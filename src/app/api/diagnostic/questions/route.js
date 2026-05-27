@@ -11,12 +11,12 @@ export async function GET(request) {
     return NextResponse.json({ error: 'At least one subject is required' }, { status: 400 })
   }
 
-  const supabase = createServiceClient(
+  const db = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  const { data: subjectRows } = await supabase
+  const { data: subjectRows } = await db
     .from('subjects')
     .select('id, name, slug')
     .in('name', subjects)
@@ -29,45 +29,43 @@ export async function GET(request) {
   const allQuestions = []
 
   for (const subject of subjectRows) {
-    const { data: questions } = await supabase
+    const { data: questions } = await db
       .from('questions')
       .select(`
         id,
         question_text,
         options,
+        correct_answer,
         explanation,
         difficulty,
         question_type,
+        has_image,
+        image_url,
+        image_description,
         subtopic_id,
+        topic_id,
         subject_id,
-        subtopics (
-          id,
-          name,
-          slug,
-          topic_id,
-          topics (
-            id,
-            name,
-            slug
-          )
-        )
+        subtopics ( id, name, slug ),
+        topics ( id, name, slug ),
+        subjects ( id, name, slug )
       `)
       .eq('subject_id', subject.id)
       .in('exam_type', [examType, 'BOTH'])
       .eq('is_active', true)
-      .eq('type', 'mcq')
+      .eq('question_type', 'objective')
+      .not('subtopic_id', 'is', null)
       .limit(perSubject + 5)
 
     if (questions?.length) {
-      const mapped = questions.map(q => ({
-        ...q,
-        subject_name: subject.name,
-        subject_slug: subject.slug,
-        subtopic_name: q.subtopics?.name ?? '',
-        topic_name: q.subtopics?.topics?.name ?? '',
-        topic_id: q.subtopics?.topics?.id ?? null,
-      }))
-      allQuestions.push(...mapped)
+      const shuffled = questions
+        .sort(() => Math.random() - 0.5)
+        .slice(0, perSubject)
+        .map(q => ({
+          ...q,
+          subject_name: subject.name,
+          subject_slug: subject.slug,
+        }))
+      allQuestions.push(...shuffled)
     }
   }
 
@@ -77,9 +75,6 @@ export async function GET(request) {
     }, { status: 404 })
   }
 
-  const shuffled = allQuestions
-    .sort(() => Math.random() - 0.5)
-    .slice(0, count)
-
+  const shuffled = allQuestions.sort(() => Math.random() - 0.5).slice(0, count)
   return NextResponse.json({ questions: shuffled })
 }

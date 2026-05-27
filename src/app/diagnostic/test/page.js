@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ToastStack } from '@/components/ui/Toast'
+import QuestionCard from '@/components/quiz/QuestionCard'
 import {
   getTotalSeconds,
   getWarningThresholds,
@@ -16,13 +17,11 @@ export default function DiagnosticTestPage() {
   const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
-  const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toasts, setToasts] = useState([])
 
-  // Timer state
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [totalSeconds, setTotalSeconds] = useState(0)
   const timerRef = useRef(null)
@@ -45,11 +44,11 @@ export default function DiagnosticTestPage() {
       questions: currentQuestions.map(q => ({
         id: q.id,
         subtopic_id: q.subtopic_id,
-        subtopic_name: q.subtopic_name,
+        subtopic_name: q.subtopics?.name ?? q.subtopic_name ?? '',
         topic_id: q.topic_id,
-        topic_name: q.topic_name,
+        topic_name: q.topics?.name ?? q.topic_name ?? '',
         subject_id: q.subject_id,
-        subject_name: q.subject_name,
+        subject_name: q.subjects?.name ?? q.subject_name ?? '',
       })),
     }))
     router.push('/diagnostic/results')
@@ -58,7 +57,6 @@ export default function DiagnosticTestPage() {
   useEffect(() => {
     const raw = sessionStorage.getItem('diagnostic_setup')
     if (!raw) { router.push('/diagnostic'); return }
-
     const parsed = JSON.parse(raw)
     setSetup(parsed)
 
@@ -77,7 +75,6 @@ export default function DiagnosticTestPage() {
       .catch(() => setError('Failed to load questions. Please try again.'))
   }, [router])
 
-  // Start timer once questions are loaded
   useEffect(() => {
     if (loading || !questions.length || !totalSeconds) return
 
@@ -87,7 +84,6 @@ export default function DiagnosticTestPage() {
       setSecondsLeft(prev => {
         const next = prev - 1
 
-        // Check minute-based warnings
         minuteWarnings.forEach(w => {
           const threshold = w.minutes * 60
           if (next === threshold && !firedWarnings.current.has(threshold)) {
@@ -96,7 +92,6 @@ export default function DiagnosticTestPage() {
           }
         })
 
-        // Check second-based warnings
         secondWarnings.forEach(w => {
           if (next === w.seconds && !firedWarnings.current.has(`s${w.seconds}`)) {
             firedWarnings.current.add(`s${w.seconds}`)
@@ -104,18 +99,11 @@ export default function DiagnosticTestPage() {
           }
         })
 
-        // Force submit at zero
         if (next <= 0) {
           clearInterval(timerRef.current)
-          addToast('Time is up! Submitting your answers...', 'urgent')
+          addToast('Time is up! Submitting...', 'urgent')
           setTimeout(() => {
-            setAnswers(currentAnswers => {
-              setQuestions(currentQuestions => {
-                submitTest(currentAnswers, currentQuestions)
-                return currentQuestions
-              })
-              return currentAnswers
-            })
+            setAnswers(a => { setQuestions(q => { submitTest(a, q); return q }); return a })
           }, 1500)
           return 0
         }
@@ -131,19 +119,15 @@ export default function DiagnosticTestPage() {
   const progress = questions.length > 0
     ? ((currentIndex + 1) / questions.length) * 100 : 0
 
-  const handleSelect = (key) => {
-    if (revealed) return
-    setSelected(key)
+  const handleAnswer = ({ questionId, selected, isCorrect, subtopicId, topicId }) => {
     setRevealed(true)
-
-    const isCorrect = currentQuestion.options.find(o => o.key === key)?.is_correct ?? false
     setAnswers(prev => ({
       ...prev,
-      [currentQuestion.id]: {
-        selected: key,
+      [questionId]: {
+        selected,
         is_correct: isCorrect,
-        subtopic_id: currentQuestion.subtopic_id,
-        topic_id: currentQuestion.topic_id,
+        subtopic_id: subtopicId,
+        topic_id: topicId,
         subject_id: currentQuestion.subject_id,
       }
     }))
@@ -155,7 +139,6 @@ export default function DiagnosticTestPage() {
       return
     }
     setCurrentIndex(i => i + 1)
-    setSelected(null)
     setRevealed(false)
   }
 
@@ -165,7 +148,6 @@ export default function DiagnosticTestPage() {
       return
     }
     setCurrentIndex(i => i + 1)
-    setSelected(null)
     setRevealed(false)
   }
 
@@ -185,10 +167,7 @@ export default function DiagnosticTestPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-red-600 text-sm mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/diagnostic')}
-            className="text-indigo-600 text-sm font-medium hover:underline"
-          >
+          <button onClick={() => router.push('/diagnostic')} className="text-indigo-600 text-sm font-medium hover:underline">
             ← Start over
           </button>
         </div>
@@ -198,14 +177,11 @@ export default function DiagnosticTestPage() {
 
   if (!currentQuestion) return null
 
-  const correctKey = currentQuestion.options?.find(o => o.is_correct)?.key
   const timerColor = getTimerColor(secondsLeft, totalSeconds)
   const isLowTime = secondsLeft / totalSeconds <= 0.1
 
   return (
     <div className="min-h-screen bg-gray-50">
-
-      {/* Toast stack */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
@@ -214,24 +190,14 @@ export default function DiagnosticTestPage() {
           <span className="text-sm font-medium text-gray-500">
             {currentIndex + 1} / {questions.length}
           </span>
-
-          {/* Timer */}
-          <div className={`flex items-center gap-1.5 font-mono font-bold text-lg ${timerColor} ${
-            isLowTime ? 'animate-pulse' : ''
-          }`}>
+          <div className={`flex items-center gap-1.5 font-mono font-bold text-lg ${timerColor} ${isLowTime ? 'animate-pulse' : ''}`}>
             <span className="text-base">⏱</span>
             {formatTime(secondsLeft)}
           </div>
-
-          <button
-            onClick={() => submitTest(answers, questions)}
-            className="text-xs text-gray-400 hover:text-gray-600 font-medium"
-          >
+          <button onClick={() => submitTest(answers, questions)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">
             Submit early
           </button>
         </div>
-
-        {/* Progress bar */}
         <div className="max-w-lg mx-auto mt-2">
           <div className="h-1.5 bg-gray-100 rounded-full">
             <div
@@ -243,95 +209,45 @@ export default function DiagnosticTestPage() {
       </div>
 
       {/* Question */}
-      <div className="max-w-lg mx-auto px-4 py-8">
-
+      <div className="max-w-lg mx-auto px-4 py-6">
         {/* Tags */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-            {currentQuestion.subject_name}
+            {currentQuestion.subjects?.name ?? currentQuestion.subject_name}
           </span>
-          {currentQuestion.topic_name && (
+          {(currentQuestion.topics?.name ?? currentQuestion.topic_name) && (
             <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-              {currentQuestion.topic_name}
+              {currentQuestion.topics?.name ?? currentQuestion.topic_name}
             </span>
           )}
         </div>
 
-        <h2 className="text-base font-semibold text-gray-900 leading-relaxed mb-6">
-          {currentQuestion.question_text}
-        </h2>
+        <QuestionCard
+          question={currentQuestion}
+          onAnswer={handleAnswer}
+          showExplanation={true}
+        />
 
-        {/* Options */}
-        <div className="space-y-3 mb-6">
-          {currentQuestion.options?.map(option => {
-            let style = 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-            if (revealed) {
-              if (option.key === correctKey) {
-                style = 'border-green-400 bg-green-50 text-green-800'
-              } else if (option.key === selected) {
-                style = 'border-red-400 bg-red-50 text-red-700'
-              } else {
-                style = 'border-gray-100 bg-gray-50 text-gray-400'
-              }
-            } else if (option.key === selected) {
-              style = 'border-indigo-400 bg-indigo-50 text-indigo-800'
-            }
-
-            return (
-              <button
-                key={option.key}
-                onClick={() => handleSelect(option.key)}
-                disabled={revealed}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm transition-colors ${style}`}
-              >
-                <span className="font-bold mr-2">{option.key}.</span>
-                {option.text}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Explanation */}
+        {/* Next button — shown after answering */}
         {revealed && (
-          <div className={`p-4 rounded-xl mb-6 text-sm ${
-            answers[currentQuestion.id]?.is_correct
-              ? 'bg-green-50 border border-green-200'
-              : 'bg-orange-50 border border-orange-200'
-          }`}>
-            <p className={`font-semibold mb-1 ${
-              answers[currentQuestion.id]?.is_correct
-                ? 'text-green-800' : 'text-orange-800'
-            }`}>
-              {answers[currentQuestion.id]?.is_correct ? '✓ Correct!' : '✗ Not quite'}
-            </p>
-            <p className="text-gray-700">{currentQuestion.explanation}</p>
-            {!answers[currentQuestion.id]?.is_correct && selected && (
-              <p className="text-gray-500 text-xs mt-2 italic">
-                {currentQuestion.options?.find(o => o.key === selected)?.distractor_explanation}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Navigation */}
-        <div className="flex gap-3">
-          {!revealed && (
-            <button
-              onClick={handleSkip}
-              className="flex-1 py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              Skip
-            </button>
-          )}
-          {revealed && (
+          <div className="mt-6">
             <button
               onClick={handleNext}
-              className="flex-1 py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
+              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors"
             >
               {currentIndex + 1 >= questions.length ? 'See results →' : 'Next →'}
             </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Skip — only when not answered */}
+        {!revealed && (
+          <div className="mt-4">
+            <button onClick={handleSkip} className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors">
+              Skip
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
