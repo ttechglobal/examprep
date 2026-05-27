@@ -1,65 +1,86 @@
-import Image from "next/image";
+import Link from 'next/link'
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white">
+
+      {/* Nav */}
+      <nav className="px-4 py-4 flex items-center justify-between max-w-5xl mx-auto">
+        <span className="text-xl font-black text-indigo-600">ExamPrep</span>
+        <Link
+          href="/login"
+          className="text-sm font-medium text-gray-600 hover:text-gray-900"
+        >
+          Sign in
+        </Link>
+      </nav>
+
+      {/* Hero */}
+      <div className="max-w-2xl mx-auto px-4 pt-16 pb-10 text-center">
+        <div className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-full mb-6">
+          Built for Nigerian secondary school students 🇳🇬
+        </div>
+        <h1 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-4">
+          Ace your WAEC and JAMB exams
+        </h1>
+        <p className="text-lg text-gray-500 leading-relaxed mb-10">
+          Take a free diagnostic test, get a personalised study plan, and study smarter — topic by topic.
+        </p>
+
+        {/* Student CTA */}
+        <div className="space-y-3 max-w-sm mx-auto">
+          <Link
+            href="/diagnostic"
+            className="block w-full py-4 bg-indigo-600 text-white text-base font-black rounded-2xl hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-200"
+          >
+            Start free diagnostic test →
+          </Link>
+          <Link
+            href="/login"
+            className="block w-full py-3.5 bg-white text-gray-700 text-sm font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            I already have an account
+          </Link>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="max-w-4xl mx-auto px-4 py-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { emoji: '🎯', title: 'Personalised plan', desc: 'We find your weak areas and build a study path just for you' },
+          { emoji: '📚', title: 'Topic-by-topic lessons', desc: 'Clear, structured lessons with inline checks to keep you engaged' },
+          { emoji: '📊', title: 'Track your progress', desc: 'See how much you\'ve improved week by week' },
+        ].map(f => (
+          <div key={f.title} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <span className="text-3xl">{f.emoji}</span>
+            <h3 className="font-black text-gray-900 mt-2 mb-1">{f.title}</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* School CTA */}
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-8 text-white text-center">
+          <p className="text-2xl mb-1">🏫</p>
+          <h2 className="text-xl font-black mb-2">Are you a school?</h2>
+          <p className="text-indigo-200 text-sm mb-5 leading-relaxed">
+            Set up ExamPrep for your students. Track class performance,
+            identify weak topics, and monitor engagement — all in one dashboard.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/school/signup"
+            className="inline-block px-8 py-3 bg-white text-indigo-600 text-sm font-black rounded-2xl hover:bg-indigo-50 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Set up your school →
+          </Link>
         </div>
-      </main>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center py-8 text-xs text-gray-400">
+        © {new Date().getFullYear()} ExamPrep · Built for Nigerian students
+      </div>
     </div>
-  );
+  )
 }

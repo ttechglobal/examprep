@@ -1,0 +1,126 @@
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
+
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const from = searchParams.get('from')
+  const errorParam = searchParams.get('error')
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(errorParam === 'auth_failed' ? 'Authentication failed. Please try again.' : null)
+
+  const supabase = createClient()
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const roleRedirects = {
+      superadmin: '/admin/dashboard',
+      admin: '/admin/dashboard',
+      reviewer: '/reviewer/dashboard',
+      school_admin: '/school/dashboard',
+      student: '/student/dashboard',
+    }
+
+    window.location.href = roleRedirects[profile?.role] ?? '/student/dashboard'
+  }
+
+  return (
+    <>
+      <h2 className="text-lg font-bold text-gray-900 mb-1">Welcome back</h2>
+
+      {from === 'diagnostic' && (
+        <p className="text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-4">
+          Sign in to save your diagnostic results and start your study plan.
+        </p>
+      )}
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleLogin} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="you@example.com"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="••••••••"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+
+      <p className="text-center text-sm text-gray-500 mt-4">
+        Don't have an account?{' '}
+        <Link href="/signup" className="text-indigo-600 font-medium hover:underline">
+          Sign up free
+        </Link>
+      </p>
+    </>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
+          <p className="text-gray-500 text-sm mt-1">Your WAEC & JAMB preparation partner</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <Suspense fallback={<div className="text-sm text-gray-400">Loading...</div>}>
+            <LoginForm />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  )
+}

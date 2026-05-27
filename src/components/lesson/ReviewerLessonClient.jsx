@@ -1,0 +1,156 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import MobilePreview from './MobilePreview'
+
+export default function ReviewerLessonClient({ subtopic, reviews, currentUserId }) {
+  const router = useRouter()
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [localReviews, setLocalReviews] = useState(reviews)
+  const [error, setError] = useState(null)
+
+  const handleSubmit = async () => {
+    if (!comment.trim()) return
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`/api/reviews/${subtopic.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      })
+      const data = await res.json()
+      if (data.error) { setError(data.error); return }
+
+      setLocalReviews(prev => [...prev, data.review])
+      setComment('')
+    } catch {
+      setError('Failed to submit — try again')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const statusColors = {
+    draft:      'bg-yellow-100 text-yellow-800',
+    in_review:  'bg-blue-100 text-blue-800',
+    published:  'bg-green-100 text-green-800',
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <button
+            onClick={() => router.back()}
+            className="text-sm text-gray-400 hover:text-gray-600 mb-2 block"
+          >
+            ← Back
+          </button>
+          <h1 className="text-xl font-bold text-gray-900">{subtopic.name}</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {subtopic.topics?.subjects?.name} · {subtopic.topics?.name}
+          </p>
+        </div>
+        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[subtopic.lesson_status]}`}>
+          {subtopic.lesson_status}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Left: mobile preview */}
+        <div>
+          <h2 className="text-sm font-medium text-gray-700 mb-3">Lesson Preview</h2>
+          <MobilePreview lesson={subtopic.lesson_content} />
+        </div>
+
+        {/* Right: review panel */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium text-gray-700">
+            Review Comments
+            {localReviews.length > 0 && (
+              <span className="ml-2 text-xs text-gray-400">({localReviews.length})</span>
+            )}
+          </h2>
+
+          {/* Existing reviews */}
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {localReviews.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">
+                No comments yet. Be the first to review this lesson.
+              </p>
+            ) : (
+              localReviews.map(review => (
+                <div
+                  key={review.id}
+                  className={`p-3.5 rounded-xl text-sm ${
+                    review.resolved
+                      ? 'bg-gray-50 border border-gray-100 text-gray-400'
+                      : review.reviewer_id === currentUserId
+                      ? 'bg-indigo-50 border border-indigo-100 text-gray-700'
+                      : 'bg-white border border-gray-200 text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-500">
+                      {review.reviewer_id === currentUserId ? 'You' : 'Reviewer'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {review.resolved && (
+                        <span className="text-xs text-green-600 font-medium">Resolved ✓</span>
+                      )}
+                      <span className="text-xs text-gray-300">
+                        {new Date(review.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="leading-relaxed">{review.comment}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add comment */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              rows={4}
+              placeholder="Add a review comment... (e.g. 'The explanation on slide 3 is unclear', 'Missing a callout for this formula')"
+              className="w-full px-4 py-3 text-sm resize-none focus:outline-none"
+            />
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-100">
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              {!error && <p className="text-xs text-gray-400">Be specific — reference slide numbers if helpful</p>}
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !comment.trim()}
+                className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg disabled:opacity-40 hover:bg-indigo-500 transition-colors"
+              >
+                {submitting ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+
+          {/* Guidelines */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <p className="text-xs font-bold text-gray-600 mb-2">Review guidelines</p>
+            <ul className="text-xs text-gray-500 space-y-1">
+              <li>· Check for factual accuracy in all slides</li>
+              <li>· Verify inline questions have correct answers</li>
+              <li>· Flag any language that's too complex for SS students</li>
+              <li>· Note slides that need diagrams or images</li>
+              <li>· Check the summary covers all key points</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

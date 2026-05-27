@@ -1,0 +1,88 @@
+{
+  "exam": "WAEC",
+  "subject": "Physics",
+  "slug": "physics",
+  "topics": [
+    {
+      "slug": "mechanics",
+      "name": "Mechanics",
+      "order": 1,
+      "subtopics": [
+        {
+          "slug": "kinematics",
+          "name": "Kinematics",
+          "order": 1,
+          "exam_frequency": 5
+        },
+        {
+          "slug": "newtons-laws",
+          "name": "Newton's Laws of Motion",
+          "order": 2,
+          "exam_frequency": 5
+        },
+        {
+          "slug": "work-energy-power",
+          "name": "Work, Energy and Power",
+          "order": 3,
+          "exam_frequency": 4
+        },
+        {
+          "slug": "momentum",
+          "name": "Momentum and Collisions",
+          "order": 4,
+          "exam_frequency": 3
+        }
+      ]
+    },
+    {
+      "slug": "waves",
+      "name": "Waves",
+      "order": 2,
+      "subtopics": [
+        {
+          "slug": "wave-properties",
+          "name": "Properties of Waves",
+          "order": 1,
+          "exam_frequency": 4
+        },
+        {
+          "slug": "sound",
+          "name": "Sound Waves",
+          "order": 2,
+          "exam_frequency": 3
+        },
+        {
+          "slug": "light",
+          "name": "Light and Optics",
+          "order": 3,
+          "exam_frequency": 4
+        }
+      ]
+    },
+    {
+      "slug": "electricity",
+      "name": "Electricity",
+      "order": 3,
+      "subtopics": [
+        {
+          "slug": "electrostatics",
+          "name": "Electrostatics",
+          "order": 1,
+          "exam_frequency": 3
+        },
+        {
+          "slug": "current-electricity",
+          "name": "Current Electricity",
+          "order": 2,
+          "exam_frequency": 5
+        },
+        {
+          "slug": "electrical-energy",
+          "name": "Electrical Energy and Power",
+          "order": 3,
+          "exam_frequency": 4
+        }
+      ]
+    }
+  ]
+}
