@@ -23,15 +23,38 @@ function LoginForm() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
-      setError(error.message)
+    if (signInError) {
+      setError(signInError.message)
       setLoading(false)
       return
     }
 
     const { data: { user } } = await supabase.auth.getUser()
+
+    // If diagnostic was taken before login, store it as pending so the dashboard picks it up.
+    // This handles the "Already have an account? Sign in" path from the diagnostic results page.
+    const resultsRaw = sessionStorage.getItem('diagnostic_results')
+    const setupRaw = sessionStorage.getItem('diagnostic_setup')
+    if (resultsRaw && setupRaw && user) {
+      try {
+        const results = JSON.parse(resultsRaw)
+        const setup = JSON.parse(setupRaw)
+        sessionStorage.setItem('pending_diagnostic', JSON.stringify({
+          userId: user.id,
+          examType: setup.examType,
+          subjects: setup.subjects,
+          answers: results.answers,
+          questions: results.questions,
+        }))
+        sessionStorage.removeItem('diagnostic_results')
+        sessionStorage.removeItem('diagnostic_setup')
+      } catch (e) {
+        console.error('Could not migrate diagnostic data:', e)
+      }
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -93,7 +116,7 @@ function LoginForm() {
           disabled={loading}
           className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Signing in...' : 'Sign in'}
+          {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
 
@@ -116,7 +139,7 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm mt-1">Your WAEC & JAMB preparation partner</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <Suspense fallback={<div className="text-sm text-gray-400">Loading...</div>}>
+          <Suspense fallback={<div className="text-sm text-gray-400">Loading…</div>}>
             <LoginForm />
           </Suspense>
         </div>

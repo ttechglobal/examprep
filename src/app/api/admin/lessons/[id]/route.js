@@ -41,7 +41,8 @@ export async function POST(request, { params }) {
     .from('subtopics')
     .update({
       lesson_content: result.lesson,
-      lesson_status: 'draft',
+      // Save = Live. Always. Saved lessons are immediately published.
+      lesson_status: 'published',
       lesson_generated: true,
     })
     .eq('id', id)
@@ -56,14 +57,14 @@ export async function PATCH(request, { params }) {
   const { id } = await params
   const { action } = await request.json()
 
-  if (!['publish', 'unpublish', 'send_for_review'].includes(action)) {
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  // Only publish and unpublish are valid — no review gate
+  if (!['publish', 'unpublish'].includes(action)) {
+    return NextResponse.json({ error: 'Invalid action. Valid actions: publish, unpublish' }, { status: 400 })
   }
 
   const statusMap = {
     publish: 'published',
     unpublish: 'draft',
-    send_for_review: 'in_review',
   }
 
   const service = createServiceClient(

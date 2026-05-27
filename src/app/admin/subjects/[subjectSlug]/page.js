@@ -1,109 +1,212 @@
-import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { parseLesson } from '@/lib/lessonParser'
+import MobilePreview from '@/components/lesson/MobilePreview'
 import Link from 'next/link'
 
-export default async function AdminSubjectPage({ params }) {
-  const { subjectSlug } = await params
-  const supabase = await createClient()
+export default function LessonEditorPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { subjectSlug, topicSlug, subtopicId } = params
 
-  const { data: subject } = await supabase
-    .from('subjects')
-    .select('id, name, slug, exam_type')
-    .eq('slug', subjectSlug)
-    .single()
+  const [subtopic, setSubtopic] = useState(null)
+  const [rawContent, setRawContent] = useState('')
+  const [parseResult, setParseResult] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [showPrompt, setShowPrompt] = useState(false)
 
-  if (!subject) notFound()
+  useEffect(() => {
+    if (!subtopicId) return
+    fetch(`/api/admin/lessons/${subtopicId}`)
+      .then(r => r.json())
+      .then(data => {
+        setSubtopic(data)
+        if (data.lesson_content) {
+          setRawContent(JSON.stringify(data.lesson_content, null, 2))
+          setParseResult(parseLesson(JSON.stringify(data.lesson_content)))
+        }
+      })
+  }, [subtopicId])
 
-  const { data: topics } = await supabase
-    .from('topics')
-    .select(`
-      id, name, slug, order_index,
-      subtopics (
-        id, name, slug, order_index,
-        lesson_status, exam_frequency
-      )
-    `)
-    .eq('subject_id', subject.id)
-    .order('order_index')
+  const handleContentChange = useCallback((value) => {
+    setRawContent(value)
+    if (value.trim().length > 20) {
+      setParseResult(parseLesson(value))
+    } else {
+      setParseResult(null)
+    }
+  }, [])
 
-  const sortedTopics = (topics ?? []).map(t => ({
-    ...t,
-    subtopics: [...(t.subtopics ?? [])].sort((a, b) => a.order_index - b.order_index),
-  }))
-
-  const statusColors = {
-    published:  'bg-green-100 text-green-700',
-    in_review:  'bg-blue-100 text-blue-700',
-    draft:      'bg-gray-100 text-gray-500',
+  // Save = Live. No review step.
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/admin/lessons/${subtopicId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_content: rawContent }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setMessage({ type: 'success', text: `Saved & Live ✓ — ${data.stats.totalSections} sections` })
+        setSubtopic(prev => ({ ...prev, lesson_status: 'published' }))
+      } else {
+        setMessage({ type: 'error', text: `${data.errors.length} error(s) — check the list below` })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Network error — try again' })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const statusLabels = {
-    published: 'Published',
-    in_review: 'In Review',
-    draft:     'Draft',
+  if (!subtopic) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-7 h-7 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
+
+  const isLive = subtopic.lesson_status === 'published'
 
   return (
-    <div className="space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/admin/dashboard" className="text-gray-400 hover:text-gray-600 text-sm">
-          ← Dashboard
+    <div>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
+        <Link href="/admin/dashboard" className="hover:text-gray-600">Dashboard</Link>
+        <span>/</span>
+        <Link href={`/admin/subjects/${subjectSlug}`} className="hover:text-gray-600 capitalize">
+          {subjectSlug}
         </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">{subject.name}</h1>
-        <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-          {subject.exam_type}
-        </span>
+        <span>/</span>
+        <span className="capitalize">{topicSlug?.replace(/-/g, ' ')}</span>
+        <span>/</span>
+        <span className="text-gray-700 font-medium">{subtopic.name}</span>
       </div>
 
-      {/* Topics + subtopics */}
-      <div className="space-y-4">
-        {sortedTopics.map(topic => (
-          <div key={topic.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{subtopic.name}</h1>
+          <span className={`inline-block mt-1 text-xs font-medium px-2.5 py-0.5 rounded-full ${
+            isLive ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+          }`}>
+            {isLive ? 'Live ✅' : 'No Lesson Yet'}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || !parseResult?.valid}
+            className="px-4 py-2 text-sm font-bold bg-green-600 text-white rounded-lg disabled:opacity-40 hover:bg-green-500 transition-colors"
+          >
+            {saving ? 'Saving…' : isLive ? 'Save Changes' : 'Save — Go Live'}
+          </button>
+        </div>
+      </div>
 
-            {/* Topic header */}
-            <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-bold text-gray-800 text-sm">{topic.name}</h3>
-              <span className="text-xs text-gray-400">
-                {topic.subtopics.filter(s => s.lesson_status === 'published').length}/
-                {topic.subtopics.length} published
-              </span>
-            </div>
+      {/* Status message */}
+      {message && (
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium ${
+          message.type === 'success'
+            ? 'bg-green-50 text-green-800 border border-green-200'
+            : 'bg-red-50 text-red-800 border border-red-200'
+        }`}>
+          {message.text}
+        </div>
+      )}
 
-            {/* Subtopics */}
-            <div className="divide-y divide-gray-50">
-              {topic.subtopics.map(subtopic => (
-                <div
-                  key={subtopic.id}
-                  className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors"
+      {/* Generation prompt */}
+      {subtopic.generation_prompt && (
+        <div className="mb-5">
+          <button
+            onClick={() => setShowPrompt(p => !p)}
+            className="text-sm text-blue-600 hover:underline font-medium"
+          >
+            {showPrompt ? '↑ Hide generation prompt' : '↓ Show generation prompt'}
+          </button>
+          {showPrompt && (
+            <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                  Paste into Claude
+                </span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(subtopic.generation_prompt)}
+                  className="text-xs text-blue-600 hover:underline font-medium"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 w-4">{subtopic.order_index}</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{subtopic.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Freq: {'★'.repeat(subtopic.exam_frequency)}{'☆'.repeat(5 - subtopic.exam_frequency)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[subtopic.lesson_status]}`}>
-                      {statusLabels[subtopic.lesson_status]}
-                    </span>
-                    <Link
-                      href={`/admin/subjects/${subjectSlug}/${topic.slug}/${subtopic.id}`}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-500 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors"
-                    >
-                      {subtopic.lesson_status === 'draft' ? 'Create lesson' : 'Edit'}
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                  Copy
+                </button>
+              </div>
+              <pre className="text-sm text-blue-900 whitespace-pre-wrap font-mono leading-relaxed">
+                {subtopic.generation_prompt}
+              </pre>
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+      )}
+
+      {/* Editor + preview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Left: editor */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Lesson JSON
+          </label>
+          <textarea
+            value={rawContent}
+            onChange={e => handleContentChange(e.target.value)}
+            className="w-full h-[600px] font-mono text-sm p-4 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Paste Claude-generated lesson JSON here..."
+            spellCheck={false}
+          />
+
+          {/* Validation */}
+          {parseResult && (
+            <div className={`mt-3 p-3 rounded-xl text-sm ${
+              parseResult.valid
+                ? 'bg-green-50 border border-green-200'
+                : 'bg-red-50 border border-red-200'
+            }`}>
+              {parseResult.valid ? (
+                <p className="text-green-800 font-bold">
+                  ✓ Valid — {parseResult.stats?.totalSections} sections ready to save
+                </p>
+              ) : (
+                <>
+                  <p className="text-red-800 font-bold">{parseResult.errors.length} error(s)</p>
+                  <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                    {parseResult.errors.map((err, i) => (
+                      <li key={i} className="text-xs text-red-700">· {err}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right: preview */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Preview
+          </label>
+          {parseResult?.valid ? (
+            <MobilePreview subtopicId={subtopicId} lessonContent={parseResult.lesson} />
+          ) : (
+            <div className="h-[600px] bg-gray-50 rounded-xl flex items-center justify-center">
+              <p className="text-gray-400 text-sm">
+                {rawContent.trim().length > 20 ? 'Fix JSON errors to see preview' : 'Paste valid JSON to see preview'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
