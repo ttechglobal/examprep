@@ -1,118 +1,210 @@
 'use client'
 
 import { useState } from 'react'
-import { SLIDE_TYPES } from '@/lib/constants'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MobilePreview.jsx
+// Lightweight phone-frame slide preview used in the admin lesson uploader.
+// Updated for the slide-based schema (lesson.slides instead of lesson.sections).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Minimal per-type preview renderers (no interaction, just display) ─────────
+
+function HookPreview({ slide }) {
+  return (
+    <div className="p-4">
+      <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1.5">
+        Think about this
+      </p>
+      <p className="text-xs font-bold text-gray-900 leading-relaxed">{slide.body}</p>
+    </div>
+  )
+}
+
+function DefinitionPreview({ slide }) {
+  return (
+    <div className="overflow-hidden rounded-xl mx-3 my-2 border border-indigo-200">
+      <div className="bg-indigo-600 px-3 py-2.5">
+        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-200 mb-0.5">
+          Definition
+        </p>
+        <p className="text-sm font-black text-white">{slide.term}</p>
+      </div>
+      <div className="bg-white px-3 py-2.5 space-y-2">
+        <p className="text-xs font-bold text-indigo-800 leading-snug">{slide.definition}</p>
+        {(slide.examples ?? []).slice(0, 2).map((ex, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
+              {i + 1}
+            </span>
+            <p className="text-[10px] text-gray-600 leading-relaxed">{ex}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RealLifePreview({ slide }) {
+  return (
+    <div className="p-4">
+      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
+        🌍 Where you see this
+      </p>
+      <div className="bg-indigo-50 rounded-xl px-3 py-3">
+        <p className="text-xs font-medium text-indigo-900 leading-relaxed">{slide.body}</p>
+      </div>
+    </div>
+  )
+}
+
+function ConceptPreview({ slide }) {
+  return (
+    <div className="p-4 space-y-2">
+      <p className="text-sm font-black text-gray-900 leading-snug">{slide.heading}</p>
+      {slide.image_prompt && (
+        <div className="w-full h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+          <p className="text-[8px] text-gray-400 italic px-3 text-center line-clamp-2">
+            {slide.image_prompt}
+          </p>
+        </div>
+      )}
+      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{slide.body}</p>
+    </div>
+  )
+}
+
+function FormulaPreview({ slide }) {
+  return (
+    <div className="p-4 space-y-2.5">
+      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+        📐 {slide.label}
+      </p>
+      <div className="bg-gray-900 rounded-xl py-4 text-center">
+        <p className="text-sm font-black text-white font-mono">{slide.formula}</p>
+      </div>
+      {slide.plain_english && (
+        <p className="text-xs text-indigo-700 font-medium leading-relaxed">{slide.plain_english}</p>
+      )}
+      {(slide.variables ?? []).slice(0, 3).map((v, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className="text-[10px] font-black font-mono text-indigo-600 w-5">{v.symbol}</span>
+          <span className="text-[10px] text-gray-500">= {v.meaning}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function InteractionPreview({ slide }) {
+  const options = (slide.options ?? []).map((opt) => {
+    if (typeof opt === 'string') {
+      return { key: opt.split('.')[0]?.trim(), text: opt.split('.').slice(1).join('.').trim() || opt }
+    }
+    return opt
+  })
+  return (
+    <div className="p-4 space-y-2.5">
+      <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500">
+        ✏️ Quick Check
+      </p>
+      <p className="text-xs font-bold text-gray-900 leading-snug">{slide.question}</p>
+      <div className="space-y-1.5">
+        {options.map((opt) => (
+          <div
+            key={opt.key}
+            className={`px-2.5 py-2 rounded-lg border text-[10px] ${
+              opt.key === slide.correct
+                ? 'border-green-400 bg-green-50 text-green-800 font-bold'
+                : 'border-gray-200 text-gray-600'
+            }`}
+          >
+            <span className="font-black mr-1">{opt.key}.</span>
+            {opt.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WorkedExamplePreview({ slide }) {
+  const steps = slide.steps ?? []
+  return (
+    <div className="p-4 space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+          {slide.mode === 'student_attempt' ? '🧠 Your Turn' : '✏️ Worked Example'}
+        </span>
+      </div>
+      <div className="bg-gray-900 rounded-xl px-3 py-2.5">
+        <p className="text-xs font-bold text-white leading-relaxed">{slide.problem}</p>
+      </div>
+      {slide.mode === 'student_attempt' ? (
+        <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
+          <p className="text-[10px] text-indigo-600 font-medium">
+            Solution reveals after {slide.reveal_delay_seconds ?? 8}s
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {steps.slice(0, 3).map((s, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <p className="text-[10px] text-gray-600 leading-relaxed">{s.instruction}</p>
+            </div>
+          ))}
+          {steps.length > 3 && (
+            <p className="text-[9px] text-gray-400 pl-5">+{steps.length - 3} more steps…</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SummaryPreview({ slide }) {
+  return (
+    <div className="p-4 space-y-2.5">
+      <p className="text-sm font-black text-gray-900">📋 What you learned</p>
+      <div className="space-y-1.5">
+        {(slide.points ?? []).map((pt, i) => (
+          <div key={i} className="flex items-start gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
+              {i + 1}
+            </span>
+            <p className="text-[10px] text-gray-700 leading-relaxed">{pt}</p>
+          </div>
+        ))}
+      </div>
+      {slide.closing && (
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl px-3 py-2.5 text-center">
+          <p className="text-[10px] font-bold text-white leading-relaxed">{slide.closing}</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function SlidePreview({ slide }) {
-  const [selectedOption, setSelectedOption] = useState(null)
-  const [revealed, setRevealed] = useState(false)
-
   if (!slide) return null
-
   switch (slide.type) {
-    case SLIDE_TYPES.TEXT:
-      return (
-        <div className="p-4 space-y-3">
-          <h2 className="text-base font-bold text-gray-900 leading-tight">{slide.title}</h2>
-          <p className="text-sm text-gray-700 leading-relaxed">{slide.body}</p>
-          {slide.callout && (
-            <div className={`p-3 rounded-lg text-xs ${
-              slide.callout.type === 'tip' ? 'bg-blue-50 text-blue-800 border-l-4 border-blue-400' :
-              slide.callout.type === 'warning' ? 'bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400' :
-              'bg-gray-50 text-gray-700 border-l-4 border-gray-400'
-            }`}>
-              <span className="font-semibold capitalize">{slide.callout.type}: </span>
-              {slide.callout.text}
-            </div>
-          )}
-        </div>
-      )
-
-    case SLIDE_TYPES.IMAGE_SLOT:
-      return (
-        <div className="p-4 space-y-3">
-          <h2 className="text-base font-bold text-gray-900">{slide.title}</h2>
-          <div className="w-full aspect-video bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center">
-            <span className="text-2xl">🖼️</span>
-            <span className="text-xs text-gray-500 mt-1 text-center px-4">{slide.image_prompt}</span>
-          </div>
-          {slide.caption && (
-            <p className="text-xs text-gray-500 text-center italic">{slide.caption}</p>
-          )}
-        </div>
-      )
-
-    case SLIDE_TYPES.INLINE_QUESTION:
-      const q = slide.question
-      const correctKey = q.options?.find(o => o.is_correct)?.key
-      return (
-        <div className="p-4 space-y-3">
-          <div className="bg-indigo-50 rounded-lg p-3">
-            <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Check your understanding</span>
-            <p className="text-sm font-medium text-gray-900 mt-1 leading-snug">{q.text}</p>
-          </div>
-          <div className="space-y-2">
-            {q.options?.map(option => {
-              let style = 'border-gray-200 text-gray-700'
-              if (revealed) {
-                if (option.key === correctKey) style = 'border-green-400 bg-green-50 text-green-800'
-                else if (option.key === selectedOption) style = 'border-red-400 bg-red-50 text-red-700'
-              } else if (option.key === selectedOption) {
-                style = 'border-indigo-400 bg-indigo-50 text-indigo-800'
-              }
-              return (
-                <button
-                  key={option.key}
-                  onClick={() => { setSelectedOption(option.key); setRevealed(true) }}
-                  className={`w-full text-left text-xs px-3 py-2 rounded-lg border-2 transition-colors ${style}`}
-                >
-                  <span className="font-bold mr-2">{option.key}.</span> {option.text}
-                </button>
-              )
-            })}
-          </div>
-          {revealed && (
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700">
-              <span className="font-semibold">Explanation: </span>{q.explanation}
-            </div>
-          )}
-        </div>
-      )
-
-    case SLIDE_TYPES.SUMMARY:
-      return (
-        <div className="p-4 space-y-3">
-          <h2 className="text-base font-bold text-gray-900">{slide.title}</h2>
-          <ul className="space-y-2">
-            {slide.points?.map((point, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">✓</span>
-                {point}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )
-
-    case SLIDE_TYPES.VIDEO:
-      return (
-        <div className="p-4">
-          <div className="w-full aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-            <span className="text-white text-3xl">▶</span>
-          </div>
-          {slide.caption && (
-            <p className="text-xs text-gray-500 text-center mt-2">{slide.caption}</p>
-          )}
-        </div>
-      )
-
+    case 'hook': return <HookPreview slide={slide} />
+    case 'definition': return <DefinitionPreview slide={slide} />
+    case 'real_life': return <RealLifePreview slide={slide} />
+    case 'concept': return <ConceptPreview slide={slide} />
+    case 'formula': return <FormulaPreview slide={slide} />
+    case 'interaction': return <InteractionPreview slide={slide} />
+    case 'worked_example': return <WorkedExamplePreview slide={slide} />
+    case 'summary': return <SummaryPreview slide={slide} />
     default:
-      return (
-        <div className="p-4 text-xs text-gray-400">Unknown slide type: {slide.type}</div>
-      )
+      return <div className="p-4 text-[10px] text-gray-400">Unknown type: {slide.type}</div>
   }
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export default function MobilePreview({ lesson }) {
   const [currentSlide, setCurrentSlide] = useState(0)
 
@@ -128,7 +220,7 @@ export default function MobilePreview({ lesson }) {
     )
   }
 
-  const slides = lesson.slides || []
+  const slides = lesson.slides ?? []
   const slide = slides[currentSlide]
   const progress = slides.length > 0 ? ((currentSlide + 1) / slides.length) * 100 : 0
 
@@ -136,7 +228,7 @@ export default function MobilePreview({ lesson }) {
     <div className="flex flex-col items-center gap-4">
       {/* Phone frame */}
       <div className="w-[320px] h-[580px] bg-white rounded-[36px] border-4 border-gray-800 shadow-2xl overflow-hidden flex flex-col">
-        {/* Phone status bar */}
+        {/* Status bar */}
         <div className="bg-gray-800 px-6 pt-2 pb-1 flex justify-between items-center flex-shrink-0">
           <span className="text-white text-[10px]">9:41</span>
           <div className="w-16 h-4 bg-gray-900 rounded-full" />
@@ -151,13 +243,6 @@ export default function MobilePreview({ lesson }) {
           />
         </div>
 
-        {/* Hook video badge */}
-        {currentSlide === 0 && lesson.hook_video && (
-          <div className="mx-4 mt-3 bg-gray-900 rounded-lg aspect-video flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-2xl">▶</span>
-          </div>
-        )}
-
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto">
           <SlidePreview slide={slide} />
@@ -166,15 +251,17 @@ export default function MobilePreview({ lesson }) {
         {/* Navigation */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 flex-shrink-0">
           <button
-            onClick={() => setCurrentSlide(s => Math.max(0, s - 1))}
+            onClick={() => setCurrentSlide((s) => Math.max(0, s - 1))}
             disabled={currentSlide === 0}
             className="text-sm text-gray-500 disabled:opacity-30 font-medium"
           >
             ← Back
           </button>
-          <span className="text-xs text-gray-400">{currentSlide + 1} / {slides.length}</span>
+          <span className="text-xs text-gray-400">
+            {currentSlide + 1} / {slides.length}
+          </span>
           <button
-            onClick={() => setCurrentSlide(s => Math.min(slides.length - 1, s + 1))}
+            onClick={() => setCurrentSlide((s) => Math.min(slides.length - 1, s + 1))}
             disabled={currentSlide === slides.length - 1}
             className="text-sm text-indigo-600 disabled:opacity-30 font-medium"
           >

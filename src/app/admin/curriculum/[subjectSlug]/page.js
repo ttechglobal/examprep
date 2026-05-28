@@ -1,6 +1,11 @@
+// src/app/admin/curriculum/[subjectSlug]/page.js  (REPLACE existing file)
+// Adds a "Prerequisites" tab to the subject page alongside the existing curriculum viewer.
+
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import CurriculumViewerClient from '@/components/admin/CurriculumViewerClient'
+import PrerequisiteMapEditor from '@/components/admin/PrerequisiteMapEditor'
 
 const EXAM_COLORS = {
   WAEC: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -8,8 +13,9 @@ const EXAM_COLORS = {
   BOTH: 'bg-indigo-100 text-indigo-700 border-indigo-200',
 }
 
-export default async function CurriculumSubjectPage({ params }) {
-  const { subjectSlug } = await params
+export default async function SubjectCurriculumPage({ params, searchParams }) {
+  const { subjectSlug }  = await params
+  const { tab = 'topics' } = await searchParams
 
   const db = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,7 +24,11 @@ export default async function CurriculumSubjectPage({ params }) {
 
   const { data: subject } = await db
     .from('subjects')
-    .select('id, name, slug, exam_type, waec_uploaded, jamb_uploaded, merged')
+    .select(`
+      id, name, slug, exam_type, is_active,
+      waec_uploaded, jamb_uploaded, merged,
+      prereq_map_status, prereq_depth, prereq_pass_threshold
+    `)
     .eq('slug', subjectSlug)
     .single()
 
@@ -28,9 +38,7 @@ export default async function CurriculumSubjectPage({ params }) {
     .from('topics')
     .select(`
       id, name, slug, exam_type, order_index,
-      subtopics (
-        id, lesson_status, lesson_generated
-      )
+      subtopics ( id, name, slug, lesson_generated, lesson_status, exam_type, order_index, objectives )
     `)
     .eq('subject_id', subject.id)
     .order('order_index')
@@ -39,20 +47,21 @@ export default async function CurriculumSubjectPage({ params }) {
     const subs = topic.subtopics ?? []
     return {
       ...topic,
-      subtopic_count: subs.length,
-      lessons_ready: subs.filter(s => s.lesson_generated).length,
+      subtopic_count:    subs.length,
+      lessons_ready:     subs.filter(s => s.lesson_generated).length,
       lessons_published: subs.filter(s => s.lesson_status === 'published').length,
     }
   })
 
   const totalSubtopics = enrichedTopics.reduce((a, t) => a + t.subtopic_count, 0)
-  const totalReady = enrichedTopics.reduce((a, t) => a + t.lessons_ready, 0)
-  const overallPct = totalSubtopics > 0
+  const totalReady     = enrichedTopics.reduce((a, t) => a + t.lessons_ready, 0)
+  const overallPct     = totalSubtopics > 0
     ? Math.round((totalReady / totalSubtopics) * 100) : 0
+
+  const prereqStatus = subject.prereq_map_status ?? 'none'
 
   return (
     <div className="space-y-6">
-
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-400">
         <Link href="/admin/curriculum" className="hover:text-gray-600">Curriculum</Link>
@@ -74,6 +83,12 @@ export default async function CurriculumSubjectPage({ params }) {
               {subject.waec_uploaded && <span className="text-xs font-medium text-blue-600">WAEC ✓</span>}
               {subject.jamb_uploaded && <span className="text-xs font-medium text-purple-600">JAMB ✓</span>}
               {subject.merged && <span className="text-xs font-medium text-green-600">Merged ✓</span>}
+              {prereqStatus === 'approved' && (
+                <span className="text-xs font-medium text-emerald-600">Prerequisites ✓</span>
+              )}
+              {prereqStatus === 'draft' && (
+                <span className="text-xs font-medium text-amber-600">Prerequisites — needs approval</span>
+              )}
             </div>
           </div>
           <Link
@@ -99,61 +114,48 @@ export default async function CurriculumSubjectPage({ params }) {
         </div>
       </div>
 
-      {/* Topics list */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900">Topics</h2>
-          <span className="text-xs text-gray-400">{enrichedTopics.length} topics</span>
-        </div>
-
-        {enrichedTopics.map(topic => {
-          const pct = topic.subtopic_count > 0
-            ? Math.round((topic.lessons_ready / topic.subtopic_count) * 100) : 0
-
-          return (
-            <Link
-              key={topic.id}
-              href={`/admin/curriculum/${subjectSlug}/${topic.slug}`}
-              className="flex items-center gap-4 bg-white rounded-2xl border border-gray-200 px-5 py-4 hover:border-indigo-300 hover:shadow-sm transition-all"
-            >
-              <span className="w-7 h-7 rounded-xl bg-gray-100 text-gray-600 text-xs font-black flex items-center justify-center flex-shrink-0">
-                {topic.order_index}
-              </span>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm font-bold text-gray-900 truncate">{topic.name}</p>
-                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full border flex-shrink-0 ${EXAM_COLORS[topic.exam_type] ?? 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                    {topic.exam_type}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <span>{topic.subtopic_count} subtopics</span>
-                  <span className="text-green-600 font-medium">{topic.lessons_ready} ready</span>
-                  {topic.subtopic_count - topic.lessons_ready > 0 && (
-                    <span className="text-amber-500">{topic.subtopic_count - topic.lessons_ready} pending</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 flex-shrink-0">
-                <div className="w-16">
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${pct === 100 ? 'bg-green-500' : 'bg-indigo-400'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-                <span className={`text-xs font-bold ${pct === 100 ? 'text-green-600' : 'text-gray-400'}`}>
-                  {pct}%
-                </span>
-                <span className="text-gray-300">→</span>
-              </div>
-            </Link>
-          )
-        })}
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl w-fit">
+        {[
+          { id: 'topics',        label: `Topics (${enrichedTopics.length})` },
+          {
+            id: 'prerequisites',
+            label: prereqStatus === 'approved'
+              ? '🗺 Prerequisites ✓'
+              : prereqStatus === 'draft'
+              ? '🗺 Prerequisites ●'
+              : '🗺 Prerequisites',
+          },
+        ].map(t => (
+          <Link
+            key={t.id}
+            href={`/admin/curriculum/${subjectSlug}?tab=${t.id}`}
+            className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors whitespace-nowrap ${
+              tab === t.id
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </Link>
+        ))}
       </div>
+
+      {/* Tab: Topics */}
+      {tab === 'topics' && (
+        <CurriculumViewerClient
+          subject={subject}
+          topics={enrichedTopics}
+        />
+      )}
+
+      {/* Tab: Prerequisites */}
+      {tab === 'prerequisites' && (
+        <PrerequisiteMapEditor
+          subject={subject}
+          topics={enrichedTopics}
+        />
+      )}
     </div>
   )
 }
