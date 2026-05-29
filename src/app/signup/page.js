@@ -14,9 +14,10 @@ const AVAILABLE_SUBJECTS = [
 
 function SignupForm() {
   const searchParams = useSearchParams()
-  const fromDiagnostic = searchParams.get('from') === 'diagnostic'
+  // "from=diagnostic" param kept for backward compat — same flow, different copy
+  const fromPractice = searchParams.get('from') === 'diagnostic'
 
-  const [step, setStep] = useState(1)  // 1: account, 2: exam setup (skipped if from diagnostic)
+  const [step, setStep] = useState(1)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,23 +27,22 @@ function SignupForm() {
   const [error, setError] = useState(null)
   const [done, setDone] = useState(false)
 
-  // Diagnostic data from sessionStorage — preserved across signup
-  const [diagnosticData, setDiagnosticData] = useState(null)
+  // Practice data from sessionStorage — preserved across signup
+  const [practiceData, setPracticeData] = useState(null)
 
   useEffect(() => {
-    // Read diagnostic data as early as possible so it survives navigation
+    // sessionStorage keys kept as-is — internal only
     const resultsRaw = sessionStorage.getItem('diagnostic_results')
     const setupRaw = sessionStorage.getItem('diagnostic_setup')
     if (resultsRaw && setupRaw) {
       try {
         const results = JSON.parse(resultsRaw)
         const setup = JSON.parse(setupRaw)
-        setDiagnosticData({ results, setup })
-        // Pre-fill exam type and subjects from diagnostic
+        setPracticeData({ results, setup })
         if (setup.examType) setExamType(setup.examType)
         if (setup.subjects?.length) setSelectedSubjects(setup.subjects)
       } catch (e) {
-        console.error('Could not parse diagnostic data:', e)
+        console.error('Could not parse practice data:', e)
       }
     }
   }, [])
@@ -59,8 +59,7 @@ function SignupForm() {
     e.preventDefault()
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     setError(null)
-    // If diagnostic was taken, exam/subjects are already set — skip step 2
-    if (diagnosticData) {
+    if (practiceData) {
       handleSignup(null, true)
     } else {
       setStep(2)
@@ -96,28 +95,19 @@ function SignupForm() {
 
     const user = authData?.user
     if (user) {
-      // Update profile with exam type and subjects
       await supabase
         .from('profiles')
-        .update({
-          exam_type: examType,
-          subjects: selectedSubjects,
-        })
+        .update({ exam_type: examType, subjects: selectedSubjects })
         .eq('id', user.id)
 
-      // If diagnostic was taken, save results now linked to the new account
-      // Store in sessionStorage so dashboard picks it up after email confirmation + login
-      if (diagnosticData) {
-        // Keep the pending_diagnostic in sessionStorage so the dashboard
-        // auto-saves it via the fire-and-forget pattern on first load
+      if (practiceData) {
         sessionStorage.setItem('pending_diagnostic', JSON.stringify({
           userId: user.id,
-          examType: diagnosticData.setup.examType,
-          subjects: diagnosticData.setup.subjects,
-          answers: diagnosticData.results.answers,
-          questions: diagnosticData.results.questions,
+          examType: practiceData.setup.examType,
+          subjects: practiceData.setup.subjects,
+          answers: practiceData.results.answers,
+          questions: practiceData.results.questions,
         }))
-        // Clear the separate results/setup keys — pending_diagnostic is the canonical store now
         sessionStorage.removeItem('diagnostic_results')
         sessionStorage.removeItem('diagnostic_setup')
       }
@@ -135,9 +125,9 @@ function SignupForm() {
         <p className="text-gray-500 text-sm mb-2">
           We sent a confirmation link to <strong>{email}</strong>.
         </p>
-        {diagnosticData && (
+        {practiceData && (
           <p className="text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-4">
-            Your diagnostic results are saved — your study plan will be ready when you sign in.
+            Your practice results are saved — your study plan will be ready when you sign in.
           </p>
         )}
         <p className="text-gray-400 text-sm">
@@ -155,18 +145,17 @@ function SignupForm() {
 
   return (
     <>
-      {/* Step indicator — only show if not skipping to account creation directly */}
-      {!diagnosticData && (
+      {!practiceData && (
         <div className="flex items-center gap-2 mb-6">
           <div className={`flex-1 h-1.5 rounded-full ${step >= 1 ? 'bg-indigo-600' : 'bg-gray-200'}`} />
           <div className={`flex-1 h-1.5 rounded-full ${step >= 2 ? 'bg-indigo-600' : 'bg-gray-200'}`} />
         </div>
       )}
 
-      {fromDiagnostic && diagnosticData && (
+      {fromPractice && practiceData && (
         <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 mb-4">
           <p className="text-sm text-green-800 font-medium">
-            ✓ Your diagnostic results will be saved automatically when you create your account.
+            ✓ Your practice results will be saved automatically when you create your account.
           </p>
         </div>
       )}
@@ -216,12 +205,12 @@ function SignupForm() {
               />
             </div>
 
-            {/* If diagnostic was taken, show a summary so they know what's pre-filled */}
-            {diagnosticData && (
+            {/* Confirm which exam/subjects were pre-filled from practice session */}
+            {practiceData && (
               <div className="bg-indigo-50 rounded-xl px-3 py-2.5 space-y-1">
-                <p className="text-xs font-bold text-indigo-700">From your diagnostic:</p>
-                <p className="text-xs text-indigo-600">Exam: {diagnosticData.setup.examType}</p>
-                <p className="text-xs text-indigo-600">Subjects: {diagnosticData.setup.subjects.join(', ')}</p>
+                <p className="text-xs font-bold text-indigo-700">From your practice session:</p>
+                <p className="text-xs text-indigo-600">Exam: {practiceData.setup.examType}</p>
+                <p className="text-xs text-indigo-600">Subjects: {practiceData.setup.subjects.join(', ')}</p>
               </div>
             )}
 
@@ -230,14 +219,14 @@ function SignupForm() {
               disabled={loading}
               className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Creating account…' : diagnosticData ? 'Create account →' : 'Continue →'}
+              {loading ? 'Creating account…' : practiceData ? 'Create account →' : 'Continue →'}
             </button>
           </form>
         </>
       )}
 
-      {/* Step 2: Exam setup — only shown when no diagnostic data */}
-      {step === 2 && !diagnosticData && (
+      {/* Step 2: Exam setup — only shown when no practice data */}
+      {step === 2 && !practiceData && (
         <>
           <h2 className="text-lg font-bold text-gray-900 mb-6">Your exam setup</h2>
           <form onSubmit={handleSignup} className="space-y-5">
@@ -287,29 +276,20 @@ function SignupForm() {
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="flex-1 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                ← Back
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Creating…' : 'Create account'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Creating account…' : 'Create account →'}
+            </button>
           </form>
         </>
       )}
 
       <p className="text-center text-sm text-gray-500 mt-4">
         Already have an account?{' '}
-        <Link href="/login?from=diagnostic" className="text-indigo-600 font-medium hover:underline">
+        <Link href="/login" className="text-indigo-600 font-medium hover:underline">
           Sign in
         </Link>
       </p>
@@ -323,10 +303,10 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
-          <p className="text-gray-500 text-sm mt-1">Your WAEC & JAMB preparation partner</p>
+          <p className="text-gray-500 text-sm mt-1">Join thousands of students preparing for success</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <Suspense fallback={<div className="text-sm text-gray-400">Loading…</div>}>
+          <Suspense fallback={<div className="h-40 flex items-center justify-center"><div className="w-6 h-6 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
             <SignupForm />
           </Suspense>
         </div>

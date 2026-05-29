@@ -1,24 +1,43 @@
 'use client'
 
-// src/components/admin/PrerequisiteMapEditor.jsx
-// Admin UI for generating, reviewing, editing and approving the prerequisite map.
-// Lives as a tab on the subject's curriculum page.
-// Workflow: generate prompt → copy to Claude → paste JSON → review edges → edit → approve
+// src/components/admin/PrerequisiteMapEditor.jsx — REPLACE existing file
+// All Supabase calls are direct — no /api/admin/prerequisites route needed.
 
 import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { buildPrerequisiteMapPrompt } from '@/lib/prerequisitePrompt'
 
 const STATUS_STYLES = {
-  none:     { label: 'Not set up',  style: 'bg-gray-100 text-gray-600' },
+  none:     { label: 'Not set up',            style: 'bg-gray-100 text-gray-600' },
   draft:    { label: 'Draft — needs approval', style: 'bg-yellow-100 text-yellow-700' },
-  approved: { label: 'Approved ✓', style: 'bg-green-100 text-green-700' },
+  approved: { label: 'Approved ✓',            style: 'bg-green-100 text-green-700' },
+}
+
+// ── Client-side cycle detection (DFS) ────────────────────────────────────────
+function detectCycles(edges) {
+  const graph = {}
+  for (const edge of edges) {
+    if (!graph[edge.topic_id]) graph[edge.topic_id] = []
+    graph[edge.topic_id].push(edge.requires_topic_id)
+  }
+  const visited = new Set()
+  const inStack = new Set()
+  function dfs(node) {
+    if (inStack.has(node)) return true
+    if (visited.has(node)) return false
+    visited.add(node); inStack.add(node)
+    for (const n of (graph[node] ?? [])) { if (dfs(n)) return true }
+    inStack.delete(node)
+    return false
+  }
+  return Object.keys(graph).some(n => !visited.has(n) && dfs(n))
 }
 
 // ── Prompt panel ──────────────────────────────────────────────────────────────
 function PromptPanel({ subject, topics, onJsonPasted }) {
-  const [copied, setCopied]     = useState(false)
-  const [rawJson, setRawJson]   = useState('')
-  const [parsing, setParsing]   = useState(false)
+  const [copied, setCopied]         = useState(false)
+  const [rawJson, setRawJson]       = useState('')
+  const [parsing, setParsing]       = useState(false)
   const [parseError, setParseError] = useState(null)
 
   const prompt = buildPrerequisiteMapPrompt({
@@ -34,12 +53,11 @@ function PromptPanel({ subject, topics, onJsonPasted }) {
   }
 
   const handleParse = () => {
-    setParsing(true)
-    setParseError(null)
+    setParsing(true); setParseError(null)
     try {
-      let cleaned = rawJson.trim()
+      const cleaned = rawJson.trim()
         .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-      const parsed = JSON.parse(cleaned)
+      const parsed   = JSON.parse(cleaned)
       const aiTopics = parsed.topics ?? (Array.isArray(parsed) ? parsed : null)
       if (!aiTopics?.length) throw new Error('No topics array found in response')
       onJsonPasted(aiTopics)
@@ -56,9 +74,7 @@ function PromptPanel({ subject, topics, onJsonPasted }) {
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-black text-blue-800">Step 1 — Copy this prompt</p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              Paste into Claude or Gemini → copy the JSON response
-            </p>
+            <p className="text-xs text-blue-600 mt-0.5">Paste into Claude or Gemini → copy the JSON response</p>
           </div>
           <button
             onClick={handleCopy}
@@ -84,9 +100,7 @@ function PromptPanel({ subject, topics, onJsonPasted }) {
           placeholder={'{\n  "topics": [\n    { "name": "...", "foundational": true, "prerequisites": [] },\n    ...\n  ]\n}'}
           spellCheck={false}
         />
-        {parseError && (
-          <p className="text-xs text-red-600 mt-1.5">⚠ {parseError}</p>
-        )}
+        {parseError && <p className="text-xs text-red-600 mt-1.5">⚠ {parseError}</p>}
         <button
           onClick={handleParse}
           disabled={!rawJson.trim() || parsing}
@@ -101,17 +115,17 @@ function PromptPanel({ subject, topics, onJsonPasted }) {
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 function SettingsPanel({ subjectId, settings, onUpdated }) {
+  const supabase = createClient()
   const [depth, setDepth]         = useState(settings?.prereq_depth ?? 2)
   const [threshold, setThreshold] = useState(settings?.prereq_pass_threshold ?? 60)
   const [saving, setSaving]       = useState(false)
 
   const handleSave = async () => {
     setSaving(true)
-    await fetch(`/api/admin/prerequisites/${subjectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_settings', depth, threshold }),
-    })
+    await supabase
+      .from('subjects')
+      .update({ prereq_depth: depth, prereq_pass_threshold: threshold })
+      .eq('id', subjectId)
     onUpdated()
     setSaving(false)
   }
@@ -122,20 +136,14 @@ function SettingsPanel({ subjectId, settings, onUpdated }) {
 
       <div>
         <label className="block text-xs font-bold text-gray-600 mb-2">
-          Prerequisite check depth
-          <span className="font-normal text-gray-400 ml-1">
-            — how many levels back the system looks
-          </span>
+          Check depth
+          <span className="font-normal text-gray-400 ml-1">— how many levels back the system looks</span>
         </label>
         <div className="flex gap-2">
           {[1, 2, 3].map(d => (
-            <button
-              key={d}
-              onClick={() => setDepth(d)}
+            <button key={d} onClick={() => setDepth(d)}
               className={`flex-1 py-2.5 text-sm font-bold rounded-xl border-2 transition-colors ${
-                depth === d
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                depth === d ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
               }`}
             >
               {d} {d === 1 ? 'level' : 'levels'}
@@ -143,26 +151,22 @@ function SettingsPanel({ subjectId, settings, onUpdated }) {
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-1.5">
-          {depth === 1 && 'Only checks the direct prerequisites of the topic being opened.'}
+          {depth === 1 && 'Only checks direct prerequisites of the topic being opened.'}
           {depth === 2 && 'Checks prerequisites and their prerequisites. Recommended.'}
-          {depth === 3 && 'Checks up to 3 levels deep. Use for subjects with long dependency chains.'}
+          {depth === 3 && 'Checks up to 3 levels deep. Use for subjects with long chains.'}
         </p>
       </div>
 
       <div>
         <label className="block text-xs font-bold text-gray-600 mb-2">
-          Mastery pass threshold
-          <span className="font-normal text-gray-400 ml-1">— quiz score to mark a topic as mastered</span>
+          Mastery threshold
+          <span className="font-normal text-gray-400 ml-1">— quiz score to mark a topic mastered</span>
         </label>
         <div className="flex gap-2">
           {[50, 60, 70, 80].map(t => (
-            <button
-              key={t}
-              onClick={() => setThreshold(t)}
+            <button key={t} onClick={() => setThreshold(t)}
               className={`flex-1 py-2.5 text-sm font-bold rounded-xl border-2 transition-colors ${
-                threshold === t
-                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                threshold === t ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
               }`}
             >
               {t}%
@@ -170,8 +174,7 @@ function SettingsPanel({ subjectId, settings, onUpdated }) {
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-1.5">
-          Students scoring ≥{threshold}% on a 10-question quiz are marked as having mastered that topic.
-          Below {threshold}% they receive an advisory but can still proceed.
+          Students scoring ≥{threshold}% are marked as mastered. Below that, they get an advisory but can still proceed.
         </p>
       </div>
 
@@ -186,55 +189,67 @@ function SettingsPanel({ subjectId, settings, onUpdated }) {
   )
 }
 
-// ── Edge list / map editor ────────────────────────────────────────────────────
+// ── Map editor ────────────────────────────────────────────────────────────────
 function MapEditor({ subjectId, topics, edges, onRefresh }) {
-  const [addingTo, setAddingTo]     = useState(null) // topicId we're adding a prereq to
+  const supabase = createClient()
+  const [addingTo, setAddingTo]           = useState(null)
   const [selectedPrereq, setSelectedPrereq] = useState('')
-  const [saving, setSaving]         = useState(false)
-  const [message, setMessage]       = useState(null)
+  const [saving, setSaving]               = useState(false)
+  const [message, setMessage]             = useState(null)
 
-  // Build map: topicId → list of required topic ids
   const prereqMap = {}
   for (const edge of edges) {
     if (!prereqMap[edge.topic_id]) prereqMap[edge.topic_id] = []
     prereqMap[edge.topic_id].push(edge)
   }
-
   const topicById = {}
   topics.forEach(t => { topicById[t.id] = t })
 
   const handleRemoveEdge = async (edgeId) => {
-    setSaving(true)
-    const res = await fetch(`/api/admin/prerequisites/${subjectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remove_edge', edgeId }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      onRefresh()
+    setSaving(true); setMessage(null)
+    const { error } = await supabase
+      .from('topic_prerequisites')
+      .delete()
+      .eq('id', edgeId)
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
     } else {
-      setMessage({ type: 'error', text: data.error })
+      // Reset approval when map is edited
+      await supabase.from('subjects').update({ prereq_map_status: 'draft' }).eq('id', subjectId)
+      onRefresh()
     }
     setSaving(false)
   }
 
   const handleAddEdge = async (topicId) => {
     if (!selectedPrereq) return
-    setSaving(true)
-    setMessage(null)
-    const res = await fetch(`/api/admin/prerequisites/${subjectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add_edge', topicId, requiresTopicId: selectedPrereq }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      setAddingTo(null)
-      setSelectedPrereq('')
-      onRefresh()
+    setSaving(true); setMessage(null)
+
+    if (topicId === selectedPrereq) {
+      setMessage({ type: 'error', text: 'A topic cannot be its own prerequisite' })
+      setSaving(false); return
+    }
+
+    // Client-side cycle check
+    const testEdges = [
+      ...edges.map(e => ({ topic_id: e.topic_id, requires_topic_id: e.requires_topic_id })),
+      { topic_id: topicId, requires_topic_id: selectedPrereq },
+    ]
+    if (detectCycles(testEdges)) {
+      setMessage({ type: 'error', text: 'This would create a circular dependency — not allowed' })
+      setSaving(false); return
+    }
+
+    const { error } = await supabase
+      .from('topic_prerequisites')
+      .insert({ topic_id: topicId, requires_topic_id: selectedPrereq })
+
+    if (error) {
+      setMessage({ type: 'error', text: error.code === '23505' ? 'This prerequisite already exists' : error.message })
     } else {
-      setMessage({ type: 'error', text: data.error })
+      await supabase.from('subjects').update({ prereq_map_status: 'draft' }).eq('id', subjectId)
+      setAddingTo(null); setSelectedPrereq('')
+      onRefresh()
     }
     setSaving(false)
   }
@@ -243,33 +258,26 @@ function MapEditor({ subjectId, topics, edges, onRefresh }) {
     <div className="space-y-2">
       {message && (
         <div className={`px-4 py-3 rounded-xl text-sm ${
-          message.type === 'error'
-            ? 'bg-red-50 border border-red-200 text-red-700'
-            : 'bg-green-50 border border-green-200 text-green-700'
+          message.type === 'error' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'
         }`}>
           {message.text}
         </div>
       )}
 
       <p className="text-xs text-gray-500 pb-1">
-        {edges.length} prerequisite relationship{edges.length !== 1 ? 's' : ''} ·{' '}
+        {edges.length} relationship{edges.length !== 1 ? 's' : ''} ·{' '}
         {topics.filter(t => !prereqMap[t.id]?.length).length} foundational topics
       </p>
 
       {topics.map(topic => {
         const topicEdges = prereqMap[topic.id] ?? []
-        const isAdding = addingTo === topic.id
-        // Topics that can be prerequisites (exclude self and any that already depend on this topic)
-        const eligible = topics.filter(t =>
-          t.id !== topic.id &&
-          !topicEdges.find(e => e.requires_topic_id === t.id)
+        const isAdding   = addingTo === topic.id
+        const eligible   = topics.filter(t =>
+          t.id !== topic.id && !topicEdges.find(e => e.requires_topic_id === t.id)
         )
 
         return (
-          <div
-            key={topic.id}
-            className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-gray-300 transition-colors"
-          >
+          <div key={topic.id} className="bg-white border border-gray-200 rounded-2xl p-4 hover:border-gray-300 transition-colors">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900">{topic.name}</p>
@@ -281,19 +289,16 @@ function MapEditor({ subjectId, topics, edges, onRefresh }) {
                 ) : (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {topicEdges.map(edge => (
-                      <span
-                        key={edge.id}
+                      <span key={edge.id}
                         className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full font-medium"
                       >
                         Requires: {topicById[edge.requires_topic_id]?.name ?? '—'}
                         <button
                           onClick={() => handleRemoveEdge(edge.id)}
                           disabled={saving}
-                          className="ml-0.5 text-amber-500 hover:text-red-500 transition-colors font-black"
-                          title="Remove this prerequisite"
-                        >
-                          ×
-                        </button>
+                          className="ml-0.5 text-amber-500 hover:text-red-500 font-black transition-colors"
+                          title="Remove prerequisite"
+                        >×</button>
                       </span>
                     ))}
                   </div>
@@ -316,9 +321,7 @@ function MapEditor({ subjectId, topics, edges, onRefresh }) {
                   className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 >
                   <option value="">Select prerequisite topic…</option>
-                  {eligible.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
+                  {eligible.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 <button
                   onClick={() => handleAddEdge(topic.id)}
@@ -338,69 +341,125 @@ function MapEditor({ subjectId, topics, edges, onRefresh }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PrerequisiteMapEditor({ subject, topics }) {
-  const [tab, setTab]         = useState('map')   // 'generate' | 'map' | 'settings'
-  const [mapData, setMapData] = useState(null)    // { topics, edges, settings }
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving]   = useState(false)
-  const [message, setMessage] = useState(null)
-  const [pendingAiTopics, setPendingAiTopics] = useState(null) // parsed but not yet saved
+  const supabase = createClient()
 
+  const [tab, setTab]               = useState('map')
+  const [mapData, setMapData]       = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [message, setMessage]       = useState(null)
+  const [pendingAiTopics, setPendingAiTopics] = useState(null)
+
+  // ── Load edges + settings directly from Supabase ──────────────────────────
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await fetch(`/api/admin/prerequisites/${subject.id}`)
-    const data = await res.json()
-    setMapData(data)
+
+    const topicIds = topics.map(t => t.id)
+
+    const [{ data: edges }, { data: subjectRow }] = await Promise.all([
+      supabase
+        .from('topic_prerequisites')
+        .select('id, topic_id, requires_topic_id')
+        .in('topic_id', topicIds),
+      supabase
+        .from('subjects')
+        .select('prereq_map_status, prereq_depth, prereq_pass_threshold, prereq_reviewed_at')
+        .eq('id', subject.id)
+        .single(),
+    ])
+
+    setMapData({
+      topics,
+      edges:    edges ?? [],
+      settings: subjectRow ?? null,
+    })
     setLoading(false)
-  }, [subject.id])
+  }, [subject.id, topics])
 
   useEffect(() => { load() }, [load])
 
+  // ── Save AI-generated map ─────────────────────────────────────────────────
   const handleSaveAiMap = async () => {
     if (!pendingAiTopics) return
-    setSaving(true)
-    setMessage(null)
-    const res = await fetch(`/api/admin/prerequisites/${subject.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topics: pendingAiTopics }),
-    })
-    const data = await res.json()
-    if (data.errors?.length) {
-      setMessage({ type: 'warning', text: `Saved with ${data.errors.length} unmatched topic(s). Review below.` })
-    } else {
-      setMessage({ type: 'success', text: `${data.saved} prerequisite relationship${data.saved !== 1 ? 's' : ''} saved. Now review and approve the map.` })
+    setSaving(true); setMessage(null)
+
+    // Build name → id map
+    const nameToId = {}
+    topics.forEach(t => { nameToId[t.name.toLowerCase().trim()] = t.id })
+
+    const topicIds = topics.map(t => t.id)
+
+    // Delete existing edges
+    await supabase.from('topic_prerequisites').delete().in('topic_id', topicIds)
+
+    const edgesToInsert = []
+    const errors        = []
+
+    for (const aiTopic of pendingAiTopics) {
+      if (aiTopic.foundational || !aiTopic.prerequisites?.length) continue
+      const topicId = nameToId[aiTopic.name?.toLowerCase().trim()]
+      if (!topicId) { errors.push(`Not found: "${aiTopic.name}"`); continue }
+
+      for (const prereqName of aiTopic.prerequisites) {
+        const prereqId = nameToId[prereqName?.toLowerCase().trim()]
+        if (!prereqId) { errors.push(`Prereq not found: "${prereqName}"`); continue }
+        if (prereqId !== topicId) edgesToInsert.push({ topic_id: topicId, requires_topic_id: prereqId })
+      }
     }
+
+    // Cycle check before inserting
+    if (detectCycles(edgesToInsert)) {
+      setMessage({ type: 'error', text: 'Circular dependency detected in AI response — review and fix before saving.' })
+      setSaving(false); return
+    }
+
+    if (edgesToInsert.length > 0) {
+      const { error } = await supabase.from('topic_prerequisites').insert(edgesToInsert)
+      if (error) { setMessage({ type: 'error', text: error.message }); setSaving(false); return }
+    }
+
+    await supabase.from('subjects').update({ prereq_map_status: 'draft' }).eq('id', subject.id)
+
+    setMessage({
+      type: errors.length ? 'warning' : 'success',
+      text: errors.length
+        ? `Saved with ${errors.length} unmatched topic(s). Review the map below.`
+        : `${edgesToInsert.length} prerequisite relationship${edgesToInsert.length !== 1 ? 's' : ''} saved. Review and approve.`,
+    })
     setPendingAiTopics(null)
     await load()
     setTab('map')
     setSaving(false)
   }
 
+  // ── Approve ───────────────────────────────────────────────────────────────
   const handleApprove = async () => {
     setSaving(true)
-    await fetch(`/api/admin/prerequisites/${subject.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'approve' }),
-    })
-    setMessage({ type: 'success', text: 'Prerequisite map approved ✓ — students will now see prerequisite checks.' })
+    await supabase
+      .from('subjects')
+      .update({
+        prereq_map_status:  'approved',
+        prereq_reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', subject.id)
+    setMessage({ type: 'success', text: 'Map approved ✓ — students will now see prerequisite checks.' })
     await load()
     setSaving(false)
   }
 
+  // ── Revoke ────────────────────────────────────────────────────────────────
   const handleRevokeApproval = async () => {
-    if (!confirm('Revoking approval will disable prerequisite checks for students until you re-approve. Continue?')) return
+    if (!confirm('Revoking approval disables prerequisite checks for students until you re-approve. Continue?')) return
     setSaving(true)
-    await fetch(`/api/admin/prerequisites/${subject.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'revoke_approval' }),
-    })
+    await supabase
+      .from('subjects')
+      .update({ prereq_map_status: 'draft', prereq_reviewed_at: null })
+      .eq('id', subject.id)
     await load()
     setSaving(false)
   }
 
-  const mapStatus = mapData?.settings?.prereq_map_status ?? 'none'
+  const mapStatus  = mapData?.settings?.prereq_map_status ?? 'none'
   const statusInfo = STATUS_STYLES[mapStatus] ?? STATUS_STYLES.none
 
   if (loading) {
@@ -413,6 +472,7 @@ export default function PrerequisiteMapEditor({ subject, topics }) {
 
   return (
     <div className="space-y-5">
+
       {/* Status bar */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl px-5 py-4">
         <div>
@@ -468,9 +528,7 @@ export default function PrerequisiteMapEditor({ subject, topics }) {
           { id: 'generate', label: '+ Generate from AI' },
           { id: 'settings', label: 'Settings' },
         ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors whitespace-nowrap ${
               tab === t.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
@@ -480,24 +538,18 @@ export default function PrerequisiteMapEditor({ subject, topics }) {
         ))}
       </div>
 
-      {/* ── Tab: Generate ── */}
+      {/* Generate tab */}
       {tab === 'generate' && (
         <div className="space-y-4">
-          <PromptPanel
-            subject={subject}
-            topics={topics}
-            onJsonPasted={aiTopics => {
-              setPendingAiTopics(aiTopics)
-            }}
-          />
+          <PromptPanel subject={subject} topics={topics} onJsonPasted={setPendingAiTopics} />
           {pendingAiTopics && (
             <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 space-y-3">
               <p className="text-sm font-bold text-indigo-800">
-                AI returned {pendingAiTopics.length} topics.
+                AI returned {pendingAiTopics.length} topics —{' '}
+                {pendingAiTopics.filter(t => !t.foundational).length} with prerequisites.
               </p>
               <p className="text-xs text-indigo-600">
-                {pendingAiTopics.filter(t => !t.foundational).length} dependent topics with prerequisites.
-                Saving this will replace any existing prerequisite map for {subject.name}.
+                Saving will replace the existing map for {subject.name}.
               </p>
               <div className="flex gap-2">
                 <button
@@ -519,7 +571,7 @@ export default function PrerequisiteMapEditor({ subject, topics }) {
         </div>
       )}
 
-      {/* ── Tab: Map editor ── */}
+      {/* Map editor tab */}
       {tab === 'map' && (
         mapData?.topics?.length > 0 ? (
           <MapEditor
@@ -532,24 +584,17 @@ export default function PrerequisiteMapEditor({ subject, topics }) {
           <div className="text-center py-12 text-gray-400">
             <p className="text-3xl mb-3">🗺️</p>
             <p className="font-semibold text-gray-600">No map yet</p>
-            <p className="text-sm mt-1">Use the Generate tab to create the prerequisite map from AI.</p>
-            <button
-              onClick={() => setTab('generate')}
-              className="mt-4 text-sm text-indigo-600 font-bold hover:underline"
-            >
+            <p className="text-sm mt-1">Use Generate to create the prerequisite map from AI.</p>
+            <button onClick={() => setTab('generate')} className="mt-4 text-sm text-indigo-600 font-bold hover:underline">
               → Generate now
             </button>
           </div>
         )
       )}
 
-      {/* ── Tab: Settings ── */}
+      {/* Settings tab */}
       {tab === 'settings' && (
-        <SettingsPanel
-          subjectId={subject.id}
-          settings={mapData?.settings}
-          onUpdated={load}
-        />
+        <SettingsPanel subjectId={subject.id} settings={mapData?.settings} onUpdated={load} />
       )}
     </div>
   )

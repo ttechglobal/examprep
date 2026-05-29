@@ -33,8 +33,8 @@ function LoginForm() {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    // If diagnostic was taken before login, store it as pending so the dashboard picks it up.
-    // This handles the "Already have an account? Sign in" path from the diagnostic results page.
+    // If practice session was taken before login, migrate it so the dashboard picks it up.
+    // sessionStorage keys kept as-is — internal only, never shown to the user.
     const resultsRaw = sessionStorage.getItem('diagnostic_results')
     const setupRaw = sessionStorage.getItem('diagnostic_setup')
     if (resultsRaw && setupRaw && user) {
@@ -51,7 +51,7 @@ function LoginForm() {
         sessionStorage.removeItem('diagnostic_results')
         sessionStorage.removeItem('diagnostic_setup')
       } catch (e) {
-        console.error('Could not migrate diagnostic data:', e)
+        console.error('Could not migrate practice data:', e)
       }
     }
 
@@ -76,9 +76,10 @@ function LoginForm() {
     <>
       <h2 className="text-lg font-bold text-gray-900 mb-1">Welcome back</h2>
 
+      {/* "from=diagnostic" param still works for backward compat — message reworded */}
       {from === 'diagnostic' && (
         <p className="text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-4">
-          Sign in to save your diagnostic results and start your study plan.
+          Sign in to save your practice results and start your study plan.
         </p>
       )}
 
@@ -108,7 +109,7 @@ function LoginForm() {
             onChange={e => setPassword(e.target.value)}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="••••••••"
+            placeholder="Your password"
           />
         </div>
         <button
@@ -116,14 +117,14 @@ function LoginForm() {
           disabled={loading}
           className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? 'Signing in…' : 'Sign in →'}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-4">
         Don't have an account?{' '}
         <Link href="/signup" className="text-indigo-600 font-medium hover:underline">
-          Sign up free
+          Create one free
         </Link>
       </p>
     </>
@@ -132,14 +133,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
-          <p className="text-gray-500 text-sm mt-1">Your WAEC & JAMB preparation partner</p>
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <Suspense fallback={<div className="text-sm text-gray-400">Loading…</div>}>
+          <Suspense fallback={<div className="h-40 flex items-center justify-center"><div className="w-6 h-6 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
             <LoginForm />
           </Suspense>
         </div>

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
-  const examType = searchParams.get('exam') ?? 'WAEC'
+  let examType = searchParams.get('exam') ?? 'WAEC'
   const count = Math.min(parseInt(searchParams.get('count') ?? '10'), 30)
   const subjectNames = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
 

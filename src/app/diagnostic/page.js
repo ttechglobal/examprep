@@ -11,7 +11,7 @@ const AVAILABLE_SUBJECTS = [
   'Geography', 'Agricultural Science',
 ]
 
-function DiagnosticSetup() {
+function PracticeSetup() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const presetCount = parseInt(searchParams.get('questions') ?? '0')
@@ -25,7 +25,6 @@ function DiagnosticSetup() {
   const [isSignedIn, setIsSignedIn] = useState(false)
 
   useEffect(() => {
-    // If signed in, pre-fill from profile
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
@@ -56,6 +55,7 @@ function DiagnosticSetup() {
     if (!selectedSubjects.length) { setError('Please select at least one subject'); return }
     setError(null)
 
+    // Internal key names kept as-is — sessionStorage keys are not user-visible
     sessionStorage.setItem('diagnostic_setup', JSON.stringify({
       examType,
       subjects: selectedSubjects,
@@ -80,18 +80,18 @@ function DiagnosticSetup() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {isSignedIn ? 'Practice Questions' : 'Free diagnostic test — no account needed'}
+            {isSignedIn ? 'Practice Questions' : 'Free practice questions — no account needed'}
           </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-1">
-            {isSignedIn ? 'Set up your practice test' : "Let's personalise your study plan"}
+            {isSignedIn ? 'Set up your practice session' : "Let's personalise your study plan"}
           </h2>
           <p className="text-sm text-gray-500 mb-6">
             {isSignedIn
               ? 'Choose how many questions and which subjects to cover.'
-              : 'Answer a few questions and we\'ll show you exactly where to focus.'}
+              : "Answer a few questions and we'll show you exactly where to focus."}
           </p>
 
           {error && (
@@ -100,7 +100,7 @@ function DiagnosticSetup() {
             </div>
           )}
 
-          {/* Exam type — only show if not pre-filled */}
+          {/* Exam type */}
           {!presetExam && (
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -185,7 +185,7 @@ function DiagnosticSetup() {
             onClick={handleStart}
             className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
           >
-            Start test →
+            Start practice →
           </button>
         </div>
       </div>
@@ -200,7 +200,7 @@ export default function DiagnosticPage() {
         <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     }>
-      <DiagnosticSetup />
+      <PracticeSetup />
     </Suspense>
   )
 }

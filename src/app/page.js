@@ -1,30 +1,17 @@
 import Link from 'next/link'
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white">
-
-      {/* Nav */}
-      <nav className="px-4 py-4 flex items-center justify-between max-w-5xl mx-auto">
-        <span className="text-xl font-black text-indigo-600">ExamPrep</span>
-        <Link
-          href="/login"
-          className="text-sm font-medium text-gray-600 hover:text-gray-900"
-        >
-          Sign in
-        </Link>
-      </nav>
-
+    <div className="min-h-screen bg-gray-50">
       {/* Hero */}
-      <div className="max-w-2xl mx-auto px-4 pt-16 pb-10 text-center">
-        <div className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-full mb-6">
-          Built for Nigerian secondary school students 🇳🇬
-        </div>
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <h1 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-4">
-          Ace your WAEC and JAMB exams
+          Pass WAEC and JAMB<br />
+          <span className="text-indigo-600">with confidence</span>
         </h1>
-        <p className="text-lg text-gray-500 leading-relaxed mb-10">
-          Take a free diagnostic test, get a personalised study plan, and study smarter — topic by topic.
+        <p className="text-gray-500 text-lg mb-8 leading-relaxed">
+          Personalised practice questions, structured lessons, and weekly progress tracking —
+          built for Nigerian secondary school students.
         </p>
 
         {/* Student CTA */}
@@ -33,7 +20,7 @@ export default function Home() {
             href="/diagnostic"
             className="block w-full py-4 bg-indigo-600 text-white text-base font-black rounded-2xl hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-200"
           >
-            Start free diagnostic test →
+            Start free practice questions →
           </Link>
           <Link
             href="/login"
@@ -49,7 +36,7 @@ export default function Home() {
         {[
           { emoji: '🎯', title: 'Personalised plan', desc: 'We find your weak areas and build a study path just for you' },
           { emoji: '📚', title: 'Topic-by-topic lessons', desc: 'Clear, structured lessons with inline checks to keep you engaged' },
-          { emoji: '📊', title: 'Track your progress', desc: 'See how much you\'ve improved week by week' },
+          { emoji: '📊', title: 'Track your progress', desc: "See how much you've improved week by week" },
         ].map(f => (
           <div key={f.title} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <span className="text-3xl">{f.emoji}</span>

@@ -1,3 +1,38 @@
+// src/lib/questionParser.js
+// ─────────────────────────────────────────────────────────────────────────────
+// Parses and validates AI-extracted question JSON.
+// Also provides matchTopicSubtopic — subtopic-first curriculum matching.
+//
+// matchTopicSubtopic change:
+//   OLD: topic-first — only searched subtopics under a topic that scored >0.5
+//        This caused systematic misses because exam curricula use different
+//        topic names than the AI's topic_title suggestions.
+//   NEW: subtopic-first — scores ALL subtopics across ALL topics directly
+//        against the AI's subtopic_title. Parent topic is inferred from the
+//        winning subtopic. The AI's raw topic_title / subtopic_title strings
+//        are always passed through unchanged for display in the UI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Image-reference detection ─────────────────────────────────────────────────
+const IMAGE_TEXT_PATTERNS = [
+  /\bdiagram\b/i,
+  /\bfigure\b/i,
+  /\billustration\b/i,
+  /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
+  /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
+  /\busing the (information|data) (in|from) the (table|graph|chart)\b/i,
+  /\bfrom the graph\b/i,
+  /\bas shown (in|above|below)\b/i,
+]
+
+export function questionHasImage(q) {
+  if (q.has_image === true) return true
+  const text = (q.question_text ?? '').toLowerCase()
+  return IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
+}
+
+// ── Prompt builders ───────────────────────────────────────────────────────────
+
 export function buildQuestionPrompt(examType, subjectName) {
   return `You are an expert teacher and exam question analyst for Nigerian secondary school education.
 Exam: ${examType}
@@ -107,8 +142,9 @@ Return ONLY valid JSON using this structure:
 }`
 }
 
+// ── Parser + validator ────────────────────────────────────────────────────────
+
 export function parseQuestions(rawText) {
-  // Strip markdown fences
   let cleaned = rawText
     .trim()
     .replace(/^```json\s*/i, '')
@@ -116,7 +152,7 @@ export function parseQuestions(rawText) {
     .replace(/```\s*$/i, '')
     .trim()
 
-  // Fix unescaped control characters
+  // Fix unescaped control characters inside JSON strings
   cleaned = cleaned.replace(
     /"((?:[^"\\]|\\.)*)"/g,
     match => match
@@ -143,7 +179,7 @@ export function parseQuestions(rawText) {
     return { valid: false, errors: ['Response must be a JSON array of questions'], questions: [] }
   }
 
-  const errors = []
+  const errors   = []
   const validated = []
 
   parsed.forEach((q, i) => {
@@ -160,7 +196,7 @@ export function parseQuestions(rawText) {
     if (!q.topic_title?.trim()) qErrors.push(`${label}: missing topic_title`)
     if (!q.subtopic_title?.trim()) qErrors.push(`${label}: missing subtopic_title`)
     if (!['easy', 'medium', 'hard'].includes(q.difficulty)) {
-      q.difficulty = 'medium' // default
+      q.difficulty = 'medium'
     }
 
     if (qErrors.length > 0) {
@@ -171,63 +207,116 @@ export function parseQuestions(rawText) {
   })
 
   return {
-    valid: errors.length === 0,
+    valid:  errors.length === 0,
     errors,
     questions: validated,
     stats: {
-      total: parsed.length,
-      valid: validated.length,
+      total:   parsed.length,
+      valid:   validated.length,
       invalid: parsed.length - validated.length,
     },
   }
 }
 
+// ── Subtopic-first curriculum matching ───────────────────────────────────────
+//
+// How it works:
+//   1. Flatten ALL subtopics from all topics into one list.
+//   2. Score q.subtopic_title against every subtopic name.
+//   3. Best-scoring subtopic wins. Its parent topic is the matched topic.
+//   4. A secondary topic-name bonus (×0.2) acts as a tiebreaker when two
+//      subtopics score identically — it does not gate the search.
+//
+// Why subtopic-first beats topic-first:
+//   The AI returns subtopic_title values that closely reflect the actual
+//   concept tested (e.g. "Ohm's Law", "Newton's Second Law of Motion").
+//   Curriculum topic names are broader and use different wording than the
+//   AI's topic_title suggestions, so topic-first matching misses frequently.
+//   Subtopic names are specific enough to match reliably.
+//
+// Confidence thresholds:
+//   ≥ 0.7  → confirmed  (green, needsReview: false)
+//   0.4–0.69 → low confidence (amber, needsReview: true, best guess shown)
+//   < 0.4  → untagged  (red, must be set manually)
+//
+// The AI's raw topic_title + subtopic_title are always returned unchanged
+// as aiTopicTitle / aiSubtopicTitle so the UI can display them.
+
 export function matchTopicSubtopic(question, topics) {
-  // Try to find matching topic + subtopic from curriculum
-  let matchedTopic = null
-  let matchedSubtopic = null
-  let matchScore = 0
+  const qSubtopic = (question.subtopic_title ?? '').toLowerCase().trim()
+  const qTopic    = (question.topic_title ?? '').toLowerCase().trim()
+
+  let bestSubtopic  = null
+  let bestTopic     = null
+  let bestScore     = 0
 
   for (const topic of topics) {
-    const topicScore = stringSimilarity(
-      question.topic_title?.toLowerCase() ?? '',
-      topic.name.toLowerCase()
-    )
+    // Small bonus when topic name also matches — acts as tiebreaker only
+    const topicBonus = stringSimilarity(qTopic, topic.name.toLowerCase()) * 0.2
 
-    if (topicScore > 0.5) {
-      for (const sub of topic.subtopics ?? []) {
-        const subScore = stringSimilarity(
-          question.subtopic_title?.toLowerCase() ?? '',
-          sub.name.toLowerCase()
-        )
-        const combined = (topicScore + subScore) / 2
-        if (combined > matchScore) {
-          matchScore = combined
-          matchedTopic = topic
-          matchedSubtopic = sub
-        }
+    for (const sub of topic.subtopics ?? []) {
+      const subScore = stringSimilarity(qSubtopic, sub.name.toLowerCase())
+      const combined = subScore + topicBonus
+
+      if (combined > bestScore) {
+        bestScore    = combined
+        bestSubtopic = sub
+        bestTopic    = topic
       }
     }
   }
 
+  // Clamp to [0,1] — the bonus can push slightly above 1
+  const confidence = Math.min(bestScore, 1)
+
+  // Below floor → treat as no match
+  if (confidence < 0.4) {
+    return {
+      topic:          null,
+      subtopic:       null,
+      confidence:     0,
+      needsReview:    true,
+      aiTopicTitle:    question.topic_title    ?? '',
+      aiSubtopicTitle: question.subtopic_title ?? '',
+    }
+  }
+
   return {
-    topic: matchedTopic,
-    subtopic: matchedSubtopic,
-    confidence: matchScore,
-    needsReview: matchScore < 0.7,
+    topic:          bestTopic,
+    subtopic:       bestSubtopic,
+    confidence,
+    needsReview:    confidence < 0.7,
+    aiTopicTitle:    question.topic_title    ?? '',
+    aiSubtopicTitle: question.subtopic_title ?? '',
   }
 }
 
+// ── String similarity ─────────────────────────────────────────────────────────
+// Combines substring containment + word-overlap (Jaccard).
+// Normalises punctuation so "Newton's Laws" matches "Newton Laws".
+
 function stringSimilarity(a, b) {
-  if (a === b) return 1
   if (!a || !b) return 0
-  const longer = a.length > b.length ? a : b
-  const shorter = a.length > b.length ? b : a
-  if (longer.includes(shorter)) return shorter.length / longer.length
-  // Simple word overlap
-  const aWords = new Set(a.split(/\s+/))
-  const bWords = new Set(b.split(/\s+/))
+
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+  const na = norm(a)
+  const nb = norm(b)
+
+  if (na === nb) return 1
+
+  const longer  = na.length >= nb.length ? na : nb
+  const shorter = na.length >= nb.length ? nb : na
+
+  // Exact substring — strong signal
+  if (longer.includes(shorter) && shorter.length > 3) {
+    return shorter.length / longer.length
+  }
+
+  // Word overlap — Jaccard coefficient
+  const aWords = new Set(na.split(/\s+/).filter(w => w.length > 1))
+  const bWords = new Set(nb.split(/\s+/).filter(w => w.length > 1))
   const intersection = [...aWords].filter(w => bWords.has(w)).length
   const union = new Set([...aWords, ...bWords]).size
-  return intersection / union
+
+  return union === 0 ? 0 : intersection / union
 }

@@ -17,7 +17,8 @@ export default function DiagnosticTestPage() {
   const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState({})
-  const [revealed, setRevealed] = useState(false)
+  // `revealed` is now derived from `answers` — a question is revealed once
+  // it has an entry in the answers map. No separate revealed state needed.
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toasts, setToasts] = useState([])
@@ -116,22 +117,24 @@ export default function DiagnosticTestPage() {
   }, [loading, questions.length, totalSeconds, addToast, submitTest])
 
   const currentQuestion = questions[currentIndex]
-  const progress = questions.length > 0
-    ? ((currentIndex + 1) / questions.length) * 100 : 0
+  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0
 
-  const handleAnswer = ({ questionId, selected, isCorrect, subtopicId, topicId }) => {
-    setRevealed(true)
+  // Controlled answer handler — QuestionCard calls this with (questionId, selectedKey)
+  const handleAnswer = useCallback((questionId, selectedKey) => {
+    const q = questions.find(q => q.id === questionId)
+    if (!q || answers[questionId]) return   // already answered — ignore
+
     setAnswers(prev => ({
       ...prev,
       [questionId]: {
-        selected,
-        is_correct: isCorrect,
-        subtopic_id: subtopicId,
-        topic_id: topicId,
-        subject_id: currentQuestion.subject_id,
-      }
+        selected: selectedKey,
+        is_correct: selectedKey === q.correct_answer,
+        subtopic_id: q.subtopic_id,
+        topic_id: q.topic_id,
+        subject_id: q.subject_id,
+      },
     }))
-  }
+  }, [questions, answers])
 
   const handleNext = () => {
     if (currentIndex + 1 >= questions.length) {
@@ -139,7 +142,6 @@ export default function DiagnosticTestPage() {
       return
     }
     setCurrentIndex(i => i + 1)
-    setRevealed(false)
   }
 
   const handleSkip = () => {
@@ -148,7 +150,6 @@ export default function DiagnosticTestPage() {
       return
     }
     setCurrentIndex(i => i + 1)
-    setRevealed(false)
   }
 
   if (loading) {
@@ -180,6 +181,11 @@ export default function DiagnosticTestPage() {
   const timerColor = getTimerColor(secondsLeft, totalSeconds)
   const isLowTime = secondsLeft / totalSeconds <= 0.1
 
+  // Derive revealed and selectedAnswer for the current question from answers map
+  const currentAnswer = answers[currentQuestion.id]
+  const isRevealed = !!currentAnswer
+  const selectedAnswer = currentAnswer?.selected ?? null
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
@@ -210,7 +216,7 @@ export default function DiagnosticTestPage() {
 
       {/* Question */}
       <div className="max-w-lg mx-auto px-4 py-6">
-        {/* Tags */}
+        {/* Subject / topic tags */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
             {currentQuestion.subjects?.name ?? currentQuestion.subject_name}
@@ -222,18 +228,30 @@ export default function DiagnosticTestPage() {
           )}
         </div>
 
+        {/*
+          KEY PROP = currentQuestion.id
+          ──────────────────────────────
+          This forces React to unmount and remount QuestionCard whenever
+          the question changes. Combined with the controlled-component
+          pattern (selectedAnswer + revealed as props), this is belt-and-
+          suspenders: even if something in the component held local state,
+          the key guarantees a clean slate on every question change.
+        */}
         <QuestionCard
+          key={currentQuestion.id}
           question={currentQuestion}
+          selectedAnswer={selectedAnswer}
+          revealed={isRevealed}
           onAnswer={handleAnswer}
           showExplanation={true}
         />
 
-        {/* Next button — shown after answering */}
-        {revealed && (
-          <div className="mt-6">
+        {/* Next / See results button — shown after answering */}
+        {isRevealed && (
+          <div className="mt-5">
             <button
               onClick={handleNext}
-              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors"
+              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.99] transition-all"
             >
               {currentIndex + 1 >= questions.length ? 'See results →' : 'Next →'}
             </button>
@@ -241,9 +259,12 @@ export default function DiagnosticTestPage() {
         )}
 
         {/* Skip — only when not answered */}
-        {!revealed && (
+        {!isRevealed && (
           <div className="mt-4">
-            <button onClick={handleSkip} className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors">
+            <button
+              onClick={handleSkip}
+              className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors"
+            >
               Skip
             </button>
           </div>

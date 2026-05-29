@@ -10,18 +10,18 @@ const ENCOURAGING = [
   "This is your starting line, not your finish line.",
   "You now know exactly what to work on. That's powerful.",
   "Progress starts with knowing where you are.",
-  "The fact that you took this test puts you ahead of most.",
+  "The fact that you practised today puts you ahead of most.",
 ]
 
 function getEncouragement(score) {
   if (score >= 80) return "Outstanding! You have a strong foundation — let's sharpen the edges."
   if (score >= 60) return "Good performance! A few focused sessions will push you much higher."
   if (score >= 40) return "You're building. Your personalised plan will close these gaps fast."
-  if (score >= 20) return "Great start — this test just showed you exactly what to work on."
+  if (score >= 20) return "Great start — these results show you exactly what to work on."
   return ENCOURAGING[Math.floor(Math.random() * ENCOURAGING.length)]
 }
 
-export default function DiagnosticResultsPage() {
+export default function PracticeResultsPage() {
   const router = useRouter()
   const [results, setResults] = useState(null)
   const [summary, setSummary] = useState(null)
@@ -37,12 +37,10 @@ export default function DiagnosticResultsPage() {
     setResults(data)
     setSummary(buildSummary(data))
 
-    // Check auth
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         setIsSignedIn(true)
-        // Auto-save for signed-in users
         const setupRaw = sessionStorage.getItem('diagnostic_setup')
         if (setupRaw) {
           setSaving(true)
@@ -79,14 +77,12 @@ export default function DiagnosticResultsPage() {
       const attempt = answers[q.id]
       if (!attempt) return
 
-      // By subject
       if (!bySubject[q.subject_name]) {
         bySubject[q.subject_name] = { total: 0, correct: 0 }
       }
       bySubject[q.subject_name].total++
       if (attempt.is_correct) bySubject[q.subject_name].correct++
 
-      // By topic
       const topicKey = q.topic_name || q.subtopic_name || 'General'
       if (!byTopic[topicKey]) {
         byTopic[topicKey] = {
@@ -124,8 +120,7 @@ export default function DiagnosticResultsPage() {
 
   const totalCorrect = Object.values(results.answers).filter(a => a.is_correct).length
   const totalQuestions = Object.keys(results.answers).length
-  const overallScore = totalQuestions > 0
-    ? Math.round((totalCorrect / totalQuestions) * 100) : 0
+  const overallScore = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0
 
   const weakTopics = summary.topics.filter(t => t.isWeak)
   const strongTopics = summary.topics.filter(t => !t.isWeak)
@@ -142,7 +137,7 @@ export default function DiagnosticResultsPage() {
         {/* Logo */}
         <div className="text-center pb-2">
           <h1 className="text-2xl font-black text-indigo-600">ExamPrep</h1>
-          {saving && <p className="text-xs text-gray-400 mt-1">Saving your results...</p>}
+          {saving && <p className="text-xs text-gray-400 mt-1">Saving your results…</p>}
           {saved && <p className="text-xs text-green-600 mt-1">✓ Results saved to your account</p>}
         </div>
 
@@ -158,7 +153,7 @@ export default function DiagnosticResultsPage() {
           </p>
         </div>
 
-        {/* Topic breakdown — the most important section */}
+        {/* Topic breakdown */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-bold text-gray-900">Topic Breakdown</h2>
@@ -167,7 +162,6 @@ export default function DiagnosticResultsPage() {
             </p>
           </div>
 
-          {/* Weak topics */}
           {weakTopics.length > 0 && (
             <div>
               <div className="px-5 py-2 bg-red-50">
@@ -183,26 +177,20 @@ export default function DiagnosticResultsPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-20 h-2 bg-gray-100 rounded-full">
-                      <div
-                        className="h-full bg-red-400 rounded-full"
-                        style={{ width: `${topic.score}%` }}
-                      />
+                      <div className="h-full bg-red-400 rounded-full" style={{ width: `${topic.score}%` }} />
                     </div>
-                    <span className="text-sm font-bold text-red-600 w-10 text-right">
-                      {topic.score}%
-                    </span>
+                    <span className="text-sm font-bold text-red-600 w-10 text-right">{topic.score}%</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Strong topics */}
           {strongTopics.length > 0 && (
             <div>
               <div className="px-5 py-2 bg-green-50">
                 <p className="text-xs font-bold text-green-600 uppercase tracking-wide">
-                  Good
+                  Looking good
                 </p>
               </div>
               {strongTopics.map(topic => (
@@ -213,14 +201,9 @@ export default function DiagnosticResultsPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-20 h-2 bg-gray-100 rounded-full">
-                      <div
-                        className="h-full bg-green-400 rounded-full"
-                        style={{ width: `${topic.score}%` }}
-                      />
+                      <div className="h-full bg-green-400 rounded-full" style={{ width: `${topic.score}%` }} />
                     </div>
-                    <span className="text-sm font-bold text-green-600 w-10 text-right">
-                      {topic.score}%
-                    </span>
+                    <span className="text-sm font-bold text-green-600 w-10 text-right">{topic.score}%</span>
                   </div>
                 </div>
               ))}
@@ -231,7 +214,7 @@ export default function DiagnosticResultsPage() {
         {/* Personalised plan message */}
         <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-4">
           <p className="text-sm font-semibold text-indigo-800">
-            📋 We've created a personalised plan for you
+            📋 We've created a personalised study plan for you
           </p>
           <p className="text-xs text-indigo-600 mt-1">
             {weakTopics.length > 0
@@ -281,7 +264,7 @@ export default function DiagnosticResultsPage() {
 
         <p className="text-center text-xs text-gray-400 pb-6">
           <Link href="/diagnostic" className="text-indigo-500 hover:underline">
-            Retake the test
+            Take more practice questions
           </Link>
         </p>
 
