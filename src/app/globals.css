@@ -1,14 +1,51 @@
 @import "tailwindcss";
 
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
 @theme {
   --font-jakarta: var(--font-jakarta);
 }
 
+/* ── CSS custom properties for dark mode ──────────────────────────────────── */
+:root {
+  --bg-base:        #F5F5FA;
+  --bg-card:        #FFFFFF;
+  --bg-subtle:      #F8F9FB;
+  --border-default: #E8EAF0;
+  --text-primary:   #111827;
+  --text-secondary: #6B7280;
+  --text-tertiary:  #9CA3AF;
+}
+
+.dark {
+  --bg-base:        #0F0F13;
+  --bg-card:        #1A1A24;
+  --bg-subtle:      #161620;
+  --border-default: #2A2A38;
+  --text-primary:   #F0F0F8;
+  --text-secondary: #9898B8;
+  --text-tertiary:  #5A5A78;
+}
+
+/* ── Base styles ────────────────────────────────────────────────────────────── */
 @layer base {
   * {
     -webkit-tap-highlight-color: transparent;
   }
   body {
     font-family: var(--font-jakarta), system-ui, sans-serif;
+    background-color: var(--bg-base);
+    color: var(--text-primary);
   }
+}
+
+/* ── Dark mode utility overrides ─────────────────────────────────────────── */
+/* These let us write dark: variants without being in the Tailwind config */
+@layer utilities {
+  .bg-base        { background-color: var(--bg-base); }
+  .bg-card        { background-color: var(--bg-card); }
+  .bg-subtle      { background-color: var(--bg-subtle); }
+  .border-default { border-color: var(--border-default); }
+  .text-primary   { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-tertiary  { color: var(--text-tertiary); }
 }
