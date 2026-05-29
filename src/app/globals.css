@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+@theme {
+  --font-jakarta: var(--font-jakarta);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: var(--font-jakarta), system-ui, sans-serif;
+  }
+}
