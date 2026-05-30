@@ -1,6 +1,7 @@
-// src/app/student/layout.js
-// The wrapper div carries NO background — body already handles it via globals.css.
-// Header uses explicit bg-white / dark:bg-gray-900 so it's always solid.
+// src/app/student/layout.js — REPLACE ENTIRE FILE
+// Key changes vs current version:
+// 1. Wrapper div: removed all bg classes — html/body handle page background
+// 2. Header: explicit bg-white dark:bg-gray-900 (not bg-card which may not resolve yet)
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -27,28 +28,20 @@ export default async function StudentLayout({ children }) {
   return (
     <LessonNavProvider>
       <PointsProvider initialTotal={initialTotal}>
-        {/* No bg class here — body handles the page background */}
+        {/* NO background class — html/body from globals.css handles it */}
         <div className="min-h-screen">
 
-          {/* ── Header: solid, never transparent ── */}
-          <header className="
-            bg-white dark:bg-gray-900
-            border-b border-gray-200 dark:border-gray-800
-            sticky top-0 z-40
-          ">
+          {/* Header — always solid, responds to dark/light correctly */}
+          <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-40">
             <div className="max-w-screen-xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between">
 
-              {/* Logo */}
               <Link href="/student/dashboard" className="flex items-center gap-2 flex-shrink-0">
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
                   <span className="text-white text-xs font-black">EP</span>
                 </div>
-                <span className="text-base font-black text-gray-900 dark:text-white tracking-tight">
-                  ExamPrep
-                </span>
+                <span className="text-base font-black text-gray-900 dark:text-white tracking-tight">ExamPrep</span>
               </Link>
 
-              {/* Desktop nav */}
               <nav className="hidden lg:flex items-center gap-1">
                 {[
                   { href: '/student/dashboard', label: 'Home'      },
@@ -59,18 +52,16 @@ export default async function StudentLayout({ children }) {
                   { href: '/student/profile',   label: 'Profile'   },
                 ].map(({ href, label }) => (
                   <Link key={href} href={href}
-                    className="
-                      px-3 py-1.5 rounded-xl text-sm font-bold transition-colors
-                      text-gray-500 dark:text-gray-400
-                      hover:text-gray-900 dark:hover:text-white
-                      hover:bg-gray-100 dark:hover:bg-gray-800
-                    ">
+                    className="px-3 py-1.5 text-sm font-bold
+                               text-gray-500 dark:text-gray-400
+                               hover:text-gray-900 dark:hover:text-white
+                               hover:bg-gray-100 dark:hover:bg-gray-800
+                               rounded-xl transition-colors">
                     {label}
                   </Link>
                 ))}
               </nav>
 
-              {/* Right controls */}
               <div className="flex items-center gap-2">
                 <PointsBadge />
                 <DarkModeToggle />
@@ -78,14 +69,7 @@ export default async function StudentLayout({ children }) {
             </div>
           </header>
 
-          {/* ── Content area with desktop sidebar ── */}
-          <main className="
-            max-w-screen-xl mx-auto px-4 lg:px-8
-            py-5 pb-28 lg:pb-8
-            lg:grid lg:grid-cols-[240px_1fr] lg:gap-8
-            xl:grid-cols-[280px_1fr]
-          ">
-            {/* Sidebar (desktop only) */}
+          <main className="max-w-screen-xl mx-auto px-4 lg:px-8 py-5 pb-28 lg:pb-8 lg:grid lg:grid-cols-[240px_1fr] lg:gap-8 xl:grid-cols-[280px_1fr]">
             <aside className="hidden lg:block">
               <nav className="sticky top-20 space-y-1">
                 {[
@@ -97,13 +81,11 @@ export default async function StudentLayout({ children }) {
                   { href: '/student/profile',   label: 'Profile',   emoji: '👤' },
                 ].map(({ href, label, emoji }) => (
                   <Link key={href} href={href}
-                    className="
-                      flex items-center gap-3 px-4 py-2.5 rounded-xl
-                      text-sm font-bold transition-colors
-                      text-gray-500 dark:text-gray-400
-                      hover:text-gray-900 dark:hover:text-white
-                      hover:bg-gray-100 dark:hover:bg-gray-800
-                    ">
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl
+                               text-gray-500 dark:text-gray-400
+                               hover:text-gray-900 dark:hover:text-white
+                               hover:bg-gray-100 dark:hover:bg-gray-800
+                               transition-colors text-sm font-bold">
                     <span className="text-base">{emoji}</span>
                     {label}
                   </Link>
@@ -111,17 +93,14 @@ export default async function StudentLayout({ children }) {
               </nav>
             </aside>
 
-            {/* Page content */}
             <div className="min-w-0 max-w-2xl lg:max-w-none">
               {children}
             </div>
           </main>
 
-          {/* Bottom nav: mobile only */}
           <div className="lg:hidden">
             <BottomNavWrapper />
           </div>
-
         </div>
       </PointsProvider>
     </LessonNavProvider>

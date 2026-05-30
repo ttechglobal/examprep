@@ -1,8 +1,5 @@
 'use client'
 // src/components/ui/PointsBadge.jsx
-// Uses explicit Tailwind colors (not custom tokens) so it works reliably
-// in BOTH light and dark mode without depending on CSS variable resolution.
-
 import { usePoints } from '@/contexts/PointsContext'
 import { useEffect, useState } from 'react'
 
@@ -24,8 +21,7 @@ export default function PointsBadge() {
                      px-2.5 py-1 rounded-xl transition-all duration-300
                      ${pulse ? 'scale-110' : ''}`}>
       <span className="text-sm leading-none">⭐</span>
-      <span className="text-xs font-black tabular-nums
-                       text-indigo-700 dark:text-indigo-300">
+      <span className="text-xs font-black tabular-nums text-indigo-700 dark:text-indigo-300">
         {totalPoints.toLocaleString()}
       </span>
     </div>

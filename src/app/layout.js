@@ -1,3 +1,4 @@
+// src/app/layout.js — REPLACE ENTIRE FILE
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
@@ -18,7 +19,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head>
-        {/* Prevent flash of wrong theme */}
+        {/* Prevent flash of wrong theme — runs before paint */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
@@ -29,6 +30,7 @@ export default function RootLayout({ children }) {
           })();
         ` }} />
       </head>
+      {/* bg-base and text-primary now work via CSS variables in globals.css */}
       <body className="font-jakarta antialiased bg-base text-primary">
         <ThemeProvider>
           {children}

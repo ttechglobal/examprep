@@ -1,47 +1,60 @@
-/* src/app/globals.css */
+/* src/app/globals.css — REPLACE ENTIRE FILE */
 @import "tailwindcss";
 
 @theme {
   --font-jakarta: var(--font-jakarta);
 }
 
-@layer base {
-  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  body { font-family: var(--font-jakarta), system-ui, sans-serif; }
-  body          { @apply bg-gray-50  text-gray-900; }
-  .dark body    { @apply bg-gray-950 text-gray-100; }
-  input, select, textarea               { @apply bg-white     text-gray-900; }
-  .dark input, .dark select,
-  .dark textarea                        { @apply bg-gray-900  text-gray-100; }
-  input::placeholder, textarea::placeholder { @apply text-gray-400; }
+/* ── Light mode CSS variables ─────────────────────────────────────────────── */
+:root {
+  --bg-base:   #f9fafb;
+  --bg-card:   #ffffff;
+  --bg-subtle: #f3f4f6;
+  --text-prim: #111827;
+  --text-sec:  #6b7280;
+  --text-tert: #9ca3af;
+  --border:    #e5e7eb;
 }
 
+/* ── Dark mode CSS variables ──────────────────────────────────────────────── */
+.dark {
+  --bg-base:   #030712;
+  --bg-card:   #111827;
+  --bg-subtle: #1f2937;
+  --text-prim: #f9fafb;
+  --text-sec:  #9ca3af;
+  --text-tert: #6b7280;
+  --border:    #374151;
+}
+
+/* ── Base styles ──────────────────────────────────────────────────────────── */
+@layer base {
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  html, body {
+    background-color: var(--bg-base);
+    color: var(--text-prim);
+    font-family: var(--font-jakarta), system-ui, sans-serif;
+  }
+  input, select, textarea {
+    background-color: var(--bg-card);
+    color: var(--text-prim);
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-tert); }
+}
+
+/* ── Semantic utilities — use CSS vars, work automatically in light/dark ──── */
 @layer utilities {
-  /* ── Semantic surface aliases ── */
-  .bg-base            { @apply bg-gray-50;  }
-  .dark .bg-base      { @apply bg-gray-950; }
-  .bg-card            { @apply bg-white;    }
-  .dark .bg-card      { @apply bg-gray-900; }
-  .bg-subtle          { @apply bg-gray-100; }
-  .dark .bg-subtle    { @apply bg-gray-800; }
+  .bg-base    { background-color: var(--bg-base);   }
+  .bg-card    { background-color: var(--bg-card);   }
+  .bg-subtle  { background-color: var(--bg-subtle); }
 
-  /* ── Semantic text aliases ── */
-  .text-primary         { @apply text-gray-900; }
-  .dark .text-primary   { @apply text-gray-100; }
-  .text-secondary       { @apply text-gray-500; }
-  .dark .text-secondary { @apply text-gray-400; }
-  .text-tertiary        { @apply text-gray-400; }
-  .dark .text-tertiary  { @apply text-gray-500; }
+  .text-primary   { color: var(--text-prim); }
+  .text-secondary { color: var(--text-sec);  }
+  .text-tertiary  { color: var(--text-tert); }
 
-  /* ── Border alias ── */
-  .border-default       { @apply border-gray-200; }
-  .dark .border-default { @apply border-gray-700; }
+  .border-default { border-color: var(--border); }
+  .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
 
-  /* ── Divide alias ── */
-  .divide-default > :not([hidden]) ~ :not([hidden])      { @apply border-gray-200; }
-  .dark .divide-default > :not([hidden]) ~ :not([hidden]){ @apply border-gray-700; }
-
-  /* ── Z-index scale ── */
   .z-viewer { z-index: 100; }
   .z-modal  { z-index: 200; }
   .z-toast  { z-index: 300; }
