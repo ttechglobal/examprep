@@ -1,4 +1,9 @@
 // src/app/student/layout.js
+// Fixes:
+// - Desktop responsive: max-w-screen-xl, sidebar-like layout on wide screens
+// - Header: solid bg-card (not transparent)
+// - Bottom nav uses bg-card token so it responds to dark/light mode properly
+
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import BottomNavWrapper from '@/components/ui/BottomNavWrapper'
@@ -6,16 +11,16 @@ import { LessonNavProvider } from '@/contexts/LessonNavContext'
 import { PointsProvider } from '@/contexts/PointsContext'
 import PointsBadge from '@/components/ui/PointsBadge'
 import DarkModeToggle from '@/components/ui/DarkModeToggle'
+import Link from 'next/link'
 
 export default async function StudentLayout({ children }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Fetch total_points for initial hydration
   const { data: profile } = await supabase
     .from('profiles')
-    .select('total_points')
+    .select('total_points, full_name')
     .eq('id', user.id)
     .single()
 
@@ -25,29 +30,76 @@ export default async function StudentLayout({ children }) {
     <LessonNavProvider>
       <PointsProvider initialTotal={initialTotal}>
         <div className="min-h-screen bg-base">
+
+          {/* ── Header — solid bg, not transparent ── */}
           <header className="bg-card border-b border-default sticky top-0 z-40">
-            <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+            <div className="max-w-screen-xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between">
+              {/* Logo */}
+              <Link href="/student/dashboard" className="flex items-center gap-2 flex-shrink-0">
+                <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
                   <span className="text-white text-xs font-black">EP</span>
                 </div>
                 <span className="text-base font-black text-primary tracking-tight">ExamPrep</span>
-              </div>
+              </Link>
+
+              {/* Desktop nav links (hidden on mobile) */}
+              <nav className="hidden lg:flex items-center gap-1">
+                {[
+                  { href: '/student/dashboard', label: 'Home' },
+                  { href: '/student/learn',     label: 'Learn' },
+                  { href: '/student/practice',  label: 'Practice' },
+                  { href: '/student/videos',    label: 'Videos' },
+                  { href: '/student/community', label: 'Community' },
+                  { href: '/student/profile',   label: 'Profile' },
+                ].map(({ href, label }) => (
+                  <Link key={href} href={href}
+                    className="px-3 py-1.5 text-sm font-bold text-secondary hover:text-primary hover:bg-subtle rounded-xl transition-colors">
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+
+              {/* Right controls */}
               <div className="flex items-center gap-2">
                 <PointsBadge />
                 <DarkModeToggle />
-                <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                </div>
               </div>
             </div>
           </header>
-          <main className="max-w-lg mx-auto px-4 py-5 pb-28">
-            {children}
+
+          {/* ── Main content — wider on desktop ── */}
+          <main className="max-w-screen-xl mx-auto px-4 lg:px-8 py-5 pb-28 lg:pb-8 lg:grid lg:grid-cols-[240px_1fr] lg:gap-8 xl:grid-cols-[280px_1fr]">
+
+            {/* Desktop sidebar (lg+) */}
+            <aside className="hidden lg:block">
+              <nav className="sticky top-20 space-y-1">
+                {[
+                  { href: '/student/dashboard', label: 'Home',      emoji: '🏠' },
+                  { href: '/student/learn',     label: 'Learn Hub', emoji: '📚' },
+                  { href: '/student/practice',  label: 'Practice',  emoji: '✏️' },
+                  { href: '/student/videos',    label: 'Videos',    emoji: '🎬' },
+                  { href: '/student/community', label: 'Community', emoji: '👥' },
+                  { href: '/student/profile',   label: 'Profile',   emoji: '👤' },
+                ].map(({ href, label, emoji }) => (
+                  <Link key={href} href={href}
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-secondary hover:text-primary hover:bg-subtle transition-colors text-sm font-bold">
+                    <span className="text-base">{emoji}</span>
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+            </aside>
+
+            {/* Page content */}
+            <div className="min-w-0 max-w-2xl lg:max-w-none">
+              {children}
+            </div>
           </main>
-          <BottomNavWrapper />
+
+          {/* Bottom nav — mobile only */}
+          <div className="lg:hidden">
+            <BottomNavWrapper />
+          </div>
         </div>
       </PointsProvider>
     </LessonNavProvider>

@@ -1,253 +1,282 @@
 'use client'
 // src/app/student/practice/page.js
-// Practice HQ — central hub for all practice activity.
-// Modes: Topic Practice · Timed Test · Mock Test · Exam Simulation
-// Tabs:  Practice (modes) · History (past sessions + performance trend)
+// Fixes:
+// 1. Modal z-index — all modals use z-[200], backdrop-blur, pb-24 to clear navbar
+// 2. Practice session setup flow — subject, question count, answer timing
+// 3. Full dark mode compliance using CSS tokens
+// 4. Session setup replaces separate subject picker + count picker modals
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getSubjectColor } from '@/lib/theme'
 import Link from 'next/link'
 
-// ─── Mode cards ───────────────────────────────────────────────────────────────
+// ─── Practice modes ────────────────────────────────────────────────────────────
 const MODES = [
   {
-    id:       'topic',
-    emoji:    '🎯',
-    title:    'Topic Practice',
-    desc:     'Focus on one topic at a time',
-    badge:    null,
+    id: 'topic', emoji: '🎯', title: 'Topic Practice',
+    desc: 'Focus on one topic at a time',
     gradient: 'from-indigo-500 to-violet-600',
-    light:    'bg-indigo-50 text-indigo-700',
-    cta:      'Choose topic →',
   },
   {
-    id:       'timed',
-    emoji:    '⏱',
-    title:    'Timed Practice Test',
-    desc:     '10, 20, or 30 questions with a timer',
-    badge:    null,
+    id: 'timed', emoji: '⏱', title: 'Timed Practice Test',
+    desc: '10, 20, or 30 questions with a timer',
     gradient: 'from-blue-500 to-cyan-500',
-    light:    'bg-blue-50 text-blue-700',
-    cta:      'Start test →',
   },
   {
-    id:       'mock',
-    emoji:    '📋',
-    title:    'Mock Test',
-    desc:     'Full subject test, mixed difficulty',
-    badge:    'Popular',
+    id: 'mock', emoji: '📋', title: 'Mock Test',
+    desc: 'Full subject test, mixed difficulty',
+    badge: 'Popular',
     gradient: 'from-emerald-500 to-teal-500',
-    light:    'bg-emerald-50 text-emerald-700',
-    cta:      'Start mock →',
   },
   {
-    id:       'exam',
-    emoji:    '🏆',
-    title:    'Exam Simulation',
-    desc:     'Full WAEC/JAMB format — real conditions',
-    badge:    'Challenge',
+    id: 'exam', emoji: '🏆', title: 'Exam Simulation',
+    desc: 'Full WAEC/JAMB format — real conditions',
+    badge: 'Challenge',
     gradient: 'from-orange-500 to-red-500',
-    light:    'bg-orange-50 text-orange-700',
-    cta:      'Simulate exam →',
   },
 ]
 
-// ─── Subject picker modal ─────────────────────────────────────────────────────
-function SubjectPicker({ subjects, onSelect, onClose, title, subtitle }) {
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
+const COUNTS = [10, 20, 30, 40]
+
+// ─── Session setup modal ───────────────────────────────────────────────────────
+// Single modal that walks through subject → count → answer timing before starting
+function SessionSetupModal({ mode, subjects, examType, onStart, onClose }) {
+  const [step, setStep]             = useState('subject')   // 'subject' | 'config'
+  const [selectedSubject, setSelectedSubject] = useState(null)
+  const [count, setCount]           = useState(mode.id === 'mock' ? 40 : mode.id === 'exam' ? 50 : 20)
+  const [revealMode, setRevealMode] = useState('immediate') // 'immediate' | 'end'
+
+  const isExam = mode.id === 'exam'
+  const isMock = mode.id === 'mock'
+
+  function handleStart() {
+    const subjectNames = selectedSubject
+      ? [selectedSubject.name]
+      : subjects.map(s => s.name)
+
+    onStart({
+      examType:   examType ?? 'WAEC',
+      subjects:   subjectNames,
+      count:      isExam ? 50 : isMock ? 40 : count,
+      mode:       mode.id,
+      revealMode,
+    })
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/40" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[200] flex flex-col"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
       <div
-        className="mt-auto bg-white rounded-t-3xl w-full max-w-lg mx-auto"
+        className="mt-auto bg-card rounded-t-3xl w-full max-w-lg mx-auto pb-24 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-gray-200" />
+          <div className="w-10 h-1.5 rounded-full bg-subtle" />
         </div>
-        <div className="px-5 pt-2 pb-3">
-          <h3 className="font-black text-gray-900 text-base">{title}</h3>
-          <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
-        </div>
-        <div className="px-4 pb-6 space-y-2">
-          {subjects.map(s => {
-            const color = getSubjectColor(s.name)
-            return (
-              <button
-                key={s.id}
-                onClick={() => onSelect(s)}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 ${color.bg} rounded-2xl text-left hover:opacity-90 active:scale-[0.98] transition-all`}
-              >
-                <div className={`w-10 h-10 rounded-xl ${color.accent} flex items-center justify-center flex-shrink-0`}>
-                  <span className="text-white text-xs font-black">{s.name.slice(0,2).toUpperCase()}</span>
-                </div>
-                <div className="flex-1">
-                  <p className={`font-black text-sm ${color.text}`}>{s.name}</p>
-                  <p className={`text-xs ${color.text} opacity-60 mt-0.5`}>{s.exam_type}</p>
-                </div>
-                <svg className={`w-4 h-4 ${color.text} opacity-40`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
 
-// ─── Quick count picker ───────────────────────────────────────────────────────
-function CountPicker({ onSelect, onClose, title, options = [10, 20, 30] }) {
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-
-  const times = { 10: '15 min', 20: '30 min', 30: '45 min' }
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/40" onClick={onClose}>
-      <div className="mt-auto bg-white rounded-t-3xl w-full max-w-lg mx-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-gray-200" />
-        </div>
-        <div className="px-5 pt-2 pb-3">
-          <h3 className="font-black text-gray-900 text-base">{title}</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Pick how many questions</p>
-        </div>
-        <div className="px-4 pb-8 grid grid-cols-3 gap-3">
-          {options.map(n => (
-            <button
-              key={n}
-              onClick={() => onSelect(n)}
-              className="flex flex-col items-center py-5 bg-indigo-50 rounded-2xl hover:bg-indigo-100 active:scale-95 transition-all"
-            >
-              <span className="text-2xl font-black text-indigo-700">{n}</span>
-              <span className="text-xs text-indigo-500 mt-1">{times[n] ?? `${n * 1.5} min`}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── History tab ──────────────────────────────────────────────────────────────
-function HistoryTab({ sessions, loading }) {
-  if (loading) {
-    return (
-      <div className="space-y-3 pt-2">
-        {[1,2,3].map(i => (
-          <div key={i} className="bg-white rounded-2xl border border-gray-100 px-4 py-4 animate-pulse">
-            <div className="h-3 bg-gray-100 rounded w-1/2 mb-2" />
-            <div className="h-2 bg-gray-100 rounded w-1/3" />
+        {/* Header */}
+        <div className="px-5 pt-2 pb-4 flex items-center justify-between border-b border-default">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{mode.emoji}</span>
+            <div>
+              <p className="font-black text-primary">{mode.title}</p>
+              <p className="text-xs text-secondary">{mode.desc}</p>
+            </div>
           </div>
-        ))}
-      </div>
-    )
-  }
-
-  if (!sessions.length) {
-    return (
-      <div className="text-center py-16 space-y-3">
-        <p className="text-4xl">📊</p>
-        <p className="font-bold text-gray-700">No practice sessions yet</p>
-        <p className="text-sm text-gray-400">Complete a practice session to see your history here</p>
-      </div>
-    )
-  }
-
-  // Compute accuracy trend (last 7 sessions)
-  const recent = sessions.slice(0, 7).reverse()
-  const maxBar = 100
-
-  return (
-    <div className="space-y-5 pt-2">
-
-      {/* Trend mini-chart */}
-      {recent.length >= 2 && (
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-black text-gray-900 mb-4">Accuracy Trend</p>
-          <div className="flex items-end gap-2 h-20">
-            {recent.map((s, i) => {
-              const pct = s.score_pct ?? 0
-              const isLast = i === recent.length - 1
-              const color = getSubjectColor(s.subject_name)
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <span className={`text-[10px] font-bold ${isLast ? 'text-indigo-600' : 'text-gray-400'}`}>
-                    {pct}%
-                  </span>
-                  <div className="w-full flex flex-col justify-end" style={{ height: 56 }}>
-                    <div
-                      className={`w-full rounded-t-lg transition-all duration-700 ${isLast ? color.accent : 'bg-gray-200'}`}
-                      style={{ height: `${Math.max(4, Math.round((pct / maxBar) * 56))}px` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-gray-400">Older</span>
-            <span className="text-xs text-gray-400">Latest</span>
-          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full bg-subtle flex items-center justify-center text-secondary hover:text-primary">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
-      )}
 
-      {/* Session list */}
-      <div className="space-y-2">
-        {sessions.map((s, i) => {
-          const color = getSubjectColor(s.subject_name)
-          const date  = new Date(s.completed_at).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })
-          const pct   = s.score_pct ?? 0
+        <div className="px-5 py-4 space-y-5">
 
-          return (
-            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-2xl ${color.bg} flex items-center justify-center flex-shrink-0`}>
-                <span className={`text-xs font-black ${color.text}`}>{s.subject_name?.slice(0,2).toUpperCase() ?? '??'}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-900 truncate">
-                  {s.mode === 'exam' ? 'Exam Simulation' : s.mode === 'mock' ? 'Mock Test' : `${s.questions_count} Questions`}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">{s.subject_name ?? 'Mixed'} · {date}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className={`text-base font-black ${pct >= 70 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
-                  {pct}%
-                </p>
-                <p className="text-xs text-gray-400">{s.correct_count}/{s.questions_count}</p>
+          {/* Subject selection */}
+          {!isExam && (
+            <div>
+              <p className="text-xs font-black text-secondary uppercase tracking-wide mb-2.5">Subject</p>
+              <div className="grid grid-cols-2 gap-2">
+                {isMock ? (
+                  // Mock test: pick one subject
+                  subjects.map(s => {
+                    const color = getSubjectColor(s.name)
+                    return (
+                      <button key={s.id} onClick={() => setSelectedSubject(s)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                          selectedSubject?.id === s.id
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40'
+                            : 'border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
+                        }`}>
+                        <div className={`w-7 h-7 rounded-lg ${color.bg} flex items-center justify-center flex-shrink-0`}>
+                          <span className={`text-xs font-black ${color.text}`}>{s.name.slice(0,2).toUpperCase()}</span>
+                        </div>
+                        <span className="text-xs font-bold text-primary truncate">{s.name}</span>
+                      </button>
+                    )
+                  })
+                ) : (
+                  // Topic/timed: all subjects or specific
+                  <>
+                    <button onClick={() => setSelectedSubject(null)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all col-span-2 ${
+                        !selectedSubject ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40' : 'border-default bg-card hover:border-indigo-300'
+                      }`}>
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                        <span className="text-white text-xs font-black">ALL</span>
+                      </div>
+                      <span className="text-xs font-bold text-primary">All subjects</span>
+                    </button>
+                    {subjects.map(s => {
+                      const color = getSubjectColor(s.name)
+                      return (
+                        <button key={s.id} onClick={() => setSelectedSubject(s)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                            selectedSubject?.id === s.id
+                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40'
+                              : 'border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
+                          }`}>
+                          <div className={`w-7 h-7 rounded-lg ${color.bg} flex items-center justify-center flex-shrink-0`}>
+                            <span className={`text-xs font-black ${color.text}`}>{s.name.slice(0,2).toUpperCase()}</span>
+                          </div>
+                          <span className="text-xs font-bold text-primary truncate">{s.name}</span>
+                        </button>
+                      )
+                    })}
+                  </>
+                )}
               </div>
             </div>
-          )
-        })}
+          )}
+
+          {/* Question count */}
+          {!isExam && !isMock && (
+            <div>
+              <p className="text-xs font-black text-secondary uppercase tracking-wide mb-2.5">Questions</p>
+              <div className="flex gap-2">
+                {COUNTS.map(n => (
+                  <button key={n} onClick={() => setCount(n)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-black border-2 transition-all ${
+                      count === n
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400'
+                        : 'border-default bg-card text-primary hover:border-indigo-300 dark:hover:border-indigo-700'
+                    }`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Answer reveal timing */}
+          {!isExam && (
+            <div>
+              <p className="text-xs font-black text-secondary uppercase tracking-wide mb-2.5">Show answers</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'immediate', label: 'After each question', desc: 'See what you got right immediately', emoji: '⚡' },
+                  { value: 'end',       label: 'At the end',          desc: 'Review all answers when done',      emoji: '📊' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => setRevealMode(opt.value)}
+                    className={`flex flex-col items-start gap-1 px-3 py-3 rounded-xl border-2 text-left transition-all ${
+                      revealMode === opt.value
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40'
+                        : 'border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
+                    }`}>
+                    <span className="text-lg">{opt.emoji}</span>
+                    <p className="text-xs font-black text-primary">{opt.label}</p>
+                    <p className="text-xs text-secondary">{opt.desc}</p>
+                    {opt.value === 'immediate' && revealMode === opt.value && (
+                      <span className="text-xs text-indigo-500 font-bold">Default</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Start button */}
+          <button
+            onClick={handleStart}
+            disabled={isMock && !selectedSubject}
+            className={`w-full py-4 bg-gradient-to-r ${mode.gradient} text-white text-sm font-black rounded-2xl
+                        hover:opacity-90 disabled:opacity-40 transition-all active:scale-[0.98]`}
+          >
+            {isExam ? 'Start exam simulation →'
+              : `Start — ${isExam ? 50 : isMock ? 40 : count} questions →`}
+          </button>
+
+          {isMock && !selectedSubject && (
+            <p className="text-xs text-center text-secondary">Select a subject to continue</p>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── History tab ───────────────────────────────────────────────────────────────
+function HistoryTab({ sessions, loading }) {
+  if (loading) return (
+    <div className="space-y-3 animate-pulse">
+      {[1,2,3].map(i => <div key={i} className="h-16 bg-subtle rounded-2xl" />)}
+    </div>
+  )
+  if (!sessions.length) return (
+    <div className="text-center py-12">
+      <p className="text-3xl mb-2">📭</p>
+      <p className="font-bold text-primary mb-1">No sessions yet</p>
+      <p className="text-sm text-secondary">Complete a practice session and it'll show here.</p>
+    </div>
+  )
+  return (
+    <div className="space-y-2">
+      {sessions.map((s, i) => {
+        const color = getSubjectColor(s.subject_name)
+        const pct   = s.questions_count > 0 ? Math.round((s.correct_count / s.questions_count) * 100) : 0
+        const date  = new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        return (
+          <div key={i} className="flex items-center gap-3 bg-card border border-default rounded-2xl px-4 py-3">
+            <div className={`w-10 h-10 rounded-xl ${color.bg} flex items-center justify-center flex-shrink-0`}>
+              <span className={`text-xs font-black ${color.text}`}>{s.subject_name?.slice(0,2).toUpperCase() ?? '??'}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-primary truncate">
+                {s.mode === 'exam' ? 'Exam Simulation' : s.mode === 'mock' ? 'Mock Test' : `${s.questions_count} Questions`}
+              </p>
+              <p className="text-xs text-secondary mt-0.5">{s.subject_name ?? 'Mixed'} · {date}</p>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className={`text-base font-black ${pct >= 70 ? 'text-green-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                {pct}%
+              </p>
+              <p className="text-xs text-secondary">{s.correct_count}/{s.questions_count}</p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function PracticeHQPage() {
   const router   = useRouter()
   const supabase = createClient()
 
-  const [tab, setTab]           = useState('practice')  // 'practice' | 'history'
+  const [tab, setTab]           = useState('practice')
   const [profile, setProfile]   = useState(null)
   const [subjects, setSubjects] = useState([])
   const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [loading, setLoading]   = useState(true)
-
-  // Modal state
-  const [subjectPicker, setSubjectPicker] = useState(null) // { mode }
-  const [countPicker, setCountPicker]     = useState(null) // { mode, subject? }
+  const [setupModal, setSetupModal] = useState(null)  // mode object | null
 
   useEffect(() => { init() }, [])
   useEffect(() => { if (tab === 'history' && !sessions.length) loadHistory() }, [tab])
@@ -255,100 +284,42 @@ export default function PracticeHQPage() {
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
-
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('subjects, exam_type')
-      .eq('id', user.id)
-      .single()
-
+    const { data: prof } = await supabase.from('profiles').select('subjects, exam_type').eq('id', user.id).single()
     setProfile(prof)
-
     if (prof?.subjects?.length) {
-      const { data: rows } = await supabase
-        .from('subjects')
-        .select('id, name, slug, exam_type')
-        .in('name', prof.subjects)
-        .eq('is_active', true)
+      const { data: rows } = await supabase.from('subjects')
+        .select('id, name, slug, exam_type').in('name', prof.subjects).eq('is_active', true)
       setSubjects(rows ?? [])
     }
-
     setLoading(false)
   }
 
   async function loadHistory() {
-    if (!profile) return
     setSessionsLoading(true)
-    try {
-      // Aggregate question_attempts into sessions by context + created_at bucket
-      const { data: attempts } = await supabase
-        .from('question_attempts')
-        .select('id, is_correct, subject_id, context, created_at, subjects(name)')
-        .eq('student_id', (await supabase.auth.getUser()).data.user.id)
-        .order('created_at', { ascending: false })
-        .limit(200)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSessionsLoading(false); return }
+    const { data } = await supabase.from('practice_sessions')
+      .select('id, mode, questions_count, correct_count, subject_name, created_at')
+      .eq('student_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    setSessions(data ?? [])
+    setSessionsLoading(false)
+  }
 
-      // Group into pseudo-sessions by 30-min windows
-      const grouped = []
-      let current   = null
-
-      for (const a of (attempts ?? [])) {
-        const t = new Date(a.created_at).getTime()
-        if (!current || t < current.startTime - 30 * 60 * 1000) {
-          if (current) grouped.push(current)
-          current = {
-            subject_name:     a.subjects?.name ?? 'Mixed',
-            subject_id:       a.subject_id,
-            mode:             a.context ?? 'practice',
-            questions_count:  0,
-            correct_count:    0,
-            completed_at:     a.created_at,
-            startTime:        t,
-          }
-        }
-        current.questions_count++
-        if (a.is_correct) current.correct_count++
-      }
-      if (current) grouped.push(current)
-
-      setSessions(grouped.map(s => ({
-        ...s,
-        score_pct: s.questions_count > 0 ? Math.round((s.correct_count / s.questions_count) * 100) : 0,
-      })))
-    } finally { setSessionsLoading(false) }
+  function handleModeClick(mode) {
+    if (mode.id === 'exam') {
+      // Exam simulation — no setup needed, just confirm
+      startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: subjects.map(s => s.name), count: 50, mode: 'exam', revealMode: 'end' })
+    } else {
+      setSetupModal(mode)
+    }
   }
 
   function startSession(config) {
+    setSetupModal(null)
     sessionStorage.setItem('practice_config', JSON.stringify(config))
     router.push('/student/practice/session')
-  }
-
-  function handleModePress(mode) {
-    if (mode === 'topic') {
-      setSubjectPicker({ mode })
-    } else if (mode === 'timed') {
-      setCountPicker({ mode, subjects: subjects.map(s => s.name) })
-    } else if (mode === 'mock') {
-      setSubjectPicker({ mode })
-    } else if (mode === 'exam') {
-      startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: subjects.map(s => s.name), count: 50, mode: 'exam' })
-    }
-  }
-
-  function handleSubjectSelected(subject) {
-    const mode = subjectPicker.mode
-    setSubjectPicker(null)
-    if (mode === 'mock') {
-      startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: [subject.name], count: 40, mode: 'mock' })
-    } else {
-      setCountPicker({ mode, subjects: [subject.name] })
-    }
-  }
-
-  function handleCountSelected(count) {
-    const { mode, subjects: subs } = countPicker
-    setCountPicker(null)
-    startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: subs, count, mode })
   }
 
   if (loading) {
@@ -364,113 +335,84 @@ export default function PracticeHQPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-black text-gray-900">Practice HQ</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Your hub for every kind of exam practice</p>
+        <h1 className="text-2xl font-black text-primary">Practice HQ</h1>
+        <p className="text-sm text-secondary mt-0.5">Your hub for every kind of exam practice</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl w-fit">
+      <div className="flex gap-1 bg-subtle p-1 rounded-2xl w-fit">
         {[{ id: 'practice', label: 'Practice' }, { id: 'history', label: 'History' }].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-5 py-2 text-sm font-black rounded-xl transition-all ${
-              tab === t.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
+              tab === t.id ? 'bg-card text-primary shadow-sm' : 'text-secondary'
+            }`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Practice tab */}
+      {/* Practice modes */}
       {tab === 'practice' && (
         <div className="space-y-3">
-
-          {/* Stats strip */}
-          {sessions.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: 'Sessions', value: sessions.length },
-                { label: 'Avg score', value: `${Math.round(sessions.reduce((a, s) => a + s.score_pct, 0) / sessions.length)}%` },
-                { label: 'Best', value: `${Math.max(...sessions.map(s => s.score_pct))}%` },
-              ].map(stat => (
-                <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3 text-center">
-                  <p className="text-lg font-black text-gray-900">{stat.value}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{stat.label}</p>
+          {MODES.map(mode => (
+            <button key={mode.id} onClick={() => handleModeClick(mode)}
+              className="w-full flex items-center gap-4 bg-card border border-default rounded-2xl px-4 py-4
+                         hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-sm
+                         transition-all active:scale-[0.98] text-left">
+              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${mode.gradient}
+                               flex items-center justify-center flex-shrink-0 text-2xl shadow-sm`}>
+                {mode.emoji}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-black text-primary">{mode.title}</p>
+                  {mode.badge && (
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full">
+                      {mode.badge}
+                    </span>
+                  )}
                 </div>
-              ))}
+                <p className="text-xs text-secondary mt-0.5">{mode.desc}</p>
+              </div>
+              <svg className="w-4 h-4 text-tertiary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+              </svg>
+            </button>
+          ))}
+
+          {/* Quick timed shortcut */}
+          {subjects.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl px-5 py-4 flex items-center gap-4">
+              <div>
+                <p className="text-white font-black text-sm">Quick 10-question timed test</p>
+                <p className="text-white/70 text-xs mt-0.5">
+                  {subjects.slice(0, 2).map(s => s.name).join(' · ')}
+                  {subjects.length > 2 && ` + ${subjects.length - 2} more`}
+                </p>
+              </div>
+              <button
+                onClick={() => startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: subjects.map(s => s.name), count: 10, mode: 'timed', revealMode: 'immediate' })}
+                className="flex-shrink-0 px-4 py-2.5 bg-white text-blue-700 text-sm font-black rounded-2xl hover:bg-blue-50 active:scale-95 transition-all ml-auto"
+              >
+                Go →
+              </button>
             </div>
           )}
-
-          {/* Mode cards — 2 column grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {MODES.map(mode => (
-              <button
-                key={mode.id}
-                onClick={() => handleModePress(mode.id)}
-                className="relative bg-white rounded-3xl border border-gray-100 shadow-sm p-4 text-left hover:shadow-md hover:border-gray-200 active:scale-[0.97] transition-all overflow-hidden"
-              >
-                {/* Gradient accent top strip */}
-                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${mode.gradient} rounded-t-3xl`} />
-
-                {/* Badge */}
-                {mode.badge && (
-                  <div className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-black ${mode.light}`}>
-                    {mode.badge}
-                  </div>
-                )}
-
-                <div className="mt-2 mb-3">
-                  <span className="text-3xl">{mode.emoji}</span>
-                </div>
-                <p className="text-sm font-black text-gray-900 leading-snug">{mode.title}</p>
-                <p className="text-xs text-gray-400 mt-1 leading-snug">{mode.desc}</p>
-                <p className={`text-xs font-bold mt-3 bg-gradient-to-r ${mode.gradient} bg-clip-text text-transparent`}>
-                  {mode.cta}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          {/* Quick start strip */}
-          <div className="bg-indigo-600 rounded-3xl p-5 flex items-center gap-4">
-            <div className="flex-1">
-              <p className="text-white font-black text-base">Quick Practice</p>
-              <p className="text-indigo-200 text-xs mt-0.5">10 random questions, all subjects, right now</p>
-            </div>
-            <button
-              onClick={() => startSession({ examType: profile?.exam_type ?? 'WAEC', subjects: subjects.map(s => s.name), count: 10, mode: 'timed' })}
-              className="flex-shrink-0 px-4 py-2.5 bg-white text-indigo-700 text-sm font-black rounded-2xl hover:bg-indigo-50 active:scale-95 transition-all"
-            >
-              Go →
-            </button>
-          </div>
         </div>
       )}
 
-      {/* History tab */}
       {tab === 'history' && (
         <HistoryTab sessions={sessions} loading={sessionsLoading} />
       )}
 
-      {/* Subject picker modal */}
-      {subjectPicker && (
-        <SubjectPicker
+      {/* Session setup modal — z-[200], transparent backdrop, pb-24 clears navbar */}
+      {setupModal && (
+        <SessionSetupModal
+          mode={setupModal}
           subjects={subjects}
-          title={MODES.find(m => m.id === subjectPicker.mode)?.title ?? 'Choose subject'}
-          subtitle="Which subject do you want to focus on?"
-          onSelect={handleSubjectSelected}
-          onClose={() => setSubjectPicker(null)}
-        />
-      )}
-
-      {/* Count picker modal */}
-      {countPicker && (
-        <CountPicker
-          title="How many questions?"
-          onSelect={handleCountSelected}
-          onClose={() => setCountPicker(null)}
+          examType={profile?.exam_type}
+          onStart={startSession}
+          onClose={() => setSetupModal(null)}
         />
       )}
     </div>

@@ -12,3 +12,42 @@
   body { @apply bg-gray-50 text-gray-900; }
   .dark body { @apply bg-gray-950 text-gray-100; }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   APPEND THIS TO src/app/globals.css
+   (Add after the existing utility layer block)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Z-index scale — modals always win over navbar ──────────────────────────── */
+/* Bottom navbar is z-50. Modals must be z-[200] or higher.                     */
+/* Every modal/overlay/sheet in the app must use one of these layers.           */
+@layer utilities {
+  /* Navbar sits here */
+  /* .z-50 = 50 (Tailwind built-in) — do not exceed this for persistent chrome  */
+
+  /* Full-screen viewers (LessonViewer, exam mode) */
+  .z-viewer  { z-index: 100; }
+
+  /* Standard modals, bottom sheets, drawers */
+  .z-modal   { z-index: 200; }
+
+  /* Toast notifications — above everything */
+  .z-toast   { z-index: 300; }
+}
+
+/* ── Light mode: ensure pure-white surfaces read correctly ───────────────────
+   The --bg-card token is white in light mode.
+   Certain third-party or legacy components hardcode dark bg colors.
+   These overrides restore correct contrast without touching JS files.        */
+
+/* Inputs and selects — consistent in both modes */
+@layer base {
+  input, select, textarea {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+}

@@ -1,5 +1,5 @@
 // src/app/student/videos/[id]/page.js
-// Full video lesson page — video player + practice questions
+// Fix: dark mode — header uses bg-card / border-default tokens, not hardcoded white
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
@@ -30,20 +30,23 @@ export default async function VideoLessonPage({ params }) {
   if (error || !lesson) notFound()
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Back nav */}
-      <div className="sticky top-0 bg-white border-b border-gray-100 z-10 px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <Link
-            href="/student/videos"
-            className="text-gray-400 hover:text-gray-600 text-sm font-medium"
-          >
-            ← Videos
+    <div className="min-h-screen bg-base pb-24">
+      {/* Back nav — uses CSS tokens for dark mode */}
+      <div className="sticky top-14 bg-card border-b border-default z-10 px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <Link href="/student/videos"
+            className="flex items-center gap-1.5 text-sm font-medium text-secondary hover:text-primary transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Videos
           </Link>
+          <span className="text-tertiary">·</span>
+          <p className="text-sm font-bold text-primary truncate">{lesson.title}</p>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 pt-5">
+      <div className="max-w-2xl mx-auto px-4 pt-5">
         <VideoLessonPlayer lesson={lesson} />
       </div>
     </div>
