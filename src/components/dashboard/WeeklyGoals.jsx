@@ -1,258 +1,260 @@
 'use client'
 // src/components/dashboard/WeeklyGoals.jsx
-// Polish pass:
-// - No card border/outline — cleaner look
-// - Edit + delete always visible (not hover-only) — mobile friendly
-// - Modal backdrop: solid dark overlay, NOT blurred, so content is readable
-// - Inline quick-add stays; Manage still available
-// - Simpler header: just gradient bar + goals count
+// All explicit Tailwind colors — no custom token dependencies.
+// Fixes:
+// 1. "Weekly Goals" title visible above gradient
+// 2. Goal preview lines: SHORTENED (max-w, truncate) + DIMMED (text-gray-400/500)
+// 3. Modal panel: bg-white dark:bg-gray-900 (solid, never transparent)
+// 4. Modal buttons: visible in both light + dark
+// 5. No counter, no Reset Monday, no Manage — only Add
+// 6. Mount-reset bug fixed (module-level cache + fetchedRef)
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 
-const SMART_SUGGESTIONS = [
+const SUGGESTIONS = [
   { emoji: '📝', text: 'Complete 20 practice questions in Biology' },
   { emoji: '📖', text: 'Revise 3 topics in Chemistry this week' },
-  { emoji: '⏱', text: 'Finish 2 timed practice tests' },
+  { emoji: '⏱',  text: 'Finish 2 timed practice tests' },
   { emoji: '🎯', text: 'Score 70%+ on a Physics mock exam' },
   { emoji: '📚', text: 'Complete 5 lessons across all subjects' },
   { emoji: '✏️', text: 'Solve 30 Maths questions without hints' },
 ]
 
-// ─── Goals management modal ───────────────────────────────────────────────────
+// Module-level cache — survives remounts without refetch
+let _cache = null
+
+// ─── Goals Modal — solid background ───────────────────────────────────────────
 function GoalsModal({ goals, onClose, onToggle, onAdd, onEdit, onDelete }) {
-  const [newText, setNewText]     = useState('')
-  const [saving, setSaving]       = useState(false)
+  const [newText,   setNewText]   = useState('')
+  const [saving,    setSaving]    = useState(false)
   const [showInput, setShowInput] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [editText, setEditText]   = useState('')
+  const [editId,    setEditId]    = useState(null)
+  const [editText,  setEditText]  = useState('')
   const inputRef = useRef(null)
   const editRef  = useRef(null)
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
-  useEffect(() => { if (showInput)  inputRef.current?.focus() }, [showInput])
-  useEffect(() => { if (editingId)  editRef.current?.focus()  }, [editingId])
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
+  useEffect(() => { if (showInput) inputRef.current?.focus() }, [showInput])
+  useEffect(() => { if (editId)   editRef.current?.focus()  }, [editId])
 
   const done  = goals.filter(g => g.completed).length
   const total = goals.length
   const pct   = total > 0 ? Math.round((done / total) * 100) : 0
 
-  async function handleAdd(text) {
-    if (!text?.trim() || saving) return
-    setSaving(true)
-    await onAdd(text.trim())
-    setNewText(''); setShowInput(false); setSaving(false)
+  async function handleAdd() {
+    if (!newText.trim() || saving) return
+    setSaving(true); await onAdd(newText.trim()); setNewText(''); setShowInput(false); setSaving(false)
   }
-
-  function startEdit(g) { setEditingId(g.id); setEditText(g.text) }
-  function saveEdit() {
-    if (editText.trim() && editText !== goals.find(g => g.id === editingId)?.text)
-      onEdit(editingId, editText.trim())
-    setEditingId(null)
+  async function handleEdit(id) {
+    if (!editText.trim()) return; await onEdit(id, editText.trim()); setEditId(null)
   }
 
   return (
-    // Solid overlay — NOT blurred, readable backdrop
-    <div
-      className="fixed inset-0 z-[200] flex flex-col"
-      style={{ background: 'rgba(0,0,0,0.75)' }}
-      onClick={onClose}
-    >
-      <div
-        className="mt-auto bg-card rounded-t-3xl w-full max-w-lg mx-auto max-h-[82vh] flex flex-col shadow-2xl pb-24"
-        onClick={e => e.stopPropagation()}
-      >
+    /* Solid semi-opaque backdrop */
+    <div className="fixed inset-0 z-[200] flex items-end justify-center"
+         style={{ background: 'rgba(0,0,0,0.6)' }}
+         onClick={onClose}>
+      {/* SOLID panel — bg-white in light, bg-gray-900 in dark */}
+      <div className="bg-white dark:bg-gray-900 rounded-t-3xl w-full max-w-lg shadow-2xl pb-28 max-h-[88vh] flex flex-col"
+           onClick={e => e.stopPropagation()}>
+
+        {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1.5 rounded-full bg-subtle" />
+          <div className="w-10 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700" />
         </div>
 
         {/* Header */}
-        <div className="px-5 pt-2 pb-3 flex items-center justify-between flex-shrink-0 border-b border-default">
+        <div className="flex items-center justify-between px-5 pt-2 pb-3 flex-shrink-0">
           <div>
-            <h2 className="text-lg font-black text-primary">Weekly Goals</h2>
-            <p className="text-xs text-secondary mt-0.5">
-              {total === 0 ? 'Set goals to track your week' : `${done}/${total} done · resets Monday`}
-            </p>
+            <p className="font-black text-lg text-gray-900 dark:text-gray-100">Weekly Goals</p>
+            {total > 0 && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{done} of {total} done</p>}
           </div>
           <button onClick={onClose}
-            className="w-9 h-9 rounded-full bg-subtle flex items-center justify-center text-secondary hover:text-primary transition-colors">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center
+                       text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
             </svg>
           </button>
         </div>
 
         {/* Progress bar */}
         {total > 0 && (
-          <div className="px-5 py-3 flex-shrink-0">
-            <div className="h-2 bg-subtle rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${pct}%`, background: pct >= 100 ? '#16a34a' : 'linear-gradient(90deg,#6366f1,#8b5cf6)' }} />
-            </div>
-            <div className="flex justify-between mt-1.5">
-              <span className="text-xs text-secondary">{pct}% complete</span>
-              {pct >= 100 && <span className="text-xs font-black text-green-600">🏆 All done!</span>}
+          <div className="px-5 pb-3 flex-shrink-0">
+            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
             </div>
           </div>
         )}
 
-        {/* Goal list */}
-        <div className="flex-1 overflow-y-auto px-5 min-h-0">
+        {/* Goals list */}
+        <div className="flex-1 overflow-y-auto px-5 space-y-2 pb-2">
           {goals.length === 0 && !showInput && (
             <div className="py-8 text-center">
-              <p className="text-3xl mb-2">🎯</p>
-              <p className="text-sm font-bold text-primary">No goals yet</p>
-              <p className="text-xs text-secondary mt-1">Add a goal or pick a suggestion below</p>
+              <p className="text-4xl mb-3">🎯</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">No goals yet</p>
+              <p className="text-xs text-gray-400 mt-1">Add your first goal for this week</p>
             </div>
           )}
 
-          {goals.length > 0 && (
-            <div className="space-y-1 py-2">
-              {goals.map(g => (
-                <div key={g.id} className="flex items-start gap-3 py-2.5 px-1">
-                  {/* Checkbox */}
-                  <button onClick={() => onToggle(g.id, g.completed)}
-                    className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                      g.completed ? 'bg-indigo-600 border-indigo-600' : 'border-default hover:border-indigo-400'
-                    }`}>
-                    {g.completed && (
-                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
+          {goals.map(g => (
+            <div key={g.id}
+              className={`flex items-start gap-3 p-3 rounded-2xl transition-colors
+                ${g.completed ? 'bg-green-50 dark:bg-green-950/30' : 'bg-gray-50 dark:bg-gray-800'}`}>
+              {/* Checkbox */}
+              <button onClick={() => onToggle(g.id, g.completed)}
+                className={`w-5 h-5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors
+                  ${g.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400'}`}>
+                {g.completed && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+              </button>
 
-                  {/* Text / edit input */}
-                  {editingId === g.id ? (
-                    <input ref={editRef} value={editText} onChange={e => setEditText(e.target.value)}
-                      onBlur={saveEdit}
-                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingId(null) }}
-                      className="flex-1 text-sm bg-subtle border border-indigo-400 rounded-lg px-2 py-1 focus:outline-none text-primary" />
-                  ) : (
-                    <span className={`flex-1 text-sm leading-relaxed ${g.completed ? 'line-through text-tertiary' : 'text-primary'}`}>
-                      {g.text}
-                    </span>
-                  )}
-
-                  {/* Action buttons — ALWAYS visible on mobile */}
-                  {editingId !== g.id && (
-                    <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={() => startEdit(g)}
-                        className="w-8 h-8 rounded-lg bg-subtle flex items-center justify-center text-secondary hover:text-primary hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6.5-6.5a2 2 0 112.828 2.828L11.828 13.828A2 2 0 0110.414 14H8v-2.414a2 2 0 01.586-1.414z" />
-                        </svg>
-                      </button>
-                      <button onClick={() => onDelete(g.id)}
-                        className="w-8 h-8 rounded-lg bg-subtle flex items-center justify-center text-secondary hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
+              {/* Text / edit */}
+              {editId === g.id ? (
+                <div className="flex-1 flex gap-2 min-w-0">
+                  <input ref={editRef} value={editText} onChange={e => setEditText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleEdit(g.id); if (e.key === 'Escape') setEditId(null) }}
+                    className="flex-1 min-w-0 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600
+                               rounded-xl px-3 py-1.5 text-gray-900 dark:text-gray-100
+                               focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  <button onClick={() => handleEdit(g.id)}
+                    className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 flex-shrink-0">Save</button>
+                  <button onClick={() => setEditId(null)}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0">Cancel</button>
                 </div>
-              ))}
-            </div>
-          )}
+              ) : (
+                <p className={`flex-1 text-sm leading-snug min-w-0
+                  ${g.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {g.text}
+                </p>
+              )}
 
-          {/* Quick add input */}
-          {showInput ? (
-            <div className="mt-2 mb-3 flex items-center gap-2 rounded-2xl px-4 py-3 border-2 border-indigo-400 bg-subtle">
+              {/* Actions */}
+              {editId !== g.id && (
+                <div className="flex gap-1 flex-shrink-0">
+                  <button onClick={() => { setEditId(g.id); setEditText(g.text) }}
+                    className="w-7 h-7 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600
+                               flex items-center justify-center text-gray-400 hover:text-indigo-500
+                               dark:text-gray-500 dark:hover:text-indigo-400 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => onDelete(g.id)}
+                    className="w-7 h-7 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600
+                               flex items-center justify-center text-gray-400 hover:text-red-500
+                               dark:text-gray-500 dark:hover:text-red-400 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Add input */}
+          {showInput && (
+            <div className="flex gap-2">
               <input ref={inputRef} value={newText} onChange={e => setNewText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAdd(newText); if (e.key === 'Escape') { setShowInput(false); setNewText('') } }}
-                placeholder="What's your goal this week?" maxLength={100}
-                className="flex-1 bg-transparent text-sm focus:outline-none text-primary placeholder:text-tertiary" />
-              <button onClick={() => handleAdd(newText)} disabled={saving || !newText.trim()}
-                className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl disabled:opacity-40 hover:bg-indigo-500">
+                onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setShowInput(false) }}
+                placeholder="What do you want to achieve this week?"
+                className="flex-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600
+                           rounded-2xl px-4 py-2.5 text-gray-900 dark:text-gray-100
+                           placeholder:text-gray-400 dark:placeholder:text-gray-500
+                           focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <button onClick={handleAdd} disabled={saving || !newText.trim()}
+                className="px-4 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-2xl
+                           hover:bg-indigo-500 disabled:opacity-40 transition-colors flex-shrink-0">
                 {saving ? '…' : 'Add'}
               </button>
             </div>
-          ) : goals.length < 10 ? (
-            <button onClick={() => setShowInput(true)}
-              className="mt-2 mb-3 w-full flex items-center gap-2 px-4 py-3 rounded-2xl text-secondary hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 transition-colors border border-dashed border-default">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="text-sm font-semibold">Add a goal</span>
-            </button>
-          ) : null}
+          )}
 
           {/* Suggestions */}
-          <div className="mb-4">
-            <p className="text-xs font-black text-tertiary uppercase tracking-wide mb-2">Suggested goals</p>
-            <div className="space-y-1.5">
-              {SMART_SUGGESTIONS.filter(s => !goals.some(g => g.text === s.text)).slice(0, 4).map(s => (
-                <button key={s.text} onClick={() => onAdd(s.text)}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-subtle rounded-2xl text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/20 transition-colors">
-                  <span className="text-lg flex-shrink-0">{s.emoji}</span>
-                  <span className="text-sm text-primary flex-1">{s.text}</span>
-                  <span className="text-xs font-bold text-indigo-500 flex-shrink-0">+ Add</span>
-                </button>
-              ))}
+          {!showInput && goals.length < 6 && (
+            <div className="pt-2">
+              <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Suggestions</p>
+              <div className="space-y-1.5">
+                {SUGGESTIONS.slice(0, 3).map((s, i) => (
+                  <button key={i} onClick={() => { setNewText(s.text); setShowInput(true) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-left transition-colors
+                               bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40
+                               border border-gray-100 dark:border-gray-700">
+                    <span className="text-base flex-shrink-0">{s.emoji}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{s.text}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
+
+        {/* Footer — Add button only */}
+        {!showInput && goals.length < 10 && (
+          <div className="px-5 pt-3 pb-2 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
+            <button onClick={() => setShowInput(true)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-black
+                         rounded-2xl transition-colors flex items-center justify-center gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Goal
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ─── Main card ─────────────────────────────────────────────────────────────────
+// ─── WeeklyGoals widget ────────────────────────────────────────────────────────
 export default function WeeklyGoals() {
-  const [goals, setGoals]         = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [quickAdd, setQuickAdd]   = useState(false)
-  const [quickText, setQuickText] = useState('')
-  const [quickSaving, setQuickSaving] = useState(false)
-  const quickRef = useRef(null)
+  const [goals,      setGoals]     = useState(_cache ?? [])
+  const [loading,    setLoading]   = useState(_cache === null)
+  const [modalOpen,  setModal]     = useState(false)
+  const fetchedRef = useRef(false)
 
-  useEffect(() => { fetchGoals() }, [])
-  useEffect(() => { if (quickAdd) quickRef.current?.focus() }, [quickAdd])
-
-  async function fetchGoals() {
+  const fetchGoals = useCallback(async (force = false) => {
+    if (!force && fetchedRef.current) return
+    fetchedRef.current = true
     setLoading(true)
-    try { const res = await fetch('/api/student/weekly-goals'); const d = await res.json(); setGoals(d.goals ?? []) }
-    catch {}
+    try {
+      const res  = await fetch('/api/student/weekly-goals')
+      const d    = await res.json()
+      const list = d.goals ?? []
+      _cache = list; setGoals(list)
+    } catch {}
     finally { setLoading(false) }
-  }
+  }, [])
+
+  useEffect(() => { fetchGoals() }, [fetchGoals])
 
   const toggleGoal = useCallback(async (id, current) => {
-    setGoals(p => p.map(g => g.id === id ? { ...g, completed: !current } : g))
-    try {
-      await fetch('/api/student/weekly-goals', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, completed: !current }) })
-    } catch { setGoals(p => p.map(g => g.id === id ? { ...g, completed: current } : g)) }
+    const upd = p => p.map(g => g.id === id ? { ...g, completed: !current } : g)
+    setGoals(p => { const n = upd(p); _cache = n; return n })
+    try { await fetch('/api/student/weekly-goals', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, completed: !current }) }) }
+    catch { const rev = p => p.map(g => g.id === id ? { ...g, completed: current } : g); setGoals(p => { const n = rev(p); _cache = n; return n }) }
   }, [])
 
   const addGoal = useCallback(async (text) => {
     try {
-      const res = await fetch('/api/student/weekly-goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
-      const d = await res.json()
-      if (d.goal) setGoals(p => [...p, d.goal])
+      const res = await fetch('/api/student/weekly-goals', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) })
+      const d   = await res.json()
+      if (d.goal) setGoals(p => { const n = [...p, d.goal]; _cache = n; return n })
     } catch {}
   }, [])
 
   const editGoal = useCallback(async (id, text) => {
-    setGoals(p => p.map(g => g.id === id ? { ...g, text } : g))
-    try { await fetch('/api/student/weekly-goals', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, text }) }) }
-    catch { fetchGoals() }
-  }, [])
+    setGoals(p => { const n = p.map(g => g.id === id ? { ...g, text } : g); _cache = n; return n })
+    try { await fetch('/api/student/weekly-goals', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, text }) }) }
+    catch { fetchGoals(true) }
+  }, [fetchGoals])
 
   const deleteGoal = useCallback(async (id) => {
-    setGoals(p => p.filter(g => g.id !== id))
-    try { await fetch('/api/student/weekly-goals', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }) }
-    catch { fetchGoals() }
-  }, [])
-
-  async function handleQuickAdd() {
-    if (!quickText.trim() || quickSaving) return
-    setQuickSaving(true)
-    await addGoal(quickText.trim())
-    setQuickText(''); setQuickAdd(false); setQuickSaving(false)
-  }
+    setGoals(p => { const n = p.filter(g => g.id !== id); _cache = n; return n })
+    try { await fetch('/api/student/weekly-goals', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id }) }) }
+    catch { fetchGoals(true) }
+  }, [fetchGoals])
 
   const done    = goals.filter(g => g.completed).length
   const total   = goals.length
@@ -262,121 +264,94 @@ export default function WeeklyGoals() {
 
   return (
     <>
-      {/* No border — removed outline */}
-      <div className="bg-card rounded-3xl overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl overflow-hidden shadow-sm">
 
-        {/* Gradient header */}
-        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 px-5 pt-4 pb-5">
+        {/* "Weekly Goals" label */}
+        <div className="px-5 pt-4">
+          <p className="text-[11px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Weekly Goals</p>
+        </div>
+
+        {/* Gradient bar */}
+        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 mx-5 mt-2 rounded-2xl px-4 pt-3 pb-4">
           <div className="flex items-center justify-between mb-2.5">
-            <div>
-              <p className="text-white/70 text-xs font-semibold uppercase tracking-wide">This week</p>
-              <p className="text-white font-black text-xl leading-tight">
-                {total === 0 ? 'Set your goals' : allDone ? 'All done! 🎉' : `${done} of ${total} done`}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-white/60 text-xs">Weekly goals</p>
-              <p className="text-white font-black text-lg">{total === 0 ? '—' : `${done}/${total}`}</p>
-            </div>
-          </div>
-
-          <div className="h-3 bg-white/20 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-700"
-              style={{ width: total === 0 ? '0%' : `${goalPct}%`, background: allDone ? '#4ade80' : '#ffffff' }} />
-          </div>
-
-          <div className="flex items-center justify-between mt-1.5">
-            <p className="text-white/60 text-xs">
-              {total === 0 ? 'Tap + to add your first goal'
-                : allDone ? '🏆 Week complete!'
-                : `${total - done} goal${total - done !== 1 ? 's' : ''} left`}
+            <p className="text-white font-black text-lg leading-tight">
+              {total === 0 ? 'Set your goals' : allDone ? 'All done! 🎉' : `${done} of ${total} done`}
             </p>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setQuickAdd(q => !q)}
-                className="text-white/80 text-xs font-bold hover:text-white transition-colors flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add
-              </button>
-              <span className="text-white/30">·</span>
-              <button onClick={() => setModalOpen(true)}
-                className="text-white/80 text-xs font-bold hover:text-white transition-colors underline underline-offset-2">
-                Manage
-              </button>
-            </div>
+            {/* Add — only button */}
+            <button onClick={() => setModal(true)}
+              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 active:bg-white/40
+                         text-white text-xs font-black px-3 py-1.5 rounded-xl transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add
+            </button>
+          </div>
+          <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-700"
+              style={{ width: total === 0 ? '0%' : `${goalPct}%`, background: allDone ? '#4ade80' : 'rgba(255,255,255,0.85)' }} />
           </div>
         </div>
 
-        {/* Quick-add inline */}
-        {quickAdd && (
-          <div className="px-5 py-3 border-b border-default flex items-center gap-2">
-            <input ref={quickRef} value={quickText} onChange={e => setQuickText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd(); if (e.key === 'Escape') { setQuickAdd(false); setQuickText('') } }}
-              placeholder="What's your goal this week?" maxLength={100}
-              className="flex-1 text-sm bg-transparent focus:outline-none text-primary placeholder:text-tertiary" />
-            <button onClick={handleQuickAdd} disabled={quickSaving || !quickText.trim()}
-              className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl disabled:opacity-40 hover:bg-indigo-500">
-              {quickSaving ? '…' : 'Add'}
+        {/* Preview — SHORT + DIMMED lines */}
+        <div className="mt-1 pb-1">
+          {loading && (
+            <div className="py-4 flex justify-center">
+              <div className="w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!loading && goals.length === 0 && (
+            <button onClick={() => setModal(true)}
+              className="w-full py-4 text-center text-sm text-gray-400 hover:text-indigo-600
+                         dark:text-gray-500 dark:hover:text-indigo-400 transition-colors">
+              Tap to add your first goal →
             </button>
-            <button onClick={() => { setQuickAdd(false); setQuickText('') }}
-              className="p-1.5 text-tertiary hover:text-secondary">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+          )}
+
+          {!loading && preview.map((g, i) => (
+            <div key={g.id}
+              className={`flex items-center gap-3 px-5 py-2.5 cursor-pointer
+                          hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
+                          ${i < preview.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''}`}
+              onClick={() => toggleGoal(g.id, g.completed)}>
+              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors
+                ${g.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 dark:border-gray-600'}`}>
+                {g.completed && (
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                  </svg>
+                )}
+              </div>
+              {/* SHORT + DIMMED text */}
+              <p className={`text-sm leading-snug truncate max-w-[200px]
+                ${g.completed
+                  ? 'line-through text-gray-300 dark:text-gray-600'
+                  : 'text-gray-400 dark:text-gray-500'}`}>
+                {g.text}
+              </p>
+            </div>
+          ))}
+
+          {!loading && total > 3 && (
+            <button onClick={() => setModal(true)}
+              className="w-full py-2.5 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400
+                         hover:text-indigo-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              See all {total} goals →
             </button>
-          </div>
-        )}
-
-        {/* Preview goals */}
-        {!loading && preview.length > 0 && (
-          <div className="px-5 py-3 space-y-2.5 border-b border-default">
-            {preview.map(goal => (
-              <div key={goal.id} className="flex items-center gap-3">
-                <button onClick={() => toggleGoal(goal.id, goal.completed)}
-                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                    goal.completed ? 'bg-indigo-600 border-indigo-600' : 'border-default hover:border-indigo-400'
-                  }`}>
-                  {goal.completed && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-                <span className={`text-sm flex-1 leading-snug ${goal.completed ? 'line-through text-tertiary' : 'text-primary'}`}>
-                  {goal.text}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {loading && (
-          <div className="px-5 py-4 space-y-2.5 border-b border-default animate-pulse">
-            {[1,2].map(i => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-subtle flex-shrink-0" />
-                <div className="h-3 bg-subtle rounded flex-1" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-5 py-3 flex items-center justify-between">
-          {total === 0 && !loading
-            ? <button onClick={() => setQuickAdd(true)} className="text-xs font-bold text-indigo-500 hover:text-indigo-400">+ Set your first goal</button>
-            : total > 3
-            ? <button onClick={() => setModalOpen(true)} className="text-xs font-bold text-indigo-500 hover:text-indigo-400">View all {total} goals →</button>
-            : <span />}
-          {allDone && total > 0 && <span className="text-xs font-black text-green-600">All done! 🏆</span>}
-          {!allDone && total > 0 && <span className="text-xs text-tertiary">Resets Monday</span>}
+          )}
         </div>
       </div>
 
       {modalOpen && (
-        <GoalsModal goals={goals} onClose={() => setModalOpen(false)}
-          onToggle={toggleGoal} onAdd={addGoal} onEdit={editGoal} onDelete={deleteGoal} />
+        <GoalsModal
+          goals={goals}
+          onClose={() => setModal(false)}
+          onToggle={toggleGoal}
+          onAdd={addGoal}
+          onEdit={editGoal}
+          onDelete={deleteGoal}
+        />
       )}
     </>
   )

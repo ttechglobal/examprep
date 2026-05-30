@@ -1,3 +1,4 @@
+/* src/app/globals.css */
 @import "tailwindcss";
 
 @theme {
@@ -7,106 +8,41 @@
 @layer base {
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
   body { font-family: var(--font-jakarta), system-ui, sans-serif; }
-
-  /* ── Page background & base text ── */
-  body { @apply bg-gray-50 text-gray-900; }
-  .dark body { @apply bg-gray-950 text-gray-100; }
+  body          { @apply bg-gray-50  text-gray-900; }
+  .dark body    { @apply bg-gray-950 text-gray-100; }
+  input, select, textarea               { @apply bg-white     text-gray-900; }
+  .dark input, .dark select,
+  .dark textarea                        { @apply bg-gray-900  text-gray-100; }
+  input::placeholder, textarea::placeholder { @apply text-gray-400; }
 }
 
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   APPEND THIS TO src/app/globals.css
-   (Add after the existing utility layer block)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* ── Z-index scale — modals always win over navbar ──────────────────────────── */
-/* Bottom navbar is z-50. Modals must be z-[200] or higher.                     */
-/* Every modal/overlay/sheet in the app must use one of these layers.           */
 @layer utilities {
-  /* Navbar sits here */
-  /* .z-50 = 50 (Tailwind built-in) — do not exceed this for persistent chrome  */
+  /* ── Semantic surface aliases ── */
+  .bg-base            { @apply bg-gray-50;  }
+  .dark .bg-base      { @apply bg-gray-950; }
+  .bg-card            { @apply bg-white;    }
+  .dark .bg-card      { @apply bg-gray-900; }
+  .bg-subtle          { @apply bg-gray-100; }
+  .dark .bg-subtle    { @apply bg-gray-800; }
 
-  /* Full-screen viewers (LessonViewer, exam mode) */
-  .z-viewer  { z-index: 100; }
+  /* ── Semantic text aliases ── */
+  .text-primary         { @apply text-gray-900; }
+  .dark .text-primary   { @apply text-gray-100; }
+  .text-secondary       { @apply text-gray-500; }
+  .dark .text-secondary { @apply text-gray-400; }
+  .text-tertiary        { @apply text-gray-400; }
+  .dark .text-tertiary  { @apply text-gray-500; }
 
-  /* Standard modals, bottom sheets, drawers */
-  .z-modal   { z-index: 200; }
+  /* ── Border alias ── */
+  .border-default       { @apply border-gray-200; }
+  .dark .border-default { @apply border-gray-700; }
 
-  /* Toast notifications — above everything */
-  .z-toast   { z-index: 300; }
-}
+  /* ── Divide alias ── */
+  .divide-default > :not([hidden]) ~ :not([hidden])      { @apply border-gray-200; }
+  .dark .divide-default > :not([hidden]) ~ :not([hidden]){ @apply border-gray-700; }
 
-/* ── Light mode: ensure pure-white surfaces read correctly ───────────────────
-   The --bg-card token is white in light mode.
-   Certain third-party or legacy components hardcode dark bg colors.
-   These overrides restore correct contrast without touching JS files.        */
-
-/* Inputs and selects — consistent in both modes */
-@layer base {
-  input, select, textarea {
-    background-color: var(--bg-card);
-    color: var(--text-primary);
-  }
-  input::placeholder, textarea::placeholder {
-    color: var(--text-tertiary);
-  }
-}
-
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   APPEND THESE BLOCKS TO src/app/globals.css
-   ─────────────────────────────────────────────────────────────────────────── */
-
-/* ── Skeleton loader animation ──────────────────────────────────────────────── */
-@layer utilities {
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      var(--bg-subtle) 25%,
-      var(--bg-card) 50%,
-      var(--bg-subtle) 75%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.4s ease-in-out infinite;
-    border-radius: 0.5rem;
-  }
-}
-
-@keyframes skeleton-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* ── Global: remove ALL outlines/borders from cards ─────────────────────────── */
-/* The .no-outline utility removes borders from any element */
-@layer utilities {
-  .no-outline * {
-    border-color: transparent !important;
-  }
-}
-
-/* ── Disable user selection in lesson viewer ─────────────────────────────────  */
-@layer utilities {
-  .no-select {
-    user-select: none;
-    -webkit-user-select: none;
-  }
-}
-
-/* ── Scrollbar hiding ────────────────────────────────────────────────────────── */
-@layer utilities {
-  .scrollbar-none {
-    scrollbar-width: none;
-  }
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-/* ── Performance: content-visibility for long lists ─────────────────────────── */
-@layer utilities {
-  .cv-auto {
-    content-visibility: auto;
-    contain-intrinsic-size: 0 80px;
-  }
+  /* ── Z-index scale ── */
+  .z-viewer { z-index: 100; }
+  .z-modal  { z-index: 200; }
+  .z-toast  { z-index: 300; }
 }

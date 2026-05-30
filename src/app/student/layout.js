@@ -1,8 +1,6 @@
 // src/app/student/layout.js
-// Fixes:
-// - Desktop responsive: max-w-screen-xl, sidebar-like layout on wide screens
-// - Header: solid bg-card (not transparent)
-// - Bottom nav uses bg-card token so it responds to dark/light mode properly
+// The wrapper div carries NO background — body already handles it via globals.css.
+// Header uses explicit bg-white / dark:bg-gray-900 so it's always solid.
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -29,31 +27,44 @@ export default async function StudentLayout({ children }) {
   return (
     <LessonNavProvider>
       <PointsProvider initialTotal={initialTotal}>
-        <div className="min-h-screen bg-base">
+        {/* No bg class here — body handles the page background */}
+        <div className="min-h-screen">
 
-          {/* ── Header — solid bg, not transparent ── */}
-          <header className="bg-card border-b border-default sticky top-0 z-40">
+          {/* ── Header: solid, never transparent ── */}
+          <header className="
+            bg-white dark:bg-gray-900
+            border-b border-gray-200 dark:border-gray-800
+            sticky top-0 z-40
+          ">
             <div className="max-w-screen-xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between">
+
               {/* Logo */}
               <Link href="/student/dashboard" className="flex items-center gap-2 flex-shrink-0">
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
                   <span className="text-white text-xs font-black">EP</span>
                 </div>
-                <span className="text-base font-black text-primary tracking-tight">ExamPrep</span>
+                <span className="text-base font-black text-gray-900 dark:text-white tracking-tight">
+                  ExamPrep
+                </span>
               </Link>
 
-              {/* Desktop nav links (hidden on mobile) */}
+              {/* Desktop nav */}
               <nav className="hidden lg:flex items-center gap-1">
                 {[
-                  { href: '/student/dashboard', label: 'Home' },
-                  { href: '/student/learn',     label: 'Learn' },
-                  { href: '/student/practice',  label: 'Practice' },
-                  { href: '/student/videos',    label: 'Videos' },
+                  { href: '/student/dashboard', label: 'Home'      },
+                  { href: '/student/learn',     label: 'Learn'     },
+                  { href: '/student/practice',  label: 'Practice'  },
+                  { href: '/student/videos',    label: 'Videos'    },
                   { href: '/student/community', label: 'Community' },
-                  { href: '/student/profile',   label: 'Profile' },
+                  { href: '/student/profile',   label: 'Profile'   },
                 ].map(({ href, label }) => (
                   <Link key={href} href={href}
-                    className="px-3 py-1.5 text-sm font-bold text-secondary hover:text-primary hover:bg-subtle rounded-xl transition-colors">
+                    className="
+                      px-3 py-1.5 rounded-xl text-sm font-bold transition-colors
+                      text-gray-500 dark:text-gray-400
+                      hover:text-gray-900 dark:hover:text-white
+                      hover:bg-gray-100 dark:hover:bg-gray-800
+                    ">
                     {label}
                   </Link>
                 ))}
@@ -67,10 +78,14 @@ export default async function StudentLayout({ children }) {
             </div>
           </header>
 
-          {/* ── Main content — wider on desktop ── */}
-          <main className="max-w-screen-xl mx-auto px-4 lg:px-8 py-5 pb-28 lg:pb-8 lg:grid lg:grid-cols-[240px_1fr] lg:gap-8 xl:grid-cols-[280px_1fr]">
-
-            {/* Desktop sidebar (lg+) */}
+          {/* ── Content area with desktop sidebar ── */}
+          <main className="
+            max-w-screen-xl mx-auto px-4 lg:px-8
+            py-5 pb-28 lg:pb-8
+            lg:grid lg:grid-cols-[240px_1fr] lg:gap-8
+            xl:grid-cols-[280px_1fr]
+          ">
+            {/* Sidebar (desktop only) */}
             <aside className="hidden lg:block">
               <nav className="sticky top-20 space-y-1">
                 {[
@@ -82,7 +97,13 @@ export default async function StudentLayout({ children }) {
                   { href: '/student/profile',   label: 'Profile',   emoji: '👤' },
                 ].map(({ href, label, emoji }) => (
                   <Link key={href} href={href}
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-secondary hover:text-primary hover:bg-subtle transition-colors text-sm font-bold">
+                    className="
+                      flex items-center gap-3 px-4 py-2.5 rounded-xl
+                      text-sm font-bold transition-colors
+                      text-gray-500 dark:text-gray-400
+                      hover:text-gray-900 dark:hover:text-white
+                      hover:bg-gray-100 dark:hover:bg-gray-800
+                    ">
                     <span className="text-base">{emoji}</span>
                     {label}
                   </Link>
@@ -96,10 +117,11 @@ export default async function StudentLayout({ children }) {
             </div>
           </main>
 
-          {/* Bottom nav — mobile only */}
+          {/* Bottom nav: mobile only */}
           <div className="lg:hidden">
             <BottomNavWrapper />
           </div>
+
         </div>
       </PointsProvider>
     </LessonNavProvider>
