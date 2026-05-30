@@ -1,58 +1,124 @@
 'use client'
 // src/components/dashboard/GoalModal.jsx
-// Changes:
-// - JAMB per-subject: slider REMOVED, replaced with number input (type="number")
-// - Auto-total: as user types per-subject scores, total auto-calculates and shows
-// - WAEC subjects selector and JAMB subjects selector are aware of exam type
-// - All explicit Tailwind colors (no token dependency issues)
+// Critical fixes:
+// 1. JAMB subjects and WAEC subjects stored SEPARATELY (jambSubjects vs waecSubjects)
+// 2. JAMB max 4 subjects enforced; Use of English auto-included and always shown
+// 3. BOTH exam type: step through JAMB selection first, then WAEC selection
+// 4. WAEC grades show ALL selected WAEC subjects (not just a few)
+// 5. JAMB scores pull from jambSubjects only (including Use of English)
+// 6. Full light/dark theme compliance using CSS token classes
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getSubjectColor } from '@/lib/theme'
 
-const ALL_SUBJECTS = [
+// ── Subject lists ──────────────────────────────────────────────────────────────
+const USE_OF_ENGLISH = 'Use of English'
+
+const JAMB_ELECTIVES = [
+  'Mathematics', 'Physics', 'Chemistry', 'Biology',
+  'Economics', 'Government', 'Geography', 'History',
+  'Commerce', 'Accounting', 'Agricultural Science', 'Further Mathematics',
+  'Computer Science', 'Civic Education', 'Christian Religious Studies',
+  'Islamic Religious Studies', 'Literature in English', 'Yoruba', 'Igbo', 'Hausa',
+]
+
+const WAEC_SUBJECTS = [
   'Mathematics', 'English Language', 'Physics', 'Chemistry', 'Biology',
   'Economics', 'Government', 'Literature in English', 'Geography', 'History',
   'Commerce', 'Accounting', 'Agricultural Science', 'Further Mathematics',
   'Computer Science', 'Civic Education', 'Christian Religious Studies',
   'Islamic Religious Studies', 'Yoruba', 'Igbo', 'Hausa',
 ]
+
 const WAEC_GRADES = ['A1', 'B2', 'B3', 'C4', 'C5', 'C6']
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function seedJambSubjects(profile) {
+  if (!profile?.subjects?.length) return [USE_OF_ENGLISH]
+  // Only keep subjects that are valid JAMB electives (or Use of English)
+  const valid = profile.subjects.filter(s => s === USE_OF_ENGLISH || JAMB_ELECTIVES.includes(s))
+  if (!valid.includes(USE_OF_ENGLISH)) valid.unshift(USE_OF_ENGLISH)
+  return valid.slice(0, 4)
+}
+
+function seedWaecSubjects(profile) {
+  if (!profile?.subjects?.length) return []
+  return profile.subjects.filter(s => WAEC_SUBJECTS.includes(s))
+}
+
+// ── Subject toggle button ──────────────────────────────────────────────────────
+function SubjectBtn({ name, selected, onClick, disabled }) {
+  const c = getSubjectColor(name)
+  return (
+    <button onClick={onClick} disabled={disabled && !selected}
+      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all text-left
+        ${selected
+          ? `${c.bg} ${c.text} border-transparent shadow-sm`
+          : disabled
+          ? 'border-default text-tertiary cursor-not-allowed opacity-40'
+          : 'border-default text-secondary hover:border-indigo-300 dark:hover:border-indigo-700 bg-card'}`}>
+      {selected && (
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+      )}
+      {name}
+    </button>
+  )
+}
+
+// ── Main modal ─────────────────────────────────────────────────────────────────
 export default function GoalModal({ profile, onClose, onSave }) {
   const supabase = createClient()
-  const [page, setPage]     = useState(0)  // 0=Goals, 1=Subjects, 2=Targets
   const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState(null)
+  const [error,  setError]  = useState(null)
 
-  const initialExams = () => {
+  // Exam type
+  const initExams = () => {
     if (profile?.exam_type === 'BOTH') return new Set(['WAEC', 'JAMB'])
     if (profile?.exam_type === 'JAMB') return new Set(['JAMB'])
     return new Set(['WAEC'])
   }
+  const [selectedExams, setSelectedExams] = useState(initExams)
+  const examType = selectedExams.has('WAEC') && selectedExams.has('JAMB') ? 'BOTH'
+    : selectedExams.has('JAMB') ? 'JAMB' : 'WAEC'
 
-  const [selectedExams, setSelectedExams]   = useState(initialExams)
-  const [subjects, setSubjects]             = useState(profile?.subjects ?? [])
-  const [universityCourse, setUniCourse]    = useState(profile?.university_course ?? '')
-  const [desiredProfession, setProfession]  = useState(profile?.desired_profession ?? '')
-  const [targetUniversity, setTargetUni]    = useState(profile?.target_university ?? '')
-  const [waecGrades, setWaecGrades]         = useState(profile?.waec_target_grades ?? {})
-  const [jambScores, setJambScores]         = useState(() => {
-    // Seed from existing scores (convert from slider values if needed)
+  // JAMB: Use of English always first, max 4 total
+  const [jambSubjects, setJambSubjects] = useState(() => seedJambSubjects(profile))
+  // WAEC: separate list
+  const [waecSubjects, setWaecSubjects] = useState(() => seedWaecSubjects(profile))
+
+  // Goals / targets
+  const [universityCourse, setUniCourse]   = useState(profile?.university_course ?? '')
+  const [targetUniversity, setTargetUni]   = useState(profile?.target_university ?? '')
+  const [desiredProfession, setProfession] = useState(profile?.desired_profession ?? '')
+  const [waecGrades, setWaecGrades]        = useState(profile?.waec_target_grades ?? {})
+
+  // JAMB scores — keyed by subject name, seeded from jambSubjects
+  const [jambScores, setJambScores] = useState(() => {
     const existing = profile?.jamb_target_scores ?? {}
-    const seeded = {}
-    ;(profile?.subjects ?? []).forEach(s => { seeded[s] = existing[s] ?? 70 })
+    const seeded = { [USE_OF_ENGLISH]: existing[USE_OF_ENGLISH] ?? 70 }
+    ;(seedJambSubjects(profile)).forEach(s => { seeded[s] = existing[s] ?? 70 })
     return seeded
   })
 
-  // Auto-calculated JAMB total from per-subject inputs
-  const jambAutoTotal = Object.values(jambScores).reduce((sum, v) => sum + (Number(v) || 0), 0)
-  const [jambTotalOverride, setJambTotalOverride] = useState(profile?.jamb_total_target ?? '')
-  // Show auto total unless user typed a manual override
-  const jambDisplayTotal = jambTotalOverride !== '' ? jambTotalOverride : (jambAutoTotal > 0 ? jambAutoTotal : '')
+  // Auto total from jambSubjects
+  const jambAutoTotal = jambSubjects.reduce((sum, s) => sum + (Number(jambScores[s]) || 0), 0)
 
-  const examType = selectedExams.has('WAEC') && selectedExams.has('JAMB') ? 'BOTH'
-    : selectedExams.has('JAMB') ? 'JAMB' : 'WAEC'
+  // Page: 0=Goals+Exam, 1=JAMB subjects (if JAMB/BOTH), 2=WAEC subjects (if WAEC/BOTH), 3=Targets
+  // Determine page sequence dynamically
+  const pages = ['Goals']
+  if (examType === 'JAMB' || examType === 'BOTH') pages.push('JAMB Subjects')
+  if (examType === 'WAEC' || examType === 'BOTH') pages.push('WAEC Subjects')
+  pages.push('Targets')
+
+  // Recompute examType whenever selectedExams changes — must use state for page tracking
+  const [page, setPage] = useState(0)
+  const totalPages = pages.length
+
+  function nextPage() { setPage(p => Math.min(p + 1, totalPages - 1)) }
+  function prevPage() { setPage(p => Math.max(p - 1, 0)) }
 
   function toggleExam(exam) {
     setSelectedExams(prev => {
@@ -60,211 +126,223 @@ export default function GoalModal({ profile, onClose, onSave }) {
       if (next.has(exam)) { if (next.size > 1) next.delete(exam) } else { next.add(exam) }
       return next
     })
+    // Reset page to 0 when exam type changes
+    setPage(0)
   }
 
-  function toggleSubject(s) {
-    setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
-    // Seed JAMB score if not already set
-    if (!jambScores[s]) setJambScores(prev => ({ ...prev, [s]: 70 }))
+  function toggleJamb(s) {
+    if (s === USE_OF_ENGLISH) return // always included
+    setJambSubjects(prev => {
+      if (prev.includes(s)) return prev.filter(x => x !== s)
+      if (prev.length >= 4) return prev // max 4
+      return [...prev, s]
+    })
+    setJambScores(prev => ({ ...prev, [s]: prev[s] ?? 70 }))
   }
 
-  function setJambScore(subject, raw) {
+  function toggleWaec(s) {
+    setWaecSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+  }
+
+  function setJambScore(s, raw) {
     const val = Math.min(100, Math.max(0, Number(raw) || 0))
-    setJambScores(prev => ({ ...prev, [subject]: val }))
-    setJambTotalOverride('') // clear manual override when per-subject changes
+    setJambScores(prev => ({ ...prev, [s]: val }))
   }
+
+  // Combined subjects for saving to profile.subjects
+  const allSubjects = [...new Set([
+    ...(examType === 'JAMB' || examType === 'BOTH' ? jambSubjects : []),
+    ...(examType === 'WAEC' || examType === 'BOTH' ? waecSubjects : []),
+  ])]
 
   async function handleSave() {
     setSaving(true); setError(null)
+    const { data: { user } } = await supabase.auth.getUser()
     const updates = {
-      exam_type:           examType,
-      subjects,
-      university_course:   universityCourse.trim() || null,
-      desired_profession:  desiredProfession.trim() || null,
-      target_university:   targetUniversity.trim() || null,
-      waec_target_grades:  waecGrades,
-      jamb_target_scores:  jambScores,
-      jamb_total_target:   jambDisplayTotal ? Number(jambDisplayTotal) : null,
-      goals_set:           true,
+      exam_type:          examType,
+      subjects:           allSubjects,
+      university_course:  universityCourse.trim() || null,
+      target_university:  targetUniversity.trim() || null,
+      desired_profession: desiredProfession.trim() || null,
+      waec_target_grades: waecGrades,
+      jamb_target_scores: jambScores,
+      jamb_total_target:  jambAutoTotal > 0 ? jambAutoTotal : null,
+      goals_set:          true,
     }
-    const { error: err } = await supabase.from('profiles').update(updates).eq('id', profile.id)
+    const { error: err } = await supabase.from('profiles').update(updates).eq('id', user.id)
     setSaving(false)
     if (err) { setError(err.message); return }
     onSave?.({ ...profile, ...updates })
     onClose()
   }
 
-  const pages = ['Goals', 'Subjects', 'Targets']
+  const currentPageLabel = pages[page]
+  const jambSlots = 4 - jambSubjects.length
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl"
-        onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.65)' }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full sm:max-w-md bg-card rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh]">
 
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0 sm:hidden">
-          <div className="w-10 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-subtle" />
         </div>
 
-        {/* Gradient header with page tabs */}
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-t-3xl px-6 py-5 flex-shrink-0">
-          <div className="flex items-center justify-between mb-4">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-default flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {page > 0 && (
+              <button onClick={prevPage} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors">
+                <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              </button>
+            )}
             <div>
-              <p className="text-white/70 text-xs font-semibold uppercase tracking-wide">My Goals</p>
-              <h2 className="text-xl font-black text-white">Edit your targets</h2>
+              <h2 className="text-base font-black text-primary">{currentPageLabel}</h2>
+              <p className="text-xs text-tertiary mt-0.5">Step {page + 1} of {totalPages}</p>
             </div>
-            <button onClick={onClose}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
           </div>
-          <div className="flex gap-1 bg-white/10 p-1 rounded-2xl">
-            {pages.map((p, i) => (
-              <button key={p} onClick={() => setPage(i)}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                  page === i ? 'bg-white text-indigo-700 shadow-sm' : 'text-white/70 hover:text-white'
-                }`}>{p}</button>
-            ))}
-          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center hover:bg-subtle/80 transition-colors">
+            <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-0.5 bg-subtle flex-shrink-0">
+          <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${((page + 1) / totalPages) * 100}%` }} />
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
-          {error && (
-            <div className="mb-4 px-3 py-2 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400
-                            text-xs rounded-xl border border-red-200 dark:border-red-800">
-              {error}
-            </div>
-          )}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          {error && <p className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-xl border border-red-200 dark:border-red-800">{error}</p>}
 
-          {/* ── Page 0: Goals ── */}
+          {/* ── Page 0: Goals + Exam type ── */}
           {page === 0 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Desired Profession</label>
-                <input value={desiredProfession} onChange={e => setProfession(e.target.value)}
-                  placeholder="e.g. Doctor, Engineer, Lawyer…"
-                  className="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm
-                             bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                             placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <label className="block text-xs font-bold text-secondary mb-1.5">Desired Profession</label>
+                <input value={desiredProfession} onChange={e => setProfession(e.target.value)} placeholder="e.g. Doctor, Engineer, Lawyer…"
+                  className="w-full px-4 py-3 border border-default rounded-2xl text-sm bg-card text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Target University Course</label>
-                <input value={universityCourse} onChange={e => setUniCourse(e.target.value)}
-                  placeholder="e.g. Medicine, Engineering…"
-                  className="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm
-                             bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                             placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <label className="block text-xs font-bold text-secondary mb-1.5">Target University Course</label>
+                <input value={universityCourse} onChange={e => setUniCourse(e.target.value)} placeholder="e.g. Medicine, Engineering…"
+                  className="w-full px-4 py-3 border border-default rounded-2xl text-sm bg-card text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Target University</label>
-                <input value={targetUniversity} onChange={e => setTargetUni(e.target.value)}
-                  placeholder="e.g. University of Lagos…"
-                  className="w-full px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-sm
-                             bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                             placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <label className="block text-xs font-bold text-secondary mb-1.5">Target University</label>
+                <input value={targetUniversity} onChange={e => setTargetUni(e.target.value)} placeholder="e.g. University of Lagos…"
+                  className="w-full px-4 py-3 border border-default rounded-2xl text-sm bg-card text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-
-              {/* Exam type */}
               <div>
-                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Which exam are you sitting?</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Tap one or both</p>
+                <p className="text-xs font-bold text-secondary mb-1.5">Which exam are you sitting?</p>
+                <p className="text-xs text-tertiary mb-3">Tap one or both</p>
                 <div className="flex gap-3">
                   {['WAEC', 'JAMB'].map(exam => (
                     <button key={exam} onClick={() => toggleExam(exam)}
                       className={`flex-1 py-3.5 rounded-2xl text-sm font-black border-2 transition-all ${
-                        selectedExams.has(exam)
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-indigo-300 dark:hover:border-indigo-700'
+                        selectedExams.has(exam) ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : 'border-default text-secondary hover:border-indigo-300 dark:hover:border-indigo-700 bg-card'
                       }`}>{exam}</button>
                   ))}
                 </div>
+                {examType === 'BOTH' && (
+                  <p className="text-xs text-indigo-500 mt-2 text-center font-medium">You'll select subjects for each exam separately</p>
+                )}
               </div>
-
-              <button onClick={() => setPage(1)}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
+              <button onClick={nextPage} className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
                 Next: Subjects →
               </button>
             </div>
           )}
 
-          {/* ── Page 1: Subjects ── */}
-          {page === 1 && (
+          {/* ── JAMB Subjects page ── */}
+          {currentPageLabel === 'JAMB Subjects' && (
             <div className="space-y-4">
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                {examType === 'BOTH'
-                  ? 'Select all your subjects across both WAEC and JAMB.'
-                  : examType === 'JAMB'
-                  ? 'JAMB: select Use of English + up to 3 other subjects.'
-                  : 'Select all subjects you are sitting for WAEC.'}
-              </p>
-
-              {/* Selected pills */}
-              {subjects.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {subjects.map(s => {
-                    const c = getSubjectColor(s)
-                    return (
-                      <button key={s} onClick={() => toggleSubject(s)}
-                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold ${c.bg} ${c.text}`}>
-                        {s}
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                      </button>
-                    )
-                  })}
+              {/* Use of English — always included, locked */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800">
+                <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                 </div>
+                <div className="flex-1">
+                  <p className="text-sm font-black text-indigo-700 dark:text-indigo-300">{USE_OF_ENGLISH}</p>
+                  <p className="text-xs text-indigo-500">Always required for JAMB</p>
+                </div>
+                <span className="text-xs text-indigo-500 font-bold">1/4</span>
+              </div>
+
+              {/* Slot counter */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-secondary">Choose {jambSlots > 0 ? `${jambSlots} more subject${jambSlots !== 1 ? 's' : ''}` : 'no more — max reached'}</p>
+                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                  jambSubjects.length === 4 ? 'bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
+                }`}>{jambSubjects.length}/4</span>
+              </div>
+
+              {jambSubjects.length < 4 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded-xl">
+                  JAMB requires exactly 4 subjects — select {jambSlots} more
+                </p>
               )}
 
               <div className="grid grid-cols-2 gap-2">
-                {ALL_SUBJECTS.filter(s => !subjects.includes(s)).map(s => {
-                  const c = getSubjectColor(s)
-                  return (
-                    <button key={s} onClick={() => toggleSubject(s)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl text-left ${c.bg} hover:opacity-90 active:scale-95 transition-all`}>
-                      <svg className={`w-4 h-4 flex-shrink-0 ${c.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
-                      </svg>
-                      <span className={`text-xs font-bold ${c.text}`}>{s}</span>
-                    </button>
-                  )
+                {JAMB_ELECTIVES.map(s => {
+                  const sel = jambSubjects.includes(s)
+                  const dis = !sel && jambSubjects.length >= 4
+                  return <SubjectBtn key={s} name={s} selected={sel} disabled={dis} onClick={() => toggleJamb(s)} />
                 })}
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setPage(0)}
-                  className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-sm font-bold rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  ← Back
-                </button>
-                <button onClick={() => setPage(2)} disabled={subjects.length === 0}
-                  className="flex-1 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-40 transition-colors">
-                  Next: Targets →
-                </button>
-              </div>
+              <button onClick={nextPage} disabled={jambSubjects.length < 2}
+                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors disabled:opacity-40">
+                {examType === 'BOTH' ? 'Next: WAEC Subjects →' : 'Next: Target Scores →'}
+              </button>
             </div>
           )}
 
-          {/* ── Page 2: Targets ── */}
-          {page === 2 && (
-            <div className="space-y-5">
+          {/* ── WAEC Subjects page ── */}
+          {currentPageLabel === 'WAEC Subjects' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-secondary">Select all WAEC subjects you're sitting</p>
+                <span className="text-xs font-bold text-secondary">{waecSubjects.length} selected</span>
+              </div>
+              {waecSubjects.length < 7 && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 rounded-xl">
+                  Most students sit 8–9 subjects for WAEC
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                {WAEC_SUBJECTS.map(s => (
+                  <SubjectBtn key={s} name={s} selected={waecSubjects.includes(s)} disabled={false} onClick={() => toggleWaec(s)} />
+                ))}
+              </div>
+              <button onClick={nextPage} disabled={waecSubjects.length === 0}
+                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors disabled:opacity-40">
+                Next: Target Scores →
+              </button>
+            </div>
+          )}
 
-              {/* WAEC grades */}
-              {(examType === 'WAEC' || examType === 'BOTH') && (
+          {/* ── Targets page ── */}
+          {currentPageLabel === 'Targets' && (
+            <div className="space-y-6">
+
+              {/* WAEC grades — ALL waecSubjects shown */}
+              {(examType === 'WAEC' || examType === 'BOTH') && waecSubjects.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">WAEC target grade per subject</p>
-                  {subjects.map(s => (
-                    <div key={s} className="flex items-center gap-3">
-                      <span className="text-sm text-gray-700 dark:text-gray-300 font-medium flex-1 truncate">{s}</span>
-                      <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-white bg-emerald-600 px-2.5 py-1 rounded-full">WAEC</span>
+                    <p className="text-sm font-bold text-primary">Target grade per subject</p>
+                  </div>
+                  <p className="text-xs text-tertiary -mt-1">A1 is the highest</p>
+                  {waecSubjects.map(s => (
+                    <div key={s} className="space-y-1">
+                      <p className="text-xs font-bold text-secondary">{s}</p>
+                      <div className="flex gap-1.5 flex-wrap">
                         {WAEC_GRADES.map(g => (
                           <button key={g} onClick={() => setWaecGrades(prev => ({ ...prev, [s]: g }))}
-                            className={`px-2 py-1 text-xs font-black rounded-lg border-2 transition-all ${
-                              (waecGrades[s] ?? 'A1') === g
-                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-indigo-300'
+                            className={`px-3 py-1.5 text-xs font-black rounded-lg border-2 transition-all ${
+                              (waecGrades[s] ?? 'A1') === g ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary hover:border-indigo-300 dark:hover:border-indigo-700 bg-card'
                             }`}>{g}</button>
                         ))}
                       </div>
@@ -273,75 +351,55 @@ export default function GoalModal({ profile, onClose, onSave }) {
                 </div>
               )}
 
-              {/* JAMB scores — number inputs, not sliders */}
-              {(examType === 'JAMB' || examType === 'BOTH') && (
+              {/* JAMB per-subject scores — ALL jambSubjects including Use of English */}
+              {(examType === 'JAMB' || examType === 'BOTH') && jambSubjects.length > 0 && (
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">JAMB target score per subject</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Enter a score between 0 and 100 for each subject</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-white bg-indigo-600 px-2.5 py-1 rounded-full">JAMB</span>
+                    <p className="text-sm font-bold text-primary">Target score per subject</p>
                   </div>
+                  <p className="text-xs text-tertiary -mt-1">Each subject is marked out of 100</p>
 
-                  {subjects.map(s => {
+                  {jambSubjects.map(s => {
                     const val = jambScores[s] ?? 70
                     return (
                       <div key={s} className="flex items-center gap-3">
-                        <span className="text-sm text-gray-700 dark:text-gray-300 font-medium flex-1 truncate">{s}</span>
+                        <span className="text-sm text-primary font-medium flex-1 truncate">{s}</span>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <input
-                            type="number" min="0" max="100"
-                            value={val === 0 ? '' : val}
-                            onChange={e => setJambScore(s, e.target.value)}
-                            placeholder="0"
-                            className="w-16 text-center text-sm font-black text-indigo-700 dark:text-indigo-300
+                          <input type="number" min="0" max="100" value={val === 0 ? '' : val}
+                            onChange={e => setJambScore(s, e.target.value)} placeholder="0"
+                            className="w-16 text-center text-sm font-black text-indigo-600 dark:text-indigo-300
                                        bg-indigo-50 dark:bg-indigo-950/40 border-2 border-indigo-200 dark:border-indigo-800
                                        rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400
                                        [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          <span className="text-xs text-gray-400">/100</span>
+                          <span className="text-xs text-tertiary">/100</span>
                         </div>
                       </div>
                     )
                   })}
 
-                  {/* Auto-calculated total */}
-                  <div className="mt-2 px-4 py-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
+                  {/* Live total */}
+                  <div className="px-4 py-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800 rounded-2xl">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-black text-indigo-700 dark:text-indigo-300">Total Score</p>
-                        <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-0.5">Auto-calculated from above</p>
+                        <p className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Total JAMB score</p>
+                        <p className="text-xs text-indigo-400 mt-0.5">Sum of all {jambSubjects.length} subjects</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300 tabular-nums">
-                          {jambAutoTotal}
-                        </p>
-                        <p className="text-xs text-indigo-400">/ 400</p>
+                        <span className="text-2xl font-black text-indigo-700 dark:text-indigo-300">{jambAutoTotal}</span>
+                        <span className="text-sm text-indigo-400">/400</span>
                       </div>
                     </div>
-                    {/* Optional manual override */}
-                    <div className="mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800">
-                      <p className="text-xs text-indigo-500 mb-1.5">Or set a custom total target:</p>
-                      <input type="number" min="100" max="400" value={jambTotalOverride}
-                        onChange={e => setJambTotalOverride(e.target.value)}
-                        placeholder={String(jambAutoTotal || 280)}
-                        className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-700 rounded-xl text-sm
-                                   bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                                   placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                    </div>
+                    {jambAutoTotal >= 300 && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-bold">🎯 Competitive for most federal universities</p>}
+                    {jambAutoTotal > 0 && jambAutoTotal < 200 && <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-bold">💪 Aim higher — most courses require 200+</p>}
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setPage(1)}
-                  className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400
-                             text-sm font-bold rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  ← Back
-                </button>
-                <button onClick={handleSave} disabled={saving}
-                  className="flex-1 py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl
-                             hover:bg-indigo-500 disabled:opacity-50 transition-colors">
-                  {saving ? 'Saving…' : 'Save goals ✓'}
-                </button>
-              </div>
+              <button onClick={handleSave} disabled={saving}
+                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-black rounded-2xl hover:opacity-90 transition-all disabled:opacity-50">
+                {saving ? 'Saving…' : 'Save goals →'}
+              </button>
             </div>
           )}
         </div>
