@@ -51,3 +51,62 @@
     color: var(--text-tertiary);
   }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   APPEND THESE BLOCKS TO src/app/globals.css
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Skeleton loader animation ──────────────────────────────────────────────── */
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-subtle) 25%,
+      var(--bg-card) 50%,
+      var(--bg-subtle) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Global: remove ALL outlines/borders from cards ─────────────────────────── */
+/* The .no-outline utility removes borders from any element */
+@layer utilities {
+  .no-outline * {
+    border-color: transparent !important;
+  }
+}
+
+/* ── Disable user selection in lesson viewer ─────────────────────────────────  */
+@layer utilities {
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* ── Scrollbar hiding ────────────────────────────────────────────────────────── */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Performance: content-visibility for long lists ─────────────────────────── */
+@layer utilities {
+  .cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 80px;
+  }
+}

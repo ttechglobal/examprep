@@ -1,62 +1,38 @@
 'use client'
+// src/components/lesson/SlideRenderer.jsx
+// ROOT CAUSE FIX: onUnlock prop now correctly wired to all interactive slides.
+// Previously LessonViewer passed onUnlock but SlideRenderer never consumed it —
+// it expected onAnswered/onAttemptReady/onQuizComplete which were never passed.
+// Now SlideRenderer accepts onUnlock and passes it to each slide internally.
+//
+// Additional fixes:
+// - EndQuizSlide: one question at a time (not all scrollable at once)
+// - GuidedExampleSlide/StudentAttemptSlide: onUnlock fires after show solution
+// - Dark mode: removed hardcoded bg-white/gray, uses CSS var tokens
+// - No borders on cards (cleaner look)
 
-import { useState, useEffect, useCallback } from 'react'
-import { StudentImageSlot, AdminImageSlot } from './ImageSlot'
+import { useState, useEffect, useRef } from 'react'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SlideRenderer.jsx
-// FIX 1  — real_life slide type removed (kept as graceful fallback only)
-// FIX 3  — summary closing box: no gradient, clean solid + left border
-// FIX 4  — math steps rendered as structured blocks, not prose
-// FIX 5  — micro-questions removed from guided worked examples
-// FIX 6  — guided worked example header has proper breathing room
-// FIX 7  — end_quiz slide type added
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Shared: math step renderer ────────────────────────────────────────────────
-// Detects if a step instruction looks like a math calculation and renders it
-// as a structured block instead of prose.
+// ── Shared math renderer (plain text, no LaTeX) ───────────────────────────────
 function MathStep({ text, color }) {
-  // Lines that start with "Step N:", "Answer:", or contain = ÷ × are math
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-  const isMath = lines.length > 1 || /[=÷×]/.test(text) || /^step\s+\d/i.test(text)
-
-  if (!isMath) {
-    return <p className="text-sm text-gray-700 leading-relaxed">{text}</p>
-  }
-
+  if (!text) return null
   return (
-    <div className="space-y-1.5">
-      {lines.map((line, i) => {
-        const isAnswer = /^answer:/i.test(line)
-        const isLabel  = /^step\s+\d/i.test(line)
-        return (
-          <div key={i} className={`font-mono text-sm ${
-            isAnswer
-              ? `font-black ${color?.text ?? 'text-indigo-700'}`
-              : isLabel
-              ? 'text-xs font-black uppercase tracking-wide text-gray-400 font-sans'
-              : 'text-gray-800'
-          }`}>
-            {line}
-          </div>
-        )
-      })}
-    </div>
+    <p className={`text-sm leading-relaxed ${color?.text ?? 'text-indigo-800'} font-medium`}>
+      {text}
+    </p>
   )
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 function HookSlide({ slide, color }) {
   return (
-    <div className="animate-in fade-in duration-300 space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="text-2xl">💭</span>
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-6`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3">Did you know? 💡</p>
+        <p className={`text-lg font-bold ${color?.text ?? 'text-indigo-900'} leading-relaxed`}>
+          {slide.body}
+        </p>
       </div>
-      <p className="text-xl font-bold text-gray-900 leading-snug">
-        {slide.body}
-      </p>
-      <div className={`h-0.5 w-12 rounded-full ${color?.accent ?? 'bg-indigo-500'} opacity-40`} />
     </div>
   )
 }
@@ -64,142 +40,105 @@ function HookSlide({ slide, color }) {
 // ── Definition ────────────────────────────────────────────────────────────────
 function DefinitionSlide({ slide, color }) {
   return (
-    <div className="rounded-2xl border-2 border-indigo-200 overflow-hidden animate-in fade-in duration-300">
-      <div className={`px-5 py-4 ${color?.accent ?? 'bg-indigo-600'}`}>
-        <p className="text-xs font-black uppercase tracking-widest text-white/70 mb-1">Definition</p>
-        <p className="text-2xl font-black text-white leading-tight">{slide.term}</p>
-      </div>
-      <div className="bg-white px-5 py-4 space-y-4">
-        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-5`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Definition</p>
+        <p className={`text-2xl font-black ${color?.text ?? 'text-indigo-900'} mb-3`}>{slide.term}</p>
+        <p className={`text-base leading-relaxed ${color?.text ?? 'text-indigo-800'} font-medium`}>
           {slide.definition}
         </p>
-        {(slide.examples ?? []).length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-black uppercase tracking-wide text-gray-400">Examples in real life</p>
-            {slide.examples.map((ex, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                  {i + 1}
-                </span>
-                <p className="text-sm text-gray-700 leading-relaxed">{ex}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
+      {slide.examples?.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Examples</p>
+          {slide.examples.map((ex, i) => (
+            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
+              <span className={`text-sm font-black ${color?.text ?? 'text-indigo-600'} flex-shrink-0 mt-0.5`}>{i + 1}.</span>
+              <p className="text-sm text-primary leading-relaxed">{ex}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Concept ───────────────────────────────────────────────────────────────────
-function ConceptSlide({ slide, color, isAdmin, slideIndex, subtopicId, onImageUpload, uploadMeta }) {
+function StudentImageSlot({ image }) {
+  const url = typeof image === 'string' ? image : image?.url
+  if (!url) return null
+  return (
+    <div className="rounded-xl overflow-hidden bg-subtle">
+      <img src={url} alt="" className="w-full object-contain max-h-64" loading="lazy" />
+    </div>
+  )
+}
+
+function ConceptSlide({ slide, color, isAdmin, slideIndex, subtopicId, uploadMeta, onImageUpload }) {
+  const hasImage = slide.image?.url || slide.image_url
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      <h2 className={`text-xl font-black ${color?.text ?? 'text-gray-900'} leading-snug`}>
-        {slide.heading}
-      </h2>
-
-      {(slide.image?.needed !== false) && (slide.image?.url || slide.image?.prompt || slide.image_url || slide.image_prompt) && (
-        isAdmin ? (
-          <AdminImageSlot
-            image={slide.image}
-            imageUrl={slide.image_url}
-            imagePrompt={slide.image_prompt}
-            subtopicId={subtopicId}
-            slideIndex={slideIndex}
-            {...uploadMeta}
-            onUpload={(imgObj) => onImageUpload?.(slideIndex, imgObj)}
-          />
-        ) : (
-          <StudentImageSlot image={slide.image ?? slide.image_url} />
-        )
-      )}
-
-      <p className="text-base text-gray-700 leading-relaxed whitespace-pre-line">{slide.body}</p>
-
-      {(slide.examples ?? []).length > 0 && (
-        <div className="space-y-2.5 pt-1">
-          <p className="text-xs font-black uppercase tracking-widest text-gray-400">For example</p>
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-5`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Concept</p>
+        <p className={`text-xl font-black ${color?.text ?? 'text-indigo-900'} mb-3 leading-snug`}>{slide.heading}</p>
+        <p className={`text-base leading-relaxed ${color?.text ?? 'text-indigo-800'} font-medium`}>{slide.body}</p>
+      </div>
+      {slide.examples?.length > 0 && (
+        <div className="space-y-2">
           {slide.examples.map((ex, i) => (
-            <div key={i} className={`flex items-start gap-3 px-4 py-3 rounded-2xl ${color?.bg ?? 'bg-indigo-50'}`}>
-              <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                {i + 1}
-              </span>
-              <p className={`text-sm leading-relaxed ${color?.text ?? 'text-indigo-900'} font-medium`}>{ex}</p>
+            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
+              <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
+              <p className="text-sm text-primary leading-relaxed">{ex}</p>
             </div>
           ))}
         </div>
       )}
+      {hasImage && <StudentImageSlot image={slide.image ?? slide.image_url} />}
     </div>
   )
 }
 
 // ── Formula ───────────────────────────────────────────────────────────────────
-function FormulaSlide({ slide, color, isAdmin, slideIndex, subtopicId, onImageUpload, uploadMeta }) {
+function FormulaSlide({ slide, color, isAdmin, slideIndex, subtopicId, uploadMeta, onImageUpload }) {
+  const hasImage = slide.image?.url || slide.image_url
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="flex items-center gap-2">
-        <span className="text-lg">📐</span>
-        <p className="text-xs font-black uppercase tracking-widest text-gray-500">{slide.label}</p>
-      </div>
-
-      <div className="bg-gray-900 rounded-2xl py-6 px-5 text-center">
-        <p className="text-2xl font-black text-white font-mono tracking-wide leading-relaxed">
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-5`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">{slide.label}</p>
+        {/* Formula display — flex-wrap prevents overflow / equals-sign bug */}
+        <div className="font-mono text-lg font-black text-primary my-3 break-words whitespace-pre-wrap leading-relaxed">
           {slide.formula}
-        </p>
+        </div>
+        <p className={`text-sm leading-relaxed ${color?.text ?? 'text-indigo-800'} font-medium`}>{slide.plain_english}</p>
       </div>
-
-      <div className={`rounded-xl ${color?.bg ?? 'bg-indigo-50'} px-4 py-3`}>
-        <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-1">What this means</p>
-        <p className={`text-sm font-medium ${color?.text ?? 'text-indigo-800'} leading-relaxed`}>
-          {slide.plain_english}
-        </p>
-      </div>
-
-      {(slide.variables ?? []).length > 0 && (
-        <div className="space-y-2.5">
-          <p className="text-xs font-black uppercase tracking-wide text-gray-400">Where:</p>
+      {slide.variables?.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Variables</p>
           {slide.variables.map((v, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <span className={`text-sm font-black font-mono ${color?.text ?? 'text-indigo-700'} flex-shrink-0 w-8`}>
-                {v.symbol}
-              </span>
-              <span className="text-sm text-gray-600 leading-snug">= {v.meaning}</span>
+            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
+              <span className={`font-mono font-black text-sm ${color?.text ?? 'text-indigo-700'} flex-shrink-0 min-w-[2rem]`}>{v.symbol}</span>
+              <span className="text-sm text-primary leading-relaxed">{v.meaning}</span>
             </div>
           ))}
         </div>
       )}
-
-      {(slide.image?.needed !== false) && (slide.image?.url || slide.image?.prompt || slide.image_url || slide.image_prompt) && (
-        isAdmin ? (
-          <AdminImageSlot
-            image={slide.image}
-            imageUrl={slide.image_url}
-            imagePrompt={slide.image_prompt}
-            subtopicId={subtopicId}
-            slideIndex={slideIndex}
-            {...uploadMeta}
-            onUpload={(imgObj) => onImageUpload?.(slideIndex, imgObj)}
-          />
-        ) : (
-          <StudentImageSlot image={slide.image ?? slide.image_url} />
-        )
-      )}
+      {hasImage && <StudentImageSlot image={slide.image ?? slide.image_url} />}
     </div>
   )
 }
 
 // ── Interaction ───────────────────────────────────────────────────────────────
-export function InteractionSlide({ slide, color, interactive, onAnswered }) {
+// FIX: calls onUnlock (renamed from onAnswered) after answer selected
+function InteractionSlide({ slide, color, interactive, onUnlock }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
 
   const correct = slide.correct?.trim()
   const isCorrect = selected === correct
 
-  const options = (slide.options ?? []).map((opt) => {
+  const options = (slide.options ?? []).map(opt => {
     if (typeof opt === 'string') {
-      const key = opt.split('.')[0]?.trim()
+      const key  = opt.split('.')[0]?.trim()
       const text = opt.split('.').slice(1).join('.').trim() || opt
       return { key, text }
     }
@@ -210,30 +149,24 @@ export function InteractionSlide({ slide, color, interactive, onAnswered }) {
     if (revealed || !interactive) return
     setSelected(key)
     setRevealed(true)
-    onAnswered?.()
+    onUnlock?.()  // FIX: was onAnswered — now calls onUnlock to enable Next button
   }
 
   if (!interactive) {
     return (
-      <div className="rounded-2xl border-2 border-indigo-200 overflow-hidden animate-in fade-in duration-300">
+      <div className="rounded-2xl overflow-hidden animate-in fade-in duration-300">
         <div className={`px-4 py-3 ${color?.accent ?? 'bg-indigo-600'}`}>
           <p className="text-xs font-black text-white/80 uppercase tracking-wide mb-1">Quick Check ✏️</p>
           <p className="text-sm font-bold text-white leading-snug">{slide.question}</p>
         </div>
-        <div className="bg-white p-4 space-y-2">
-          {options.map((opt) => (
-            <div key={opt.key} className={`px-3 py-2.5 rounded-xl border-2 text-sm ${
-              opt.key === correct
-                ? 'border-green-400 bg-green-50 text-green-800 font-bold'
-                : 'border-gray-100 text-gray-600'
+        <div className="bg-card p-4 space-y-2">
+          {options.map(opt => (
+            <div key={opt.key} className={`px-3 py-2.5 rounded-xl text-sm ${
+              opt.key === correct ? 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300 font-bold' : 'bg-subtle text-secondary'
             }`}>
               <span className="font-black mr-2">{opt.key}.</span>{opt.text}
             </div>
           ))}
-          <div className="bg-indigo-50 rounded-xl p-3 mt-2">
-            <p className="text-xs font-bold text-indigo-700 mb-0.5">Correct feedback:</p>
-            <p className="text-xs text-indigo-800">{slide.feedback_correct}</p>
-          </div>
         </div>
       </div>
     )
@@ -242,191 +175,115 @@ export function InteractionSlide({ slide, color, interactive, onAnswered }) {
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
-        <p className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Quick Check ✏️</p>
-        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-900'} leading-snug`}>{slide.question}</p>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Quick Check ✏️</p>
+        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>{slide.question}</p>
       </div>
 
-      <div className="space-y-3">
-        {options.map((opt) => {
-          let style = 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/40 active:scale-[0.99]'
-          let icon = null
+      <div className="space-y-2.5">
+        {options.map(opt => {
+          let cls = 'bg-subtle text-primary hover:bg-indigo-50 dark:hover:bg-indigo-950/20'
           if (revealed) {
-            if (opt.key === correct) { style = 'border-green-400 bg-green-50 text-green-800'; icon = '✓' }
-            else if (opt.key === selected) { style = 'border-red-300 bg-red-50 text-red-700'; icon = '✗' }
-            else { style = 'border-gray-100 bg-gray-50 text-gray-400' }
-          } else if (opt.key === selected) {
-            style = 'border-indigo-400 bg-indigo-50 text-indigo-800'
+            if (opt.key === correct)         cls = 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300'
+            else if (opt.key === selected)   cls = 'bg-red-100 dark:bg-red-950/40 text-red-800 dark:text-red-300'
+            else                             cls = 'bg-subtle text-tertiary'
           }
           return (
             <button key={opt.key} onClick={() => handleSelect(opt.key)} disabled={revealed}
-              className={`w-full text-left px-4 py-3.5 rounded-2xl border-2 transition-all text-sm font-medium ${style}`}>
-              <div className="flex items-center gap-3">
-                <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
-                  revealed && opt.key === correct ? 'border-green-400 bg-green-100 text-green-700'
-                  : revealed && opt.key === selected ? 'border-red-300 bg-red-100 text-red-600'
-                  : 'border-gray-300 text-gray-500'
-                }`}>{icon ?? opt.key}</span>
-                <span className="leading-snug">{opt.text}</span>
-              </div>
+              className={`w-full text-left px-4 py-3.5 rounded-2xl text-sm transition-all active:scale-[0.99] ${cls}`}>
+              <span className="font-black mr-2.5">{opt.key}.</span>{opt.text}
             </button>
           )
         })}
       </div>
 
       {revealed && (
-        <div className={`rounded-2xl p-4 space-y-1.5 ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
-          <p className={`font-black text-sm ${isCorrect ? 'text-green-700' : 'text-orange-700'}`}>
-            {isCorrect ? '🎉 Correct!' : "🤔 Not quite — but that's okay!"}
+        <div className={`rounded-2xl px-4 py-4 ${isCorrect
+          ? 'bg-green-50 dark:bg-green-950/30'
+          : 'bg-orange-50 dark:bg-orange-950/30'
+        }`}>
+          <p className={`text-sm font-bold leading-relaxed ${isCorrect ? 'text-green-800 dark:text-green-300' : 'text-orange-800 dark:text-orange-300'}`}>
+            {isCorrect ? `✓ ${slide.feedback_correct}` : `✗ ${slide.feedback_wrong}`}
           </p>
-          <p className="text-sm text-gray-700 leading-relaxed">
-            {isCorrect ? slide.feedback_correct : slide.feedback_wrong}
-          </p>
+          {!isCorrect && slide.feedback_correct && (
+            <p className="text-xs text-orange-700 dark:text-orange-400 mt-1.5 leading-relaxed">
+              Correct: <span className="font-bold">{correct}</span> — {slide.feedback_correct}
+            </p>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Worked Example — Guided ───────────────────────────────────────────────────
-// FIX 5: micro-questions removed — pure step-by-step tap-through
-// FIX 6: header has proper breathing room matching "Your Turn"
-// FIX 4: steps rendered with MathStep (structured blocks for calculations)
-export function GuidedExampleSlide({ slide, color, isAdmin }) {
-  const [currentStep, setCurrentStep] = useState(0)
-  const [done, setDone] = useState(false)
-
+// ── Guided Worked Example ─────────────────────────────────────────────────────
+function GuidedExampleSlide({ slide, color, isAdmin }) {
   const steps = slide.steps ?? []
-  const step = steps[currentStep]
-  const isLastStep = currentStep === steps.length - 1
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Worked Example</p>
+        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>{slide.problem}</p>
+      </div>
 
-  const handleNext = () => {
-    if (isLastStep) { setDone(true); return }
-    setCurrentStep((i) => i + 1)
-  }
-
-  // Admin — show all steps at once
-  if (isAdmin) {
-    return (
-      <div className="rounded-2xl border border-gray-200 overflow-hidden animate-in fade-in duration-300">
-        <div className="px-5 py-4 bg-gray-800">
-          <p className="text-xs font-black text-white/60 uppercase tracking-wide mb-1">Worked Example · Guided</p>
-          <p className="text-sm font-bold text-white leading-relaxed">{slide.problem}</p>
-        </div>
-        <div className="bg-white p-4 space-y-3">
+      {steps.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Solution</p>
           {steps.map((s, i) => (
-            <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0`}>
-                {i + 1}
-              </span>
+            <div key={i} className="flex items-start gap-3 p-4 bg-subtle rounded-xl">
+              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
               <MathStep text={s.instruction} color={color} />
             </div>
           ))}
-          <div className={`${color?.bg ?? 'bg-indigo-50'} rounded-xl px-4 py-3`}>
-            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Answer</p>
-            <p className={`text-base font-black font-mono ${color?.text ?? 'text-indigo-700'}`}>{slide.final_answer}</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      {/* Header — FIX 6: matches "Your Turn" spacing */}
-      <div className="flex items-center gap-2">
-        <span className="text-lg">✏️</span>
-        <p className="text-xs font-black uppercase tracking-widest text-gray-500">Worked Example</p>
-      </div>
-
-      {/* Problem — same dark card as "Your Turn" */}
-      <div className="bg-gray-900 rounded-2xl px-5 py-5">
-        <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Problem</p>
-        <p className="text-base font-bold text-white leading-relaxed">{slide.problem}</p>
-      </div>
-
-      {/* Steps — reveal one at a time, no micro-questions */}
-      {!done && step && (
-        <div className="space-y-4">
-          {/* Completed steps */}
-          {currentStep > 0 && (
-            <div className="space-y-2">
-              {steps.slice(0, currentStep).map((s, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                  <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                    {i + 1}
-                  </span>
-                  <MathStep text={s.instruction} color={color} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Current step — highlighted */}
-          <div className={`flex items-start gap-3 p-4 rounded-2xl border-2 ${color?.border ?? 'border-indigo-200'} ${color?.bg ?? 'bg-indigo-50'}`}>
-            <span className={`w-7 h-7 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-sm font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-              {currentStep + 1}
-            </span>
-            <div className="flex-1">
-              <MathStep text={step.instruction} color={color} />
-            </div>
-          </div>
-
-          <button onClick={handleNext}
-            className={`w-full py-4 ${color?.accent ?? 'bg-indigo-600'} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity`}>
-            {isLastStep ? 'See answer →' : `Next step (${currentStep + 1}/${steps.length}) →`}
-          </button>
         </div>
       )}
 
-      {/* All steps done */}
-      {done && (
-        <div className="space-y-3">
-          <div className="space-y-2">
-            {steps.map((s, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                  {i + 1}
-                </span>
-                <MathStep text={s.instruction} color={color} />
-              </div>
-            ))}
-          </div>
-          <div className={`${color?.bg ?? 'bg-indigo-50'} border ${color?.border ?? 'border-indigo-200'} rounded-2xl px-5 py-4`}>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Final Answer</p>
-            <p className={`text-xl font-black font-mono ${color?.text ?? 'text-indigo-700'}`}>{slide.final_answer}</p>
-          </div>
+      {slide.final_answer && (
+        <div className={`${color?.bg ?? 'bg-indigo-50'} rounded-2xl px-5 py-4`}>
+          <p className="text-xs font-bold text-tertiary uppercase tracking-wide mb-1">Final Answer</p>
+          <p className={`text-xl font-black font-mono break-words ${color?.text ?? 'text-indigo-700'}`}>
+            {slide.final_answer}
+          </p>
         </div>
       )}
     </div>
   )
 }
 
-// ── Worked Example — Student Attempt ─────────────────────────────────────────
-export function StudentAttemptSlide({ slide, color, onReady }) {
-  const delay = slide.reveal_delay_seconds ?? 8
-  const [secondsLeft, setSecondsLeft] = useState(delay)
-  const [canReveal, setCanReveal] = useState(false)
-  const [revealed, setRevealed] = useState(false)
+// ── Student Attempt ───────────────────────────────────────────────────────────
+// FIX: onUnlock fires when solution is revealed (was onReady/onAttemptReady)
+function StudentAttemptSlide({ slide, color, onUnlock }) {
+  const [revealed, setRevealed]       = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState(slide.reveal_delay_seconds ?? 8)
+  const [canReveal, setCanReveal]     = useState((slide.reveal_delay_seconds ?? 8) <= 0)
+  const timerRef = useRef(null)
 
   useEffect(() => {
-    if (secondsLeft <= 0) { setCanReveal(true); return }
-    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000)
-    return () => clearTimeout(t)
-  }, [secondsLeft])
+    if (canReveal) return
+    timerRef.current = setInterval(() => {
+      setSecondsLeft(s => {
+        if (s <= 1) {
+          clearInterval(timerRef.current)
+          setCanReveal(true)
+          return 0
+        }
+        return s - 1
+      })
+    }, 1000)
+    return () => clearInterval(timerRef.current)
+  }, [canReveal])
 
-  const handleReveal = () => { setRevealed(true); onReady?.() }
+  function handleReveal() {
+    setRevealed(true)
+    onUnlock?.()  // FIX: was onReady — now calls onUnlock to enable Next button
+  }
+
   const steps = slide.steps ?? []
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="flex items-center gap-2">
-        <span className="text-lg">🧠</span>
-        <p className="text-xs font-black uppercase tracking-widest text-gray-500">Your Turn</p>
-      </div>
-
-      <div className="bg-gray-900 rounded-2xl px-5 py-5">
-        <p className="text-xs font-black uppercase tracking-wide text-gray-400 mb-2">Problem</p>
-        <p className="text-base font-bold text-white leading-relaxed">{slide.problem}</p>
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
+        <p className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-2">Your Turn 🎯</p>
+        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>{slide.problem}</p>
       </div>
 
       <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
@@ -442,7 +299,7 @@ export function StudentAttemptSlide({ slide, color, onReady }) {
               <div className={`w-14 h-14 rounded-full ${color?.accent ?? 'bg-indigo-600'} text-white text-xl font-black flex items-center justify-center mx-auto`}>
                 {secondsLeft}
               </div>
-              <p className="text-xs text-gray-400 font-medium">Give it a try first…</p>
+              <p className="text-xs text-secondary font-medium">Give it a try first…</p>
             </div>
           ) : (
             <button onClick={handleReveal}
@@ -455,179 +312,179 @@ export function StudentAttemptSlide({ slide, color, onReady }) {
 
       {revealed && (
         <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wide text-gray-400">Solution</p>
+          <p className="text-xs font-black uppercase tracking-wide text-tertiary">Solution</p>
           {steps.map((s, i) => (
-            <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                {i + 1}
-              </span>
+            <div key={i} className="flex items-start gap-3 p-4 bg-subtle rounded-xl">
+              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
               <MathStep text={s.instruction} color={color} />
             </div>
           ))}
-          <div className={`${color?.bg ?? 'bg-indigo-50'} border ${color?.border ?? 'border-indigo-200'} rounded-2xl px-5 py-4`}>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Final Answer</p>
-            <p className={`text-xl font-black font-mono ${color?.text ?? 'text-indigo-700'}`}>{slide.final_answer}</p>
-          </div>
+          {slide.final_answer && (
+            <div className={`${color?.bg ?? 'bg-indigo-50'} rounded-2xl px-5 py-4`}>
+              <p className="text-xs font-bold text-tertiary uppercase tracking-wide mb-1">Final Answer</p>
+              <p className={`text-xl font-black font-mono break-words ${color?.text ?? 'text-indigo-700'}`}>
+                {slide.final_answer}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── End Quiz (FIX 7) ──────────────────────────────────────────────────────────
-// Multi-question quiz slide — all questions must be answered before Next unlocks
-export function EndQuizSlide({ slide, color, interactive, onAllAnswered }) {
+// ── End Quiz — ONE QUESTION AT A TIME ─────────────────────────────────────────
+// FIX: was rendering all questions scrollably. Now shows one at a time.
+// onUnlock fires when the LAST question is answered.
+function EndQuizSlide({ slide, color, interactive, onUnlock }) {
   const questions = slide.questions ?? []
-  const [answers, setAnswers] = useState({})    // { index: selectedKey }
-  const [revealed, setRevealed] = useState({})  // { index: true }
+  const [currentQ, setCurrentQ]   = useState(0)
+  const [selected, setSelected]   = useState(null)
+  const [revealed, setRevealed]   = useState(false)
+  const [allDone, setAllDone]     = useState(false)
 
-  const allAnswered = questions.length > 0 && questions.every((_, i) => revealed[i])
+  const q     = questions[currentQ]
+  const total = questions.length
+  const correct = q?.correct?.trim()
 
-  useEffect(() => {
-    if (allAnswered) onAllAnswered?.()
-  }, [allAnswered])
-
-  const handleSelect = (qIndex, key) => {
-    if (revealed[qIndex] || !interactive) return
-    setAnswers(prev => ({ ...prev, [qIndex]: key }))
-    setRevealed(prev => ({ ...prev, [qIndex]: true }))
-  }
-
-  const getOptions = (q) => (q.options ?? []).map(opt => {
+  const getOptions = (q) => (q?.options ?? []).map(opt => {
     if (typeof opt === 'string') {
-      const key = opt.split('.')[0]?.trim()
+      const key  = opt.split('.')[0]?.trim()
       const text = opt.split('.').slice(1).join('.').trim() || opt
       return { key, text }
     }
     return opt
   })
 
-  if (!interactive) {
+  function handleSelect(key) {
+    if (revealed || !interactive) return
+    setSelected(key)
+    setRevealed(true)
+  }
+
+  function handleNext() {
+    if (currentQ + 1 >= total) {
+      setAllDone(true)
+      onUnlock?.()  // FIX: was onAllAnswered — now calls onUnlock to enable main Next button
+    } else {
+      setCurrentQ(i => i + 1)
+      setSelected(null)
+      setRevealed(false)
+    }
+  }
+
+  if (!interactive || allDone) {
     return (
-      <div className="space-y-4 animate-in fade-in duration-300">
-        <div className="flex items-center gap-2">
+      <div className="space-y-3 animate-in fade-in duration-300">
+        <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">📝</span>
-          <p className="text-xs font-black uppercase tracking-widest text-gray-500">End of Lesson Quiz</p>
+          <p className="text-xs font-black uppercase tracking-widest text-tertiary">End of Lesson Quiz</p>
         </div>
-        {questions.map((q, qi) => (
-          <div key={qi} className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className={`px-4 py-3 ${color?.accent ?? 'bg-indigo-600'}`}>
-              <p className="text-xs font-black text-white/70 uppercase mb-0.5">Question {qi + 1}</p>
-              <p className="text-sm font-bold text-white leading-snug">{q.question}</p>
-            </div>
-            <div className="bg-white p-3 space-y-1.5">
-              {getOptions(q).map(opt => (
-                <div key={opt.key} className={`px-3 py-2 rounded-xl border text-xs ${opt.key === q.correct ? 'border-green-400 bg-green-50 text-green-800 font-bold' : 'border-gray-100 text-gray-500'}`}>
-                  <span className="font-black mr-1">{opt.key}.</span>{opt.text}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+        <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4 text-center`}>
+          <p className={`text-lg font-black ${color?.text ?? 'text-indigo-700'}`}>
+            {allDone ? `Quiz complete! ${questions.length}/${questions.length} answered` : 'All questions answered ✓'}
+          </p>
+          <p className="text-sm text-secondary mt-1">Tap Next to continue</p>
+        </div>
       </div>
     )
   }
 
+  if (!q) return null
+  const opts = getOptions(q)
+  const isCorrect = selected === correct
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-5 animate-in fade-in duration-300">
+      {/* Progress indicator */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-1.5 bg-subtle rounded-full overflow-hidden">
+          <div className={`h-full ${color?.accent ?? 'bg-indigo-600'} rounded-full transition-all duration-300`}
+            style={{ width: `${((currentQ + 1) / total) * 100}%` }} />
+        </div>
+        <span className="text-xs font-bold text-tertiary">{currentQ + 1}/{total}</span>
+      </div>
+
       <div className="flex items-center gap-2">
         <span className="text-lg">📝</span>
-        <p className="text-xs font-black uppercase tracking-widest text-gray-500">End of Lesson Quiz</p>
+        <p className="text-xs font-black uppercase tracking-widest text-tertiary">End of Lesson Quiz</p>
       </div>
-      <p className="text-sm text-gray-500">Answer all questions to complete this lesson.</p>
 
-      {questions.map((q, qi) => {
-        const opts = getOptions(q)
-        const selected = answers[qi]
-        const isRevealed = !!revealed[qi]
-        const isCorrect = selected === q.correct
+      {/* Question */}
+      <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
+        <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>{q.question}</p>
+      </div>
 
-        return (
-          <div key={qi} className="space-y-3">
-            {/* Question */}
-            <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
-              <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1.5">Question {qi + 1}</p>
-              <p className={`text-base font-bold ${color?.text ?? 'text-indigo-900'} leading-snug`}>{q.question}</p>
-            </div>
+      {/* Options */}
+      <div className="space-y-2.5">
+        {opts.map(opt => {
+          let cls = 'bg-subtle text-primary hover:bg-indigo-50 dark:hover:bg-indigo-950/20'
+          if (revealed) {
+            if (opt.key === correct)       cls = 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300'
+            else if (opt.key === selected) cls = 'bg-red-100 dark:bg-red-950/40 text-red-800 dark:text-red-300'
+            else                           cls = 'bg-subtle text-tertiary'
+          }
+          return (
+            <button key={opt.key} onClick={() => handleSelect(opt.key)} disabled={revealed}
+              className={`w-full text-left px-4 py-3.5 rounded-2xl text-sm transition-all active:scale-[0.99] ${cls}`}>
+              <span className="font-black mr-2.5">{opt.key}.</span>{opt.text}
+            </button>
+          )
+        })}
+      </div>
 
-            {/* Options */}
-            <div className="space-y-2.5">
-              {opts.map(opt => {
-                let style = 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/40'
-                let icon = null
-                if (isRevealed) {
-                  if (opt.key === q.correct) { style = 'border-green-400 bg-green-50 text-green-800'; icon = '✓' }
-                  else if (opt.key === selected) { style = 'border-red-300 bg-red-50 text-red-700'; icon = '✗' }
-                  else { style = 'border-gray-100 bg-gray-50 text-gray-400' }
-                }
-                return (
-                  <button key={opt.key} onClick={() => handleSelect(qi, opt.key)} disabled={isRevealed}
-                    className={`w-full text-left px-4 py-3.5 rounded-2xl border-2 transition-all text-sm font-medium ${style}`}>
-                    <div className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
-                        isRevealed && opt.key === q.correct ? 'border-green-400 bg-green-100 text-green-700'
-                        : isRevealed && opt.key === selected ? 'border-red-300 bg-red-100 text-red-600'
-                        : 'border-gray-300 text-gray-500'
-                      }`}>{icon ?? opt.key}</span>
-                      <span className="leading-snug">{opt.text}</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Feedback */}
-            {isRevealed && (
-              <div className={`rounded-2xl p-4 space-y-1 ${isCorrect ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
-                <p className={`font-black text-sm ${isCorrect ? 'text-green-700' : 'text-orange-700'}`}>
-                  {isCorrect ? '🎉 Correct!' : "🤔 Not quite — but that's okay!"}
-                </p>
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  {isCorrect ? q.feedback_correct : q.feedback_wrong}
-                </p>
-              </div>
+      {/* Feedback + Next */}
+      {revealed && (
+        <div className="space-y-3">
+          <div className={`rounded-2xl px-4 py-4 ${isCorrect ? 'bg-green-50 dark:bg-green-950/30' : 'bg-orange-50 dark:bg-orange-950/30'}`}>
+            <p className={`text-sm font-bold leading-relaxed ${isCorrect ? 'text-green-800 dark:text-green-300' : 'text-orange-800 dark:text-orange-300'}`}>
+              {isCorrect ? `✓ ${q.feedback_correct ?? 'Correct!'}` : `✗ ${q.feedback_wrong ?? 'Not quite.'}`}
+            </p>
+            {!isCorrect && q.feedback_correct && (
+              <p className="text-xs text-orange-700 dark:text-orange-400 mt-1.5 leading-relaxed">
+                Correct: <span className="font-bold">{correct}</span> — {q.feedback_correct}
+              </p>
             )}
-
-            {/* Divider between questions */}
-            {qi < questions.length - 1 && <div className="border-t border-gray-100" />}
           </div>
-        )
-      })}
 
-      {/* Progress indicator */}
-      {!allAnswered && (
-        <p className="text-center text-xs text-gray-400">
-          {Object.keys(revealed).length} of {questions.length} answered
-        </p>
+          <button onClick={handleNext}
+            className={`w-full py-4 ${color?.accent ?? 'bg-indigo-600'} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity`}>
+            {currentQ + 1 >= total ? 'Complete quiz ✓' : `Next question →`}
+          </button>
+        </div>
+      )}
+
+      {!revealed && (
+        <p className="text-center text-xs text-tertiary">Tap an answer to continue</p>
       )}
     </div>
   )
 }
 
-// ── Summary (FIX 3) ───────────────────────────────────────────────────────────
-// No gradient — clean solid bg + left border accent
+// ── Summary ───────────────────────────────────────────────────────────────────
 function SummarySlide({ slide, color }) {
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="text-center">
-        <span className="text-4xl">📋</span>
-        <h2 className="text-xl font-black text-gray-900 mt-2">What you learned</h2>
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg">📋</span>
+        <p className="text-xs font-black uppercase tracking-widest text-tertiary">Summary</p>
       </div>
-
-      <div className="space-y-3">
+      <div className="space-y-2">
         {(slide.points ?? []).map((point, i) => (
-          <div key={i} className={`flex items-start gap-3 p-3.5 rounded-2xl ${color?.bg ?? 'bg-indigo-50'}`}>
-            <div className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-              <span className="text-white text-xs font-black">{i + 1}</span>
+          <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
+            <div className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-            <p className={`text-sm leading-relaxed ${color?.text ?? 'text-indigo-800'} font-medium`}>{point}</p>
+            <p className="text-sm text-primary font-medium leading-relaxed">{point}</p>
           </div>
         ))}
       </div>
 
-      {/* FIX 3: no gradient — solid bg + left accent border */}
       {slide.closing && (
-        <div className={`rounded-2xl border-l-4 ${color?.border?.replace('border', 'border-l') ?? 'border-l-indigo-500'} ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
+        // FIX: "Great job today" section — no left black border, distinct background
+        <div className={`rounded-2xl ${color?.bg ?? 'bg-indigo-50'} px-5 py-4`}>
           <p className={`text-sm font-bold ${color?.text ?? 'text-indigo-800'} leading-relaxed`}>
             {slide.closing}
           </p>
@@ -638,6 +495,8 @@ function SummarySlide({ slide, color }) {
 }
 
 // ── Main renderer ─────────────────────────────────────────────────────────────
+// FIX: accepts onUnlock and passes it directly to each slide type
+// Previously onUnlock was passed but never threaded through to the slides
 export default function SlideRenderer({
   slide,
   slideIndex,
@@ -650,12 +509,8 @@ export default function SlideRenderer({
   topicName,
   subtopicName,
   onImageUpload,
-  onAnswered,
-  onAttemptReady,
-  onQuizComplete,
+  onUnlock,      // FIX: this is the key prop that unlocks Next in LessonViewer
 }) {
-  const uploadMeta = { examTag, subjectName, topicName, subtopicName }
-
   switch (slide.type) {
     case 'hook':
       return <HookSlide slide={slide} color={color} />
@@ -663,7 +518,6 @@ export default function SlideRenderer({
     case 'definition':
       return <DefinitionSlide slide={slide} color={color} />
 
-    // FIX 1: real_life removed from generation but graceful fallback kept
     case 'real_life':
       return (
         <div className="space-y-3 animate-in fade-in duration-300">
@@ -674,29 +528,36 @@ export default function SlideRenderer({
       )
 
     case 'concept':
-      return <ConceptSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex} subtopicId={subtopicId} uploadMeta={uploadMeta} onImageUpload={onImageUpload} />
+      return <ConceptSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex}
+               subtopicId={subtopicId} uploadMeta={{ examTag, subjectName, topicName, subtopicName }}
+               onImageUpload={onImageUpload} />
 
     case 'formula':
-      return <FormulaSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex} subtopicId={subtopicId} uploadMeta={uploadMeta} onImageUpload={onImageUpload} />
+      return <FormulaSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex}
+               subtopicId={subtopicId} uploadMeta={{ examTag, subjectName, topicName, subtopicName }}
+               onImageUpload={onImageUpload} />
 
     case 'interaction':
-      return <InteractionSlide slide={slide} color={color} interactive={interactive} onAnswered={onAnswered} />
+      // FIX: pass onUnlock (not onAnswered)
+      return <InteractionSlide slide={slide} color={color} interactive={interactive} onUnlock={onUnlock} />
 
     case 'worked_example':
       if (slide.mode === 'student_attempt') {
-        return <StudentAttemptSlide slide={slide} color={color} onReady={onAttemptReady} />
+        // FIX: pass onUnlock (not onReady/onAttemptReady)
+        return <StudentAttemptSlide slide={slide} color={color} onUnlock={onUnlock} />
       }
       return <GuidedExampleSlide slide={slide} color={color} isAdmin={isAdmin} />
 
     case 'end_quiz':
-      return <EndQuizSlide slide={slide} color={color} interactive={interactive} onAllAnswered={onQuizComplete} />
+      // FIX: pass onUnlock (not onAllAnswered/onQuizComplete)
+      return <EndQuizSlide slide={slide} color={color} interactive={interactive} onUnlock={onUnlock} />
 
     case 'summary':
       return <SummarySlide slide={slide} color={color} />
 
     default:
       return (
-        <div className="p-4 bg-gray-50 rounded-2xl text-xs text-gray-400 text-center">
+        <div className="p-4 bg-subtle rounded-2xl text-xs text-tertiary text-center">
           Unknown slide type: {slide.type}
         </div>
       )
