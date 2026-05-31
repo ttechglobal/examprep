@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import { getSubjectColor } from '@/lib/theme'
 import { DashboardSkeleton } from '@/components/ui/Skeletons'
 import Link from 'next/link'
+import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
 const WeeklyGoals = lazy(() => import('@/components/dashboard/WeeklyGoals'))
 const GoalModal   = lazy(() => import('@/components/dashboard/GoalModal'))
@@ -457,6 +458,7 @@ export default function DashboardPage() {
           </Link>
         </div>
       )}
+      <PracticeHubFAB />
     </div>
   )
 }

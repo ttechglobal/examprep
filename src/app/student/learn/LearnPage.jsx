@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getSubjectColor, getMasteryLevel } from '@/lib/theme'
 import { LearnHubSkeleton } from '@/components/ui/Skeletons'
 import Link from 'next/link'
+import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
@@ -359,6 +360,7 @@ export default function LearnHubPage() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
         </svg>
       </Link>
+      <PracticeHubFAB />
     </div>
   )
 }
