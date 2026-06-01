@@ -1,4 +1,4 @@
-// src/app/admin/layout.js  (REPLACE existing file — adds Video Lessons nav link)
+// src/app/admin/layout.js
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -16,11 +16,12 @@ export default async function AdminLayout({ children }) {
             <span className="font-black text-lg text-indigo-600">ExamPrep Admin</span>
             <div className="flex items-center gap-1 overflow-x-auto">
               {[
-                { href: '/admin/curriculum',     label: 'Curriculum' },
-                { href: '/admin/subjects-manager', label: 'Subjects' },
-                { href: '/admin/curriculum/upload', label: 'Upload' },
-                { href: '/admin/questions',       label: 'Questions' },
-                { href: '/admin/video-lessons',   label: '🎬 Videos' },
+                { href: '/admin/curriculum',       label: 'Curriculum'    },
+                { href: '/admin/subjects-manager', label: 'Subjects'      },
+                { href: '/admin/curriculum/upload', label: 'Upload'       },
+                { href: '/admin/questions',         label: 'Questions'    },
+                { href: '/admin/core-topics',       label: '⭐ Core Topics' },
+                { href: '/admin/video-lessons',     label: '🎬 Videos'    },
               ].map(item => (
                 <Link
                   key={item.href}
