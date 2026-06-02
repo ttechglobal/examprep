@@ -4,6 +4,7 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { rebuildStudyPlan, seedCoreTopicsForSubject } from '@/lib/studyPlanEngine'
 
 function svc() {
   return createServiceClient(
@@ -65,7 +66,7 @@ export async function POST(request) {
     console.log('[diag-save] answers sample:', JSON.stringify(Object.entries(answers ?? {}).slice(0, 1)))
   }
 
-  // 4. Per-subject: diagnostic result + learning path
+  // 4. Per-subject: diagnostic result + learning path + core topic seed
   for (const sub of subjectRows) {
     const subQs = (questions ?? []).filter(q => q.subject_name === sub.name || q.subject_id === sub.id)
     const weakIds = [...new Set(subQs.filter(q => answers?.[q.id] && !answers[q.id].is_correct && q.subtopic_id).map(q => q.subtopic_id))]
@@ -96,6 +97,23 @@ export async function POST(request) {
       if (lpErr) console.error('[diag-save] learning_path error:', lpErr.message)
       else console.log('[diag-save] learning_path OK for', sub.name)
     }
+
+    // Seed core topics immediately so the plan isn't blank on first visit
+    try {
+      await seedCoreTopicsForSubject(service, user.id, sub.id)
+      console.log('[diag-save] core topics seeded for', sub.name)
+    } catch (e) {
+      console.error('[diag-save] seedCoreTopics error:', e.message)
+    }
+  }
+
+  // 5. Rebuild the full study plan now that all attempts are committed
+  const subjectIds = subjectRows.map(s => s.id)
+  try {
+    await rebuildStudyPlan(service, user.id, subjectIds)
+    console.log('[diag-save] study plan rebuilt for subjects:', subjectIds)
+  } catch (e) {
+    console.error('[diag-save] rebuildStudyPlan error:', e.message)
   }
 
   console.log('[diag-save] DONE')

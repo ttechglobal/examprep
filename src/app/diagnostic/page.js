@@ -1,15 +1,15 @@
 'use client'
 // src/app/diagnostic/page.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Diagnostic setup — one subject at a time.
+// FIX: subjectsToShow always shows ALL_SUBJECTS.
 //
-// Key changes from previous version:
-//   - Student selects ONE subject (not multiple)
-//   - If signed in, their enrolled subjects are shown as quick-select options
-//   - If not signed in, full subject list is shown
-//   - Subjects already diagnosed are shown with a "Retake" label so the student
-//     knows they can top up any subject's plan
-//   - questionCount is fixed at 10 (no UI picker — keeps it simple and fast)
+// Previous bug: when signed-in and enrolledSubjects.length > 0, the page
+// showed ONLY enrolledSubjects — hiding Physics and other subjects the
+// student hadn't enrolled in yet.
+//
+// Fix: always render ALL_SUBJECTS. Enrolled subjects get a highlighted
+// "enrolled" badge so they're easy to find. Already-diagnosed subjects
+// keep the "Retake" label.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, Suspense } from 'react'
@@ -27,7 +27,6 @@ function DiagnosticSetup() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  // Allow pre-selecting subject via ?subject=Physics
   const presetSubject = searchParams.get('subject') ?? ''
   const presetExam    = searchParams.get('exam') ?? ''
 
@@ -37,9 +36,7 @@ function DiagnosticSetup() {
   const [loadingProfile,  setLoadingProfile]  = useState(true)
   const [isSignedIn,      setIsSignedIn]      = useState(false)
 
-  // Subjects the student is enrolled in
   const [enrolledSubjects,  setEnrolledSubjects]  = useState([])
-  // Subjects they've already taken a diagnostic for
   const [diagnosedSubjects, setDiagnosedSubjects] = useState(new Set())
 
   useEffect(() => {
@@ -63,7 +60,6 @@ function DiagnosticSetup() {
         if (profile?.exam_type && !presetExam) setExamType(profile.exam_type)
         if (profile?.subjects?.length) setEnrolledSubjects(profile.subjects)
 
-        // Build set of subject names already diagnosed
         const names = new Set(
           (diagResults ?? []).map(r => r.subjects?.name).filter(Boolean)
         )
@@ -86,7 +82,6 @@ function DiagnosticSetup() {
 
     sessionStorage.setItem('diagnostic_setup', JSON.stringify({
       examType,
-      // Always an array of one — API accepts array, this keeps compat
       subjects:      [selectedSubject],
       questionCount: 10,
       isPractice:    isSignedIn,
@@ -95,9 +90,8 @@ function DiagnosticSetup() {
     router.push('/diagnostic/test')
   }
 
-  const subjectsToShow = isSignedIn && enrolledSubjects.length
-    ? enrolledSubjects
-    : ALL_SUBJECTS
+  // ── FIX: always show ALL subjects — enrolled ones get a badge ────────────
+  const subjectsToShow = ALL_SUBJECTS
 
   if (loadingProfile) {
     return (
@@ -121,7 +115,7 @@ function DiagnosticSetup() {
           <h1 className="text-2xl font-black text-gray-900">Diagnostic Test</h1>
           <p className="text-sm text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
             {isSignedIn
-              ? 'Pick one subject. We\'ll find your weak areas and add them to your study plan.'
+              ? "Pick one subject. We'll find your weak areas and add them to your study plan."
               : '10 quick questions to see where you stand. No account needed.'}
           </p>
         </div>
@@ -150,7 +144,7 @@ function DiagnosticSetup() {
             </div>
           </div>
 
-          {/* Subject picker — one at a time */}
+          {/* Subject picker */}
           <div className="px-5 py-4">
             <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
               Choose one subject
@@ -160,6 +154,7 @@ function DiagnosticSetup() {
                 const color      = getSubjectColor(subject)
                 const isSelected = selectedSubject === subject
                 const isDone     = diagnosedSubjects.has(subject)
+                const isEnrolled = enrolledSubjects.includes(subject)
 
                 return (
                   <button
@@ -169,65 +164,58 @@ function DiagnosticSetup() {
                       w-full flex items-center justify-between px-4 py-3 rounded-xl
                       border-2 text-left transition-all
                       ${isSelected
-                        ? `${color.bg} ${color.text} border-transparent shadow-sm`
-                        : 'bg-gray-50 text-gray-700 border-transparent hover:border-gray-200'
+                        ? `${color.bg} border-current ${color.text}`
+                        : 'border-gray-100 hover:border-gray-200 bg-gray-50'
                       }
                     `}
                   >
-                    <span className="text-sm font-bold">{subject}</span>
-                    {isDone && !isSelected && (
-                      <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                        retake
-                      </span>
-                    )}
-                    {isSelected && (
-                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                      </svg>
-                    )}
+                    <span className={`text-sm font-bold ${isSelected ? color.text : 'text-gray-700'}`}>
+                      {subject}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                      {isEnrolled && !isSelected && (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">
+                          Enrolled
+                        </span>
+                      )}
+                      {isDone && (
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          isSelected ? 'bg-white/30 text-current' : 'bg-gray-200 text-gray-500'
+                        }`}>
+                          Retake
+                        </span>
+                      )}
+                      {isSelected && (
+                        <svg className={`w-4 h-4 ${color.text}`} fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                        </svg>
+                      )}
+                    </div>
                   </button>
                 )
               })}
             </div>
           </div>
-
-          {/* Info strip */}
-          <div className="mx-5 mb-4 px-4 py-3 bg-indigo-50 rounded-xl">
-            <p className="text-xs text-indigo-700 leading-relaxed">
-              <span className="font-black">10 questions · ~5 minutes</span>
-              {' '}— We'll draw from the most important topics first.
-              {isSignedIn && ' You can run a diagnostic for each subject separately.'}
-            </p>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="mx-5 mb-4 px-4 py-3 bg-red-50 rounded-xl">
-              <p className="text-xs font-bold text-red-600">{error}</p>
-            </div>
-          )}
-
-          {/* Start button */}
-          <div className="px-5 pb-5">
-            <button
-              onClick={handleStart}
-              disabled={!examType || !selectedSubject}
-              className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl
-                hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {selectedSubject
-                ? `Start ${selectedSubject} diagnostic →`
-                : 'Select a subject to start →'}
-            </button>
-          </div>
         </div>
 
-        {/* Already have a plan */}
-        {isSignedIn && (
+        {error && (
+          <p className="text-sm text-red-600 font-bold text-center">{error}</p>
+        )}
+
+        <button
+          onClick={handleStart}
+          disabled={!examType || !selectedSubject}
+          className="w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl
+                     hover:bg-indigo-500 active:scale-[0.98] transition-all
+                     disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+        >
+          Start diagnostic →
+        </button>
+
+        {!isSignedIn && (
           <p className="text-center text-xs text-gray-400">
-            <a href="/student/study-plan" className="text-indigo-500 hover:underline font-medium">
-              View your study plan
-            </a>
+            Results are saved only if you're signed in.{' '}
+            <a href="/login" className="text-indigo-600 font-bold hover:underline">Sign in</a>
           </p>
         )}
       </div>

@@ -1,28 +1,22 @@
 'use client'
 // src/app/student/practice/page.js
-// Complete rewrite addressing all issues:
-// 1. Topic Practice: subject → topic → count → review mode → start
-// 2. Timed Practice: topic option (all or specific) → count → start; shows timer preview
-// 3. Mock Test: single required subject, 40q, end-of-session review
-// 4. Exam Simulation: JAMB or WAEC format, real timing, all subjects
-// 5. Prerequisite check wired into Topic Practice
-// 6. Full light/dark mode — all pills/badges use CSS variable tokens
-// 7. Scroll fix: flex layout with sticky start button, body scrolls freely
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANGE: ExamSimSetup — WAEC format now requires picking ONE subject.
+//   - Student picks WAEC → picks a subject → 50 questions, 45 minutes
+//   - JAMB unchanged: 4 subjects × 40 questions, 3 hours
+//
+// All other modes (Topic, Timed, Mock) unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getSubjectColor } from '@/lib/theme'
 
-// ─── JAMB exam config ──────────────────────────────────────────────────────────
-// JAMB: 180 minutes for 4 subjects × 40 questions each = 160 total
-const JAMB_DURATION_SECS = 180 * 60
-// WAEC: 3 hours per paper; for simulation we do 50q per subject selected
-const WAEC_DURATION_SECS = 180 * 60
+const JAMB_DURATION_SECS = 180 * 60   // 3 hours
+const WAEC_DURATION_SECS = 45  * 60   // 45 minutes per subject paper
 
-// ─── Pill/badge that works in both light and dark mode ─────────────────────────
-// Uses bg-subtle (light: #f3f4f6, dark: #1f2937) + text-secondary
-// For coloured pills: subject colours from theme already work in both modes
+// ── Neutral pill ──────────────────────────────────────────────────────────────
 function NeutralPill({ children, className = '' }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-subtle text-secondary border border-default ${className}`}>
@@ -31,49 +25,20 @@ function NeutralPill({ children, className = '' }) {
   )
 }
 
-// ─── Practice mode cards ───────────────────────────────────────────────────────
+// ── Mode cards ────────────────────────────────────────────────────────────────
 const MODES = [
-  {
-    id: 'topic',
-    emoji: '🎯',
-    title: 'Topic Practice',
-    desc: 'Pick a subject and topic, drill specific concepts',
-    gradient: 'from-indigo-500 to-violet-600',
-    badge: null,
-  },
-  {
-    id: 'timed',
-    emoji: '⏱',
-    title: 'Timed Practice',
-    desc: 'Mixed questions with a live countdown timer',
-    gradient: 'from-blue-500 to-cyan-500',
-    badge: null,
-  },
-  {
-    id: 'mock',
-    emoji: '📋',
-    title: 'Mock Test',
-    desc: 'Full subject test — all difficulty levels mixed',
-    gradient: 'from-emerald-500 to-teal-500',
-    badge: 'Popular',
-  },
-  {
-    id: 'exam',
-    emoji: '🏆',
-    title: 'Exam Simulation',
-    desc: 'Real JAMB or WAEC format with official timing',
-    gradient: 'from-orange-500 to-red-500',
-    badge: 'Challenge',
-  },
+  { id: 'topic', emoji: '🎯', title: 'Topic Practice',    desc: 'Pick a subject and topic, drill specific concepts',   gradient: 'from-indigo-500 to-violet-600', badge: null },
+  { id: 'timed', emoji: '⏱',  title: 'Timed Practice',    desc: 'Mixed questions with a live countdown timer',         gradient: 'from-blue-500 to-cyan-500',     badge: null },
+  { id: 'mock',  emoji: '📋', title: 'Mock Test',          desc: 'Full subject test — all difficulty levels mixed',    gradient: 'from-emerald-500 to-teal-500',  badge: 'Popular' },
+  { id: 'exam',  emoji: '🏆', title: 'Exam Simulation',   desc: 'Real JAMB or WAEC format with official timing',      gradient: 'from-orange-500 to-red-500',    badge: 'Challenge' },
 ]
 
-// ─── Shared bottom-sheet shell ─────────────────────────────────────────────────
+// ── Bottom sheet shell ────────────────────────────────────────────────────────
 function Sheet({ onClose, children }) {
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
-
   return (
     <div className="fixed inset-0 z-[200] flex flex-col justify-end"
       style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
@@ -81,7 +46,6 @@ function Sheet({ onClose, children }) {
       <div className="bg-card rounded-t-3xl w-full max-w-lg mx-auto shadow-2xl flex flex-col"
         style={{ maxHeight: '92vh' }}
         onClick={e => e.stopPropagation()}>
-        {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-10 h-1.5 rounded-full bg-subtle" />
         </div>
@@ -91,26 +55,23 @@ function Sheet({ onClose, children }) {
   )
 }
 
-// ─── Topic Practice setup ──────────────────────────────────────────────────────
+// ── Topic Practice ────────────────────────────────────────────────────────────
 function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
-  const [step, setStep]         = useState('subject')  // subject | topic | config
-  const [subject, setSubject]   = useState(null)
-  const [topics, setTopics]     = useState([])
-  const [topic, setTopic]       = useState(null)       // null = all topics
-  const [topicsLoading, setTopicsLoading] = useState(false)
-  const [count, setCount]       = useState(20)
-  const [revealMode, setRevealMode] = useState('immediate')
-  const [prereqCheck, setPrereqCheck] = useState(null)  // null | {loading} | {data}
+  const [step,         setStep]         = useState('subject')
+  const [subject,      setSubject]      = useState(null)
+  const [topics,       setTopics]       = useState([])
+  const [topic,        setTopic]        = useState(null)
+  const [topicsLoading,setTopicsLoading]= useState(false)
+  const [count,        setCount]        = useState(20)
+  const [revealMode,   setRevealMode]   = useState('immediate')
+  const [prereqCheck,  setPrereqCheck]  = useState(null)
   const supabase = createClient()
 
   async function handleSubjectSelect(sub) {
     setSubject(sub)
     setTopicsLoading(true)
-    const { data } = await supabase
-      .from('topics')
-      .select('id, name, slug')
-      .eq('subject_id', sub.id)
-      .order('order_index', { ascending: true })
+    const { data } = await supabase.from('topics').select('id, name, slug')
+      .eq('subject_id', sub.id).order('order_index', { ascending: true })
     setTopics(data ?? [])
     setTopicsLoading(false)
     setStep('topic')
@@ -118,186 +79,116 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
 
   async function handleTopicSelect(t) {
     setTopic(t)
-    // Check prerequisites for this topic
     if (t) {
       setPrereqCheck({ loading: true })
       try {
         const res  = await fetch(`/api/prerequisites/check?topicId=${t.id}`)
         const data = await res.json()
         setPrereqCheck({ data })
-        if (data.gateActive && data.unmetPrerequisites?.length > 0) {
-          setStep('prereq')
-          return
-        }
-      } catch {
-        setPrereqCheck(null)
-      }
-    } else {
-      setPrereqCheck(null)
-    }
+        if (data.gateActive && data.unmetPrerequisites?.length > 0) { setStep('prereq'); return }
+      } catch { setPrereqCheck(null) }
+    } else { setPrereqCheck(null) }
     setStep('config')
   }
 
   function handleStart() {
-    onStart({
-      mode:       'topic',
-      examType:   examType ?? 'WAEC',
-      subjects:   [subject.name],
-      topic_id:   topic?.id ?? null,
-      topic_name: topic?.name ?? null,
-      count,
-      revealMode,
-    })
+    onStart({ mode: 'topic', examType: examType ?? 'WAEC', subjects: [subject.name],
+      topic_id: topic?.id ?? null, topic_name: topic?.name ?? null, count, revealMode })
   }
 
   const color = subject ? getSubjectColor(subject.name) : null
 
   return (
     <Sheet onClose={onClose}>
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-default flex-shrink-0">
         <div className="flex items-center gap-3">
           {step !== 'subject' && (
             <button onClick={() => setStep(step === 'config' || step === 'prereq' ? 'topic' : 'subject')}
               className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
-              </svg>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
             </button>
           )}
           <div>
             <p className="font-black text-primary text-base">🎯 Topic Practice</p>
             <p className="text-xs text-secondary mt-0.5">
-              {step === 'subject' ? 'Choose a subject' : step === 'topic' ? `${subject?.name} · Choose a topic` : step === 'prereq' ? 'Prerequisite check' : 'Configure session'}
+              {step === 'subject' ? 'Choose a subject'
+                : step === 'topic' ? `${subject?.name} · Choose a topic`
+                : `${subject?.name} · ${topic?.name ?? 'All topics'}`}
             </p>
           </div>
         </div>
         <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        {step === 'subject' && subjects.map(sub => {
+          const c = getSubjectColor(sub.name)
+          return (
+            <button key={sub.id} onClick={() => handleSubjectSelect(sub)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700`}>
+              <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
+                <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
+              </div>
+              <span className="text-sm font-bold text-primary">{sub.name}</span>
+              <svg className="w-4 h-4 text-tertiary ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          )
+        })}
 
-        {/* Step: Subject */}
-        {step === 'subject' && (
-          <>
-            {subjects.map(sub => {
-              const c = getSubjectColor(sub.name)
-              return (
-                <button key={sub.id} onClick={() => handleSubjectSelect(sub)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl ${c.bg} hover:opacity-90 active:scale-[0.98] transition-all text-left`}>
-                  <span className={`text-xl`}>📚</span>
-                  <span className={`text-sm font-black ${c.text}`}>{sub.name}</span>
-                  <svg className={`w-4 h-4 ${c.text} ml-auto`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                  </svg>
-                </button>
-              )
-            })}
-          </>
-        )}
-
-        {/* Step: Topic */}
         {step === 'topic' && (
           <>
             {topicsLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-              </div>
+              <div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
             ) : (
               <>
-                {/* "All topics" option */}
                 <button onClick={() => handleTopicSelect(null)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-subtle hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border border-default hover:border-indigo-300 dark:hover:border-indigo-700 transition-all text-left">
-                  <span className="text-xl">🎲</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-black text-primary">All topics (random)</p>
-                    <p className="text-xs text-secondary">Questions from across {subject?.name}</p>
-                  </div>
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm font-bold transition-all ${!topic ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
+                  All topics in {subject.name}
                 </button>
                 {topics.map(t => (
                   <button key={t.id} onClick={() => handleTopicSelect(t)}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-card border border-default hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-subtle transition-all text-left`}>
-                    <span className="text-xl">📌</span>
-                    <span className="text-sm font-bold text-primary flex-1">{t.name}</span>
-                    {prereqCheck?.loading && <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${topic?.id === t.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
+                    {t.name}
                   </button>
                 ))}
-                {topics.length === 0 && (
-                  <p className="text-center text-sm text-secondary py-6">No topics found for {subject?.name}</p>
-                )}
               </>
             )}
           </>
         )}
 
-        {/* Step: Prerequisite warning */}
-        {step === 'prereq' && prereqCheck?.data && (
+        {(step === 'config' || step === 'prereq') && (
           <div className="space-y-4">
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
-              <p className="text-sm font-black text-amber-800 dark:text-amber-400 mb-1">⚠️ Prerequisites not met</p>
-              <p className="text-xs text-amber-700 dark:text-amber-500 leading-relaxed">
-                These topics are recommended before <strong>{topic?.name}</strong>. You can still proceed, but reviewing them will help.
-              </p>
-            </div>
-            {prereqCheck.data.unmetPrerequisites?.map(prereq => (
-              <div key={prereq.topic.id} className="bg-card border border-default rounded-2xl p-4">
-                <p className="text-sm font-bold text-primary">{prereq.topic.name}</p>
-                <p className="text-xs text-secondary mt-0.5">{prereq.questions?.length ?? 0} quick questions available</p>
-              </div>
-            ))}
-            <p className="text-xs text-secondary text-center">You can still continue to {topic?.name}</p>
-          </div>
-        )}
-
-        {/* Step: Config */}
-        {step === 'config' && (
-          <div className="space-y-5">
-            {topic && (
-              <div className={`${color?.bg} rounded-2xl px-4 py-3`}>
-                <p className={`text-xs font-bold ${color?.text} opacity-70`}>{subject?.name}</p>
-                <p className={`text-sm font-black ${color?.text}`}>{topic.name}</p>
+            {step === 'prereq' && prereqCheck?.data?.unmetPrerequisites?.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
+                <p className="text-sm font-black text-amber-800 dark:text-amber-400 mb-1">📚 Recommended first</p>
+                <p className="text-xs text-amber-700 dark:text-amber-500 leading-relaxed">
+                  Consider studying <strong>{prereqCheck.data.unmetPrerequisites[0]?.name}</strong> before this topic.
+                </p>
               </div>
             )}
-
-            {/* Question count */}
             <div>
-              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Number of questions</p>
+              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Questions</p>
               <div className="grid grid-cols-4 gap-2">
                 {[10, 20, 30, 40].map(n => (
                   <button key={n} onClick={() => setCount(n)}
-                    className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${
-                      count === n
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
-                        : 'border-default text-secondary hover:border-indigo-300 dark:hover:border-indigo-700 bg-card'
-                    }`}>
+                    className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${count === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card hover:border-indigo-300 dark:hover:border-indigo-700'}`}>
                     {n}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-tertiary mt-1.5 text-center">~{count * 1.5} minutes</p>
             </div>
-
-            {/* Reveal mode */}
             <div>
-              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Show answers</p>
-              <div className="flex gap-2">
-                {[
-                  { value: 'immediate', label: 'After each question', icon: '⚡' },
-                  { value: 'end',       label: 'Review at the end',   icon: '📋' },
-                ].map(opt => (
-                  <button key={opt.value} onClick={() => setRevealMode(opt.value)}
-                    className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold border-2 transition-all text-center ${
-                      revealMode === opt.value
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
-                        : 'border-default text-secondary bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
-                    }`}>
-                    <span className="block text-base mb-0.5">{opt.icon}</span>
-                    {opt.label}
+              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Answer reveal</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ id: 'immediate', icon: '⚡', label: 'Instant', desc: 'See answer after each question' },
+                  { id: 'end',       icon: '📋', label: 'At the end', desc: 'Review all after finishing' }].map(opt => (
+                  <button key={opt.id} onClick={() => setRevealMode(opt.id)}
+                    className={`p-3 rounded-xl border-2 text-left transition-all ${revealMode === opt.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-600 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
+                    <span className="text-base block mb-0.5">{opt.icon}</span>
+                    <p className="text-xs font-black">{opt.label}</p>
+                    <p className="text-[10px] text-secondary leading-snug mt-0.5">{opt.desc}</p>
                   </button>
                 ))}
               </div>
@@ -306,7 +197,6 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
         )}
       </div>
 
-      {/* Sticky start button */}
       {(step === 'config' || step === 'prereq') && (
         <div className="px-5 py-4 border-t border-default flex-shrink-0 space-y-2">
           <button onClick={handleStart}
@@ -314,8 +204,7 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
             {step === 'prereq' ? `Continue to ${topic?.name} →` : 'Start Practice →'}
           </button>
           {step === 'prereq' && (
-            <button onClick={() => { setStep('config') }}
-              className="w-full py-2.5 text-xs text-secondary hover:text-primary transition-colors">
+            <button onClick={() => setStep('config')} className="w-full py-2.5 text-xs text-secondary hover:text-primary transition-colors">
               Skip prerequisite check
             </button>
           )}
@@ -325,149 +214,90 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
   )
 }
 
-// ─── Timed Practice setup ──────────────────────────────────────────────────────
+// ── Timed Practice ────────────────────────────────────────────────────────────
 function TimedSetup({ subjects, examType, onStart, onClose }) {
-  const [count, setCount]         = useState(20)
-  const [topicFilter, setTopicFilter] = useState('all')  // 'all' | subject_id
-  const [subject, setSubject]     = useState(null)
-  const [topics, setTopics]       = useState([])
-  const [topic, setTopic]         = useState(null)
+  const [count,         setCount]         = useState(20)
+  const [subject,       setSubject]       = useState(null)
+  const [topics,        setTopics]        = useState([])
+  const [topic,         setTopic]         = useState(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
   const supabase = createClient()
-
   const countOptions = [10, 20, 30, 40]
   const mins = { 10: 15, 20: 20, 30: 30, 40: 40 }
 
   async function handleSubjectFilter(sub) {
-    setSubject(sub)
-    setTopic(null)
-    setTopicsLoading(true)
-    const { data } = await supabase
-      .from('topics')
-      .select('id, name')
-      .eq('subject_id', sub.id)
-      .order('order_index')
+    setSubject(sub); setTopic(null); setTopicsLoading(true)
+    const { data } = await supabase.from('topics').select('id, name').eq('subject_id', sub.id).order('order_index')
     setTopics(data ?? [])
     setTopicsLoading(false)
   }
 
   function handleStart() {
-    onStart({
-      mode:       'timed',
-      examType:   examType ?? 'WAEC',
-      subjects:   subject ? [subject.name] : subjects.map(s => s.name),
-      topic_id:   topic?.id ?? null,
-      topic_name: topic?.name ?? null,
-      count,
-      revealMode: 'immediate',
-      timed:      true,
-    })
+    onStart({ mode: 'timed', examType: examType ?? 'WAEC',
+      subjects: subject ? [subject.name] : subjects.map(s => s.name),
+      topic_id: topic?.id ?? null, topic_name: topic?.name ?? null,
+      count, revealMode: 'immediate', timed: true })
   }
 
   return (
     <Sheet onClose={onClose}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-default flex-shrink-0">
-        <div>
-          <p className="font-black text-primary text-base">⏱ Timed Practice</p>
-          <p className="text-xs text-secondary mt-0.5">Beat the clock, build exam speed</p>
-        </div>
-        <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
+        <div><p className="font-black text-primary text-base">⏱ Timed Practice</p><p className="text-xs text-secondary mt-0.5">Beat the clock, build exam speed</p></div>
+        <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
-
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-
-        {/* Timer preview */}
         <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl px-4 py-3">
-          <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <circle cx="12" cy="12" r="9"/>
-            <polyline points="12 7 12 12 15 15"/>
-          </svg>
+          <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
           <div>
             <p className="text-sm font-black text-blue-800 dark:text-blue-300">{mins[count]} minutes</p>
-            <p className="text-xs text-blue-600 dark:text-blue-400">~{(mins[count] * 60 / count).toFixed(0)} seconds per question</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">~{((mins[count] * 60) / count).toFixed(0)} seconds per question</p>
           </div>
         </div>
-
-        {/* Question count */}
         <div>
           <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Questions</p>
           <div className="grid grid-cols-4 gap-2">
             {countOptions.map(n => (
               <button key={n} onClick={() => setCount(n)}
-                className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${
-                  count === n
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'border-default text-secondary hover:border-blue-300 dark:hover:border-blue-700 bg-card'
-                }`}>
+                className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${count === n ? 'bg-blue-600 border-blue-600 text-white' : 'border-default text-secondary hover:border-blue-300 dark:hover:border-blue-700 bg-card'}`}>
                 {n}
               </button>
             ))}
           </div>
         </div>
-
-        {/* Topic filter */}
         <div>
           <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Focus on</p>
           <button onClick={() => { setSubject(null); setTopic(null) }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left mb-2 transition-all ${
-              !subject ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300' : 'border-default bg-card text-secondary hover:border-blue-300 dark:hover:border-blue-700'
-            }`}>
-            <span className="text-xl">🎲</span>
-            <span className="text-sm font-bold">All subjects — random mix</span>
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left mb-2 transition-all ${!subject ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+            <span className="text-sm font-bold">All subjects (mixed)</span>
           </button>
-          <div className="grid grid-cols-2 gap-2">
-            {subjects.map(sub => {
-              const c = getSubjectColor(sub.name)
-              const sel = subject?.id === sub.id
-              return (
-                <button key={sub.id} onClick={() => handleSubjectFilter(sub)}
-                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border-2 transition-all ${
-                    sel ? `${c.bg} ${c.text} border-transparent` : 'border-default bg-card text-secondary hover:border-default'
-                  }`}>
-                  {sub.name}
+          {subjects.map(sub => {
+            const c = getSubjectColor(sub.name)
+            const isSelected = subject?.id === sub.id
+            return (
+              <button key={sub.id} onClick={() => handleSubjectFilter(sub)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border mb-1 text-left transition-all text-xs font-bold ${isSelected ? `${c.bg} ${c.text} border-transparent` : 'border-default bg-card text-secondary'}`}>
+                {sub.name}
+              </button>
+            )
+          })}
+          {subject && !topicsLoading && topics.length > 0 && (
+            <div className="mt-2 ml-3 space-y-1">
+              <button onClick={() => setTopic(null)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${!topic ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+                All topics in {subject.name}
+              </button>
+              {topics.map(t => (
+                <button key={t.id} onClick={() => setTopic(t)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${topic?.id === t.id ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-400 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+                  {t.name}
                 </button>
-              )
-            })}
-          </div>
-
-          {/* Topic refinement if subject selected */}
-          {subject && (
-            <div className="mt-2 space-y-1.5">
-              <p className="text-xs text-secondary px-1">Specific topic (optional)</p>
-              {topicsLoading ? (
-                <div className="flex justify-center py-3">
-                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <>
-                  <button onClick={() => setTopic(null)}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      !topic ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'
-                    }`}>
-                    All topics in {subject.name}
-                  </button>
-                  {topics.map(t => (
-                    <button key={t.id} onClick={() => setTopic(t)}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                        topic?.id === t.id ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'
-                      }`}>
-                      {t.name}
-                    </button>
-                  ))}
-                </>
-              )}
+              ))}
             </div>
           )}
         </div>
       </div>
-
       <div className="px-5 py-4 border-t border-default flex-shrink-0">
-        <button onClick={handleStart}
-          className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-sm font-black rounded-2xl hover:opacity-90 active:scale-[0.98] transition-all shadow-sm">
+        <button onClick={handleStart} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-sm font-black rounded-2xl hover:opacity-90 active:scale-[0.98] transition-all shadow-sm">
           Start Timed Practice →
         </button>
       </div>
@@ -475,64 +305,37 @@ function TimedSetup({ subjects, examType, onStart, onClose }) {
   )
 }
 
-// ─── Mock Test setup ───────────────────────────────────────────────────────────
+// ── Mock Test ─────────────────────────────────────────────────────────────────
 function MockSetup({ subjects, examType, onStart, onClose }) {
   const [subject, setSubject] = useState(null)
 
   function handleStart() {
     if (!subject) return
-    onStart({
-      mode:       'mock',
-      examType:   examType ?? 'WAEC',
-      subjects:   [subject.name],
-      count:      40,
-      revealMode: 'end',
-      timed:      false,
-    })
+    onStart({ mode: 'mock', examType: examType ?? 'WAEC', subjects: [subject.name],
+      count: 40, revealMode: 'end', timed: true, durationSecs: 45 * 60 })
   }
 
   return (
     <Sheet onClose={onClose}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-default flex-shrink-0">
-        <div>
-          <p className="font-black text-primary text-base">📋 Mock Test</p>
-          <p className="text-xs text-secondary mt-0.5">Full subject test — 40 questions, all difficulty levels</p>
-        </div>
-        <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
+        <div><p className="font-black text-primary text-base">📋 Mock Test</p><p className="text-xs text-secondary mt-0.5">Full subject test — pick one subject</p></div>
+        <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
-
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-3 space-y-1">
-          <p className="text-sm font-black text-emerald-800 dark:text-emerald-400">📋 40 questions · Mixed difficulty</p>
-          <p className="text-xs text-emerald-700 dark:text-emerald-500">Answers revealed at the end so you can review everything</p>
-        </div>
-
-        <div>
-          <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Select a subject <span className="text-red-500">*</span></p>
-          <div className="space-y-2">
-            {subjects.map(sub => {
-              const c = getSubjectColor(sub.name)
-              const sel = subject?.id === sub.id
-              return (
-                <button key={sub.id} onClick={() => setSubject(sub)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 text-left transition-all ${
-                    sel ? `${c.bg} border-transparent` : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
-                  }`}>
-                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${sel ? 'bg-white/40 border-white/60' : 'border-default'}`}>
-                    {sel && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                  <span className={`text-sm font-black ${sel ? c.text : 'text-primary'}`}>{sub.name}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+        <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-3">Choose subject</p>
+        {subjects.map(sub => {
+          const c = getSubjectColor(sub.name)
+          return (
+            <button key={sub.id} onClick={() => setSubject(sub)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all ${subject?.id === sub.id ? `${c.bg} border-transparent` : 'border-default bg-card hover:border-default'}`}>
+              <div className={`w-8 h-8 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
+                <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
+              </div>
+              <span className={`text-sm font-bold ${subject?.id === sub.id ? c.text : 'text-primary'}`}>{sub.name}</span>
+            </button>
+          )
+        })}
       </div>
-
       <div className="px-5 py-4 border-t border-default flex-shrink-0">
         <button onClick={handleStart} disabled={!subject}
           className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-sm font-black rounded-2xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 shadow-sm">
@@ -543,123 +346,202 @@ function MockSetup({ subjects, examType, onStart, onClose }) {
   )
 }
 
-// ─── Exam Simulation setup ─────────────────────────────────────────────────────
+// ── Exam Simulation ───────────────────────────────────────────────────────────
+// WAEC: pick ONE subject → 50 questions → 45 minutes
+// JAMB: all 4 enrolled subjects → 160 questions → 3 hours (unchanged)
 function ExamSimSetup({ subjects, profile, onStart, onClose }) {
-  const [examFormat, setExamFormat] = useState(
+  const [examFormat,     setExamFormat]     = useState(
     profile?.exam_type === 'JAMB' ? 'JAMB' : profile?.exam_type === 'WAEC' ? 'WAEC' : null
   )
+  const [waecSubject,    setWaecSubject]    = useState(null)  // WAEC: one subject required
+  const [step,           setStep]           = useState('format') // format | waec_subject
 
-  const jambInfo = {
-    subjects: 4,
-    questions: '40 per subject (160 total)',
-    duration: '3 hours',
-    secs: JAMB_DURATION_SECS,
-  }
-  const waecInfo = {
-    subjects: subjects.length,
-    questions: '15 per subject (objective)',
-    duration: '40–45 minutes total',
-    secs: 40 * 60,  // 40 minutes for the full simulation
+  function handleFormatSelect(fmt) {
+    setExamFormat(fmt)
+    setWaecSubject(null)
+    if (fmt === 'WAEC') {
+      setStep('waec_subject')
+    } else {
+      setStep('format')
+    }
   }
 
   function handleStart() {
     if (!examFormat) return
-    const info = examFormat === 'JAMB' ? jambInfo : waecInfo
-    onStart({
-      mode:       'exam',
-      examType:   examFormat,
-      examFormat,
-      subjects:   subjects.map(s => s.name),
-      count:      examFormat === 'JAMB' ? 160 : subjects.length * 15,
-      revealMode: 'end',
-      timed:      true,
-      durationSecs: info.secs,
-    })
+    if (examFormat === 'WAEC') {
+      if (!waecSubject) return
+      onStart({
+        mode:         'exam',
+        examType:     'WAEC',
+        examFormat:   'WAEC',
+        subjects:     [waecSubject.name],
+        count:        50,
+        revealMode:   'end',
+        timed:        true,
+        durationSecs: WAEC_DURATION_SECS,
+      })
+    } else {
+      // JAMB — all enrolled subjects
+      onStart({
+        mode:         'exam',
+        examType:     'JAMB',
+        examFormat:   'JAMB',
+        subjects:     subjects.map(s => s.name),
+        count:        160,
+        revealMode:   'end',
+        timed:        true,
+        durationSecs: JAMB_DURATION_SECS,
+      })
+    }
   }
+
+  const canStart = examFormat === 'JAMB' || (examFormat === 'WAEC' && waecSubject !== null)
 
   return (
     <Sheet onClose={onClose}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-default flex-shrink-0">
-        <div>
-          <p className="font-black text-primary text-base">🏆 Exam Simulation</p>
-          <p className="text-xs text-secondary mt-0.5">Real exam conditions — official timing and format</p>
+        <div className="flex items-center gap-3">
+          {step === 'waec_subject' && (
+            <button onClick={() => setStep('format')}
+              className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+          )}
+          <div>
+            <p className="font-black text-primary text-base">🏆 Exam Simulation</p>
+            <p className="text-xs text-secondary mt-0.5">
+              {step === 'waec_subject' ? 'WAEC · Choose a subject' : 'Real exam conditions'}
+            </p>
+          </div>
         </div>
         <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        <p className="text-xs font-bold text-secondary uppercase tracking-wide">Choose exam format</p>
 
-        {/* JAMB card */}
-        <button onClick={() => setExamFormat('JAMB')}
-          className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-            examFormat === 'JAMB'
-              ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 dark:border-indigo-400'
-              : 'border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
-          }`}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'JAMB' ? 'border-indigo-600 bg-indigo-600' : 'border-default'}`}>
-              {examFormat === 'JAMB' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+        {/* Step 1: Format selection */}
+        {step === 'format' && (
+          <>
+            <p className="text-xs font-bold text-secondary uppercase tracking-wide">Choose exam format</p>
+
+            {/* JAMB */}
+            <button onClick={() => handleFormatSelect('JAMB')}
+              className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
+                examFormat === 'JAMB'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 dark:border-indigo-400'
+                  : 'border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700'
+              }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'JAMB' ? 'border-indigo-600 bg-indigo-600' : 'border-default'}`}>
+                  {examFormat === 'JAMB' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                </div>
+                <span className="text-sm font-black text-primary">JAMB / UTME</span>
+                <span className="ml-auto text-xs font-black text-white bg-indigo-600 px-2 py-0.5 rounded-full">4 subjects</span>
+              </div>
+              <div className="pl-8 space-y-1">
+                <p className="text-xs text-secondary">📝 40 questions per subject · 160 total</p>
+                <p className="text-xs text-secondary">⏱ 3 hours</p>
+                <p className="text-xs text-secondary">🎯 All enrolled subjects at once</p>
+              </div>
+            </button>
+
+            {/* WAEC */}
+            <button onClick={() => handleFormatSelect('WAEC')}
+              className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
+                examFormat === 'WAEC'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-400'
+                  : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
+              }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'WAEC' ? 'border-emerald-600 bg-emerald-600' : 'border-default'}`}>
+                  {examFormat === 'WAEC' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                </div>
+                <span className="text-sm font-black text-primary">WAEC / SSCE</span>
+                <span className="ml-auto text-xs font-black text-white bg-emerald-600 px-2 py-0.5 rounded-full">1 subject</span>
+              </div>
+              <div className="pl-8 space-y-1">
+                <p className="text-xs text-secondary">📝 50 questions (objective)</p>
+                <p className="text-xs text-secondary">⏱ 45 minutes</p>
+                <p className="text-xs text-secondary">🎯 One subject per simulation</p>
+              </div>
+            </button>
+
+            {/* JAMB ready-to-go info */}
+            {examFormat === 'JAMB' && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
+                <p className="text-xs font-black text-amber-800 dark:text-amber-400">⚠️ Real exam conditions</p>
+                <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">3-hour timer starts immediately. No pausing. Answers shown at the end.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Step 2: WAEC subject picker */}
+        {step === 'waec_subject' && (
+          <>
+            <p className="text-xs font-bold text-secondary uppercase tracking-wide">
+              Pick one subject for this simulation
+            </p>
+
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-3">
+              <p className="text-xs font-black text-emerald-800 dark:text-emerald-400">📝 WAEC format</p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-500 mt-0.5">50 questions · 45 minutes · objective only · answers at end</p>
             </div>
-            <span className="text-sm font-black text-primary">JAMB / UTME</span>
-            <span className="ml-auto text-xs font-black text-white bg-indigo-600 px-2 py-0.5 rounded-full">4 subjects</span>
-          </div>
-          <div className="pl-8 space-y-1">
-            <p className="text-xs text-secondary">📝 {jambInfo.questions}</p>
-            <p className="text-xs text-secondary">⏱ {jambInfo.duration}</p>
-            <p className="text-xs text-secondary">🎯 Objective questions only</p>
-          </div>
-        </button>
 
-        {/* WAEC card */}
-        <button onClick={() => setExamFormat('WAEC')}
-          className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-            examFormat === 'WAEC'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-400'
-              : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
-          }`}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'WAEC' ? 'border-emerald-600 bg-emerald-600' : 'border-default'}`}>
-              {examFormat === 'WAEC' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+            <div className="space-y-2">
+              {subjects.map(sub => {
+                const c = getSubjectColor(sub.name)
+                const isSelected = waecSubject?.id === sub.id
+                return (
+                  <button key={sub.id} onClick={() => setWaecSubject(sub)}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 text-left transition-all ${
+                      isSelected
+                        ? `${c.bg} border-transparent`
+                        : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
+                    }`}>
+                    <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
+                      <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
+                    </div>
+                    <span className={`text-sm font-bold flex-1 ${isSelected ? c.text : 'text-primary'}`}>{sub.name}</span>
+                    {isSelected && (
+                      <svg className={`w-5 h-5 ${c.text} flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <span className="text-sm font-black text-primary">WAEC / SSCE</span>
-            <span className="ml-auto text-xs font-black text-white bg-emerald-600 px-2 py-0.5 rounded-full">{subjects.length} subjects</span>
-          </div>
-          <div className="pl-8 space-y-1">
-            <p className="text-xs text-secondary">📝 {waecInfo.questions}</p>
-            <p className="text-xs text-secondary">⏱ {waecInfo.duration}</p>
-            <p className="text-xs text-secondary">🎯 Objective + theory questions</p>
-          </div>
-        </button>
 
-        {examFormat && (
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
-            <p className="text-xs font-black text-amber-800 dark:text-amber-400">⚠️ Real exam conditions</p>
-            <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">The timer runs for the full {examFormat === 'JAMB' ? '3 hours' : '3 hours'}. No pausing. Answers revealed at the end.</p>
-          </div>
+            {waecSubject && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
+                <p className="text-xs font-black text-amber-800 dark:text-amber-400">⚠️ Real exam conditions</p>
+                <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">45-minute timer starts immediately. No pausing. Answers shown at the end.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
       <div className="px-5 py-4 border-t border-default flex-shrink-0">
-        <button onClick={handleStart} disabled={!examFormat}
+        <button onClick={handleStart} disabled={!canStart}
           className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-black rounded-2xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 shadow-sm">
-          {examFormat ? `Start ${examFormat} Simulation →` : 'Choose a format first'}
+          {!examFormat ? 'Choose a format first'
+            : examFormat === 'JAMB' ? 'Start JAMB Simulation →'
+            : !waecSubject ? 'Select a subject first'
+            : `Start ${waecSubject.name} WAEC Simulation →`}
         </button>
       </div>
     </Sheet>
   )
 }
 
-// ─── History tab ───────────────────────────────────────────────────────────────
+// ── History tab ───────────────────────────────────────────────────────────────
 function HistoryTab({ sessions, loading }) {
   if (loading) return (
-    <div className="space-y-2 animate-pulse">
-      {[1,2,3].map(i => <div key={i} className="h-16 bg-subtle rounded-2xl" />)}
-    </div>
+    <div className="space-y-2 animate-pulse">{[1,2,3].map(i => <div key={i} className="h-16 bg-subtle rounded-2xl" />)}</div>
   )
   if (!sessions.length) return (
     <div className="text-center py-12">
@@ -695,7 +577,7 @@ function HistoryTab({ sessions, loading }) {
   )
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function PracticeHQPage() {
   const router   = useRouter()
   const supabase = createClient()
@@ -706,7 +588,7 @@ export default function PracticeHQPage() {
   const [sessions,        setSessions]        = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [loading,         setLoading]         = useState(true)
-  const [activeSetup,     setActiveSetup]     = useState(null)  // mode id | null
+  const [activeSetup,     setActiveSetup]     = useState(null)
 
   useEffect(() => { init() }, [])
   useEffect(() => { if (tab === 'history' && !sessions.length) loadHistory() }, [tab])
@@ -747,23 +629,11 @@ export default function PracticeHQPage() {
 
   return (
     <div className="space-y-5 pb-4">
-      {/* Modals */}
-      {activeSetup === 'topic' && (
-        <TopicSetup subjects={subjects} examType={profile?.exam_type} profile={profile}
-          onStart={startSession} onClose={() => setActiveSetup(null)} />
-      )}
-      {activeSetup === 'timed' && (
-        <TimedSetup subjects={subjects} examType={profile?.exam_type}
-          onStart={startSession} onClose={() => setActiveSetup(null)} />
-      )}
-      {activeSetup === 'mock' && (
-        <MockSetup subjects={subjects} examType={profile?.exam_type}
-          onStart={startSession} onClose={() => setActiveSetup(null)} />
-      )}
-      {activeSetup === 'exam' && (
-        <ExamSimSetup subjects={subjects} profile={profile}
-          onStart={startSession} onClose={() => setActiveSetup(null)} />
-      )}
+      {/* Setup sheets */}
+      {activeSetup === 'topic' && <TopicSetup subjects={subjects} examType={profile?.exam_type} profile={profile} onStart={startSession} onClose={() => setActiveSetup(null)} />}
+      {activeSetup === 'timed' && <TimedSetup subjects={subjects} examType={profile?.exam_type} onStart={startSession} onClose={() => setActiveSetup(null)} />}
+      {activeSetup === 'mock'  && <MockSetup  subjects={subjects} examType={profile?.exam_type} onStart={startSession} onClose={() => setActiveSetup(null)} />}
+      {activeSetup === 'exam'  && <ExamSimSetup subjects={subjects} profile={profile} onStart={startSession} onClose={() => setActiveSetup(null)} />}
 
       {/* Header */}
       <div>
@@ -775,39 +645,61 @@ export default function PracticeHQPage() {
       <div className="flex gap-1 bg-subtle p-1 rounded-2xl w-fit">
         {[{ id: 'practice', label: 'Practice' }, { id: 'history', label: 'History' }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-5 py-2 text-sm font-black rounded-xl transition-all ${
-              tab === t.id ? 'bg-card text-primary shadow-sm' : 'text-secondary hover:text-primary'
-            }`}>
+            className={`px-5 py-2 text-sm font-black rounded-xl transition-all ${tab === t.id ? 'bg-card text-primary shadow-sm' : 'text-secondary hover:text-primary'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
       {tab === 'practice' && (
-        <div className="space-y-3">
-          {MODES.map(mode => (
-            <button key={mode.id} onClick={() => setActiveSetup(mode.id)}
-              className="w-full flex items-center gap-4 bg-card rounded-2xl px-4 py-4 shadow-sm hover:shadow-md active:scale-[0.98] transition-all text-left">
-              {/* Icon with gradient background */}
-              <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${mode.gradient} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                <span className="text-xl">{mode.emoji}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-black text-primary">{mode.title}</p>
-                  {mode.badge && (
-                    <span className="text-xs font-black px-2 py-0.5 rounded-full bg-subtle text-secondary border border-default">
-                      {mode.badge}
-                    </span>
-                  )}
+        <div className="space-y-5">
+          {subjects.length === 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-4">
+              <p className="text-sm font-black text-amber-800 dark:text-amber-300">No subjects added yet</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+                Go to your profile and add the subjects you are studying to start practising.
+              </p>
+            </div>
+          )}
+
+          {/* Mode cards */}
+          <div className="grid grid-cols-2 gap-3">
+            {MODES.map(mode => (
+              <button key={mode.id} onClick={() => setActiveSetup(mode.id)}
+                className="relative flex flex-col gap-3 bg-card rounded-2xl p-4 shadow-sm hover:shadow-md transition-all active:scale-[0.97] text-left">
+                {mode.badge && (
+                  <span className="absolute top-3 right-3 text-[9px] font-black text-white bg-gradient-to-r from-orange-500 to-red-500 px-1.5 py-0.5 rounded-full">
+                    {mode.badge}
+                  </span>
+                )}
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${mode.gradient} flex items-center justify-center text-lg shadow-sm`}>
+                  {mode.emoji}
                 </div>
-                <p className="text-xs text-secondary mt-0.5 leading-snug">{mode.desc}</p>
+                <div>
+                  <p className="text-sm font-black text-primary">{mode.title}</p>
+                  <p className="text-xs text-secondary mt-0.5 leading-snug">{mode.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Quick stats */}
+          {subjects.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
+                <p className="text-xl font-black text-primary">{subjects.length}</p>
+                <p className="text-[10px] text-secondary">Subjects</p>
               </div>
-              <svg className="w-5 h-5 text-tertiary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-              </svg>
-            </button>
-          ))}
+              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
+                <p className="text-xl font-black text-primary">50</p>
+                <p className="text-[10px] text-secondary">WAEC Qs</p>
+              </div>
+              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
+                <p className="text-xl font-black text-primary">160</p>
+                <p className="text-[10px] text-secondary">JAMB Qs</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

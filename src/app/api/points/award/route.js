@@ -1,17 +1,39 @@
 // src/app/api/points/award/route.js
-// POST /api/points/award
-// Awards points for a given reason. Enforces duplicate guards per reason type.
-// Returns { awarded: bool, points_awarded: int, new_total: int }
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATED POINTS SYSTEM:
+//
+// practice_complete:
+//   Was: flat 15 points every time
+//   Now: base 5 pts + (correct_answers × 2 pts), capped at 50
+//   e.g. 8/10 correct = 5 + 16 = 21 pts
+//       10/10 correct = 5 + 20 = 25 pts
+//        3/10 correct = 5 + 6  = 11 pts
+//   This rewards accuracy, not just showing up.
+//
+// lesson_complete: flat 20 pts (unchanged — completing a lesson is effort)
+// weekly_goal:     flat 30 pts (unchanged)
+// badge_earned:    flat 10 pts (unchanged)
+//
+// The API now accepts optional `correct` and `total` fields in the body
+// for practice_complete to calculate proportional points.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
-const POINT_VALUES = {
-  lesson_complete:   10,
-  practice_complete: 15,
-  weekly_goal:       20,
-  badge_earned:      5,
+function calcPracticePoints(correct = 0, total = 0) {
+  if (total === 0) return 5 // fallback — shouldn't happen
+  const base      = 5
+  const perCorrect = 2
+  const raw       = base + (correct * perCorrect)
+  return Math.min(50, Math.max(5, raw))
+}
+
+const FLAT_POINT_VALUES = {
+  lesson_complete: 20,
+  weekly_goal:     30,
+  badge_earned:    10,
 }
 
 export async function POST(request) {
@@ -19,9 +41,11 @@ export async function POST(request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { reason, reference_id } = await request.json()
+  const { reason, reference_id, correct, total } = await request.json()
 
-  if (!POINT_VALUES[reason]) {
+  // Validate reason
+  const validReasons = ['lesson_complete', 'practice_complete', 'weekly_goal', 'badge_earned']
+  if (!validReasons.includes(reason)) {
     return NextResponse.json({ error: `Unknown reason: ${reason}` }, { status: 400 })
   }
 
@@ -30,8 +54,8 @@ export async function POST(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // ── Duplicate guards ─────────────────────────────────────────────────────
-  // lesson_complete: once per subtopic (reference_id = subtopic_id)
+  // ── Duplicate guards ───────────────────────────────────────────────────────
+  // lesson_complete: once per subtopic
   if (reason === 'lesson_complete' && reference_id) {
     const { data: existing } = await service
       .from('points_log')
@@ -42,17 +66,12 @@ export async function POST(request) {
       .maybeSingle()
 
     if (existing) {
-      // Already awarded — return current total without writing
-      const { data: profile } = await service
-        .from('profiles')
-        .select('total_points')
-        .eq('id', user.id)
-        .single()
+      const { data: profile } = await service.from('profiles').select('total_points').eq('id', user.id).single()
       return NextResponse.json({ awarded: false, reason: 'already_awarded', new_total: profile?.total_points ?? 0 })
     }
   }
 
-  // badge_earned: once per badge (reference_id = badge_id)
+  // badge_earned: once per badge
   if (reason === 'badge_earned' && reference_id) {
     const { data: existing } = await service
       .from('points_log')
@@ -63,81 +82,56 @@ export async function POST(request) {
       .maybeSingle()
 
     if (existing) {
-      const { data: profile } = await service
-        .from('profiles')
-        .select('total_points')
-        .eq('id', user.id)
-        .single()
+      const { data: profile } = await service.from('profiles').select('total_points').eq('id', user.id).single()
       return NextResponse.json({ awarded: false, reason: 'already_awarded', new_total: profile?.total_points ?? 0 })
     }
   }
 
   // weekly_goal: once per ISO week
   if (reason === 'weekly_goal') {
-    const weekStart = getWeekStart()
-    const weekEnd   = getWeekEnd()
+    const now      = new Date()
+    const day      = now.getDay()
+    const diff     = now.getDate() - day + (day === 0 ? -6 : 1)
+    const monday   = new Date(now); monday.setDate(diff); monday.setHours(0, 0, 0, 0)
+    const sunday   = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999)
+
     const { data: existing } = await service
       .from('points_log')
       .select('id')
       .eq('student_id', user.id)
       .eq('reason', 'weekly_goal')
-      .gte('created_at', weekStart)
-      .lte('created_at', weekEnd)
+      .gte('created_at', monday.toISOString())
+      .lte('created_at', sunday.toISOString())
       .maybeSingle()
 
     if (existing) {
-      const { data: profile } = await service
-        .from('profiles')
-        .select('total_points')
-        .eq('id', user.id)
-        .single()
+      const { data: profile } = await service.from('profiles').select('total_points').eq('id', user.id).single()
       return NextResponse.json({ awarded: false, reason: 'already_awarded', new_total: profile?.total_points ?? 0 })
     }
   }
 
-  // ── Insert the award ─────────────────────────────────────────────────────
-  const points = POINT_VALUES[reason]
+  // ── Calculate points ───────────────────────────────────────────────────────
+  const points = reason === 'practice_complete'
+    ? calcPracticePoints(correct ?? 0, total ?? 0)
+    : (FLAT_POINT_VALUES[reason] ?? 10)
 
-  const { error } = await service
-    .from('points_log')
-    .insert({
-      student_id:   user.id,
-      points,
-      reason,
-      reference_id: reference_id ?? null,
-    })
+  // ── Insert award ───────────────────────────────────────────────────────────
+  const { error } = await service.from('points_log').insert({
+    student_id:   user.id,
+    points,
+    reason,
+    reference_id: reference_id ?? null,
+    metadata:     reason === 'practice_complete' ? { correct, total } : null,
+  })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // The DB trigger already incremented profiles.total_points.
-  // Re-fetch to confirm the new total.
-  const { data: profile } = await service
-    .from('profiles')
-    .select('total_points')
-    .eq('id', user.id)
-    .single()
+  // DB trigger increments profiles.total_points — fetch updated total
+  const { data: profile } = await service.from('profiles').select('total_points').eq('id', user.id).single()
 
   return NextResponse.json({
     awarded:        true,
     points_awarded: points,
     new_total:      profile?.total_points ?? 0,
   })
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function getWeekStart() {
-  const now  = new Date()
-  const day  = now.getDay()
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
-  const mon  = new Date(now)
-  mon.setDate(diff)
-  mon.setHours(0, 0, 0, 0)
-  return mon.toISOString()
-}
-
-function getWeekEnd() {
-  const start = new Date(getWeekStart())
-  start.setDate(start.getDate() + 6)
-  start.setHours(23, 59, 59, 999)
-  return start.toISOString()
 }

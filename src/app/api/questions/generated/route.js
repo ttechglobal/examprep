@@ -1,6 +1,5 @@
-// src/app/api/admin/questions/generated/route.js
-// POST — save a batch of AI-generated questions for a subtopic
-// These questions are tagged source='ai_generated' and slot into the existing questions table
+// src/app/api/questions/generated/route.js
+// FIX: removed question_type from insert — column was dropped from DB
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -29,28 +28,27 @@ export async function POST(request) {
   const results = { saved: 0, errors: [] }
 
   for (const q of questions) {
-    // Build the explanation object in the same format as past-paper questions
     const explanation = {
-      correct:       q.correct_explanation ?? '',
-      workings:      [],
-      wrong_options: q.wrong_explanations ?? {},
+      correct:       q.correct_explanation ?? q.explanation?.correct      ?? '',
+      workings:      q.explanation?.workings      ?? [],
+      wrong_options: q.wrong_explanations  ?? q.explanation?.wrong_options ?? {},
     }
 
     const { error } = await db.from('questions').insert({
-      subject_id:    subjectId,
-      topic_id:      topicId ?? null,
-      subtopic_id:   subtopicId,
-      exam_type:     examType ?? 'BOTH',
-      year:          null,
-      question_text: q.question_text,
-      has_image:     false,
-      options:       q.options,
+      subject_id:     subjectId,
+      topic_id:       topicId    ?? null,
+      subtopic_id:    subtopicId,
+      exam_type:      examType   ?? 'BOTH',
+      year:           null,
+      question_text:  q.question_text,
+      has_image:      false,
+      options:        q.options,
       correct_answer: q.correct_answer,
       explanation,
-      difficulty:    q.difficulty ?? 'medium',
-      question_type: q.question_type ?? 'objective',
-      source:        'ai_generated',
-      is_active:     true,
+      difficulty:     q.difficulty ?? 'medium',
+      // question_type intentionally omitted — column was dropped from DB
+      source:         'ai_generated',
+      is_active:      true,
     })
 
     if (error) {

@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { rebuildStudyPlan } from '@/lib/studyPlanEngine'
 
 function svc() {
   return createServiceClient(
@@ -58,6 +59,18 @@ export async function POST(request) {
   } else {
     await db.from('student_streaks')
       .insert({ student_id: user.id, current_streak: 1, last_active_date: todayStr })
+  }
+
+  // 3. Rebuild study plan for every subject touched in this session
+  const subjectIds = [...new Set(answers.map(a => qMap[a.questionId]?.subject_id).filter(Boolean))]
+  if (subjectIds.length) {
+    try {
+      await rebuildStudyPlan(db, user.id, subjectIds)
+      console.log('[practice-save] study plan rebuilt for subjects:', subjectIds)
+    } catch (e) {
+      console.error('[practice-save] rebuildStudyPlan error:', e.message)
+      // Non-fatal — attempts are already saved, plan rebuilds on next session
+    }
   }
 
   return NextResponse.json({ success: true })

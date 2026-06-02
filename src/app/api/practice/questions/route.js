@@ -1,17 +1,6 @@
 // src/app/api/practice/questions/route.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Modified: core topic sequencing + question_types param added.
-//
-// Changes from original:
-//   1. Normal practice branch now:
-//      a. Fetches core_topics for the subject(s) from DB
-//      b. Fetches the authenticated student's accuracy per topic
-//      c. Calls sequenceQuestions() — weak core topics get weighted slots
-//      d. Fully mastered core topics treated like normal topics
-//      e. All wrapped in try/catch — failure falls back to original random shuffle
-//   2. question_types param (default ['objective']) — future-proofing for theory Qs
-//   3. Exam sim and topic-specific branches: unchanged
-// ─────────────────────────────────────────────────────────────────────────────
+// FIX: removed .in('question_type', questionTypes) from all query branches
+//      — column was dropped from the questions table
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -25,8 +14,6 @@ export async function GET(request) {
   const topicId      = searchParams.get('topic_id')
   const mode         = searchParams.get('mode') ?? 'practice'
   const subjectNames = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
-  // question_types: defaults to ['objective'] — backward compatible
-  const questionTypes = searchParams.get('question_types')?.split(',').filter(Boolean) ?? ['objective']
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -63,9 +50,7 @@ export async function GET(request) {
   const allQuestions = []
   const examFilter   = examType === 'BOTH' ? ['WAEC', 'JAMB', 'BOTH'] : [examType, 'BOTH']
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // BRANCH A: Exam simulation — unchanged, sequencer not applied
-  // ────────────────────────────────────────────────────────────────────────────
+  // ── BRANCH A: Exam simulation ──────────────────────────────────────────────
   if (mode === 'exam') {
     const perSubject = examType === 'JAMB' ? 40 : 50
 
@@ -74,13 +59,13 @@ export async function GET(request) {
         .from('questions')
         .select(`
           id, question_text, options, correct_answer, explanation,
-          difficulty, question_type, subtopic_id, topic_id, subject_id,
+          difficulty, subtopic_id, topic_id, subject_id,
           subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
         `)
         .eq('subject_id', subject.id)
         .in('exam_type', examFilter)
         .eq('is_active', true)
-        .in('question_type', questionTypes)
+        // question_type filter removed — column dropped
         .limit(perSubject + 20)
 
       if (questions?.length) {
@@ -97,10 +82,7 @@ export async function GET(request) {
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // BRANCH B: Topic-specific practice — unchanged, sequencer not applied
-  // (student already chose the topic — no need to reprioritise)
-  // ────────────────────────────────────────────────────────────────────────────
+  // ── BRANCH B: Topic-specific practice ─────────────────────────────────────
   else if (topicId) {
     const subject = subjectRows[0]
 
@@ -108,12 +90,12 @@ export async function GET(request) {
       .from('questions')
       .select(`
         id, question_text, options, correct_answer, explanation,
-        difficulty, question_type, subtopic_id, topic_id, subject_id,
+        difficulty, subtopic_id, topic_id, subject_id,
         subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
       `)
       .eq('topic_id', topicId)
       .eq('is_active', true)
-      .in('question_type', questionTypes)
+      // question_type filter removed — column dropped
       .in('exam_type', examFilter)
       .limit(count + 20)
 
@@ -130,13 +112,9 @@ export async function GET(request) {
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // BRANCH C: Normal practice — sequencer applied
-  // ────────────────────────────────────────────────────────────────────────────
+  // ── BRANCH C: Normal practice — sequencer applied ──────────────────────────
   else {
     const perSubject = Math.ceil(count / subjectRows.length)
-
-    // Pre-fetch core topic map + student accuracy (both fail-safe)
     const subjectIds = subjectRows.map(s => s.id)
     let coreTopicMap = {}
     let studentAcc   = {}
@@ -147,24 +125,23 @@ export async function GET(request) {
         fetchStudentAccuracy(service, studentId, subjectIds),
       ])
     } catch {
-      // Both default to {} on error — sequencer falls back to random
+      // Fail gracefully — fall back to random
     }
 
     for (const subject of subjectRows) {
-      // Fetch a generous pool so the sequencer has enough to work with
       const fetchLimit = Math.max(perSubject * 5, 60)
 
       const { data: rawQuestions } = await service
         .from('questions')
         .select(`
           id, question_text, options, correct_answer, explanation,
-          difficulty, question_type, subtopic_id, topic_id, subject_id,
+          difficulty, subtopic_id, topic_id, subject_id,
           subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
         `)
         .eq('subject_id', subject.id)
         .in('exam_type', examFilter)
         .eq('is_active', true)
-        .in('question_type', questionTypes)
+        // question_type filter removed — column dropped
         .limit(fetchLimit)
 
       if (!rawQuestions?.length) continue
@@ -179,14 +156,7 @@ export async function GET(request) {
       }))
 
       const coreTopicIds = coreTopicMap[subject.id] ?? []
-
-      const sequenced = sequenceQuestions({
-        questions:    enriched,
-        coreTopicIds,
-        studentAcc,   // weakness-weighted slots
-        count:        perSubject,
-      })
-
+      const sequenced    = sequenceQuestions({ questions: enriched, coreTopicIds, studentAcc, count: perSubject })
       allQuestions.push(...sequenced)
     }
   }
@@ -197,16 +167,9 @@ export async function GET(request) {
     }, { status: 404 })
   }
 
-  // For exam sim and topic-specific: final shuffle (original behaviour).
-  // For normal practice: do NOT re-shuffle — sequencer already set optimal order.
   const final = (mode === 'exam' || topicId)
     ? allQuestions.sort(() => Math.random() - 0.5).slice(0, count)
     : allQuestions.slice(0, count)
 
-  return NextResponse.json({
-    questions: final,
-    count:     final.length,
-    examType,
-    mode,
-  })
+  return NextResponse.json({ questions: final, count: final.length, examType, mode })
 }

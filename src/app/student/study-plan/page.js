@@ -1,107 +1,274 @@
 'use client'
 // src/app/student/study-plan/page.js
-// VERSION: 2025-STUDY-PLAN-FIX
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getSubjectColor } from '@/lib/theme'
+import Link from 'next/link'
+import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
-const STATUS_CONFIG = {
-  weak:      { label: 'Needs work',    dot: 'bg-red-400',   badge: 'bg-red-50 text-red-700 border-red-100',     bar: 'bg-red-400',   left: 'border-l-red-400'   },
-  improving: { label: 'Getting there', dot: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700 border-amber-100', bar: 'bg-amber-400', left: 'border-l-amber-400' },
+// ── Status config — NO left-border pattern ────────────────────────────────────
+const STATUS = {
+  weak:      { label: 'Needs work', icon: '🎯', bar: 'bg-red-400',    pill: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400' },
+  improving: { label: 'Improving',  icon: '📈', bar: 'bg-amber-400',  pill: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400' },
+  untested:  { label: 'Not started',icon: '📖', bar: 'bg-indigo-300', pill: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400' },
+  strong:    { label: 'Strong',     icon: '✅', bar: 'bg-green-400',  pill: 'bg-green-50 text-green-600 dark:bg-green-950/40 dark:text-green-400' },
 }
 
-function EmptyState() {
+// ── Progress ring (small, inline SVG) ─────────────────────────────────────────
+function MiniRing({ pct, size = 36 }) {
+  const r = (size / 2) - 4
+  const circ = 2 * Math.PI * r
+  const fill = (pct / 100) * circ
+  const color = pct >= 70 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-5">
-      <div className="w-20 h-20 rounded-3xl bg-indigo-50 flex items-center justify-center">
-        <svg className="w-10 h-10 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-        </svg>
-      </div>
-      <div>
-        <h2 className="text-xl font-black text-gray-900">Let's find out where to start</h2>
-        <p className="text-sm text-gray-500 mt-2 leading-relaxed max-w-xs mx-auto">
-          Take a quick diagnostic test and we'll build your personal study plan — showing exactly which topics to focus on first.
-        </p>
-      </div>
-      <div className="flex flex-col gap-2.5 w-full max-w-xs">
-        <Link href="/diagnostic"
-          className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors text-center">
-          Take the diagnostic test →
-        </Link>
-        <Link href="/student/practice"
-          className="w-full py-3 bg-gray-50 border border-gray-200 text-gray-600 text-sm font-bold rounded-2xl hover:bg-gray-100 transition-colors text-center">
-          Start a practice session
-        </Link>
-      </div>
-    </div>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth="3.5" />
+      <circle cx={size/2} cy={size/2} r={r} fill="none"
+        stroke={color} strokeWidth="3.5"
+        strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`} />
+      <text x={size/2} y={size/2 + 4} textAnchor="middle"
+        style={{ fontSize: size * 0.24, fontWeight: 900, fill: color }}>
+        {pct}%
+      </text>
+    </svg>
   )
 }
 
-function SubjectTab({ subject, isActive, onClick }) {
-  const color = getSubjectColor(subject.name)
-  return (
-    <button onClick={onClick}
-      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap transition-all
-        ${isActive ? `${color.bg} ${color.text} shadow-sm` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-      {subject.name}
-      {subject.itemCount > 0 && (
-        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/40' : 'bg-gray-200 text-gray-600'}`}>
-          {subject.itemCount}
-        </span>
-      )}
-    </button>
-  )
-}
+// ── Topic card — clean, native, no left border ────────────────────────────────
+function TopicCard({ item, rank }) {
+  const cfg   = STATUS[item.status] ?? STATUS.weak
+  const color = getSubjectColor(item.subjectName ?? '')
 
-function TopicCard({ item }) {
-  const cfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.weak
   return (
-    <Link href={`/student/topics/${item.topicSlug}`} className="block group">
-      <div className={`bg-white border border-gray-100 border-l-4 ${cfg.left} rounded-2xl p-4 hover:shadow-sm transition-all duration-200 group-hover:-translate-y-0.5`}>
-        <div className="flex items-start justify-between gap-3">
+    <Link
+      href={`/student/study-plan/${item.topicId}`}
+      onClick={() => {
+        try {
+          sessionStorage.setItem('study_plan_topic', JSON.stringify({
+            topicId:        item.topicId,
+            topicName:      item.topicName,
+            subjectName:    item.subjectName,
+            subjectId:      item.subjectId,
+            examType:       item.examType ?? 'WAEC',
+            attempts:       item.attemptCount ?? 0,
+            correct:        Math.round(((item.accuracyPct ?? 0) / 100) * (item.attemptCount ?? 0)),
+            insightMessage: item.insightMessage,
+          }))
+        } catch {}
+      }}
+      className="block group"
+    >
+      <div className="bg-card rounded-2xl shadow-sm hover:shadow-md active:scale-[0.985] transition-all duration-200 overflow-hidden">
+        {/* Thin top strip — only colour signal, no left border */}
+        <div className={`h-0.5 w-full ${cfg.bar}`} />
+
+        <div className="p-4 flex items-center gap-3">
+          {/* Rank bubble */}
+          <div className="w-8 h-8 rounded-full bg-subtle flex items-center justify-center flex-shrink-0">
+            <span className="text-[11px] font-black text-tertiary">{rank}</span>
+          </div>
+
+          {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${cfg.badge}`}>{cfg.label}</span>
+            {/* Subject pill + status pill */}
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${color.bg} ${color.text}`}>
+                {item.subjectName}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.pill}`}>
+                {cfg.icon} {cfg.label}
+              </span>
             </div>
-            <p className="text-sm font-black text-gray-900 leading-tight mb-1">{item.topicName}</p>
-            <p className="text-xs text-gray-500 leading-relaxed">{item.insightMessage}</p>
+            {/* Topic name */}
+            <p className="text-sm font-black text-primary leading-snug">{item.topicName}</p>
+            {/* Insight */}
+            {item.insightMessage && (
+              <p className="text-xs text-secondary mt-0.5 leading-relaxed line-clamp-1">
+                {item.insightMessage}
+              </p>
+            )}
           </div>
-          <svg className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1 group-hover:text-indigo-400 transition-colors"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-          </svg>
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${cfg.bar}`} style={{ width: `${item.accuracyPct}%` }} />
+
+          {/* Accuracy ring + chevron */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {item.attemptCount > 0 && <MiniRing pct={item.accuracyPct ?? 0} />}
+            <svg className="w-4 h-4 text-tertiary group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
           </div>
-          <span className="text-[10px] font-bold text-gray-400 w-8 text-right">{item.accuracyPct}%</span>
         </div>
       </div>
     </Link>
   )
 }
 
-function SubjectEmptyState({ subjectName }) {
+// ── Mastered topics — collapsed by default ────────────────────────────────────
+function MasteredSection({ items }) {
+  const [open, setOpen] = useState(false)
+  if (!items.length) return null
   return (
-    <div className="flex flex-col items-center py-12 px-4 text-center gap-4">
-      <p className="text-sm font-bold text-gray-700">No plan for {subjectName} yet</p>
-      <p className="text-xs text-gray-500 max-w-[220px] mx-auto">
-        Start a practice session or take the diagnostic so we can track your weak topics.
-      </p>
-      <Link href="/diagnostic"
-        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors">
-        Take diagnostic →
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 w-full py-2 px-1 text-xs font-bold text-tertiary hover:text-secondary transition-colors"
+      >
+        <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+        {items.length} mastered topic{items.length !== 1 ? 's' : ''} (hidden)
+        <svg className={`w-3.5 h-3.5 ml-auto transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="space-y-1.5 mt-1">
+          {items.map(item => (
+            <Link
+              key={item.topicId}
+              href={`/student/study-plan/${item.topicId}`}
+              className="flex items-center gap-3 px-4 py-2.5 bg-subtle rounded-xl hover:bg-green-50 dark:hover:bg-green-950/20 transition-colors"
+            >
+              <span className="text-green-500 text-sm">✓</span>
+              <span className="text-sm text-secondary font-medium flex-1 truncate">{item.topicName}</span>
+              <span className="text-xs font-black text-green-600 dark:text-green-400 tabular-nums">
+                {item.accuracyPct}%
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Progress summary bar ──────────────────────────────────────────────────────
+function ProgressSummary({ items }) {
+  const total     = items.length
+  const weak      = items.filter(i => i.status === 'weak').length
+  const improving = items.filter(i => i.status === 'improving').length
+  const strong    = items.filter(i => i.status === 'strong' || i._mastered).length
+  const untested  = items.filter(i => i.status === 'untested').length
+
+  if (total === 0) return null
+
+  // Overall progress score: weak=0, untested=0, improving=0.5, strong=1
+  const score = total > 0
+    ? Math.round(((improving * 0.5) + (strong * 1)) / total * 100)
+    : 0
+
+  return (
+    <div className="bg-card rounded-2xl shadow-sm p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-black text-primary">Your progress</p>
+        <span className={`text-sm font-black tabular-nums ${
+          score >= 60 ? 'text-green-600 dark:text-green-400'
+          : score >= 30 ? 'text-amber-500 dark:text-amber-400'
+          : 'text-secondary'
+        }`}>{score}%</span>
+      </div>
+
+      {/* Segmented bar */}
+      <div className="h-2.5 bg-subtle rounded-full overflow-hidden flex">
+        {weak > 0 && (
+          <div className="bg-red-400 h-full transition-all duration-700"
+            style={{ width: `${(weak / total) * 100}%` }} />
+        )}
+        {untested > 0 && (
+          <div className="bg-gray-300 dark:bg-gray-600 h-full transition-all duration-700"
+            style={{ width: `${(untested / total) * 100}%` }} />
+        )}
+        {improving > 0 && (
+          <div className="bg-amber-400 h-full transition-all duration-700"
+            style={{ width: `${(improving / total) * 100}%` }} />
+        )}
+        {strong > 0 && (
+          <div className="bg-green-400 h-full transition-all duration-700"
+            style={{ width: `${(strong / total) * 100}%` }} />
+        )}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {weak > 0 && (
+          <span className="flex items-center gap-1.5 text-xs text-secondary">
+            <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" />
+            {weak} need work
+          </span>
+        )}
+        {improving > 0 && (
+          <span className="flex items-center gap-1.5 text-xs text-secondary">
+            <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+            {improving} improving
+          </span>
+        )}
+        {strong > 0 && (
+          <span className="flex items-center gap-1.5 text-xs text-secondary">
+            <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+            {strong} mastered
+          </span>
+        )}
+        {untested > 0 && (
+          <span className="flex items-center gap-1.5 text-xs text-secondary">
+            <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
+            {untested} not started
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Subject tab ───────────────────────────────────────────────────────────────
+function SubjectTab({ subject, isActive, onClick }) {
+  const color = getSubjectColor(subject.name)
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all flex-shrink-0 ${
+        isActive
+          ? `${color.bg} ${color.text} shadow-sm`
+          : 'bg-subtle text-secondary hover:text-primary'
+      }`}
+    >
+      {subject.name}
+      {subject.weakCount > 0 && (
+        <span className={`text-[9px] font-black min-w-[14px] h-3.5 px-1 rounded-full ${
+          isActive ? 'bg-white/40' : 'bg-red-100 text-red-600'
+        }`}>
+          {subject.weakCount}
+        </span>
+      )}
+    </button>
+  )
+}
+
+// ── Empty states ──────────────────────────────────────────────────────────────
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center py-16 px-6 text-center gap-5">
+      <div className="w-20 h-20 rounded-3xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center text-4xl">
+        🎯
+      </div>
+      <div>
+        <p className="text-base font-black text-primary">Your study plan is empty</p>
+        <p className="text-sm text-secondary mt-1.5 leading-relaxed max-w-[240px] mx-auto">
+          Take a 10-question diagnostic test and we'll build a plan showing exactly what to work on.
+        </p>
+      </div>
+      <Link
+        href="/diagnostic"
+        className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all shadow-md shadow-indigo-200 dark:shadow-none"
+      >
+        Take diagnostic test →
       </Link>
     </div>
   )
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function StudyPlanPage() {
   const router   = useRouter()
   const supabase = createClient()
@@ -117,17 +284,14 @@ export default function StudyPlanPage() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-
       try {
         const res  = await fetch('/api/student/study-plan')
         const data = await res.json()
-        console.log('[study-plan page] API response:', data)
         setSubjects(data.subjects ?? [])
         setItems(data.items ?? [])
         setHasAnyAttempts(data.hasAnyAttempts ?? false)
         if (data.subjects?.length) setActiveSubjId(data.subjects[0].id)
       } catch (e) {
-        console.error('[study-plan page] fetch error:', e)
         setError(e.message)
       }
       setLoading(false)
@@ -135,68 +299,127 @@ export default function StudyPlanPage() {
     load()
   }, [])
 
-  const activeItems = useMemo(() =>
-    items.filter(i => i.subjectId === activeSubjId).sort((a, b) => a.accuracyPct - b.accuracyPct),
+  // Active items — split mastered (≥90%) from active
+  const { activeItems, masteredItems } = useMemo(() => {
+    const subjectItems = items
+      .filter(i => i.subjectId === activeSubjId)
+      .sort((a, b) => {
+        const order = { weak: 0, improving: 1, untested: 2, strong: 3 }
+        const od = (order[a.status] ?? 2) - (order[b.status] ?? 2)
+        return od !== 0 ? od : (a.accuracyPct ?? 0) - (b.accuracyPct ?? 0)
+      })
+
+    // Topics at 90%+ are "mastered" — hide from main list, show collapsed
+    const mastered = subjectItems.filter(i => (i.accuracyPct ?? 0) >= 90)
+    const active   = subjectItems.filter(i => (i.accuracyPct ?? 0) < 90)
+    return { activeItems: active, masteredItems: mastered }
+  }, [items, activeSubjId])
+
+  // Enrich subjects with weak count badge
+  const enrichedSubjects = useMemo(() =>
+    subjects.map(s => ({
+      ...s,
+      weakCount: items.filter(i => i.subjectId === s.id && i.status === 'weak' && (i.accuracyPct ?? 0) < 90).length,
+    })),
+    [subjects, items]
+  )
+
+  // All items for this subject (for progress summary)
+  const allSubjectItems = useMemo(() =>
+    items.filter(i => i.subjectId === activeSubjId),
     [items, activeSubjId]
   )
-  const activeSubject = subjects.find(s => s.id === activeSubjId)
+
+  const activeSubject = enrichedSubjects.find(s => s.id === activeSubjId)
 
   if (loading) return (
-    <div className="flex items-center justify-center py-24">
+    <div className="flex items-center justify-center min-h-[50vh]">
       <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   if (error) return (
-    <div className="space-y-4 px-1">
-      <h1 className="text-2xl font-black text-gray-900">Study Plan</h1>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-black text-primary">Study Plan</h1>
       <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-        <p className="text-sm font-bold text-red-700">Error loading study plan: {error}</p>
+        <p className="text-sm font-bold text-red-700">Error: {error}</p>
       </div>
     </div>
   )
 
   if (!subjects.length || !hasAnyAttempts) return (
-    <div className="space-y-4 px-1">
-      <h1 className="text-2xl font-black text-gray-900">Study Plan</h1>
-      <EmptyState />
-    </div>
+    <>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-black text-primary">Study Plan</h1>
+          <p className="text-xs text-secondary mt-0.5">Updates after every practice session</p>
+        </div>
+        <EmptyState />
+      </div>
+      <PracticeHubFAB />
+    </>
   )
 
   return (
-    <div className="space-y-5 pb-10">
-      <div>
-        <h1 className="text-2xl font-black text-gray-900">Study Plan</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Updates automatically after every session</p>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        {subjects.map(s => (
-          <SubjectTab key={s.id} subject={s} isActive={s.id === activeSubjId} onClick={() => setActiveSubjId(s.id)} />
-        ))}
-      </div>
-
-      {activeItems.length > 0 && (
-        <div className="flex items-center gap-4 flex-wrap">
-          {activeItems.filter(i => i.status === 'weak').length > 0 && (
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-red-400" />
-              {activeItems.filter(i => i.status === 'weak').length} need work
-            </span>
-          )}
-          {activeItems.filter(i => i.status === 'improving').length > 0 && (
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              {activeItems.filter(i => i.status === 'improving').length} improving
-            </span>
-          )}
+    <>
+      <div className="space-y-5 pb-28">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-primary">Study Plan</h1>
+            <p className="text-xs text-secondary mt-0.5">Updates after every session</p>
+          </div>
+          <Link
+            href="/diagnostic"
+            className="text-[11px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 rounded-xl hover:bg-indigo-100 transition-colors"
+          >
+            Retake →
+          </Link>
         </div>
-      )}
 
-      {activeSubject && activeItems.length === 0
-        ? <SubjectEmptyState subjectName={activeSubject.name} />
-        : <div className="space-y-2.5">{activeItems.map(item => <TopicCard key={item.id} item={item} />)}</div>
-      }
-    </div>
+        {/* Subject tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+          {enrichedSubjects.map(s => (
+            <SubjectTab
+              key={s.id}
+              subject={s}
+              isActive={s.id === activeSubjId}
+              onClick={() => setActiveSubjId(s.id)}
+            />
+          ))}
+        </div>
+
+        {/* Progress summary */}
+        <ProgressSummary items={allSubjectItems} />
+
+        {/* Active topic cards */}
+        {activeItems.length === 0 && masteredItems.length === 0 ? (
+          <div className="flex flex-col items-center py-10 gap-3 text-center">
+            <p className="text-2xl">🎉</p>
+            <p className="text-sm font-bold text-primary">All caught up for {activeSubject?.name}!</p>
+            <p className="text-xs text-secondary leading-relaxed max-w-[220px] mx-auto">
+              Keep practising to maintain your scores, or take the diagnostic again.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {activeItems.map((item, idx) => (
+              <TopicCard
+                key={item.topicId}
+                item={{ ...item, subjectName: activeSubject?.name ?? item.subjectName }}
+                rank={idx + 1}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Mastered topics — collapsed */}
+        <MasteredSection
+          items={masteredItems.map(i => ({ ...i, subjectName: activeSubject?.name ?? i.subjectName }))}
+        />
+      </div>
+
+      <PracticeHubFAB />
+    </>
   )
 }

@@ -1,8 +1,10 @@
 'use client'
+// src/app/admin/questions/upload/page.js
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseQuestions, buildQuestionPrompt, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
 import { uploadQuestionImage, buildImageImprovementPrompt } from '@/lib/questionImageUpload'
+import QuestionStudentPreview from '@/components/admin/QuestionStudentPreview'
 import Link from 'next/link'
 
 const DIFFICULTY_COLORS = {
@@ -26,7 +28,7 @@ function StepIndicator({ current }) {
         <div key={i} className="flex items-center flex-1">
           <div className="flex flex-col items-center">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-colors ${
-              i + 1 < current ? 'bg-green-500 text-white' :
+              i + 1 < current  ? 'bg-green-500 text-white'  :
               i + 1 === current ? 'bg-indigo-600 text-white' :
               'bg-gray-100 text-gray-400'
             }`}>
@@ -54,7 +56,9 @@ function CopyBox({ text, label = 'AI Question Extraction Prompt' }) {
         <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">{label}</span>
         <button
           onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+            copied ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-500'
+          }`}
         >
           {copied ? '✓ Copied!' : 'Copy'}
         </button>
@@ -68,13 +72,13 @@ function CopyBox({ text, label = 'AI Question Extraction Prompt' }) {
 
 // ── Image drop zone (inline, per question) ────────────────────────────────────
 function ImageDropZone({ question, examType, subjectName, questionIndex, onImageUploaded }) {
-  const [dragging, setDragging]     = useState(false)
-  const [uploading, setUploading]   = useState(false)
-  const [uploadedImage, setUploaded] = useState(
+  const [dragging,      setDragging]  = useState(false)
+  const [uploading,     setUploading] = useState(false)
+  const [uploadedImage, setUploaded]  = useState(
     question.image_url ? { url: question.image_url, sizeKb: null } : null
   )
-  const [error, setError]           = useState(null)
-  const [showPrompt, setShowPrompt] = useState(false)
+  const [error,       setError]       = useState(null)
+  const [showPrompt,  setShowPrompt]  = useState(false)
   const inputRef = useRef()
 
   const imagePrompt = buildImageImprovementPrompt({
@@ -89,10 +93,7 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
     setUploading(true)
     const result = await uploadQuestionImage(file, { examType, subjectName, questionIndex })
     setUploading(false)
-    if (result.error) {
-      setError(result.error)
-      return
-    }
+    if (result.error) { setError(result.error); return }
     setUploaded({ url: result.url, sizeKb: result.sizeKb })
     onImageUploaded(result.url)
   }, [examType, subjectName, questionIndex, onImageUploaded])
@@ -106,7 +107,6 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
 
   return (
     <div className="space-y-2">
-      {/* Prompt for AI image improvement */}
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold text-violet-700">🖼 Image required for this question</p>
         <button
@@ -117,11 +117,8 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
         </button>
       </div>
 
-      {showPrompt && (
-        <CopyBox text={imagePrompt} label="AI Image Improvement Prompt" />
-      )}
+      {showPrompt && <CopyBox text={imagePrompt} label="AI Image Improvement Prompt" />}
 
-      {/* Uploaded thumbnail — or drop zone */}
       {uploadedImage ? (
         <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
           <img
@@ -131,9 +128,7 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
           />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-green-700">Image uploaded ✓</p>
-            {uploadedImage.sizeKb && (
-              <p className="text-xs text-green-600">{uploadedImage.sizeKb} KB</p>
-            )}
+            {uploadedImage.sizeKb && <p className="text-xs text-green-600">{uploadedImage.sizeKb} KB</p>}
           </div>
           <button
             onClick={() => { setUploaded(null); onImageUploaded(null) }}
@@ -174,127 +169,84 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
         </div>
       )}
 
-      {error && (
-        <p className="text-xs text-red-600 font-medium">⚠ {error}</p>
-      )}
+      {error && <p className="text-xs text-red-600 font-medium">⚠ {error}</p>}
     </div>
   )
 }
 
-// ── Question preview card (tag review step) ───────────────────────────────────
+// ── Question preview card (tag review step 4) ─────────────────────────────────
 function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdateMapping, onRemove, onImageUploaded }) {
-  const [expanded, setExpanded]         = useState(false)
-  const [selectedTopicId, setTopicId]   = useState(question.topic_id ?? '')
-  const [selectedSubtopicId, setSubId]  = useState(question.subtopic_id ?? '')
+  const [expanded,          setExpanded]  = useState(false)
+  const [selectedTopicId,   setTopicId]   = useState(question.topic_id    ?? '')
+  const [selectedSubtopicId, setSubId]   = useState(question.subtopic_id ?? '')
 
+  const subtopics = topics.find(t => t.id === selectedTopicId)?.subtopics ?? []
   const isImage   = question._hasImage
-  const conf      = question._matchConfidence ?? 0
-  const hasMapping = !!(selectedTopicId && selectedSubtopicId)
-  const badge     = CONFIDENCE_BADGE(conf, hasMapping)
-
-  const selectedTopic = topics.find(t => t.id === selectedTopicId)
-  const subtopics     = selectedTopic?.subtopics ?? []
+  const badge     = CONFIDENCE_BADGE(question._matchConfidence ?? 0, !!question.subtopic_id)
 
   const handleTopicChange = (topicId) => {
     setTopicId(topicId)
     setSubId('')
     onUpdateMapping(question._index, { topic_id: topicId, subtopic_id: null })
   }
+
   const handleSubtopicChange = (subId) => {
     setSubId(subId)
     onUpdateMapping(question._index, { topic_id: selectedTopicId, subtopic_id: subId })
   }
 
   return (
-    <div className={`bg-white rounded-2xl border overflow-hidden ${
-      isImage && !question.image_url ? 'border-violet-300' :
-      !hasMapping                    ? 'border-red-300' :
-      conf < 0.7                     ? 'border-amber-300' :
-      'border-gray-200'
+    <div className={`bg-white border rounded-2xl overflow-hidden transition-colors ${
+      !question.subtopic_id ? 'border-red-200' : question._needsReview ? 'border-amber-200' : 'border-gray-200'
     }`}>
       {/* Card header — always visible */}
       <div
-        className="flex items-start gap-3 px-4 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
         onClick={() => setExpanded(e => !e)}
       >
-        <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5 w-5">{question._index + 1}</span>
-
+        <span className="text-xs font-black text-gray-400 flex-shrink-0 mt-0.5 w-6">
+          {question._index + 1}.
+        </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-800 leading-snug line-clamp-2">
+          <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2">
             {question.question_text}
           </p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DIFFICULTY_COLORS[question.difficulty]}`}>
-              {question.difficulty}
-            </span>
-            {isImage && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                question.image_url ? 'bg-green-100 text-green-700' : 'bg-violet-100 text-violet-700'
-              }`}>
-                {question.image_url ? '🖼 Image ✓' : '🖼 Needs image'}
+            {question.difficulty && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[question.difficulty] ?? 'bg-gray-100 text-gray-600'}`}>
+                {question.difficulty}
               </span>
             )}
-            {question.year && <span className="text-xs text-gray-400">{question.year}</span>}
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>
               {badge.label}
             </span>
+            {isImage && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                question.image_url ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+              }`}>
+                {question.image_url ? '🖼 Image ✓' : '🖼 Image needed'}
+              </span>
+            )}
           </div>
         </div>
-
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Remove question button */}
           <button
             onClick={e => { e.stopPropagation(); onRemove(question._index) }}
-            className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors text-sm"
-            title="Remove this question"
+            className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
           >
-            ✕
+            Remove
           </button>
-          <span className={`text-gray-300 text-xs transition-transform ${expanded ? 'rotate-180' : ''}`}>▼</span>
+          <span className="text-gray-300 text-sm">{expanded ? '▲' : '▼'}</span>
         </div>
       </div>
 
-      {/* Expanded body */}
+      {/* Expanded controls */}
       {expanded && (
-        <div className="border-t border-gray-100 px-4 py-4 space-y-4">
-
-          {/* AI suggestion — always shown */}
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5">
-            <p className="text-xs font-bold text-indigo-600 mb-0.5">AI suggested</p>
-            <p className="text-xs text-indigo-800">
-              <span className="font-medium">{question.topic_title || '—'}</span>
-              <span className="mx-1.5 text-indigo-400">→</span>
-              <span className="font-medium">{question.subtopic_title || '—'}</span>
-            </p>
-            {conf > 0 && (
-              <p className="text-xs text-indigo-500 mt-0.5">
-                Matched to curriculum at {Math.round(conf * 100)}% confidence
-              </p>
-            )}
-            {conf === 0 && (
-              <p className="text-xs text-amber-600 mt-0.5">
-                No curriculum match found — please tag manually below
-              </p>
-            )}
-          </div>
-
-          {/* Answer options */}
-          <div className="grid grid-cols-2 gap-2">
-            {Object.entries(question.options ?? {}).map(([key, text]) => (
-              <div key={key} className={`px-3 py-2 rounded-xl text-xs border ${
-                key === question.correct_answer
-                  ? 'border-green-300 bg-green-50 text-green-800 font-medium'
-                  : 'border-gray-100 text-gray-600'
-              }`}>
-                <span className="font-bold">{key}.</span> {text}
-              </div>
-            ))}
-          </div>
-
+        <div className="border-t border-gray-100 p-4 space-y-3 bg-gray-50">
           {/* Topic / subtopic selects */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Topic</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Topic</label>
               <select
                 value={selectedTopicId}
                 onChange={e => handleTopicChange(e.target.value)}
@@ -307,7 +259,7 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1">Subtopic</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Subtopic</label>
               <select
                 value={selectedSubtopicId}
                 onChange={e => handleSubtopicChange(e.target.value)}
@@ -335,7 +287,7 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
 
           {/* Explanation preview */}
           {question.explanation?.correct && (
-            <div className="bg-gray-50 rounded-xl px-3 py-2.5">
+            <div className="bg-white rounded-xl px-3 py-2.5 border border-gray-100">
               <p className="text-xs font-bold text-gray-500 mb-0.5">Explanation</p>
               <p className="text-xs text-gray-600 leading-relaxed">{question.explanation.correct}</p>
             </div>
@@ -348,17 +300,17 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function QuestionUploadPage() {
-  const [step, setStep]                   = useState(1)
-  const [examType, setExamType]           = useState('')
-  const [subjects, setSubjects]           = useState([])
-  const [selectedSubject, setSelectedSubject] = useState(null)
-  const [rawJson, setRawJson]             = useState('')
-  const [parseResult, setParseResult]     = useState(null)
-  const [taggedQuestions, setTaggedQuestions] = useState([])
-  const [topics, setTopics]               = useState([])
-  const [loadingTopics, setLoadingTopics] = useState(false)
-  const [saving, setSaving]               = useState(false)
-  const [saveResult, setSaveResult]       = useState(null)
+  const [step,             setStep]             = useState(1)
+  const [examType,         setExamType]         = useState('')
+  const [subjects,         setSubjects]         = useState([])
+  const [selectedSubject,  setSelectedSubject]  = useState(null)
+  const [rawJson,          setRawJson]          = useState('')
+  const [parseResult,      setParseResult]      = useState(null)
+  const [taggedQuestions,  setTaggedQuestions]  = useState([])
+  const [topics,           setTopics]           = useState([])
+  const [loadingTopics,    setLoadingTopics]    = useState(false)
+  const [saving,           setSaving]           = useState(false)
+  const [saveResult,       setSaveResult]       = useState(null)
 
   useEffect(() => {
     fetch('/api/admin/subjects')
@@ -392,14 +344,12 @@ export default function QuestionUploadPage() {
       const hasImage = questionHasImage(q)
       return {
         ...q,
-        _index:          i,
-        _hasImage:       hasImage,
-        topic_id:        match.topic?.id    ?? null,
-        subtopic_id:     match.subtopic?.id ?? null,
-        _needsReview:    match.needsReview,
+        _index:           i,
+        _hasImage:        hasImage,
+        topic_id:         match.topic?.id    ?? null,
+        subtopic_id:      match.subtopic?.id ?? null,
+        _needsReview:     match.needsReview,
         _matchConfidence: match.confidence,
-        // Preserve AI-suggested strings for display (from matchTopicSubtopic)
-        // topic_title and subtopic_title already on q from parsed JSON
       }
     })
 
@@ -427,20 +377,20 @@ export default function QuestionUploadPage() {
     setSaving(true)
     try {
       const batchRes = await fetch('/api/admin/questions/batch', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           examType,
           subjectId: selectedSubject.id,
-          total: taggedQuestions.length,
+          total:     taggedQuestions.length,
         }),
       })
       const batch = await batchRes.json()
 
       const res = await fetch('/api/admin/questions', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           questions: taggedQuestions,
           examType,
           subjectId: selectedSubject.id,
@@ -458,13 +408,13 @@ export default function QuestionUploadPage() {
     }
   }
 
-  // Blocking conditions for "proceed to preview"
-  const untaggedCount  = taggedQuestions.filter(q => !q.subtopic_id).length
-  const missingImages  = taggedQuestions.filter(q => q._hasImage && !q.image_url).length
-  const imageCount     = taggedQuestions.filter(q => q._hasImage).length
-  const canProceed     = untaggedCount === 0 && missingImages === 0
+  const untaggedCount = taggedQuestions.filter(q => !q.subtopic_id).length
+  const missingImages = taggedQuestions.filter(q => q._hasImage && !q.image_url).length
+  const canProceed    = untaggedCount === 0 && missingImages === 0
 
-  const prompt = selectedSubject && examType ? buildQuestionPrompt(examType, selectedSubject.name) : ''
+  const prompt = selectedSubject && examType
+    ? buildQuestionPrompt(examType, selectedSubject.name)
+    : ''
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -476,7 +426,7 @@ export default function QuestionUploadPage() {
 
       <StepIndicator current={step} />
 
-      {/* ── STEP 1: Context ── */}
+      {/* ── STEP 1: Context ─────────────────────────────────────────────────── */}
       {step === 1 && (
         <div className="space-y-5">
           <h2 className="text-lg font-black text-gray-900">Select exam and subject</h2>
@@ -485,10 +435,17 @@ export default function QuestionUploadPage() {
             <label className="block text-sm font-bold text-gray-700 mb-2">Exam</label>
             <div className="grid grid-cols-2 gap-3">
               {['WAEC', 'JAMB'].map(e => (
-                <button key={e} onClick={() => setExamType(e)}
+                <button
+                  key={e}
+                  onClick={() => setExamType(e)}
                   className={`py-3 rounded-2xl border-2 text-sm font-black transition-colors ${
-                    examType === e ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}>{e}</button>
+                    examType === e
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {e}
+                </button>
               ))}
             </div>
           </div>
@@ -497,53 +454,82 @@ export default function QuestionUploadPage() {
             <label className="block text-sm font-bold text-gray-700 mb-2">Subject</label>
             <div className="space-y-2">
               {subjects.map(s => (
-                <button key={s.id} onClick={() => setSelectedSubject(s)}
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedSubject(s)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 text-left transition-colors ${
-                    selectedSubject?.id === s.id ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'
+                    selectedSubject?.id === s.id
+                      ? 'border-indigo-600 bg-indigo-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <span className={`text-sm font-bold ${
+                    selectedSubject?.id === s.id ? 'text-indigo-700' : 'text-gray-700'
                   }`}>
-                  <span className={`text-sm font-bold ${selectedSubject?.id === s.id ? 'text-indigo-700' : 'text-gray-700'}`}>{s.name}</span>
-                  {selectedSubject?.id === s.id && <span className="text-indigo-500 text-sm">✓</span>}
+                    {s.name}
+                  </span>
+                  {selectedSubject?.id === s.id && (
+                    <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                    </svg>
+                  )}
                 </button>
               ))}
             </div>
           </div>
 
-          <button onClick={() => setStep(2)} disabled={!examType || !selectedSubject}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors">
+          <button
+            onClick={() => setStep(2)}
+            disabled={!examType || !selectedSubject}
+            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
+          >
             Continue →
           </button>
         </div>
       )}
 
-      {/* ── STEP 2: Prompt ── */}
+      {/* ── STEP 2: Prompt ──────────────────────────────────────────────────── */}
       {step === 2 && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-black text-gray-900 mb-1">Copy the extraction prompt</h2>
-              <p className="text-sm text-gray-500">Paste this into Claude or Gemini with your PDF questions.</p>
+              <h2 className="text-lg font-black text-gray-900 mb-1">Copy the AI prompt</h2>
+              <p className="text-sm text-gray-500">
+                Paste this into Claude or Gemini along with your PDF or question text.
+              </p>
             </div>
             <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-sm font-medium text-indigo-700">
-            {examType} · {selectedSubject?.name}
-          </div>
-
           <CopyBox text={prompt} />
 
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 leading-relaxed">
-            <strong>Image questions:</strong> If a question references a diagram, the AI will set <code>has_image: true</code>. Those questions will stay in the flow — you'll be asked to drop the image during tag review.
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <p className="text-sm font-bold text-amber-800 mb-1">Tips for best results</p>
+            <ul className="space-y-1">
+              {[
+                'Copy the full prompt above, then paste your PDF text or screenshot after it.',
+                'If questions have diagrams, use the image upload option in Claude/Gemini.',
+                'The AI returns a JSON array — copy the entire JSON response.',
+                'Questions with diagrams will prompt you to upload images in the next step.',
+              ].map((tip, i) => (
+                <li key={i} className="text-xs text-amber-700 flex gap-1.5">
+                  <span className="flex-shrink-0">·</span>
+                  {tip}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <button onClick={() => setStep(3)}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors">
+          <button
+            onClick={() => setStep(3)}
+            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
+          >
             I've got the JSON →
           </button>
         </div>
       )}
 
-      {/* ── STEP 3: Paste JSON ── */}
+      {/* ── STEP 3: Paste JSON ──────────────────────────────────────────────── */}
       {step === 3 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -565,31 +551,40 @@ export default function QuestionUploadPage() {
 
           {parseResult && (
             <div className={`p-3 rounded-xl text-sm ${
-              parseResult.stats?.invalid === 0
+              parseResult.valid
                 ? 'bg-green-50 border border-green-200'
                 : 'bg-amber-50 border border-amber-200'
             }`}>
-              <p className={`font-bold ${parseResult.stats?.invalid === 0 ? 'text-green-800' : 'text-amber-800'}`}>
-                {parseResult.stats?.total} detected ·{' '}
-                {parseResult.stats?.valid} valid
-                {parseResult.stats?.invalid > 0 && ` · ${parseResult.stats.invalid} with errors`}
-              </p>
-              {parseResult.errors.length > 0 && (
-                <ul className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
-                  {parseResult.errors.slice(0, 5).map((err, i) => (
-                    <li key={i} className="text-xs text-amber-700">· {err}</li>
-                  ))}
-                  {parseResult.errors.length > 5 && (
-                    <li className="text-xs text-amber-600">+{parseResult.errors.length - 5} more errors</li>
-                  )}
-                </ul>
+              {parseResult.valid ? (
+                <div>
+                  <p className="font-bold text-green-800">
+                    ✓ {parseResult.stats?.total} questions detected
+                    {parseResult.stats?.withWorkings > 0 && ` · ${parseResult.stats.withWorkings} with workings`}
+                    {parseResult.stats?.withImages > 0 && ` · ${parseResult.stats.withImages} with images`}
+                  </p>
+                  <p className="text-xs text-green-600 mt-0.5">
+                    {parseResult.stats?.easy} easy · {parseResult.stats?.medium} medium · {parseResult.stats?.hard} hard
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="font-bold text-amber-800">{parseResult.errors.length} error(s) found</p>
+                  <ul className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                    {parseResult.errors.slice(0, 5).map((err, i) => (
+                      <li key={i} className="text-xs text-amber-700">· {err}</li>
+                    ))}
+                    {parseResult.errors.length > 5 && (
+                      <li className="text-xs text-amber-600">+{parseResult.errors.length - 5} more errors</li>
+                    )}
+                  </ul>
+                </div>
               )}
             </div>
           )}
 
           <button
             onClick={handleProceedToTagging}
-            disabled={!parseResult || parseResult.questions.length === 0}
+            disabled={!parseResult?.valid || parseResult.questions.length === 0}
             className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
           >
             Review topic tagging ({parseResult?.questions?.length ?? 0} questions) →
@@ -597,29 +592,27 @@ export default function QuestionUploadPage() {
         </div>
       )}
 
-      {/* ── STEP 4: Tag review ── */}
+      {/* ── STEP 4: Tag Review ──────────────────────────────────────────────── */}
       {step === 4 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Review topic tagging</h2>
               <p className="text-sm text-gray-500">
-                {taggedQuestions.length} questions
-                {imageCount > 0 && ` · ${imageCount} need images`}
-                {untaggedCount > 0 && ` · ${untaggedCount} untagged`}
+                AI auto-tagged {taggedQuestions.filter(q => q.subtopic_id).length} of {taggedQuestions.length} questions.
+                Review and fix any mismatches.
               </p>
             </div>
             <button onClick={() => setStep(3)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
-          {/* Blocking warnings */}
           {missingImages > 0 && (
             <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
               <p className="text-sm font-bold text-violet-800">
-                🖼 {missingImages} image question{missingImages > 1 ? 's' : ''} still need{missingImages === 1 ? 's' : ''} an image
+                {missingImages} question{missingImages > 1 ? 's' : ''} need images
               </p>
               <p className="text-xs text-violet-600 mt-0.5">
-                Expand the question, copy the AI image prompt, improve the image in Gemini/ChatGPT, then drag and drop it here.
+                Expand each flagged question to upload the diagram.
               </p>
             </div>
           )}
@@ -639,7 +632,7 @@ export default function QuestionUploadPage() {
             </div>
           ) : (
             <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
-              {taggedQuestions.map((q) => (
+              {taggedQuestions.map(q => (
                 <QuestionPreviewCard
                   key={q._index}
                   question={q}
@@ -664,56 +657,41 @@ export default function QuestionUploadPage() {
         </div>
       )}
 
-      {/* ── STEP 5: Preview ── */}
+      {/* ── STEP 5: Preview (exact student view + QA score) ─────────────────── */}
       {step === 5 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Preview</h2>
-              <p className="text-sm text-gray-500">{taggedQuestions.length} questions ready to save</p>
+              <p className="text-sm text-gray-500">
+                This is exactly what students will see. Check every question before saving.
+              </p>
             </div>
             <button onClick={() => setStep(4)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-8">
             {taggedQuestions.map((q, i) => {
               const topicName    = topics.find(t => t.id === q.topic_id)?.name ?? '—'
               const subtopicName = topics.flatMap(t => t.subtopics ?? []).find(s => s.id === q.subtopic_id)?.name ?? '—'
 
               return (
-                <div key={q._index} className="bg-white border border-gray-200 rounded-2xl p-4">
-                  <div className="flex items-start gap-2 mb-3">
-                    <span className="text-xs text-gray-400 w-5 flex-shrink-0 mt-0.5">{i + 1}.</span>
-                    <p className="text-sm text-gray-800 leading-relaxed flex-1">{q.question_text}</p>
-                  </div>
-
-                  {/* Image thumbnail if present */}
-                  {q.image_url && (
-                    <div className="mb-3">
-                      <img src={q.image_url} alt="Diagram" className="max-h-32 rounded-xl border border-gray-200 object-contain" />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    {Object.entries(q.options ?? {}).map(([key, text]) => (
-                      <div key={key} className={`px-3 py-2 rounded-xl text-xs border ${
-                        key === q.correct_answer
-                          ? 'border-green-300 bg-green-50 text-green-800 font-medium'
-                          : 'border-gray-100 text-gray-600'
-                      }`}>
-                        <span className="font-bold">{key}.</span> {text}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${DIFFICULTY_COLORS[q.difficulty]}`}>
+                <div key={q._index} className="border border-gray-200 rounded-2xl overflow-hidden">
+                  {/* Question meta strip */}
+                  <div className="flex items-center gap-3 flex-wrap px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <span className="text-xs font-black text-gray-400">Q{i + 1}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[q.difficulty] ?? 'bg-gray-100 text-gray-500'}`}>
                       {q.difficulty}
                     </span>
-                    {q.year && <span className="text-gray-400">{q.year}</span>}
-                    <span className="text-indigo-600 font-medium">{topicName}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="text-gray-600">{subtopicName}</span>
+                    <span className="text-xs text-gray-500">{topicName}</span>
+                    <span className="text-gray-300 text-xs">→</span>
+                    <span className="text-xs text-gray-600 font-medium">{subtopicName}</span>
+                    {q.year && <span className="text-xs text-gray-400 ml-auto">{q.year}</span>}
+                  </div>
+
+                  {/* Exact student view */}
+                  <div className="p-4 bg-white">
+                    <QuestionStudentPreview question={q} showRawTab={true} />
                   </div>
                 </div>
               )
@@ -730,7 +708,7 @@ export default function QuestionUploadPage() {
         </div>
       )}
 
-      {/* ── STEP 6: Done ── */}
+      {/* ── STEP 6: Done ────────────────────────────────────────────────────── */}
       {step === 6 && saveResult && (
         <div className="text-center space-y-4 py-6">
           <div className="text-5xl">{saveResult.errors?.length > 0 ? '⚠️' : '🎉'}</div>
@@ -738,7 +716,8 @@ export default function QuestionUploadPage() {
             {saveResult.errors?.length > 0 ? 'Saved with some errors' : 'Questions saved!'}
           </h2>
           <p className="text-gray-500">
-            {saveResult.saved} question{saveResult.saved !== 1 ? 's' : ''} added to the question bank for {selectedSubject?.name}.
+            {saveResult.saved} question{saveResult.saved !== 1 ? 's' : ''} added to the question bank for{' '}
+            {selectedSubject?.name}.
           </p>
 
           {saveResult.errors?.length > 0 && (
@@ -754,7 +733,13 @@ export default function QuestionUploadPage() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => { setStep(1); setRawJson(''); setParseResult(null); setTaggedQuestions([]); setSaveResult(null) }}
+              onClick={() => {
+                setStep(1)
+                setRawJson('')
+                setParseResult(null)
+                setTaggedQuestions([])
+                setSaveResult(null)
+              }}
               className="flex-1 py-3 border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors"
             >
               Upload another batch

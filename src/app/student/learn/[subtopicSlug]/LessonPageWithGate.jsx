@@ -1,30 +1,87 @@
-'use client'
+// src/app/student/learn/[subtopicSlug]/page.js
+// This file was missing — causing every /student/learn/[slug] URL to 404.
+// It fetches the subtopic by slug and renders LessonViewer (same as
+// /student/lesson/[id]/page.js but looked up by slug instead of UUID).
 
-// src/app/student/learn/[subtopicSlug]/LessonPageWithGate.jsx
-// Client wrapper that puts PrerequisiteGate in front of the lesson viewer.
-// The gate checks prerequisites for the topic, runs soft quizzes, then opens the lesson.
-// Drop this in as a wrapper around your existing LessonViewer.
+import { createClient } from '@/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import LessonViewer from '@/components/lesson/LessonViewer'
 
-import { useRouter } from 'next/navigation'
-import PrerequisiteGate from '@/components/lesson/PrerequisiteGate'
+export default async function LearnSubtopicPage({ params }) {
+  const { subtopicSlug } = await params
+  const supabase = await createClient()
 
-export default function LessonPageWithGate({ subtopic, subject, topic, children }) {
-  const router = useRouter()
+  // Look up subtopic by slug — does NOT require lesson_status = published
+  // so admins can preview drafts too. Published check happens in the viewer.
+  const { data: subtopic, error } = await supabase
+    .from('subtopics')
+    .select(`
+      id,
+      name,
+      slug,
+      lesson_content,
+      lesson_status,
+      topic_id,
+      topics (
+        id,
+        name,
+        slug,
+        subject_id,
+        subjects (
+          id,
+          name,
+          slug
+        )
+      )
+    `)
+    .eq('slug', subtopicSlug)
+    .single()
 
-  const handleGoToPrereq = (prereqTopicId) => {
-    // Find the first subtopic of the prereq topic and navigate there
-    // For now, navigate to the learn page filtered to that topic's subject
-    router.push(`/student/learn?highlight=${prereqTopicId}`)
+  if (error || !subtopic) notFound()
+
+  // Show "coming soon" if lesson not published yet
+  if (subtopic.lesson_status !== 'published') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="text-5xl">📖</div>
+          <h1 className="text-xl font-black text-gray-900 dark:text-white">
+            Lesson coming soon
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+            <span className="font-semibold">{subtopic.name}</span> hasn't been published yet.
+            Check back soon — we're working on it.
+          </p>
+          <a
+            href="/student/study-plan"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
+          >
+            ← Back to study plan
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  // Auth + progress
+  const { data: { user } } = await supabase.auth.getUser()
+
+  let existingProgress = null
+  if (user) {
+    const { data } = await supabase
+      .from('lesson_progress')
+      .select('slides_completed, completed')
+      .eq('student_id', user.id)
+      .eq('subtopic_id', subtopic.id)
+      .maybeSingle()
+    existingProgress = data
   }
 
   return (
-    <PrerequisiteGate
-      topicId={topic.id}
-      subjectName={subject.name}
-      onProceed={() => {}} // lesson is rendered as children, no nav needed
-      onGoToPrereq={handleGoToPrereq}
-    >
-      {children}
-    </PrerequisiteGate>
+    <LessonViewer
+      subtopic={subtopic}
+      userId={user?.id ?? null}
+      existingProgress={existingProgress}
+    />
   )
 }
