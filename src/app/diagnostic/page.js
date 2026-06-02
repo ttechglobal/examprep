@@ -1,70 +1,103 @@
 'use client'
+// src/app/diagnostic/page.js
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagnostic setup — one subject at a time.
+//
+// Key changes from previous version:
+//   - Student selects ONE subject (not multiple)
+//   - If signed in, their enrolled subjects are shown as quick-select options
+//   - If not signed in, full subject list is shown
+//   - Subjects already diagnosed are shown with a "Retake" label so the student
+//     knows they can top up any subject's plan
+//   - questionCount is fixed at 10 (no UI picker — keeps it simple and fast)
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Suspense } from 'react'
+import { getSubjectColor } from '@/lib/theme'
 
-const AVAILABLE_SUBJECTS = [
+const ALL_SUBJECTS = [
   'Mathematics', 'English Language', 'Physics', 'Chemistry',
   'Biology', 'Economics', 'Government', 'Literature in English',
-  'Geography', 'Agricultural Science',
+  'Geography', 'Agricultural Science', 'Further Mathematics', 'Commerce',
 ]
 
-function PracticeSetup() {
-  const router = useRouter()
+function DiagnosticSetup() {
+  const router       = useRouter()
   const searchParams = useSearchParams()
-  const presetCount = parseInt(searchParams.get('questions') ?? '0')
-  const presetExam = searchParams.get('exam') ?? ''
 
-  const [examType, setExamType] = useState(presetExam)
-  const [selectedSubjects, setSelectedSubjects] = useState([])
-  const [questionCount, setQuestionCount] = useState(presetCount || 10)
-  const [error, setError] = useState(null)
-  const [loadingProfile, setLoadingProfile] = useState(true)
-  const [isSignedIn, setIsSignedIn] = useState(false)
+  // Allow pre-selecting subject via ?subject=Physics
+  const presetSubject = searchParams.get('subject') ?? ''
+  const presetExam    = searchParams.get('exam') ?? ''
+
+  const [examType,        setExamType]        = useState(presetExam)
+  const [selectedSubject, setSelectedSubject] = useState(presetSubject)
+  const [error,           setError]           = useState(null)
+  const [loadingProfile,  setLoadingProfile]  = useState(true)
+  const [isSignedIn,      setIsSignedIn]      = useState(false)
+
+  // Subjects the student is enrolled in
+  const [enrolledSubjects,  setEnrolledSubjects]  = useState([])
+  // Subjects they've already taken a diagnostic for
+  const [diagnosedSubjects, setDiagnosedSubjects] = useState(new Set())
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         setIsSignedIn(true)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('exam_type, subjects')
-          .eq('id', user.id)
-          .single()
+
+        const [{ data: profile }, { data: diagResults }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('exam_type, subjects')
+            .eq('id', user.id)
+            .single(),
+          supabase
+            .from('diagnostic_results')
+            .select('subject_id, subjects(name)')
+            .eq('student_id', user.id),
+        ])
 
         if (profile?.exam_type && !presetExam) setExamType(profile.exam_type)
-        if (profile?.subjects?.length) setSelectedSubjects(profile.subjects)
+        if (profile?.subjects?.length) setEnrolledSubjects(profile.subjects)
+
+        // Build set of subject names already diagnosed
+        const names = new Set(
+          (diagResults ?? []).map(r => r.subjects?.name).filter(Boolean)
+        )
+        setDiagnosedSubjects(names)
+
+        // Pre-select first undiagnosed enrolled subject if none preset
+        if (!presetSubject && profile?.subjects?.length) {
+          const firstUndone = profile.subjects.find(s => !names.has(s))
+          if (firstUndone) setSelectedSubject(firstUndone)
+        }
       }
       setLoadingProfile(false)
     })
   }, [])
 
-  const toggleSubject = (subject) => {
-    setSelectedSubjects(prev =>
-      prev.includes(subject)
-        ? prev.filter(s => s !== subject)
-        : prev.length < 4 ? [...prev, subject] : prev
-    )
-  }
-
   const handleStart = () => {
-    if (!examType) { setError('Please select your target exam'); return }
-    if (!selectedSubjects.length) { setError('Please select at least one subject'); return }
+    if (!examType)        { setError('Please select your target exam'); return }
+    if (!selectedSubject) { setError('Please select a subject to test'); return }
     setError(null)
 
-    // Internal key names kept as-is — sessionStorage keys are not user-visible
     sessionStorage.setItem('diagnostic_setup', JSON.stringify({
       examType,
-      subjects: selectedSubjects,
-      questionCount,
-      isPractice: isSignedIn,
+      // Always an array of one — API accepts array, this keeps compat
+      subjects:      [selectedSubject],
+      questionCount: 10,
+      isPractice:    isSignedIn,
     }))
 
     router.push('/diagnostic/test')
   }
+
+  const subjectsToShow = isSignedIn && enrolledSubjects.length
+    ? enrolledSubjects
+    : ALL_SUBJECTS
 
   if (loadingProfile) {
     return (
@@ -76,118 +109,127 @@ function PracticeSetup() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {isSignedIn ? 'Practice Questions' : 'Free practice questions — no account needed'}
+      <div className="w-full max-w-md space-y-6">
+
+        {/* Header */}
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-black text-gray-900">Diagnostic Test</h1>
+          <p className="text-sm text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
+            {isSignedIn
+              ? 'Pick one subject. We\'ll find your weak areas and add them to your study plan.'
+              : '10 quick questions to see where you stand. No account needed.'}
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">
-            {isSignedIn ? 'Set up your practice session' : "Let's personalise your study plan"}
-          </h2>
-          <p className="text-sm text-gray-500 mb-6">
-            {isSignedIn
-              ? 'Choose how many questions and which subjects to cover.'
-              : "Answer a few questions and we'll show you exactly where to focus."}
-          </p>
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 
           {/* Exam type */}
-          {!presetExam && (
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Which exam are you preparing for?
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {['WAEC', 'JAMB', 'BOTH'].map(exam => (
+          <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+              Target exam
+            </p>
+            <div className="flex gap-2">
+              {['WAEC', 'JAMB'].map(et => (
+                <button
+                  key={et}
+                  onClick={() => setExamType(et)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${
+                    examType === et
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {et}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Subject picker — one at a time */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+              Choose one subject
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {subjectsToShow.map(subject => {
+                const color      = getSubjectColor(subject)
+                const isSelected = selectedSubject === subject
+                const isDone     = diagnosedSubjects.has(subject)
+
+                return (
                   <button
-                    key={exam}
-                    type="button"
-                    onClick={() => setExamType(exam)}
-                    className={`py-2.5 text-sm font-medium rounded-lg border-2 transition-colors ${
-                      examType === exam
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
+                    key={subject}
+                    onClick={() => setSelectedSubject(subject)}
+                    className={`
+                      w-full flex items-center justify-between px-4 py-3 rounded-xl
+                      border-2 text-left transition-all
+                      ${isSelected
+                        ? `${color.bg} ${color.text} border-transparent shadow-sm`
+                        : 'bg-gray-50 text-gray-700 border-transparent hover:border-gray-200'
+                      }
+                    `}
                   >
-                    {exam}
+                    <span className="text-sm font-bold">{subject}</span>
+                    {isDone && !isSelected && (
+                      <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                        retake
+                      </span>
+                    )}
+                    {isSelected && (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                      </svg>
+                    )}
                   </button>
-                ))}
-              </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Info strip */}
+          <div className="mx-5 mb-4 px-4 py-3 bg-indigo-50 rounded-xl">
+            <p className="text-xs text-indigo-700 leading-relaxed">
+              <span className="font-black">10 questions · ~5 minutes</span>
+              {' '}— We'll draw from the most important topics first.
+              {isSignedIn && ' You can run a diagnostic for each subject separately.'}
+            </p>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mx-5 mb-4 px-4 py-3 bg-red-50 rounded-xl">
+              <p className="text-xs font-bold text-red-600">{error}</p>
             </div>
           )}
 
-          {/* Subjects */}
-          <div className="mb-5">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Subjects
-              <span className="ml-1 text-gray-400 font-normal">
-                ({selectedSubjects.length} selected, up to 4)
-              </span>
-            </label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {AVAILABLE_SUBJECTS.map(subject => (
-                <button
-                  key={subject}
-                  type="button"
-                  onClick={() => toggleSubject(subject)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                    selectedSubjects.includes(subject)
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium'
-                      : selectedSubjects.length >= 4
-                      ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  {subject}
-                </button>
-              ))}
-            </div>
+          {/* Start button */}
+          <div className="px-5 pb-5">
+            <button
+              onClick={handleStart}
+              disabled={!examType || !selectedSubject}
+              className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl
+                hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {selectedSubject
+                ? `Start ${selectedSubject} diagnostic →`
+                : 'Select a subject to start →'}
+            </button>
           </div>
-
-          {/* Question count */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Number of questions
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { count: 10, time: '15 mins' },
-                { count: 20, time: '30 mins' },
-                { count: 30, time: '45 mins' },
-              ].map(option => (
-                <button
-                  key={option.count}
-                  type="button"
-                  onClick={() => setQuestionCount(option.count)}
-                  className={`py-3 rounded-xl border-2 text-sm font-medium transition-colors ${
-                    questionCount === option.count
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <span className="font-bold block">{option.count} Qs</span>
-                  <span className="text-xs opacity-70">{option.time}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={handleStart}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
-          >
-            Start practice →
-          </button>
         </div>
+
+        {/* Already have a plan */}
+        {isSignedIn && (
+          <p className="text-center text-xs text-gray-400">
+            <a href="/student/study-plan" className="text-indigo-500 hover:underline font-medium">
+              View your study plan
+            </a>
+          </p>
+        )}
       </div>
     </div>
   )
@@ -200,7 +242,7 @@ export default function DiagnosticPage() {
         <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     }>
-      <PracticeSetup />
+      <DiagnosticSetup />
     </Suspense>
   )
 }
