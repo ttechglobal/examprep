@@ -14,6 +14,11 @@
   --text-sec:  #6b7280;
   --text-tert: #9ca3af;
   --border:    #e5e7eb;
+
+  /* Active/highlight state — strong enough to see in light mode */
+  --active-bg:      #e0e7ff;   /* indigo-100 */
+  --active-text:    #4338ca;   /* indigo-700 */
+  --active-border:  #a5b4fc;   /* indigo-300 */
 }
 
 /* ── Dark mode CSS variables ──────────────────────────────────────────────── */
@@ -25,6 +30,11 @@
   --text-sec:  #9ca3af;
   --text-tert: #6b7280;
   --border:    #374151;
+
+  /* Active/highlight state — visible in dark mode */
+  --active-bg:      rgba(99, 102, 241, 0.2);  /* indigo-500/20 */
+  --active-text:    #a5b4fc;                   /* indigo-300 */
+  --active-border:  rgba(99, 102, 241, 0.4);
 }
 
 /* ── Base styles ──────────────────────────────────────────────────────────── */
@@ -54,6 +64,11 @@
 
   .border-default { border-color: var(--border); }
   .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
+
+  /* Active/selected state — works in both modes automatically */
+  .bg-active      { background-color: var(--active-bg);     }
+  .text-active    { color:            var(--active-text);   }
+  .border-active  { border-color:     var(--active-border); }
 
   .z-viewer { z-index: 100; }
   .z-modal  { z-index: 200; }
