@@ -1,24 +1,40 @@
 'use client'
 // src/components/quiz/QuestionCard.js
 // ─────────────────────────────────────────────────────────────────────────────
-// This is the SINGLE shared question card used by BOTH the diagnostic test
-// and the practice session. The session/page.js should import and use THIS
-// component — not its own inline copy.
-//
+// Shared question card — diagnostic test + practice session.
 // Fully controlled: parent owns selectedAnswer + revealed state.
-// Math rendered via MathText / WorkingsBlock throughout.
-// Explanation modal: polished bottom sheet with step-by-step workings.
-// Core topic logic: entirely invisible to students — no labels, no badges.
+//
+// FIX: TypeError: e is not iterable (at useState, initial render)
+//   Root cause: question.options and question.explanation can arrive from
+//   Supabase as JSON strings (text / json column) instead of parsed objects.
+//   Object.entries("string") / Object.entries(null) throws during render,
+//   which React's minified fiber reports as a useState error.
+//
+//   Fix: normalise options + explanation at the very top of every render
+//   path before any .map() / Object.entries() / Object.keys() call.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MathText, WorkingsBlock, injectMathStyles } from '@/lib/mathRenderer'
 
+// ── Safe JSON parse helper ────────────────────────────────────────────────────
+// Returns `fallback` when val is already an object, null, undefined, or
+// an unparseable string.  Never throws.
+function safeParseJson(val, fallback) {
+  if (val === null || val === undefined) return fallback
+  if (typeof val === 'object') return val
+  if (typeof val === 'string') {
+    try { return JSON.parse(val) } catch { return fallback }
+  }
+  return fallback
+}
+
 // ── Explanation Modal — bottom sheet ─────────────────────────────────────────
 function ExplanationModal({ question, selectedKey, onClose }) {
   const isCorrect   = selectedKey === question.correct_answer
-  const explanation = question.explanation ?? {}
+  // Safely parse explanation in case it arrived as a string
+  const explanation = safeParseJson(question.explanation, {})
 
   useEffect(() => {
     injectMathStyles()
@@ -70,25 +86,15 @@ function ExplanationModal({ question, selectedKey, onClose }) {
               {isCorrect ? '✓' : '✗'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-base font-black leading-tight ${
-                isCorrect ? 'text-green-900' : 'text-red-900'
-              }`}>
-                {isCorrect ? 'You got this right!' : 'Not quite right'}
+              <p className={`text-sm font-black ${isCorrect ? 'text-green-800' : 'text-red-700'}`}>
+                {isCorrect ? 'Correct!' : `Incorrect — Answer is ${question.correct_answer}`}
               </p>
-              {!isCorrect && (
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {selectedKey && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-200 text-red-900 rounded-lg text-xs font-black">
-                      ✗ You chose: {selectedKey}
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 text-green-900 rounded-lg text-xs font-black">
-                    ✓ Correct: {question.correct_answer}
-                  </span>
-                </div>
-              )}
-              {isCorrect && (
-                <p className="text-xs text-green-700 mt-0.5">See the full explanation below.</p>
+              {explanation.correct && (
+                <MathText
+                  text={explanation.correct}
+                  className="text-xs text-gray-600 leading-relaxed mt-0.5"
+                  as="p"
+                />
               )}
             </div>
           </div>
@@ -97,45 +103,26 @@ function ExplanationModal({ question, selectedKey, onClose }) {
         {/* Scrollable body */}
         <div className="overflow-y-auto flex-1 px-5 space-y-4 pb-2">
 
-          {/* Approach sentence */}
-          {explanation.correct && (
-            <div>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-wide mb-1.5">
-                Why {question.correct_answer} is correct
-              </p>
-              <MathText
-                text={explanation.correct}
-                className="text-sm text-gray-800 leading-relaxed"
-                as="p"
-              />
-            </div>
-          )}
-
-          {/* Step-by-step workings — each step on its own line, never prose */}
+          {/* Step-by-step workings */}
           {hasWorkings && (
             <div>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">
-                Step-by-step working
-              </p>
-              <div className="bg-gray-50 rounded-2xl px-4 py-3 divide-y divide-gray-100">
-                <WorkingsBlock
-                  workings={explanation.workings}
-                  className="space-y-0"
-                />
+              <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">Workings</p>
+              <div className="bg-gray-50 rounded-2xl p-4">
+                <WorkingsBlock workings={explanation.workings} />
               </div>
             </div>
           )}
 
-          {/* Why other options are wrong */}
+          {/* Why wrong options are wrong */}
           {wrongOptions.length > 0 && (
             <div>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">
-                Why the other options are wrong
-              </p>
+              <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">Why the other options are wrong</p>
               <div className="space-y-2">
                 {wrongOptions.map(([key, reason]) => (
-                  <div key={key} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${
-                    key === selectedKey ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'
+                  <div key={key} className={`flex gap-3 px-4 py-3 rounded-2xl border ${
+                    key === selectedKey
+                      ? 'bg-red-50 border-red-200'
+                      : 'bg-gray-50 border-gray-100'
                   }`}>
                     <span className={`w-5 h-5 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5 ${
                       key === selectedKey ? 'bg-red-200 text-red-700' : 'bg-gray-200 text-gray-500'
@@ -188,6 +175,16 @@ export default function QuestionCard({
   useEffect(() => { injectMathStyles() }, [])
   useEffect(() => { setShowModal(false) }, [question?.id])
 
+  // ── FIX: normalise options + explanation before any render logic ──────────
+  // Supabase can return JSONB columns as strings when the column type is
+  // `text` or `json`. Object.entries(string) is not iterable and crashes
+  // the render. Parse here once so all downstream code gets a plain object.
+  const options     = safeParseJson(question?.options, {})
+  const explanation = safeParseJson(question?.explanation, {})
+
+  // Rebuild question with normalised fields so ExplanationModal also gets them
+  const normalisedQuestion = { ...question, options, explanation }
+
   const handleSelect = useCallback((key) => {
     if (revealed) return
     onAnswer?.(question.id, key)
@@ -196,9 +193,12 @@ export default function QuestionCard({
   const isCorrect = revealed && selectedAnswer === question.correct_answer
 
   const hasExplanation = !!(
-    question.explanation?.correct ||
-    question.explanation?.workings?.length > 0
+    explanation.correct ||
+    explanation.workings?.length > 0
   )
+
+  // Guard: if options is empty after normalisation, show a safe fallback
+  const optionEntries = Object.entries(options)
 
   return (
     <div className="space-y-3">
@@ -226,10 +226,17 @@ export default function QuestionCard({
         as="p"
       />
 
+      {/* Guard: no options */}
+      {optionEntries.length === 0 && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl">
+          <p className="text-xs text-amber-700 font-medium">Options unavailable for this question.</p>
+        </div>
+      )}
+
       {/* Answer options */}
       <div className="space-y-2.5">
-        {Object.entries(question.options ?? {}).map(([key, text]) => {
-          // ── Option styling — matches diagnostic test exactly ───────────────
+        {optionEntries.map(([key, text]) => {
+          // ── Option styling ────────────────────────────────────────────────
           let style    = 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/30'
           let dotStyle = 'border-current text-current'
 
@@ -258,45 +265,33 @@ export default function QuestionCard({
               key={key}
               onClick={() => handleSelect(key)}
               disabled={revealed}
-              className={`w-full text-left px-4 py-3.5 rounded-2xl border-2 text-sm transition-all duration-150 ${style} ${!revealed ? 'active:scale-[0.99] cursor-pointer' : 'cursor-default'}`}
+              className={`w-full text-left px-4 py-3.5 rounded-2xl border-2 text-sm transition-all duration-150 ${style} ${!revealed ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
             >
               <div className="flex items-start gap-3">
-                <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 transition-all duration-150 ${dotStyle}`}>
+                <span className={`w-6 h-6 rounded-full border-2 text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5 ${dotStyle}`}>
                   {dotContent}
                 </span>
-                <MathText text={text} className="leading-snug flex-1 pt-px" as="span" />
+                <MathText text={String(text ?? '')} className="flex-1 leading-snug" as="span" />
               </div>
             </button>
           )
         })}
       </div>
 
-      {/* Post-answer: result pill + Why button */}
-      {revealed && showExplanation && (
-        <div className="flex items-center justify-between pt-1">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black ${
-            isCorrect ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-          }`}>
-            <span>{isCorrect ? '🎉' : '🤔'}</span>
-            <span>{isCorrect ? 'Correct!' : `Answer: ${question.correct_answer}`}</span>
-          </div>
-
-          {hasExplanation && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-full hover:bg-indigo-500 active:scale-95 transition-all"
-            >
-              <span>💡</span>
-              <span>Why?</span>
-            </button>
-          )}
-        </div>
+      {/* Explanation trigger — shown after answering */}
+      {revealed && showExplanation && hasExplanation && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-full py-3 border-2 border-indigo-200 text-indigo-600 text-sm font-black rounded-2xl hover:bg-indigo-50 transition-colors"
+        >
+          See explanation →
+        </button>
       )}
 
       {/* Explanation modal */}
       {showModal && (
         <ExplanationModal
-          question={question}
+          question={normalisedQuestion}
           selectedKey={selectedAnswer}
           onClose={() => setShowModal(false)}
         />
