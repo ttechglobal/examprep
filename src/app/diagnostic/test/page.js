@@ -1,15 +1,15 @@
 'use client'
 // src/app/diagnostic/test/page.js
-// FIXES:
-// 1. Imports getTotalSeconds, getWarningThresholds, formatTime, getTimerColor
-//    from @/lib/practiceTimer (matching the real file's imports)
-// 2. Dark mode tokens throughout (bg-base, bg-card, border-default, etc.)
-// 3. Subject/topic tags use dark-safe classes
-// 4. Progress bar track uses bg-subtle
-// 5. Skip/submit buttons use border-default text-secondary
-//
-// NOTE: This page uses the ORIGINAL structure (practiceTimer lib, full timer
-// warning system) — it does NOT use the simplified version from earlier.
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX: TypeError: e is not iterable
+//   - sessionStorage.getItem may return null — JSON.parse(null) = null,
+//     then parsed.subjects.join(',') throws because parsed.subjects is
+//     undefined. Added guard so subjects always falls back to [].
+//   - API response data.questions may be null/undefined — setQuestions
+//     now always receives an array via ?? []
+//   - parsed.questionCount / parsed.examType / parsed.subjects all have
+//     explicit fallbacks so nothing downstream receives undefined
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -24,17 +24,20 @@ import {
 
 export default function DiagnosticTestPage() {
   const router = useRouter()
-  const [setup, setSetup]           = useState(null)
-  const [questions, setQuestions]   = useState([])
+  const [setup, setSetup] = useState(null)
+  const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers]       = useState({})
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
-  const [toasts, setToasts]         = useState([])
-  const [secondsLeft, setSecondsLeft]   = useState(0)
+  const [answers, setAnswers] = useState({})
+  // `revealed` is derived from `answers` — a question is revealed once
+  // it has an entry in the answers map. No separate revealed state needed.
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [toasts, setToasts] = useState([])
+
+  const [secondsLeft, setSecondsLeft] = useState(0)
   const [totalSeconds, setTotalSeconds] = useState(0)
-  const timerRef       = useRef(null)
-  const firedWarnings  = useRef(new Set())
+  const timerRef = useRef(null)
+  const firedWarnings = useRef(new Set())
 
   const addToast = useCallback((message, type = 'warning') => {
     const id = Date.now()
@@ -48,16 +51,18 @@ export default function DiagnosticTestPage() {
   const submitTest = useCallback((currentAnswers, currentQuestions) => {
     clearInterval(timerRef.current)
     sessionStorage.setItem('diagnostic_results', JSON.stringify({
-      setup: JSON.parse(sessionStorage.getItem('diagnostic_setup') ?? '{}'),
+      setup: (() => {
+        try { return JSON.parse(sessionStorage.getItem('diagnostic_setup') ?? '{}') } catch { return {} }
+      })(),
       answers: currentAnswers,
-      questions: currentQuestions.map(q => ({
-        id:            q.id,
-        subtopic_id:   q.subtopic_id,
+      questions: (Array.isArray(currentQuestions) ? currentQuestions : []).map(q => ({
+        id: q.id,
+        subtopic_id: q.subtopic_id,
         subtopic_name: q.subtopics?.name ?? q.subtopic_name ?? '',
-        topic_id:      q.topic_id,
-        topic_name:    q.topics?.name ?? q.topic_name ?? '',
-        subject_id:    q.subject_id,
-        subject_name:  q.subjects?.name ?? q.subject_name ?? '',
+        topic_id: q.topic_id,
+        topic_name: q.topics?.name ?? q.topic_name ?? '',
+        subject_id: q.subject_id,
+        subject_name: q.subjects?.name ?? q.subject_name ?? '',
       })),
     }))
     router.push('/diagnostic/results')
@@ -66,40 +71,70 @@ export default function DiagnosticTestPage() {
   useEffect(() => {
     const raw = sessionStorage.getItem('diagnostic_setup')
     if (!raw) { router.push('/diagnostic'); return }
-    const parsed = JSON.parse(raw)
-    setSetup(parsed)
 
-    const count = parsed.questionCount ?? 10
+    let parsed
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      router.push('/diagnostic')
+      return
+    }
+
+    // FIX: always normalise subjects to a non-empty array before .join()
+    const subjects = Array.isArray(parsed?.subjects) && parsed.subjects.length
+      ? parsed.subjects
+      : []
+
+    if (!subjects.length) {
+      router.push('/diagnostic')
+      return
+    }
+
+    const examType = parsed.examType ?? 'WAEC'
+    const count    = parsed.questionCount ?? 10
+
+    setSetup({ ...parsed, subjects, examType, questionCount: count })
+
     const total = getTotalSeconds(count)
     setTotalSeconds(total)
     setSecondsLeft(total)
 
-    fetch(`/api/diagnostic/questions?subjects=${parsed.subjects.join(',')}&exam=${parsed.examType}&count=${count}`)
+    fetch(`/api/diagnostic/questions?subjects=${subjects.join(',')}&exam=${examType}&count=${count}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) { setError(data.error); return }
-        setQuestions(data.questions)
+        // FIX: guard against null / non-array from API
+        const qs = Array.isArray(data.questions) ? data.questions : []
+        if (!qs.length) { setError('No questions found for this subject. Please try again.'); return }
+        setQuestions(qs)
         setLoading(false)
       })
       .catch(() => setError('Failed to load questions. Please try again.'))
-  }, [router, submitTest])
+  }, [router])
 
-  // Timer + warning toasts
   useEffect(() => {
-    if (loading || questions.length === 0) return
-    const thresholds = getWarningThresholds(totalSeconds)
+    if (loading || !questions.length || !totalSeconds) return
+
+    const { minuteWarnings, secondWarnings } = getWarningThresholds(totalSeconds / 60)
 
     timerRef.current = setInterval(() => {
       setSecondsLeft(prev => {
         const next = prev - 1
 
-        // Fire warning toasts
-        for (const [threshold, message, type] of thresholds) {
-          if (next <= threshold && !firedWarnings.current.has(threshold)) {
+        minuteWarnings.forEach(w => {
+          const threshold = w.minutes * 60
+          if (next === threshold && !firedWarnings.current.has(threshold)) {
             firedWarnings.current.add(threshold)
-            addToast(message, type)
+            addToast(w.label, w.minutes <= 1 ? 'urgent' : 'warning')
           }
-        }
+        })
+
+        secondWarnings.forEach(w => {
+          if (next === w.seconds && !firedWarnings.current.has(`s${w.seconds}`)) {
+            firedWarnings.current.add(`s${w.seconds}`)
+            addToast(w.label, 'urgent')
+          }
+        })
 
         if (next <= 0) {
           clearInterval(timerRef.current)
@@ -109,6 +144,7 @@ export default function DiagnosticTestPage() {
           }, 1500)
           return 0
         }
+
         return next
       })
     }, 1000)
@@ -116,37 +152,48 @@ export default function DiagnosticTestPage() {
     return () => clearInterval(timerRef.current)
   }, [loading, questions.length, totalSeconds, addToast, submitTest])
 
+  const currentQuestion = questions[currentIndex]
+  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0
+
+  // Controlled answer handler — QuestionCard calls this with (questionId, selectedKey)
   const handleAnswer = useCallback((questionId, selectedKey) => {
     const q = questions.find(q => q.id === questionId)
-    if (!q || answers[questionId]) return
+    if (!q || answers[questionId]) return   // already answered — ignore
+
     setAnswers(prev => ({
       ...prev,
       [questionId]: {
-        selected:    selectedKey,
-        is_correct:  selectedKey === q.correct_answer,
+        selected: selectedKey,
+        is_correct: selectedKey === q.correct_answer,
         subtopic_id: q.subtopic_id,
-        topic_id:    q.topic_id,
-        subject_id:  q.subject_id,
+        topic_id: q.topic_id,
+        subject_id: q.subject_id,
       },
     }))
   }, [questions, answers])
 
   const handleNext = () => {
-    if (currentIndex + 1 >= questions.length) { submitTest(answers, questions); return }
+    if (currentIndex + 1 >= questions.length) {
+      submitTest(answers, questions)
+      return
+    }
     setCurrentIndex(i => i + 1)
   }
 
   const handleSkip = () => {
-    if (currentIndex + 1 >= questions.length) { submitTest(answers, questions); return }
+    if (currentIndex + 1 >= questions.length) {
+      submitTest(answers, questions)
+      return
+    }
     setCurrentIndex(i => i + 1)
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-secondary text-sm">Loading your questions...</p>
+          <p className="text-gray-500 text-sm">Loading your questions...</p>
         </div>
       </div>
     )
@@ -154,12 +201,10 @@ export default function DiagnosticTestPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-base flex items-center justify-center px-4">
-        <div className="text-center space-y-4">
-          <p className="text-4xl">⚠️</p>
-          <p className="text-primary font-bold">{error}</p>
-          <button onClick={() => router.push('/diagnostic')}
-            className="text-indigo-500 text-sm font-medium hover:underline">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <p className="text-red-600 text-sm mb-4">{error}</p>
+          <button onClick={() => router.push('/diagnostic')} className="text-indigo-600 text-sm font-medium hover:underline">
             ← Start over
           </button>
         </div>
@@ -167,39 +212,36 @@ export default function DiagnosticTestPage() {
     )
   }
 
-  if (!questions.length) return null
+  if (!currentQuestion) return null
 
-  const currentQuestion = questions[currentIndex]
-  const currentAnswer   = answers[currentQuestion?.id]
-  const isRevealed      = !!currentAnswer
-  const selectedAnswer  = currentAnswer?.selected ?? null
-  const progress        = ((currentIndex + 1) / questions.length) * 100
-  const timerColor      = getTimerColor(secondsLeft, totalSeconds)
-  const isLowTime       = secondsLeft / totalSeconds <= 0.1
+  const timerColor = getTimerColor(secondsLeft, totalSeconds)
+  const isLowTime = secondsLeft / totalSeconds <= 0.1
+
+  // Derive revealed and selectedAnswer for the current question from answers map
+  const currentAnswer  = answers[currentQuestion.id]
+  const isRevealed     = !!currentAnswer
+  const selectedAnswer = currentAnswer?.selected ?? null
 
   return (
-    <div className="min-h-screen bg-base">
+    <div className="min-h-screen bg-gray-50">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="bg-card border-b border-default px-4 py-3 sticky top-0 z-10">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          <span className="text-sm font-medium text-secondary">
+          <span className="text-sm font-medium text-gray-500">
             {currentIndex + 1} / {questions.length}
           </span>
           <div className={`flex items-center gap-1.5 font-mono font-bold text-lg ${timerColor} ${isLowTime ? 'animate-pulse' : ''}`}>
             <span className="text-base">⏱</span>
             {formatTime(secondsLeft)}
           </div>
-          <button
-            onClick={() => submitTest(answers, questions)}
-            className="text-xs text-tertiary hover:text-secondary font-medium transition-colors"
-          >
+          <button onClick={() => submitTest(answers, questions)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">
             Submit early
           </button>
         </div>
         <div className="max-w-lg mx-auto mt-2">
-          <div className="h-1.5 bg-subtle rounded-full overflow-hidden">
+          <div className="h-1.5 bg-gray-100 rounded-full">
             <div
               className="h-full bg-indigo-500 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -208,22 +250,29 @@ export default function DiagnosticTestPage() {
         </div>
       </div>
 
-      {/* ── Question ────────────────────────────────────────────────────── */}
+      {/* Question */}
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Subject / topic tags */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 rounded-full">
-            {currentQuestion?.subjects?.name ?? currentQuestion?.subject_name}
+          <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+            {currentQuestion.subjects?.name ?? currentQuestion.subject_name}
           </span>
-          {(currentQuestion?.topics?.name ?? currentQuestion?.topic_name) && (
-            <span className="text-xs text-secondary bg-subtle px-2.5 py-1 rounded-full">
-              {currentQuestion?.topics?.name ?? currentQuestion?.topic_name}
+          {(currentQuestion.topics?.name ?? currentQuestion.topic_name) && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+              {currentQuestion.topics?.name ?? currentQuestion.topic_name}
             </span>
           )}
         </div>
 
+        {/*
+          KEY PROP = currentQuestion.id
+          ──────────────────────────────
+          Forces React to unmount and remount QuestionCard on every question
+          change. Belt-and-suspenders with the controlled-component pattern
+          (selectedAnswer + revealed as props).
+        */}
         <QuestionCard
-          key={currentQuestion?.id}
+          key={currentQuestion.id}
           question={currentQuestion}
           selectedAnswer={selectedAnswer}
           revealed={isRevealed}
@@ -231,19 +280,25 @@ export default function DiagnosticTestPage() {
           showExplanation={true}
         />
 
+        {/* Next / See results button — shown after answering */}
         {isRevealed && (
           <div className="mt-5">
-            <button onClick={handleNext}
-              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.99] transition-all">
+            <button
+              onClick={handleNext}
+              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.99] transition-all"
+            >
               {currentIndex + 1 >= questions.length ? 'See results →' : 'Next →'}
             </button>
           </div>
         )}
 
+        {/* Skip — only when not answered */}
         {!isRevealed && (
           <div className="mt-4">
-            <button onClick={handleSkip}
-              className="w-full py-3 border border-default text-secondary text-sm font-medium rounded-2xl hover:bg-subtle transition-colors">
+            <button
+              onClick={handleSkip}
+              className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors"
+            >
               Skip
             </button>
           </div>
