@@ -1,22 +1,25 @@
 'use client'
 // src/components/school/SchoolNav.jsx
-// Desktop: fixed left sidebar with section links.
-// Mobile: sticky top bar + bottom tab nav.
+// Desktop: fixed sidebar with nav buttons that fire a tab change.
+// Mobile: sticky top bar only (bottom tabs are in the page).
+// Uses a custom event to communicate tab change to the dashboard page
+// without prop drilling through the layout.
 
 import { usePathname } from 'next/navigation'
 
 const TABS = [
-  { id: 'overview',  label: 'Overview',  emoji: '📊', hash: '' },
-  { id: 'students',  label: 'Students',  emoji: '👥', hash: '#students' },
-  { id: 'topics',    label: 'Topics',    emoji: '📚', hash: '#topics' },
-  { id: 'cohort',    label: 'Cohort',    emoji: '🎓', hash: '#cohort' },
-  { id: 'reports',   label: 'Reports',   emoji: '📄', hash: '#reports' },
+  { id: 'overview', label: 'Overview', emoji: '📊' },
+  { id: 'students', label: 'Students', emoji: '👥' },
+  { id: 'topics',   label: 'Topics',   emoji: '📚' },
+  { id: 'cohort',   label: 'Cohort',   emoji: '🎓' },
+  { id: 'reports',  label: 'Reports',  emoji: '📄' },
 ]
 
-export default function SchoolNav({ schoolName, schoolCity }) {
-  const pathname = usePathname()
-  const isDashboard = pathname === '/school/dashboard'
+function fireTabChange(id) {
+  window.dispatchEvent(new CustomEvent('school-tab-change', { detail: id }))
+}
 
+export default function SchoolNav({ schoolName, schoolCity }) {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────────────────── */}
@@ -34,23 +37,22 @@ export default function SchoolNav({ schoolName, schoolCity }) {
           </div>
         </div>
 
-        {/* Nav items — these are hash links that trigger section jumps */}
+        {/* Nav items — fire custom event to switch tab in dashboard */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {TABS.map(t => (
-            <a
+            <button
               key={t.id}
-              href={`/school/dashboard${t.hash}`}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              onClick={() => fireTabChange(t.id)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors text-left"
             >
               <span className="text-base leading-none w-5 text-center">{t.emoji}</span>
               {t.label}
-            </a>
+            </button>
           ))}
         </nav>
 
-        {/* Badge */}
         <div className="px-4 py-4 border-t border-gray-100">
-          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-xl">
+          <div className="px-3 py-2 bg-emerald-50 rounded-xl">
             <span className="text-xs font-black text-emerald-600">School Admin</span>
           </div>
         </div>

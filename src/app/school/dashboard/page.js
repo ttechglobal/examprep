@@ -976,6 +976,13 @@ export default function SchoolDashboardPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Listen for tab changes fired by the desktop sidebar (SchoolNav)
+  useEffect(() => {
+    function onSidebarTab(e) { setTab(e.detail) }
+    window.addEventListener('school-tab-change', onSidebarTab)
+    return () => window.removeEventListener('school-tab-change', onSidebarTab)
+  }, [])
+
   function handleCohortCreated(newCohort) {
     setData(prev => prev ? {
       ...prev,
@@ -1012,32 +1019,26 @@ export default function SchoolDashboardPage() {
   // On mobile only the active tab content is shown.
   return (
     <>
-      {/* ── Page header (mobile only — desktop uses sidebar) ── */}
-      <div className="lg:hidden flex items-center justify-between mb-4">
+      {/* Page header — same on mobile and desktop */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-lg font-black text-gray-900">Dashboard</h1>
-          {cohort && <p className="text-xs text-gray-400">{cohort.name}</p>}
-        </div>
-      </div>
-
-      {/* Desktop: page header */}
-      <div className="hidden lg:flex lg:items-center lg:justify-between lg:mb-8">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900">School Dashboard</h1>
+          <h1 className="text-xl lg:text-2xl font-black text-gray-900">
+            {TABS.find(t => t.id === tab)?.label ?? 'Dashboard'}
+          </h1>
           {cohort
-            ? <p className="text-sm text-gray-500 mt-1">Active cohort: {cohort.name}{cohort.session ? ` · ${cohort.session}` : ''}</p>
-            : <p className="text-sm text-gray-500 mt-1">No active cohort yet</p>
+            ? <p className="text-xs lg:text-sm text-gray-400 mt-0.5">{cohort.name}{cohort.session ? ` · ${cohort.session}` : ''}</p>
+            : <p className="text-xs lg:text-sm text-gray-400 mt-0.5">No active cohort yet</p>
           }
         </div>
-        {!cohort && (
-          <div className="w-72">
+        {!cohort && tab === 'overview' && (
+          <div className="hidden lg:block w-64">
             <CreateCohortInline currentCohort={null} onCreated={handleCohortCreated} />
           </div>
         )}
       </div>
 
-      {/* ── MOBILE: tab-based single section ── */}
-      <div className="lg:hidden">
+      {/* Single active section — identical behaviour on mobile and desktop */}
+      <div className="pb-24 lg:pb-8">
         {tab === 'overview' && (
           <OverviewSection data={data} onTabChange={setTab} onCohortCreated={handleCohortCreated} />
         )}
@@ -1055,15 +1056,7 @@ export default function SchoolDashboardPage() {
         )}
       </div>
 
-      {/* ── DESKTOP: all sections stacked with anchors ── */}
-      <div className="hidden lg:block space-y-16">
-        <OverviewSection data={data} onTabChange={setTab} onCohortCreated={handleCohortCreated} />
-        <StudentsSection students={students} atRisk={atRisk} />
-        <TopicsSection subjectTopics={subjectTopics} />
-        <CohortSection cohort={cohort} allCohorts={allCohorts} totalStudents={summary.totalStudents} onCohortCreated={handleCohortCreated} />
-        <ReportsSection schoolName={school?.name ?? ''} cohortName={cohort?.name ?? ''} />
-      </div>
-
+      {/* Bottom tabs — mobile only, desktop uses sidebar */}
       <MobileBottomTabs active={tab} onChange={setTab} />
     </>
   )
