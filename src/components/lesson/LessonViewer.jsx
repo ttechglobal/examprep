@@ -60,7 +60,9 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   const { open: openLesson, close: closeLesson } = useLessonNav()
   const { awardPoints } = usePoints()
 
-  const lesson      = subtopic.lesson_content
+const lesson = typeof subtopic.lesson_content === 'string'
+  ? JSON.parse(subtopic.lesson_content)
+  : subtopic.lesson_content  
   const slides      = lesson?.slides ?? []
   const totalSlides = slides.length
   const subjectName = subtopic.topics?.subjects?.name ?? ''

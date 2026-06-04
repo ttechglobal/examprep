@@ -76,7 +76,7 @@ export async function POST(request, { params }) {
   const { error } = await svc
     .from('subtopics')
     .update({
-      lesson_content:   raw_content,
+      lesson_content:   JSON.parse(raw_content),
       lesson_generated: true,
     })
     .eq('id', subtopicId)
