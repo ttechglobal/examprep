@@ -1,6 +1,7 @@
 'use client'
 // src/components/lesson/SubjectPageClient.jsx
-// Fixes: full dark mode, search bar, cleaner subtopic list, back button in correct place
+// FIX: subtopic links now use /student/learn/[slug] instead of /student/lesson/[id]
+// so they go through the slug-based route which doesn't require lesson_status filter at query time.
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,12 +15,10 @@ function TopicCard({ topic, progressMap, color, nextSubtopicId, searchQuery }) {
   const subtopics = topic.subtopics ?? []
   const published = subtopics.filter(s => s.lesson_status === 'published')
 
-  // Auto-open if any subtopic matches search
   const filteredSubs = searchQuery
     ? subtopics.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : subtopics
 
-  // Don't render topic if search active and no subtopics match
   if (searchQuery && !filteredSubs.length) return null
 
   const completedInTopic = subtopics.filter(s => progressMap[s.id]?.completed).length
@@ -58,7 +57,9 @@ function TopicCard({ topic, progressMap, color, nextSubtopicId, searchQuery }) {
                 style={{ width: `${topicPct}%` }}
               />
             </div>
-            <span className="text-xs text-tertiary">{published.length} lesson{published.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-tertiary">
+              {published.length} lesson{published.length !== 1 ? 's' : ''}
+            </span>
           </div>
         </div>
 
@@ -129,7 +130,8 @@ function TopicCard({ topic, progressMap, color, nextSubtopicId, searchQuery }) {
             )
 
             if (!hasLesson) return <div key={subtopic.id}>{row}</div>
-            return <Link key={subtopic.id} href={`/student/lesson/${subtopic.id}`}>{row}</Link>
+            // ✅ FIX: use slug-based route instead of UUID route
+            return <Link key={subtopic.id} href={`/student/learn/${subtopic.slug}`}>{row}</Link>
           })}
         </div>
       )}
@@ -159,8 +161,8 @@ export default function SubjectPageClient({ subject, topics, progress, learningP
   let nextSubtopicId = null
   if (learningPath?.ordered_subtopic_ids?.length) {
     nextSubtopicId = learningPath.ordered_subtopic_ids.find(id => {
-      const prog    = progressMap[id]
-      const sub     = allSubtopics.find(s => s.id === id)
+      const prog = progressMap[id]
+      const sub  = allSubtopics.find(s => s.id === id)
       return sub?.lesson_status === 'published' && !prog?.completed
     }) ?? null
   }
@@ -185,7 +187,7 @@ export default function SubjectPageClient({ subject, topics, progress, learningP
         Back
       </button>
 
-      {/* Subject header — themed, dark mode safe */}
+      {/* Subject header */}
       <div className={`${color.bg} ${color.border} border rounded-3xl p-5`}>
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -212,10 +214,10 @@ export default function SubjectPageClient({ subject, topics, progress, learningP
         </div>
       </div>
 
-      {/* Continue CTA */}
+      {/* Continue CTA — ✅ FIX: use slug-based route */}
       {nextSubtopic && (
         <Link
-          href={`/student/lesson/${nextSubtopic.id}`}
+          href={`/student/learn/${nextSubtopic.slug}`}
           className={`flex items-center justify-between w-full ${color.accent} text-white rounded-2xl px-5 py-4 hover:opacity-90 transition-opacity active:scale-[0.98]`}
         >
           <div>

@@ -1,16 +1,7 @@
 'use client'
 // src/components/dashboard/CuratedLearningPlan.jsx
-// DARK MODE AUDIT — full pass:
-// - bg-white → bg-card
-// - divide-gray-50 → divide-default
-// - border-gray-100 → border-default
-// - text-gray-900 → text-primary
-// - text-gray-400 → text-tertiary / text-secondary
-// - hover:bg-gray-50 → hover:bg-subtle
-// - bg-gray-100 (position number) → bg-subtle
-// - "Up next" badge: bg-indigo-100 text-indigo-600 → + dark variants
-// - "Coming soon" badge: bg-gray-100 text-gray-400 → bg-subtle text-tertiary
-// FEATURE: subject chip already present — kept + styled with theme tokens
+// FIX: lesson links now use /student/learn/[slug] instead of /student/lesson/[id]
+// so they go through the slug-based route which handles published check gracefully.
 
 import Link from 'next/link'
 import { getSubjectColor } from '@/lib/theme'
@@ -27,6 +18,7 @@ function buildPlanItems({ learningPaths, lessonProgress, subtopicMap, max }) {
         if (!sub) return null
         return {
           id,
+          slug:          sub.slug,
           subtopicName:  sub.name,
           topicName:     sub.topics?.name ?? '',
           subjectName:   path.subjects?.name ?? '',
@@ -91,7 +83,7 @@ export default function CuratedLearningPlan({ learningPaths, lessonProgress, sub
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                  {/* Subject chip — uses theme colors, dark variants included */}
+                  {/* Subject chip */}
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${color.bg} ${color.text}`}>
                     {item.subjectName}
                   </span>
@@ -120,8 +112,9 @@ export default function CuratedLearningPlan({ learningPaths, lessonProgress, sub
             </div>
           )
 
+          // ✅ FIX: use slug-based route instead of UUID route
           return hasLesson
-            ? <Link key={item.id} href={`/student/lesson/${item.id}`}>{inner}</Link>
+            ? <Link key={item.id} href={`/student/learn/${item.slug}`}>{inner}</Link>
             : <div key={item.id}>{inner}</div>
         })}
       </div>
