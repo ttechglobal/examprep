@@ -1,19 +1,14 @@
 'use client'
 // src/app/diagnostic/page.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Diagnostic setup — one subject at a time.
-//
-// FIX: TypeError: e is not iterable
-//   - diagResults from Supabase may not be an array (could be null or error obj)
-//   - profile.subjects may be a JSON string instead of a parsed array
-//   - Added Array.isArray guards on all Supabase array responses before
-//     passing them to new Set() or .find() / .length checks
+// FIX: Selected subject button uses inline styles (not dynamic Tailwind classes)
+//      so the colour always renders — Tailwind JIT can't purge inline styles.
+//      Each subject has a hardcoded selectedStyle with bg + border colour.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getSubjectColor } from '@/lib/theme'
 
 const ALL_SUBJECTS = [
   'Mathematics', 'English Language', 'Physics', 'Chemistry',
@@ -21,69 +16,76 @@ const ALL_SUBJECTS = [
   'Geography', 'Agricultural Science', 'Further Mathematics', 'Commerce',
 ]
 
+// Hardcoded per-subject selected styles — bg + border + text colour
+// These NEVER get purged by Tailwind because they're inline styles, not classes
+const SUBJECT_SELECTED_STYLE = {
+  'Mathematics':           { background: '#dbeafe', borderColor: '#93c5fd', color: '#1d4ed8' }, // blue-100 / blue-300 / blue-700
+  'English Language':      { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' }, // violet-100 / violet-300 / violet-700
+  'Physics':               { background: '#cffafe', borderColor: '#67e8f9', color: '#0e7490' }, // cyan-100 / cyan-300 / cyan-700
+  'Chemistry':             { background: '#dcfce7', borderColor: '#86efac', color: '#15803d' }, // green-100 / green-300 / green-700
+  'Biology':               { background: '#d1fae5', borderColor: '#6ee7b7', color: '#047857' }, // emerald-100 / emerald-300 / emerald-700
+  'Economics':             { background: '#fef3c7', borderColor: '#fcd34d', color: '#b45309' }, // amber-100 / amber-300 / amber-700
+  'Government':            { background: '#fee2e2', borderColor: '#fca5a5', color: '#b91c1c' }, // red-100 / red-300 / red-700
+  'Literature in English': { background: '#fce7f3', borderColor: '#f9a8d4', color: '#be185d' }, // pink-100 / pink-300 / pink-700
+  'Geography':             { background: '#ccfbf1', borderColor: '#5eead4', color: '#0f766e' }, // teal-100 / teal-300 / teal-700
+  'Agricultural Science':  { background: '#ecfccb', borderColor: '#bef264', color: '#4d7c0f' }, // lime-100 / lime-300 / lime-700
+  'Further Mathematics':   { background: '#e0f2fe', borderColor: '#7dd3fc', color: '#0369a1' }, // sky-100 / sky-300 / sky-700
+  'Commerce':              { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' }, // violet-100 / violet-300 / violet-700
+}
+
+const DEFAULT_SELECTED_STYLE = { background: '#e0e7ff', borderColor: '#a5b4fc', color: '#4338ca' } // indigo
+
+function getSelectedStyle(subject) {
+  return SUBJECT_SELECTED_STYLE[subject] ?? DEFAULT_SELECTED_STYLE
+}
+
 function DiagnosticSetup() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  // Allow pre-selecting subject via ?subject=Physics
   const presetSubject = searchParams.get('subject') ?? ''
   const presetExam    = searchParams.get('exam') ?? ''
 
-  const [examType,        setExamType]        = useState(presetExam)
-  const [selectedSubject, setSelectedSubject] = useState(presetSubject)
-  const [error,           setError]           = useState(null)
-  const [loadingProfile,  setLoadingProfile]  = useState(true)
-  const [isSignedIn,      setIsSignedIn]      = useState(false)
-
-  // Subjects the student is enrolled in
-  const [enrolledSubjects,  setEnrolledSubjects]  = useState([])
-  // Subjects they've already taken a diagnostic for
-  const [diagnosedSubjects, setDiagnosedSubjects] = useState(new Set())
+  const [examType,          setExamType]         = useState(presetExam || '')
+  const [selectedSubject,   setSelectedSubject]  = useState(presetSubject || '')
+  const [enrolledSubjects,  setEnrolledSubjects] = useState([])
+  const [diagnosedSubjects, setDiagnosedSubjects]= useState(new Set())
+  const [isSignedIn,        setIsSignedIn]       = useState(false)
+  const [loadingProfile,    setLoadingProfile]   = useState(true)
+  const [error,             setError]            = useState(null)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        setIsSignedIn(true)
+      if (!user) { setLoadingProfile(false); return }
+      setIsSignedIn(true)
 
-        const [{ data: profile }, { data: diagResults }] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('exam_type, subjects')
-            .eq('id', user.id)
-            .single(),
-          supabase
-            .from('diagnostic_results')
-            .select('subject_id, subjects(name)')
-            .eq('student_id', user.id),
-        ])
+      const [{ data: profile }, { data: diagResults }] = await Promise.all([
+        supabase.from('profiles').select('subjects, exam_type').eq('id', user.id).single(),
+        supabase.from('diagnostic_results').select('subjects(name)').eq('student_id', user.id),
+      ])
 
-        if (profile?.exam_type && !presetExam) setExamType(profile.exam_type)
-
-        // FIX: profile.subjects may be a JSON string (Supabase text column)
-        // or null — always normalise to a plain array before using it
-        const enrolledRaw = (() => {
-          if (!profile?.subjects) return []
-          if (Array.isArray(profile.subjects)) return profile.subjects
-          try { return JSON.parse(profile.subjects) } catch { return [] }
-        })()
-        const enrolled = enrolledRaw.filter(Boolean)
-        if (enrolled.length) setEnrolledSubjects(enrolled)
-
-        // FIX: diagResults may be null or a non-array on Supabase error —
-        // guard with Array.isArray before passing to new Set()
-        const safeResults = Array.isArray(diagResults) ? diagResults : []
-        const names = new Set(
-          safeResults.map(r => r.subjects?.name).filter(Boolean)
-        )
-        setDiagnosedSubjects(names)
-
-        // Pre-select first undiagnosed enrolled subject if none preset
-        if (!presetSubject && enrolled.length) {
-          const firstUndone = enrolled.find(s => !names.has(s))
-          if (firstUndone) setSelectedSubject(firstUndone)
-        }
+      let enrolled = []
+      if (profile?.subjects) {
+        try {
+          enrolled = Array.isArray(profile.subjects)
+            ? profile.subjects
+            : JSON.parse(profile.subjects)
+        } catch { enrolled = [] }
       }
+      setEnrolledSubjects(enrolled)
+
+      if (!examType && profile?.exam_type) setExamType(profile.exam_type)
+
+      const safeResults = Array.isArray(diagResults) ? diagResults : []
+      const names = new Set(safeResults.map(r => r.subjects?.name).filter(Boolean))
+      setDiagnosedSubjects(names)
+
+      if (!presetSubject && enrolled.length) {
+        const firstUndone = enrolled.find(s => !names.has(s))
+        if (firstUndone) setSelectedSubject(firstUndone)
+      }
+
       setLoadingProfile(false)
     })
   }, [])
@@ -95,7 +97,6 @@ function DiagnosticSetup() {
 
     sessionStorage.setItem('diagnostic_setup', JSON.stringify({
       examType,
-      // Always an array of one — API accepts array, this keeps compat
       subjects:      [selectedSubject],
       questionCount: 10,
       isPractice:    isSignedIn,
@@ -159,27 +160,32 @@ function DiagnosticSetup() {
             </div>
           </div>
 
-          {/* Subject picker — one at a time */}
+          {/* Subject picker */}
           <div className="px-5 py-4">
             <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
               Choose one subject
             </p>
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {subjectsToShow.map(subject => {
-                const color      = getSubjectColor(subject)
                 const isSelected = selectedSubject === subject
                 const isDone     = diagnosedSubjects.has(subject)
+                const selStyle   = getSelectedStyle(subject)
 
                 return (
                   <button
                     key={subject}
                     onClick={() => setSelectedSubject(subject)}
+                    style={isSelected ? {
+                      backgroundColor: selStyle.background,
+                      borderColor:     selStyle.borderColor,
+                      color:           selStyle.color,
+                    } : {}}
                     className={`
                       w-full flex items-center justify-between px-4 py-3 rounded-xl
                       border-2 text-left transition-all
                       ${isSelected
-                        ? `${color.bg} ${color.text} border-transparent shadow-sm`
-                        : 'bg-gray-50 text-gray-700 border-transparent hover:border-gray-200'
+                        ? 'shadow-sm font-bold'
+                        : 'bg-gray-50 text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-white'
                       }
                     `}
                   >

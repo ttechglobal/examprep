@@ -1,60 +1,107 @@
 'use client'
 // src/components/lesson/SlideRenderer.jsx
-// Changes in this version:
-// 1. GuidedExampleSlide — step-by-step reveal: one step at a time, user presses
-//    "Next step →" to advance. onUnlock fires after the LAST step is revealed.
-// 2. EndQuizSlide — onQuizComplete(correctCount, totalCount) callback added.
-//    LessonViewer uses this to award bonus points per correct answer.
-// 3. All dark mode token classes preserved from previous audit.
+// ─────────────────────────────────────────────────────────────────────────────
+// REDESIGN:
+// 1. ALL slides use CSS custom properties (--lesson-*) from LessonViewer
+//    so they automatically respect light/dark mode without any hardcoded colours
+// 2. Worked examples (guided AND student_attempt) are fully step-by-step:
+//    one step revealed at a time, user presses "Next step →" to advance.
+//    onUnlock fires only after the LAST step is revealed.
+// 3. Quiz options (interaction + end_quiz) have sharp, high-contrast selected/
+//    correct/wrong states that are beautiful and unmistakably clear.
+// 4. Warm learning-environment aesthetic throughout.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
 
-// ── Shared math renderer ──────────────────────────────────────────────────────
-function MathStep({ text, color }) {
+// ── Shared: render text with basic line breaks ────────────────────────────────
+function BodyText({ text, style }) {
   if (!text) return null
+  return <p style={{ fontSize: 16, lineHeight: 1.7, margin: 0, ...style }}>{text}</p>
+}
+
+// ── Shared: image slot ────────────────────────────────────────────────────────
+function StudentImageSlot({ image }) {
+  const url = typeof image === 'string' ? image : image?.url
+  if (!url) return null
   return (
-    <p className={`text-sm leading-relaxed ${color?.text ?? 'text-primary'} font-medium`}>
+    <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--lesson-border)' }}>
+      <img src={url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
+    </div>
+  )
+}
+
+// ── Slide type label ──────────────────────────────────────────────────────────
+function SlideLabel({ text, accent }) {
+  return (
+    <p style={{
+      fontSize: 10,
+      fontWeight: 900,
+      textTransform: 'uppercase',
+      letterSpacing: '0.12em',
+      color: accent ?? 'var(--lesson-text-muted)',
+      marginBottom: 10,
+    }}>
       {text}
     </p>
   )
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// HOOK
+// ────────────────────────────────────────────────────────────────────────────
 function HookSlide({ slide, color }) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-6`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-3 ${color?.text ?? 'text-secondary'}`}>
-          Did you know? 💡
-        </p>
-        <p className={`text-lg font-bold ${color?.text ?? 'text-primary'} leading-relaxed`}>
-          {slide.body}
-        </p>
+    <div style={{ animation: 'lessonFadeIn 0.35s ease' }}>
+      <div style={{
+        borderRadius: 20,
+        padding: '24px 20px',
+        background: 'var(--lesson-surface)',
+        borderLeft: `4px solid var(--lesson-accent)`,
+      }}>
+        <SlideLabel text="Did you know? 💡" />
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 600, fontSize: 18 }} />
       </div>
     </div>
   )
 }
 
-// ── Definition ────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// DEFINITION
+// ────────────────────────────────────────────────────────────────────────────
 function DefinitionSlide({ slide, color }) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-5`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-2 ${color?.text ?? 'text-secondary'}`}>
-          Definition
-        </p>
-        <p className={`text-2xl font-black ${color?.text ?? 'text-primary'} mb-3`}>{slide.term}</p>
-        <p className={`text-base leading-relaxed ${color?.text ?? 'text-primary'} font-medium`}>
-          {slide.definition}
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+      {/* Term banner */}
+      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', background: 'var(--lesson-accent)' }}>
+          <SlideLabel text="Definition" accent="rgba(255,255,255,0.7)" />
+          <p style={{ fontSize: 26, fontWeight: 900, color: '#fff', margin: 0, lineHeight: 1.2 }}>{slide.term}</p>
+        </div>
+        <div style={{ padding: '16px 20px', background: 'var(--lesson-card)', borderTop: '1px solid var(--lesson-border)' }}>
+          <BodyText text={slide.definition} style={{ color: 'var(--lesson-text)', fontWeight: 500 }} />
+        </div>
       </div>
+
+      {/* Examples */}
       {slide.examples?.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Examples</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <SlideLabel text="Examples" />
           {slide.examples.map((ex, i) => (
-            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
-              <span className={`text-sm font-black ${color?.text ?? 'text-secondary'} flex-shrink-0 mt-0.5`}>{i + 1}.</span>
-              <p className="text-sm text-primary leading-relaxed">{ex}</p>
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '12px 16px', borderRadius: 14,
+              background: 'var(--lesson-surface)',
+              border: '1px solid var(--lesson-border)',
+            }}>
+              <span style={{
+                minWidth: 24, height: 24, borderRadius: 8,
+                background: 'var(--lesson-accent)', color: '#fff',
+                fontSize: 11, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, marginTop: 2,
+              }}>{i + 1}</span>
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0 }}>{ex}</p>
             </div>
           ))}
         </div>
@@ -63,76 +110,124 @@ function DefinitionSlide({ slide, color }) {
   )
 }
 
-// ── Shared image slot ─────────────────────────────────────────────────────────
-function StudentImageSlot({ image }) {
-  const url = typeof image === 'string' ? image : image?.url
-  if (!url) return null
+// ────────────────────────────────────────────────────────────────────────────
+// REAL LIFE
+// ────────────────────────────────────────────────────────────────────────────
+function RealLifeSlide({ slide, color }) {
   return (
-    <div className="rounded-xl overflow-hidden bg-subtle">
-      <img src={url} alt="" className="w-full object-contain max-h-64" loading="lazy" />
+    <div style={{ animation: 'lessonFadeIn 0.35s ease' }}>
+      <div style={{
+        borderRadius: 20, padding: '24px 20px',
+        background: 'var(--lesson-surface)',
+        border: '1px solid var(--lesson-border)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, right: 0,
+          width: 80, height: 80,
+          background: 'var(--lesson-accent)',
+          opacity: 0.06, borderRadius: '0 20px 0 80px',
+        }} />
+        <SlideLabel text="Real-life connection 🌍" />
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 500, fontSize: 16 }} />
+      </div>
     </div>
   )
 }
 
-// ── Concept ───────────────────────────────────────────────────────────────────
-function ConceptSlide({ slide, color, isAdmin, slideIndex, subtopicId, uploadMeta, onImageUpload }) {
-  const hasImage = slide.image?.url || slide.image_url
+// ────────────────────────────────────────────────────────────────────────────
+// CONCEPT
+// ────────────────────────────────────────────────────────────────────────────
+function ConceptSlide({ slide, color }) {
+  const hasImage = slide.image?.url || (typeof slide.image === 'string' && slide.image)
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-5`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-2 ${color?.text ?? 'text-secondary'}`}>Concept</p>
-        <p className={`text-xl font-black ${color?.text ?? 'text-primary'} mb-3 leading-snug`}>{slide.heading}</p>
-        <p className={`text-base leading-relaxed ${color?.text ?? 'text-primary'} font-medium`}>{slide.body}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)' }}>
+        {slide.heading && (
+          <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--lesson-text)', margin: '0 0 12px' }}>{slide.heading}</p>
+        )}
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 500 }} />
       </div>
-      {slide.examples?.length > 0 && (
-        <div className="space-y-2">
-          {slide.examples.map((ex, i) => (
-            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
-              <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
-              <p className="text-sm text-primary leading-relaxed">{ex}</p>
-            </div>
-          ))}
-        </div>
-      )}
+
       {hasImage && <StudentImageSlot image={slide.image ?? slide.image_url} />}
+
+      {slide.examples?.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <SlideLabel text="Examples" />
+          {slide.examples.map((ex, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '12px 16px', borderRadius: 14,
+              background: 'var(--lesson-surface)',
+              border: '1px solid var(--lesson-border)',
+            }}>
+              <span style={{
+                minWidth: 22, height: 22, borderRadius: 6,
+                background: 'var(--lesson-accent)', color: '#fff',
+                fontSize: 11, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
+              }}>{i + 1}</span>
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0 }}>{ex}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Formula ───────────────────────────────────────────────────────────────────
-function FormulaSlide({ slide, color, isAdmin, slideIndex, subtopicId, uploadMeta, onImageUpload }) {
-  const hasImage = slide.image?.url || slide.image_url
+// ────────────────────────────────────────────────────────────────────────────
+// FORMULA
+// ────────────────────────────────────────────────────────────────────────────
+function FormulaSlide({ slide, color }) {
+  const hasImage = slide.image?.url || (typeof slide.image === 'string' && slide.image)
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-5`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-2 ${color?.text ?? 'text-secondary'}`}>{slide.label}</p>
-        <div className="font-mono text-lg font-black text-primary my-3 break-words whitespace-pre-wrap leading-relaxed">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)' }}>
+        <SlideLabel text={slide.label ?? 'Formula'} />
+        {/* Formula block */}
+        <div style={{
+          fontFamily: 'monospace', fontSize: 22, fontWeight: 900,
+          color: 'var(--lesson-text)',
+          background: 'var(--lesson-card)',
+          borderRadius: 14, padding: '16px 20px',
+          margin: '12px 0', border: '1px solid var(--lesson-border)',
+          wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.4,
+        }}>
           {slide.formula}
         </div>
-        <p className={`text-sm leading-relaxed ${color?.text ?? 'text-primary'} font-medium`}>{slide.plain_english}</p>
+        <BodyText text={slide.plain_english} style={{ color: 'var(--lesson-text-muted)', fontSize: 14 }} />
       </div>
+
       {slide.variables?.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Variables</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <SlideLabel text="Variables" />
           {slide.variables.map((v, i) => (
-            <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
-              <span className={`font-mono font-black text-sm ${color?.text ?? 'text-secondary'} flex-shrink-0 min-w-[2rem]`}>{v.symbol}</span>
-              <span className="text-sm text-primary leading-relaxed">{v.meaning}</span>
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 16px', borderRadius: 12,
+              background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+            }}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: 'var(--lesson-accent)', minWidth: 32 }}>{v.symbol}</span>
+              <p style={{ fontSize: 14, color: 'var(--lesson-text)', margin: 0, lineHeight: 1.5 }}>{v.meaning}</p>
             </div>
           ))}
         </div>
       )}
+
       {hasImage && <StudentImageSlot image={slide.image ?? slide.image_url} />}
     </div>
   )
 }
 
-// ── Interaction ───────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// INTERACTION (quick check quiz)
+// ────────────────────────────────────────────────────────────────────────────
 function InteractionSlide({ slide, color, interactive, onUnlock }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
 
-  const correct  = slide.correct?.trim()
+  const correct = slide.correct?.trim()
   const isCorrect = selected === correct
 
   const options = (slide.options ?? []).map(opt => {
@@ -151,227 +246,273 @@ function InteractionSlide({ slide, color, interactive, onUnlock }) {
     onUnlock?.()
   }
 
-  if (!interactive) {
-    return (
-      <div className="rounded-2xl overflow-hidden animate-in fade-in duration-300">
-        <div className={`px-4 py-3 ${color?.accent ?? 'bg-indigo-600'}`}>
-          <p className="text-xs font-black text-white/80 uppercase tracking-wide mb-1">Quick Check ✏️</p>
-          <p className="text-sm font-bold text-white leading-snug">{slide.question}</p>
-        </div>
-        <div className="bg-card p-4 space-y-2">
-          {options.map(opt => (
-            <div key={opt.key} className={`px-3 py-2.5 rounded-xl text-sm border ${
-              opt.key === correct
-                ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 font-bold'
-                : 'bg-subtle border-default text-secondary'
-            }`}>
-              <span className="font-bold mr-2">{opt.key}.</span>{opt.text}
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="rounded-2xl overflow-hidden animate-in fade-in duration-300">
-      <div className={`px-4 py-3 ${color?.accent ?? 'bg-indigo-600'}`}>
-        <p className="text-xs font-black text-white/80 uppercase tracking-wide mb-1">Quick Check ✏️</p>
-        <p className="text-sm font-bold text-white leading-snug">{slide.question}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'lessonFadeIn 0.35s ease' }}>
+      {/* Question header */}
+      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', background: 'var(--lesson-accent)' }}>
+          <SlideLabel text="✏️ Quick Check" accent="rgba(255,255,255,0.7)" />
+          <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{slide.question}</p>
+        </div>
       </div>
-      <div className="bg-card p-4 space-y-2">
+
+      {/* Options */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {options.map(opt => {
-          const isSelected = selected === opt.key
-          const isRight    = opt.key === correct
-          let optClass = 'border-default bg-subtle text-primary'
+          const isThisCorrect = opt.key === correct
+          const isThisSelected = opt.key === selected
+
+          let bg = 'var(--lesson-option-bg)'
+          let border = '2px solid var(--lesson-option-bd)'
+          let textColor = 'var(--lesson-option-tx)'
+          let labelBg = 'var(--lesson-surface)'
+          let labelColor = 'var(--lesson-text-muted)'
+
           if (revealed) {
-            if (isRight)         optClass = 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300'
-            else if (isSelected) optClass = 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300'
-            else                 optClass = 'border-default bg-subtle text-secondary opacity-50'
+            if (isThisCorrect) {
+              bg = 'var(--lesson-correct-bg)'
+              border = `2px solid var(--lesson-correct-bd)`
+              textColor = 'var(--lesson-correct-tx)'
+              labelBg = 'var(--lesson-correct-bd)'
+              labelColor = '#fff'
+            } else if (isThisSelected && !isThisCorrect) {
+              bg = 'var(--lesson-wrong-bg)'
+              border = `2px solid var(--lesson-wrong-bd)`
+              textColor = 'var(--lesson-wrong-tx)'
+              labelBg = 'var(--lesson-wrong-bd)'
+              labelColor = '#fff'
+            }
+          } else if (isThisSelected) {
+            bg = 'var(--lesson-option-sel)'
+            border = `2px solid var(--lesson-option-selbd)`
+            textColor = 'var(--lesson-option-seltx)'
+            labelBg = 'var(--lesson-option-selbd)'
+            labelColor = '#fff'
           }
+
           return (
-            <button key={opt.key} onClick={() => handleSelect(opt.key)} disabled={revealed}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm border-2 transition-all ${optClass} ${
-                !revealed ? 'hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 active:scale-[0.98]' : ''
-              }`}>
-              <span className="font-bold mr-2">{opt.key}.</span>{opt.text}
+            <button
+              key={opt.key}
+              onClick={() => handleSelect(opt.key)}
+              disabled={revealed || !interactive}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
+                padding: '14px 16px', borderRadius: 16,
+                background: bg, border,
+                cursor: revealed || !interactive ? 'default' : 'pointer',
+                textAlign: 'left', transition: 'all 0.18s ease',
+              }}
+            >
+              <span style={{
+                minWidth: 28, height: 28, borderRadius: 8,
+                background: labelBg, color: labelColor,
+                fontSize: 13, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, transition: 'all 0.18s ease',
+              }}>{opt.key}</span>
+              <p style={{ fontSize: 14, lineHeight: 1.55, color: textColor, margin: 0, fontWeight: revealed && isThisCorrect ? 700 : 500, transition: 'color 0.18s' }}>{opt.text}</p>
+              {revealed && isThisCorrect && (
+                <span style={{ marginLeft: 'auto', fontSize: 16, flexShrink: 0 }}>✓</span>
+              )}
+              {revealed && isThisSelected && !isThisCorrect && (
+                <span style={{ marginLeft: 'auto', fontSize: 16, flexShrink: 0 }}>✗</span>
+              )}
             </button>
           )
         })}
       </div>
+
+      {/* Feedback */}
       {revealed && (
-        <div className={`px-4 py-3 border-t border-default ${isCorrect ? 'bg-green-50 dark:bg-green-950/30' : 'bg-orange-50 dark:bg-orange-950/30'}`}>
-          <p className={`text-sm font-bold leading-relaxed ${isCorrect ? 'text-green-800 dark:text-green-300' : 'text-orange-800 dark:text-orange-300'}`}>
-            {isCorrect ? `✓ ${slide.feedback_correct}` : `✗ ${slide.feedback_wrong}`}
+        <div style={{
+          padding: '14px 18px', borderRadius: 16,
+          background: isCorrect ? 'var(--lesson-correct-bg)' : 'var(--lesson-wrong-bg)',
+          border: `1px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
+          animation: 'lessonFadeIn 0.25s ease',
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: isCorrect ? 'var(--lesson-correct-tx)' : 'var(--lesson-wrong-tx)', margin: 0, lineHeight: 1.5 }}>
+            {isCorrect
+              ? (slide.feedback_correct || '✅ Correct! Well done.')
+              : (slide.feedback_wrong  || `❌ Not quite. The correct answer is ${correct}.`)}
           </p>
-          {!isCorrect && slide.feedback_correct && (
-            <p className="text-xs text-orange-700 dark:text-orange-400 mt-1.5 leading-relaxed">
-              Correct: <span className="font-bold">{correct}</span> — {slide.feedback_correct}
-            </p>
-          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Guided Worked Example — STEP BY STEP ──────────────────────────────────────
-// NEW: reveals one step at a time. User presses "Next step →" to advance.
-// onUnlock fires after the final step is shown.
-function GuidedExampleSlide({ slide, color, onUnlock }) {
-  const steps    = slide.steps ?? []
-  const total    = steps.length
-  const [visibleCount, setVisibleCount] = useState(1) // start with step 1 shown
-  const allShown = visibleCount >= total
+// ────────────────────────────────────────────────────────────────────────────
+// WORKED EXAMPLE — fully step-by-step for BOTH guided and student_attempt
+// One step shown at a time. User taps "Next step →" to reveal each one.
+// onUnlock fires only when the final step is revealed.
+// ────────────────────────────────────────────────────────────────────────────
+function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
+  const steps        = slide.steps ?? []
+  const totalSteps   = steps.length
+  const isAttempt    = slide.mode === 'student_attempt'
 
-  // Fire onUnlock once all steps are visible
+  // Safety: if slide has no steps at all, unlock immediately so student is never stuck
   useEffect(() => {
-    if (allShown) onUnlock?.()
-  }, [allShown, onUnlock])
+    if (totalSteps === 0) onUnlock?.()
+  }, [])
 
-  function showNext() {
-    setVisibleCount(n => Math.min(n + 1, total))
+  const [revealedCount, setRevealedCount] = useState(0)
+  const [timerDone,     setTimerDone]     = useState(!isAttempt)
+  const [secondsLeft,   setSecondsLeft]   = useState(slide.reveal_delay_seconds ?? 8)
+  const [isDone,        setIsDone]        = useState(false)
+  const intervalRef = useRef(null)
+
+  // Student attempt: countdown before first step can be shown
+  useEffect(() => {
+    if (!isAttempt || timerDone) return
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft(s => {
+        if (s <= 1) {
+          clearInterval(intervalRef.current)
+          setTimerDone(true)
+          return 0
+        }
+        return s - 1
+      })
+    }, 1000)
+    return () => clearInterval(intervalRef.current)
+  }, [isAttempt, timerDone])
+
+  function handleRevealNext() {
+    const next = revealedCount + 1
+    setRevealedCount(next)
+    if (next >= totalSteps) {
+      setIsDone(true)
+      onUnlock?.()
+    }
   }
 
+  const canRevealNext = timerDone && revealedCount < totalSteps
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Problem */}
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-4`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-2 ${color?.text ?? 'text-secondary'}`}>
-          Worked Example
-        </p>
-        <p className={`text-base font-bold ${color?.text ?? 'text-primary'} leading-snug`}>
-          {slide.problem}
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+
+      {/* Header */}
+      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', background: isAttempt ? '#7c3aed' : 'var(--lesson-accent)' }}>
+          <SlideLabel
+            text={isAttempt ? '🧠 Your Turn — Try This' : '✏️ Worked Example'}
+            accent="rgba(255,255,255,0.7)"
+          />
+          {/* Problem statement */}
+          <p style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+            {slide.problem}
+          </p>
+        </div>
       </div>
 
-      {/* Steps — reveal one at a time */}
-      {total > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-xs font-black uppercase tracking-wide text-tertiary">Solution</p>
-            <p className="text-xs text-tertiary">
-              Step {Math.min(visibleCount, total)} of {total}
-            </p>
-          </div>
-
-          {steps.slice(0, visibleCount).map((s, i) => (
-            <div
-              key={i}
-              className={`flex items-start gap-3 p-4 bg-subtle rounded-xl ${
-                i === visibleCount - 1 ? 'animate-in fade-in slide-in-from-bottom-2 duration-300' : ''
-              }`}
-            >
-              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                {i + 1}
-              </span>
-              <MathStep text={s.instruction} color={color} />
-            </div>
-          ))}
-
-          {/* Next step button — shown while steps remain */}
-          {!allShown && (
-            <button
-              onClick={showNext}
-              className={`w-full py-3 border-2 border-dashed ${
-                color?.border ?? 'border-indigo-200 dark:border-indigo-800'
-              } rounded-2xl text-sm font-bold ${
-                color?.text ?? 'text-indigo-600 dark:text-indigo-400'
-              } hover:bg-subtle transition-colors active:scale-[0.98]`}
-            >
-              Next step →
-            </button>
-          )}
+      {/* Attempt countdown */}
+      {isAttempt && !timerDone && (
+        <div style={{
+          padding: '14px 18px', borderRadius: 16, textAlign: 'center',
+          background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)',
+        }}>
+          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: '0 0 6px' }}>
+            Try solving it yourself first…
+          </p>
+          <p style={{ fontSize: 28, fontWeight: 900, color: 'var(--lesson-accent)', margin: 0 }}>{secondsLeft}s</p>
         </div>
       )}
 
-      {/* Final answer — only once all steps shown */}
-      {allShown && slide.final_answer && (
-        <div className={`${color?.bg ?? 'bg-subtle'} rounded-2xl px-5 py-4 animate-in fade-in duration-300`}>
-          <p className="text-xs font-bold text-tertiary uppercase tracking-wide mb-1">Final Answer</p>
-          <p className={`text-xl font-black font-mono break-words ${color?.text ?? 'text-primary'}`}>
+      {/* Steps revealed so far */}
+      {revealedCount > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SlideLabel text={isAttempt ? 'Solution walkthrough' : 'Step-by-step solution'} />
+          {steps.slice(0, revealedCount).map((s, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14,
+                padding: '14px 16px', borderRadius: 16,
+                background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+                animation: 'lessonFadeIn 0.3s ease',
+              }}
+            >
+              <span style={{
+                minWidth: 28, height: 28, borderRadius: 8,
+                background: 'var(--lesson-accent)', color: '#fff',
+                fontSize: 12, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>{i + 1}</span>
+              <p style={{
+                fontFamily: /[=÷×]/.test(s.instruction) ? 'monospace' : 'inherit',
+                fontSize: 15, lineHeight: 1.65, color: 'var(--lesson-text)',
+                margin: 0, fontWeight: 500,
+              }}>{s.instruction}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Final answer — only shown when all steps are revealed */}
+      {isDone && slide.final_answer && (
+        <div style={{
+          padding: '16px 20px', borderRadius: 16, textAlign: 'center',
+          background: 'var(--lesson-correct-bg)', border: `2px solid var(--lesson-correct-bd)`,
+          animation: 'lessonFadeIn 0.3s ease',
+        }}>
+          <p style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--lesson-correct-tx)', margin: '0 0 6px' }}>
+            Final Answer
+          </p>
+          <p style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 900, color: 'var(--lesson-correct-tx)', margin: 0 }}>
             {slide.final_answer}
           </p>
         </div>
       )}
-    </div>
-  )
-}
 
-// ── Student Attempt ───────────────────────────────────────────────────────────
-function StudentAttemptSlide({ slide, color, onUnlock }) {
-  const [revealed, setRevealed]       = useState(false)
-  const [secondsLeft, setSecondsLeft] = useState(slide.reveal_delay_seconds ?? 8)
-  const [canReveal, setCanReveal]     = useState((slide.reveal_delay_seconds ?? 8) <= 0)
-  const timerRef = useRef(null)
-
-  useEffect(() => {
-    if (canReveal) return
-    timerRef.current = setInterval(() => {
-      setSecondsLeft(s => {
-        if (s <= 1) { clearInterval(timerRef.current); setCanReveal(true); return 0 }
-        return s - 1
-      })
-    }, 1000)
-    return () => clearInterval(timerRef.current)
-  }, [canReveal])
-
-  function handleReveal() { setRevealed(true); onUnlock?.() }
-
-  const steps = slide.steps ?? []
-
-  return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-4`}>
-        <p className={`text-xs font-black uppercase tracking-widest mb-2 ${color?.text ?? 'text-secondary'}`}>Your Turn ✏️</p>
-        <p className={`text-base font-bold ${color?.text ?? 'text-primary'} leading-snug`}>{slide.problem}</p>
-      </div>
-      {!revealed && (
-        <div className="px-4 py-3 bg-subtle rounded-2xl text-center">
-          <p className="text-sm text-secondary">Work it out on paper first, then reveal the solution.</p>
+      {/* Progress indicator */}
+      {totalSteps > 0 && revealedCount > 0 && revealedCount < totalSteps && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {steps.map((_, i) => (
+            <div key={i} style={{
+              flex: 1, height: 4, borderRadius: 4,
+              background: i < revealedCount ? 'var(--lesson-accent)' : 'var(--lesson-track)',
+              transition: 'background 0.3s',
+            }} />
+          ))}
         </div>
       )}
-      {!revealed && (
-        <button onClick={handleReveal} disabled={!canReveal}
-          className={`w-full py-3.5 rounded-2xl text-sm font-black transition-all ${
-            canReveal
-              ? `${color?.accent ?? 'bg-indigo-600'} text-white hover:opacity-90 active:scale-[0.98]`
-              : 'bg-subtle text-tertiary cursor-not-allowed'
-          }`}>
-          {canReveal ? 'Show solution →' : `Show solution in ${secondsLeft}s`}
+
+      {/* Next step / reveal button */}
+      {timerDone && !isDone && (
+        <button
+          onClick={handleRevealNext}
+          style={{
+            width: '100%', padding: '14px', borderRadius: 16,
+            background: canRevealNext ? 'var(--lesson-accent)' : 'var(--lesson-surface)',
+            color: canRevealNext ? '#fff' : 'var(--lesson-text-muted)',
+            fontSize: 14, fontWeight: 900, border: 'none',
+            cursor: canRevealNext ? 'pointer' : 'not-allowed',
+            transition: 'all 0.18s',
+          }}
+        >
+          {revealedCount === 0
+            ? (isAttempt ? 'Show solution →' : 'Show first step →')
+            : revealedCount >= totalSteps - 1
+              ? 'Show final step →'
+              : `Next step → (${revealedCount}/${totalSteps})`}
         </button>
       )}
-      {revealed && steps.length > 0 && (
-        <div className="space-y-2 animate-in fade-in duration-300">
-          <p className="text-xs font-black uppercase tracking-wide text-tertiary px-1">Solution</p>
-          {steps.map((s, i) => (
-            <div key={i} className="flex items-start gap-3 p-4 bg-subtle rounded-xl">
-              <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
-              <MathStep text={s.instruction} color={color} />
-            </div>
-          ))}
-          {slide.final_answer && (
-            <div className={`${color?.bg ?? 'bg-subtle'} rounded-2xl px-5 py-4`}>
-              <p className="text-xs font-bold text-tertiary uppercase tracking-wide mb-1">Final Answer</p>
-              <p className={`text-xl font-black font-mono break-words ${color?.text ?? 'text-primary'}`}>{slide.final_answer}</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
 
-// ── End Quiz — one question at a time, reports score ─────────────────────────
-// NEW: onQuizComplete(correctCount, totalCount) fires when all questions done.
-// LessonViewer uses this to award per-answer bonus points.
+// ────────────────────────────────────────────────────────────────────────────
+// END QUIZ — one question at a time
+// ────────────────────────────────────────────────────────────────────────────
 function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
   const questions = slide.questions ?? []
-  const [currentQ, setCurrentQ]       = useState(0)
-  const [selected, setSelected]       = useState(null)
-  const [revealed, setRevealed]       = useState(false)
-  const [allDone, setAllDone]         = useState(false)
-  const [correctCount, setCorrectCount] = useState(0)
+  const [currentQ,    setCurrentQ]    = useState(0)
+  const [selected,    setSelected]    = useState(null)
+  const [revealed,    setRevealed]    = useState(false)
+  const [allDone,     setAllDone]     = useState(false)
+  const [correctCount,setCorrectCount]= useState(0)
+  const [answers,     setAnswers]     = useState([]) // track per-question for score display
 
   const q       = questions[currentQ]
   const total   = questions.length
@@ -395,199 +536,240 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
   function handleNext() {
     const wasCorrect = selected === correct
     const newCorrect = correctCount + (wasCorrect ? 1 : 0)
+    const newAnswers = [...answers, { selected, correct, wasCorrect }]
 
     if (currentQ + 1 >= total) {
       setCorrectCount(newCorrect)
+      setAnswers(newAnswers)
       setAllDone(true)
       onUnlock?.()
       onQuizComplete?.(newCorrect, total)
     } else {
       setCorrectCount(newCorrect)
-      setCurrentQ(i => i + 1)
+      setAnswers(newAnswers)
+      setCurrentQ(q => q + 1)
       setSelected(null)
       setRevealed(false)
     }
   }
 
-  if (!interactive || allDone) {
+  if (allDone) {
+    const pct = Math.round((correctCount / total) * 100)
+    const great = pct >= 70
     return (
-      <div className="space-y-3 animate-in fade-in duration-300">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">📝</span>
-          <p className="text-xs font-black uppercase tracking-widest text-tertiary">End of Lesson Quiz</p>
-        </div>
-        <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-4 text-center`}>
-          <p className={`text-lg font-black ${color?.text ?? 'text-primary'}`}>
-            {allDone
-              ? `Quiz complete! ${correctCount}/${total} correct 🎉`
-              : `${total} question${total !== 1 ? 's' : ''}`}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+        <div style={{
+          borderRadius: 20, padding: '24px 20px', textAlign: 'center',
+          background: great ? 'var(--lesson-correct-bg)' : 'var(--lesson-surface)',
+          border: `2px solid ${great ? 'var(--lesson-correct-bd)' : 'var(--lesson-border)'}`,
+        }}>
+          <p style={{ fontSize: 40, margin: '0 0 12px' }}>{great ? '🏆' : '📖'}</p>
+          <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--lesson-text)', margin: '0 0 4px' }}>
+            {correctCount}/{total} correct
           </p>
-          {allDone && correctCount === total && (
-            <p className="text-sm text-secondary mt-1">Perfect score! 🏆</p>
-          )}
+          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: 0 }}>
+            {great ? 'Excellent work! You\'re ready to move on.' : 'Good effort — review the lesson to strengthen these concepts.'}
+          </p>
+        </div>
+        {/* Per-question summary */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {answers.map((a, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+              borderRadius: 12, background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+            }}>
+              <span style={{ fontSize: 16 }}>{a.wasCorrect ? '✅' : '❌'}</span>
+              <p style={{ fontSize: 13, color: 'var(--lesson-text)', margin: 0, flex: 1 }}>Question {i + 1}</p>
+              {!a.wasCorrect && (
+                <p style={{ fontSize: 12, color: 'var(--lesson-text-muted)', margin: 0 }}>Answer: {a.correct}</p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     )
   }
 
   if (!q) return null
+  const options = getOptions(q)
   const isCorrect = selected === correct
-  const options   = getOptions(q)
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📝</span>
-          <p className="text-xs font-black uppercase tracking-widest text-tertiary">End of Lesson Quiz</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'lessonFadeIn 0.35s ease' }}>
+      {/* Progress pills */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {questions.map((_, i) => (
+          <div key={i} style={{
+            flex: 1, height: 5, borderRadius: 4,
+            background: i < currentQ ? 'var(--lesson-accent)' : i === currentQ ? 'var(--lesson-accent)' : 'var(--lesson-track)',
+            opacity: i === currentQ ? 1 : i < currentQ ? 0.5 : 0.3,
+            transition: 'all 0.3s',
+          }} />
+        ))}
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--lesson-text-muted)', flexShrink: 0 }}>
+          {currentQ + 1}/{total}
+        </span>
+      </div>
+
+      {/* Question */}
+      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', background: 'var(--lesson-accent)' }}>
+          <SlideLabel text="📝 End Quiz" accent="rgba(255,255,255,0.7)" />
+          <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{q.question}</p>
         </div>
-        <p className="text-xs font-bold text-tertiary">{currentQ + 1} / {total}</p>
       </div>
-      <div className="h-1.5 bg-subtle rounded-full overflow-hidden">
-        <div
-          className={`h-full ${color?.accent ?? 'bg-indigo-500'} rounded-full transition-all duration-500`}
-          style={{ width: `${(currentQ / total) * 100}%` }}
-        />
-      </div>
-      <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-4`}>
-        <p className={`text-base font-bold ${color?.text ?? 'text-primary'} leading-snug`}>{q.question}</p>
-      </div>
-      <div className="space-y-2">
+
+      {/* Options */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {options.map(opt => {
-          const isSelected = selected === opt.key
-          const isRight    = opt.key === correct
-          let optClass = 'border-default bg-subtle text-primary'
+          const isThisCorrect  = opt.key === correct
+          const isThisSelected = opt.key === selected
+
+          let bg = 'var(--lesson-option-bg)'
+          let border = '2px solid var(--lesson-option-bd)'
+          let textColor = 'var(--lesson-option-tx)'
+          let labelBg = 'var(--lesson-surface)'
+          let labelColor = 'var(--lesson-text-muted)'
+
           if (revealed) {
-            if (isRight)         optClass = 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300'
-            else if (isSelected) optClass = 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300'
-            else                 optClass = 'border-default bg-subtle text-secondary opacity-50'
+            if (isThisCorrect) {
+              bg = 'var(--lesson-correct-bg)'; border = `2px solid var(--lesson-correct-bd)`
+              textColor = 'var(--lesson-correct-tx)'; labelBg = 'var(--lesson-correct-bd)'; labelColor = '#fff'
+            } else if (isThisSelected) {
+              bg = 'var(--lesson-wrong-bg)'; border = `2px solid var(--lesson-wrong-bd)`
+              textColor = 'var(--lesson-wrong-tx)'; labelBg = 'var(--lesson-wrong-bd)'; labelColor = '#fff'
+            }
+          } else if (isThisSelected) {
+            bg = 'var(--lesson-option-sel)'; border = `2px solid var(--lesson-option-selbd)`
+            textColor = 'var(--lesson-option-seltx)'; labelBg = 'var(--lesson-option-selbd)'; labelColor = '#fff'
           }
+
           return (
-            <button key={opt.key} onClick={() => handleSelect(opt.key)} disabled={revealed}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm border-2 transition-all ${optClass} ${
-                !revealed ? 'hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 active:scale-[0.98]' : ''
-              }`}>
-              <span className="font-bold mr-2">{opt.key}.</span>{opt.text}
+            <button
+              key={opt.key}
+              onClick={() => handleSelect(opt.key)}
+              disabled={revealed || !interactive}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
+                padding: '14px 16px', borderRadius: 16, background: bg, border,
+                cursor: revealed || !interactive ? 'default' : 'pointer',
+                textAlign: 'left', transition: 'all 0.18s ease',
+              }}
+            >
+              <span style={{
+                minWidth: 28, height: 28, borderRadius: 8,
+                background: labelBg, color: labelColor,
+                fontSize: 13, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, transition: 'all 0.18s ease',
+              }}>{opt.key}</span>
+              <p style={{ fontSize: 14, lineHeight: 1.55, color: textColor, margin: 0, fontWeight: revealed && isThisCorrect ? 700 : 500 }}>{opt.text}</p>
+              {revealed && isThisCorrect  && <span style={{ marginLeft: 'auto', fontSize: 16, flexShrink: 0 }}>✓</span>}
+              {revealed && isThisSelected && !isThisCorrect && <span style={{ marginLeft: 'auto', fontSize: 16, flexShrink: 0 }}>✗</span>}
             </button>
           )
         })}
       </div>
+
+      {/* Feedback */}
       {revealed && (
-        <div className="space-y-3">
-          <div className={`px-4 py-3 rounded-2xl ${isCorrect ? 'bg-green-50 dark:bg-green-950/30' : 'bg-orange-50 dark:bg-orange-950/30'}`}>
-            <p className={`text-sm font-bold leading-relaxed ${isCorrect ? 'text-green-800 dark:text-green-300' : 'text-orange-800 dark:text-orange-300'}`}>
-              {isCorrect ? `✓ ${q.feedback_correct ?? 'Correct!'}` : `✗ ${q.feedback_wrong ?? 'Not quite.'}`}
-            </p>
-            {!isCorrect && q.feedback_correct && (
-              <p className="text-xs text-orange-700 dark:text-orange-400 mt-1.5 leading-relaxed">
-                Correct: <span className="font-bold">{correct}</span> — {q.feedback_correct}
-              </p>
-            )}
-          </div>
-          <button onClick={handleNext}
-            className={`w-full py-4 ${color?.accent ?? 'bg-indigo-600'} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity active:scale-[0.98]`}>
-            {currentQ + 1 >= total ? 'Complete quiz ✓' : 'Next question →'}
-          </button>
+        <div style={{
+          padding: '14px 18px', borderRadius: 16,
+          background: isCorrect ? 'var(--lesson-correct-bg)' : 'var(--lesson-wrong-bg)',
+          border: `1px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
+          animation: 'lessonFadeIn 0.25s ease',
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: isCorrect ? 'var(--lesson-correct-tx)' : 'var(--lesson-wrong-tx)', margin: 0, lineHeight: 1.5 }}>
+            {isCorrect
+              ? (q.feedback_correct || '✅ Correct! Great work.')
+              : (q.feedback_wrong  || `❌ Not quite. The correct answer is ${correct}.`)}
+          </p>
         </div>
       )}
-      {!revealed && (
-        <p className="text-center text-xs text-tertiary">Tap an answer to continue</p>
+
+      {/* Next question button */}
+      {revealed && (
+        <button
+          onClick={handleNext}
+          style={{
+            width: '100%', padding: '14px', borderRadius: 16,
+            background: 'var(--lesson-accent)', color: '#fff',
+            fontSize: 14, fontWeight: 900, border: 'none', cursor: 'pointer',
+            transition: 'opacity 0.18s', animation: 'lessonFadeIn 0.25s ease',
+          }}
+        >
+          {currentQ + 1 >= total ? 'See my results →' : `Next question → (${currentQ + 1}/${total})`}
+        </button>
       )}
     </div>
   )
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// SUMMARY
+// ────────────────────────────────────────────────────────────────────────────
 function SummarySlide({ slide, color }) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg">📋</span>
-        <p className="text-xs font-black uppercase tracking-widest text-tertiary">Summary</p>
-      </div>
-      <div className="space-y-2">
-        {(slide.points ?? []).map((point, i) => (
-          <div key={i} className="flex items-start gap-3 px-4 py-3 bg-subtle rounded-xl">
-            <div className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
+      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)' }}>
+        <SlideLabel text="📋 What you learned" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {(slide.points ?? []).map((pt, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <span style={{
+                minWidth: 22, height: 22, borderRadius: 6,
+                background: 'var(--lesson-accent)', color: '#fff',
+                fontSize: 11, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
+              }}>{i + 1}</span>
+              <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0, fontWeight: 500 }}>{pt}</p>
             </div>
-            <p className="text-sm text-primary font-medium leading-relaxed">{point}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
       {slide.closing && (
-        <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-4`}>
-          <p className={`text-sm font-bold ${color?.text ?? 'text-primary'} leading-relaxed`}>{slide.closing}</p>
+        <div style={{
+          borderRadius: 18, padding: '16px 20px', textAlign: 'center',
+          background: 'var(--lesson-accent)',
+        }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{slide.closing}</p>
         </div>
       )}
     </div>
   )
 }
 
-// ── Main renderer ─────────────────────────────────────────────────────────────
-export default function SlideRenderer({
-  slide,
-  slideIndex,
-  color,
-  interactive = true,
-  isAdmin = false,
-  subtopicId,
-  examTag,
-  subjectName,
-  topicName,
-  subtopicName,
-  onImageUpload,
-  onUnlock,
-  onQuizComplete,  // NEW: (correctCount, totalCount) => void
-}) {
-  switch (slide.type) {
-    case 'hook':
-      return <HookSlide slide={slide} color={color} />
-    case 'definition':
-      return <DefinitionSlide slide={slide} color={color} />
-    case 'real_life':
-      return (
-        <div className="space-y-3 animate-in fade-in duration-300">
-          <div className={`rounded-2xl ${color?.bg ?? 'bg-subtle'} px-5 py-5`}>
-            <p className={`text-base leading-relaxed ${color?.text ?? 'text-primary'} font-medium`}>{slide.body}</p>
-          </div>
-        </div>
-      )
-    case 'concept':
-      return (
-        <ConceptSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex}
-          subtopicId={subtopicId} uploadMeta={{ examTag, subjectName, topicName, subtopicName }}
-          onImageUpload={onImageUpload} />
-      )
-    case 'formula':
-      return (
-        <FormulaSlide slide={slide} color={color} isAdmin={isAdmin} slideIndex={slideIndex}
-          subtopicId={subtopicId} uploadMeta={{ examTag, subjectName, topicName, subtopicName }}
-          onImageUpload={onImageUpload} />
-      )
-    case 'interaction':
-      return <InteractionSlide slide={slide} color={color} interactive={interactive} onUnlock={onUnlock} />
-    case 'worked_example':
-      if (slide.mode === 'student_attempt') {
-        return <StudentAttemptSlide slide={slide} color={color} onUnlock={onUnlock} />
-      }
-      return <GuidedExampleSlide slide={slide} color={color} onUnlock={onUnlock} />
-    case 'end_quiz':
-      return (
-        <EndQuizSlide
-          slide={slide} color={color} interactive={interactive}
-          onUnlock={onUnlock} onQuizComplete={onQuizComplete}
-        />
-      )
-    case 'summary':
-      return <SummarySlide slide={slide} color={color} />
-    default:
-      return (
-        <div className="p-4 bg-subtle rounded-2xl text-xs text-tertiary text-center">
+// ────────────────────────────────────────────────────────────────────────────
+// MAIN DISPATCHER
+// ────────────────────────────────────────────────────────────────────────────
+export default function SlideRenderer({ slide, color, onUnlock, onQuizComplete }) {
+  if (!slide) return null
+  const interactive = true
+
+  const props = { slide, color, interactive, onUnlock, onQuizComplete }
+
+  return (
+    <>
+      <style>{`
+        @keyframes lessonFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      {slide.type === 'hook'           && <HookSlide           {...props} />}
+      {slide.type === 'definition'     && <DefinitionSlide     {...props} />}
+      {slide.type === 'real_life'      && <RealLifeSlide       {...props} />}
+      {slide.type === 'concept'        && <ConceptSlide        {...props} />}
+      {slide.type === 'formula'        && <FormulaSlide        {...props} />}
+      {slide.type === 'interaction'    && <InteractionSlide    {...props} />}
+      {slide.type === 'worked_example' && <WorkedExampleSlide  {...props} />}
+      {slide.type === 'end_quiz'       && <EndQuizSlide        {...props} />}
+      {slide.type === 'summary'        && <SummarySlide        {...props} />}
+      {!['hook','definition','real_life','concept','formula','interaction','worked_example','end_quiz','summary'].includes(slide.type) && (
+        <div style={{ padding: 20, borderRadius: 16, background: 'var(--lesson-surface)', color: 'var(--lesson-text-muted)', fontSize: 13 }}>
           Unknown slide type: {slide.type}
         </div>
-      )
-  }
+      )}
+    </>
+  )
 }

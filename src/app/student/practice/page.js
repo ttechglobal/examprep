@@ -1,11 +1,9 @@
 'use client'
 // src/app/student/practice/page.js
 // ─────────────────────────────────────────────────────────────────────────────
-// CHANGE: ExamSimSetup — WAEC format now requires picking ONE subject.
-//   - Student picks WAEC → picks a subject → 50 questions, 45 minutes
-//   - JAMB unchanged: 4 subjects × 40 questions, 3 hours
-//
-// All other modes (Topic, Timed, Mock) unchanged.
+// FIX: All subject pickers (MockSetup, TimedSetup, ExamSimSetup waec_subject)
+//      now use inline styles for the selected state so Tailwind JIT purging
+//      can't remove the colours. Each subject maps to a hardcoded hex palette.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react'
@@ -13,24 +11,38 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getSubjectColor } from '@/lib/theme'
 
-const JAMB_DURATION_SECS = 180 * 60   // 3 hours
-const WAEC_DURATION_SECS = 45  * 60   // 45 minutes per subject paper
+const JAMB_DURATION_SECS = 180 * 60
+const WAEC_DURATION_SECS = 45  * 60
 
-// ── Neutral pill ──────────────────────────────────────────────────────────────
-function NeutralPill({ children, className = '' }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-subtle text-secondary border border-default ${className}`}>
-      {children}
-    </span>
-  )
+// Hardcoded per-subject selected styles (bg + border + text) as hex values
+// so Tailwind JIT purging cannot remove them
+const SUBJECT_SELECTED_STYLE = {
+  'Mathematics':           { background: '#dbeafe', borderColor: '#93c5fd', color: '#1d4ed8' },
+  'English Language':      { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' },
+  'Physics':               { background: '#cffafe', borderColor: '#67e8f9', color: '#0e7490' },
+  'Chemistry':             { background: '#dcfce7', borderColor: '#86efac', color: '#15803d' },
+  'Biology':               { background: '#d1fae5', borderColor: '#6ee7b7', color: '#047857' },
+  'Economics':             { background: '#fef3c7', borderColor: '#fcd34d', color: '#b45309' },
+  'Government':            { background: '#fee2e2', borderColor: '#fca5a5', color: '#b91c1c' },
+  'Literature in English': { background: '#fce7f3', borderColor: '#f9a8d4', color: '#be185d' },
+  'Geography':             { background: '#ccfbf1', borderColor: '#5eead4', color: '#0f766e' },
+  'Agricultural Science':  { background: '#ecfccb', borderColor: '#bef264', color: '#4d7c0f' },
+  'Further Mathematics':   { background: '#e0f2fe', borderColor: '#7dd3fc', color: '#0369a1' },
+  'Commerce':              { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' },
+  'Use of English':        { background: '#e0e7ff', borderColor: '#a5b4fc', color: '#4338ca' },
+}
+const DEFAULT_SELECTED = { background: '#e0e7ff', borderColor: '#a5b4fc', color: '#4338ca' }
+
+function getSelStyle(name) {
+  return SUBJECT_SELECTED_STYLE[name] ?? DEFAULT_SELECTED
 }
 
 // ── Mode cards ────────────────────────────────────────────────────────────────
 const MODES = [
-  { id: 'topic', emoji: '🎯', title: 'Topic Practice',    desc: 'Pick a subject and topic, drill specific concepts',   gradient: 'from-indigo-500 to-violet-600', badge: null },
-  { id: 'timed', emoji: '⏱',  title: 'Timed Practice',    desc: 'Mixed questions with a live countdown timer',         gradient: 'from-blue-500 to-cyan-500',     badge: null },
-  { id: 'mock',  emoji: '📋', title: 'Mock Test',          desc: 'Full subject test — all difficulty levels mixed',    gradient: 'from-emerald-500 to-teal-500',  badge: 'Popular' },
-  { id: 'exam',  emoji: '🏆', title: 'Exam Simulation',   desc: 'Real JAMB or WAEC format with official timing',      gradient: 'from-orange-500 to-red-500',    badge: 'Challenge' },
+  { id: 'topic', emoji: '🎯', title: 'Topic Practice',  desc: 'Pick a subject and topic, drill specific concepts', gradient: 'from-indigo-500 to-violet-600', badge: null },
+  { id: 'timed', emoji: '⏱',  title: 'Timed Practice',  desc: 'Mixed questions with a live countdown timer',       gradient: 'from-blue-500 to-cyan-500',     badge: null },
+  { id: 'mock',  emoji: '📋', title: 'Mock Test',        desc: 'Full subject test — all difficulty levels mixed',  gradient: 'from-emerald-500 to-teal-500',  badge: 'Popular' },
+  { id: 'exam',  emoji: '🏆', title: 'Exam Simulation', desc: 'Real JAMB or WAEC format with official timing',    gradient: 'from-orange-500 to-red-500',    badge: 'Challenge' },
 ]
 
 // ── Bottom sheet shell ────────────────────────────────────────────────────────
@@ -57,14 +69,14 @@ function Sheet({ onClose, children }) {
 
 // ── Topic Practice ────────────────────────────────────────────────────────────
 function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
-  const [step,         setStep]         = useState('subject')
-  const [subject,      setSubject]      = useState(null)
-  const [topics,       setTopics]       = useState([])
-  const [topic,        setTopic]        = useState(null)
-  const [topicsLoading,setTopicsLoading]= useState(false)
-  const [count,        setCount]        = useState(20)
-  const [revealMode,   setRevealMode]   = useState('immediate')
-  const [prereqCheck,  setPrereqCheck]  = useState(null)
+  const [step,          setStep]          = useState('subject')
+  const [subject,       setSubject]       = useState(null)
+  const [topics,        setTopics]        = useState([])
+  const [topic,         setTopic]         = useState(null)
+  const [topicsLoading, setTopicsLoading] = useState(false)
+  const [count,         setCount]         = useState(20)
+  const [revealMode,    setRevealMode]    = useState('immediate')
+  const [prereqCheck,   setPrereqCheck]   = useState(null)
   const supabase = createClient()
 
   async function handleSubjectSelect(sub) {
@@ -123,11 +135,13 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+
+        {/* Step 1: subject */}
         {step === 'subject' && subjects.map(sub => {
           const c = getSubjectColor(sub.name)
           return (
             <button key={sub.id} onClick={() => handleSubjectSelect(sub)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700`}>
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all border-default bg-card hover:border-indigo-300 dark:hover:border-indigo-700">
               <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
                 <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
               </div>
@@ -137,6 +151,7 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
           )
         })}
 
+        {/* Step 2: topic */}
         {step === 'topic' && (
           <>
             {topicsLoading ? (
@@ -149,7 +164,7 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
                 </button>
                 {topics.map(t => (
                   <button key={t.id} onClick={() => handleTopicSelect(t)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${topic?.id === t.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-colors ${topic?.id === t.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary hover:text-primary'}`}>
                     {t.name}
                   </button>
                 ))}
@@ -158,22 +173,30 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
           </>
         )}
 
+        {/* Step 3: prereq warning */}
+        {step === 'prereq' && prereqCheck?.data && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-4 space-y-2">
+            <p className="text-sm font-black text-amber-800 dark:text-amber-300">⚠️ Prerequisite topics recommended</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+              You haven't completed these topics yet. Studying them first will help you score better here.
+            </p>
+            <ul className="space-y-1">
+              {prereqCheck.data.unmetPrerequisites?.map((p, i) => (
+                <li key={i} className="text-xs font-bold text-amber-700 dark:text-amber-400">→ {p.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Step 3/4: config */}
         {(step === 'config' || step === 'prereq') && (
           <div className="space-y-4">
-            {step === 'prereq' && prereqCheck?.data?.unmetPrerequisites?.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
-                <p className="text-sm font-black text-amber-800 dark:text-amber-400 mb-1">📚 Recommended first</p>
-                <p className="text-xs text-amber-700 dark:text-amber-500 leading-relaxed">
-                  Consider studying <strong>{prereqCheck.data.unmetPrerequisites[0]?.name}</strong> before this topic.
-                </p>
-              </div>
-            )}
             <div>
-              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Questions</p>
-              <div className="grid grid-cols-4 gap-2">
+              <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Number of questions</p>
+              <div className="flex gap-2">
                 {[10, 20, 30, 40].map(n => (
                   <button key={n} onClick={() => setCount(n)}
-                    className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${count === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card hover:border-indigo-300 dark:hover:border-indigo-700'}`}>
+                    className={`flex-1 py-2 rounded-xl text-sm font-black border-2 transition-all ${count === n ? 'bg-blue-600 border-blue-600 text-white' : 'border-default text-secondary hover:border-blue-300 dark:hover:border-blue-700 bg-card'}`}>
                     {n}
                   </button>
                 ))}
@@ -181,14 +204,15 @@ function TopicSetup({ subjects, examType, profile, onStart, onClose }) {
             </div>
             <div>
               <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Answer reveal</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[{ id: 'immediate', icon: '⚡', label: 'Instant', desc: 'See answer after each question' },
-                  { id: 'end',       icon: '📋', label: 'At the end', desc: 'Review all after finishing' }].map(opt => (
+              <div className="flex gap-2">
+                {[
+                  { id: 'immediate', icon: '⚡', label: 'Immediate' },
+                  { id: 'end',       icon: '📋', label: 'At end' },
+                ].map(opt => (
                   <button key={opt.id} onClick={() => setRevealMode(opt.id)}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${revealMode === opt.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-600 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black border-2 transition-all text-center ${revealMode === opt.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-600 text-indigo-700 dark:text-indigo-400' : 'border-default bg-card text-secondary'}`}>
                     <span className="text-base block mb-0.5">{opt.icon}</span>
                     <p className="text-xs font-black">{opt.label}</p>
-                    <p className="text-[10px] text-secondary leading-snug mt-0.5">{opt.desc}</p>
                   </button>
                 ))}
               </div>
@@ -236,29 +260,22 @@ function TimedSetup({ subjects, examType, onStart, onClose }) {
     onStart({ mode: 'timed', examType: examType ?? 'WAEC',
       subjects: subject ? [subject.name] : subjects.map(s => s.name),
       topic_id: topic?.id ?? null, topic_name: topic?.name ?? null,
-      count, revealMode: 'immediate', timed: true })
+      count, revealMode: 'immediate', timed: true, durationSecs: mins[count] * 60 })
   }
 
   return (
     <Sheet onClose={onClose}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-default flex-shrink-0">
-        <div><p className="font-black text-primary text-base">⏱ Timed Practice</p><p className="text-xs text-secondary mt-0.5">Beat the clock, build exam speed</p></div>
+        <div><p className="font-black text-primary text-base">⏱ Timed Practice</p><p className="text-xs text-secondary mt-0.5">Race the clock</p></div>
         <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl px-4 py-3">
-          <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
-          <div>
-            <p className="text-sm font-black text-blue-800 dark:text-blue-300">{mins[count]} minutes</p>
-            <p className="text-xs text-blue-600 dark:text-blue-400">~{((mins[count] * 60) / count).toFixed(0)} seconds per question</p>
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div>
           <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Questions</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="flex gap-2">
             {countOptions.map(n => (
               <button key={n} onClick={() => setCount(n)}
-                className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${count === n ? 'bg-blue-600 border-blue-600 text-white' : 'border-default text-secondary hover:border-blue-300 dark:hover:border-blue-700 bg-card'}`}>
+                className={`flex-1 py-2 rounded-xl text-sm font-black border-2 transition-all ${count === n ? 'bg-blue-600 border-blue-600 text-white' : 'border-default text-secondary hover:border-blue-300 dark:hover:border-blue-700 bg-card'}`}>
                 {n}
               </button>
             ))}
@@ -266,29 +283,48 @@ function TimedSetup({ subjects, examType, onStart, onClose }) {
         </div>
         <div>
           <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">Focus on</p>
+          {/* All subjects */}
           <button onClick={() => { setSubject(null); setTopic(null) }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left mb-2 transition-all ${!subject ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left mb-2 transition-all ${
+              !subject
+                ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400'
+                : 'border-default bg-card text-secondary'
+            }`}>
             <span className="text-sm font-bold">All subjects (mixed)</span>
           </button>
+          {/* Individual subjects — inline styles for selected */}
           {subjects.map(sub => {
-            const c = getSubjectColor(sub.name)
             const isSelected = subject?.id === sub.id
+            const sel        = getSelStyle(sub.name)
+            const c          = getSubjectColor(sub.name)
             return (
               <button key={sub.id} onClick={() => handleSubjectFilter(sub)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border mb-1 text-left transition-all text-xs font-bold ${isSelected ? `${c.bg} ${c.text} border-transparent` : 'border-default bg-card text-secondary'}`}>
+                style={isSelected ? { backgroundColor: sel.background, borderColor: sel.borderColor, color: sel.color } : {}}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 mb-1 text-left transition-all text-sm font-bold ${
+                  isSelected ? '' : 'border-default bg-card text-secondary hover:border-gray-300'
+                }`}>
                 {sub.name}
               </button>
             )
           })}
+          {/* Topic drill-down */}
           {subject && !topicsLoading && topics.length > 0 && (
             <div className="mt-2 ml-3 space-y-1">
               <button onClick={() => setTopic(null)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${!topic ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border-2 transition-colors ${
+                  !topic
+                    ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400'
+                    : 'border-default bg-card text-secondary'
+                }`}>
                 All topics in {subject.name}
               </button>
               {topics.map(t => (
                 <button key={t.id} onClick={() => setTopic(t)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${topic?.id === t.id ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-400 text-blue-700 dark:text-blue-400' : 'border-default bg-card text-secondary'}`}>
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold border-2 transition-colors ${
+                    topic?.id === t.id
+                      ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-400 text-blue-700 dark:text-blue-400'
+                      : 'border-default bg-card text-secondary'
+                  }`}>
                   {t.name}
                 </button>
               ))}
@@ -324,14 +360,24 @@ function MockSetup({ subjects, examType, onStart, onClose }) {
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
         <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-3">Choose subject</p>
         {subjects.map(sub => {
-          const c = getSubjectColor(sub.name)
+          const isSelected = subject?.id === sub.id
+          const sel        = getSelStyle(sub.name)
+          const c          = getSubjectColor(sub.name)
           return (
             <button key={sub.id} onClick={() => setSubject(sub)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all ${subject?.id === sub.id ? `${c.bg} border-transparent` : 'border-default bg-card hover:border-default'}`}>
+              style={isSelected ? { backgroundColor: sel.background, borderColor: sel.borderColor } : {}}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 text-left transition-all ${
+                isSelected ? '' : 'border-default bg-card hover:border-gray-300'
+              }`}>
               <div className={`w-8 h-8 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
                 <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
               </div>
-              <span className={`text-sm font-bold ${subject?.id === sub.id ? c.text : 'text-primary'}`}>{sub.name}</span>
+              <span className="text-sm font-bold text-primary" style={isSelected ? { color: sel.color } : {}}>{sub.name}</span>
+              {isSelected && (
+                <svg className="w-4 h-4 ml-auto flex-shrink-0" style={{ color: sel.color }} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                </svg>
+              )}
             </button>
           )
         })}
@@ -347,51 +393,31 @@ function MockSetup({ subjects, examType, onStart, onClose }) {
 }
 
 // ── Exam Simulation ───────────────────────────────────────────────────────────
-// WAEC: pick ONE subject → 50 questions → 45 minutes
-// JAMB: all 4 enrolled subjects → 160 questions → 3 hours (unchanged)
 function ExamSimSetup({ subjects, profile, onStart, onClose }) {
-  const [examFormat,     setExamFormat]     = useState(
+  const [examFormat,  setExamFormat]  = useState(
     profile?.exam_type === 'JAMB' ? 'JAMB' : profile?.exam_type === 'WAEC' ? 'WAEC' : null
   )
-  const [waecSubject,    setWaecSubject]    = useState(null)  // WAEC: one subject required
-  const [step,           setStep]           = useState('format') // format | waec_subject
+  const [waecSubject, setWaecSubject] = useState(null)
+  const [step,        setStep]        = useState('format')
 
   function handleFormatSelect(fmt) {
     setExamFormat(fmt)
     setWaecSubject(null)
-    if (fmt === 'WAEC') {
-      setStep('waec_subject')
-    } else {
-      setStep('format')
-    }
+    if (fmt === 'WAEC') setStep('waec_subject')
+    else setStep('format')
   }
 
   function handleStart() {
     if (!examFormat) return
     if (examFormat === 'WAEC') {
       if (!waecSubject) return
-      onStart({
-        mode:         'exam',
-        examType:     'WAEC',
-        examFormat:   'WAEC',
-        subjects:     [waecSubject.name],
-        count:        50,
-        revealMode:   'end',
-        timed:        true,
-        durationSecs: WAEC_DURATION_SECS,
-      })
+      onStart({ mode: 'exam', examType: 'WAEC', examFormat: 'WAEC',
+        subjects: [waecSubject.name], count: 50, revealMode: 'end',
+        timed: true, durationSecs: WAEC_DURATION_SECS })
     } else {
-      // JAMB — all enrolled subjects
-      onStart({
-        mode:         'exam',
-        examType:     'JAMB',
-        examFormat:   'JAMB',
-        subjects:     subjects.map(s => s.name),
-        count:        160,
-        revealMode:   'end',
-        timed:        true,
-        durationSecs: JAMB_DURATION_SECS,
-      })
+      onStart({ mode: 'exam', examType: 'JAMB', examFormat: 'JAMB',
+        subjects: subjects.map(s => s.name), count: 160, revealMode: 'end',
+        timed: true, durationSecs: JAMB_DURATION_SECS })
     }
   }
 
@@ -421,12 +447,9 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-        {/* Step 1: Format selection */}
         {step === 'format' && (
           <>
             <p className="text-xs font-bold text-secondary uppercase tracking-wide">Choose exam format</p>
-
-            {/* JAMB */}
             <button onClick={() => handleFormatSelect('JAMB')}
               className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
                 examFormat === 'JAMB'
@@ -446,8 +469,6 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
                 <p className="text-xs text-secondary">🎯 All enrolled subjects at once</p>
               </div>
             </button>
-
-            {/* WAEC */}
             <button onClick={() => handleFormatSelect('WAEC')}
               className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
                 examFormat === 'WAEC'
@@ -467,8 +488,6 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
                 <p className="text-xs text-secondary">🎯 One subject per simulation</p>
               </div>
             </button>
-
-            {/* JAMB ready-to-go info */}
             {examFormat === 'JAMB' && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
                 <p className="text-xs font-black text-amber-800 dark:text-amber-400">⚠️ Real exam conditions</p>
@@ -478,35 +497,30 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
           </>
         )}
 
-        {/* Step 2: WAEC subject picker */}
         {step === 'waec_subject' && (
           <>
-            <p className="text-xs font-bold text-secondary uppercase tracking-wide">
-              Pick one subject for this simulation
-            </p>
-
+            <p className="text-xs font-bold text-secondary uppercase tracking-wide">Pick one subject for this simulation</p>
             <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-3">
               <p className="text-xs font-black text-emerald-800 dark:text-emerald-400">📝 WAEC format</p>
               <p className="text-xs text-emerald-700 dark:text-emerald-500 mt-0.5">50 questions · 45 minutes · objective only · answers at end</p>
             </div>
-
             <div className="space-y-2">
               {subjects.map(sub => {
-                const c = getSubjectColor(sub.name)
                 const isSelected = waecSubject?.id === sub.id
+                const sel        = getSelStyle(sub.name)
+                const c          = getSubjectColor(sub.name)
                 return (
                   <button key={sub.id} onClick={() => setWaecSubject(sub)}
+                    style={isSelected ? { backgroundColor: sel.background, borderColor: sel.borderColor } : {}}
                     className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 text-left transition-all ${
-                      isSelected
-                        ? `${c.bg} border-transparent`
-                        : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
+                      isSelected ? 'shadow-sm' : 'border-default bg-card hover:border-emerald-300 dark:hover:border-emerald-700'
                     }`}>
                     <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
                       <span className={`text-xs font-black ${c.text}`}>{sub.name.slice(0, 2)}</span>
                     </div>
-                    <span className={`text-sm font-bold flex-1 ${isSelected ? c.text : 'text-primary'}`}>{sub.name}</span>
+                    <span className="text-sm font-bold flex-1 text-primary" style={isSelected ? { color: sel.color } : {}}>{sub.name}</span>
                     {isSelected && (
-                      <svg className={`w-5 h-5 ${c.text} flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-5 h-5 flex-shrink-0" style={{ color: sel.color }} fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
                       </svg>
                     )}
@@ -514,7 +528,6 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
                 )
               })}
             </div>
-
             {waecSubject && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
                 <p className="text-xs font-black text-amber-800 dark:text-amber-400">⚠️ Real exam conditions</p>
@@ -629,19 +642,16 @@ export default function PracticeHQPage() {
 
   return (
     <div className="space-y-5 pb-4">
-      {/* Setup sheets */}
       {activeSetup === 'topic' && <TopicSetup subjects={subjects} examType={profile?.exam_type} profile={profile} onStart={startSession} onClose={() => setActiveSetup(null)} />}
       {activeSetup === 'timed' && <TimedSetup subjects={subjects} examType={profile?.exam_type} onStart={startSession} onClose={() => setActiveSetup(null)} />}
       {activeSetup === 'mock'  && <MockSetup  subjects={subjects} examType={profile?.exam_type} onStart={startSession} onClose={() => setActiveSetup(null)} />}
       {activeSetup === 'exam'  && <ExamSimSetup subjects={subjects} profile={profile} onStart={startSession} onClose={() => setActiveSetup(null)} />}
 
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-primary">Practice HQ</h1>
         <p className="text-sm text-secondary mt-0.5">Every type of practice, all in one place</p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-subtle p-1 rounded-2xl w-fit">
         {[{ id: 'practice', label: 'Practice' }, { id: 'history', label: 'History' }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -661,49 +671,31 @@ export default function PracticeHQPage() {
               </p>
             </div>
           )}
-
-          {/* Mode cards */}
           <div className="grid grid-cols-2 gap-3">
-            {MODES.map(mode => (
-              <button key={mode.id} onClick={() => setActiveSetup(mode.id)}
-                className="relative flex flex-col gap-3 bg-card rounded-2xl p-4 shadow-sm hover:shadow-md transition-all active:scale-[0.97] text-left">
-                {mode.badge && (
-                  <span className="absolute top-3 right-3 text-[9px] font-black text-white bg-gradient-to-r from-orange-500 to-red-500 px-1.5 py-0.5 rounded-full">
-                    {mode.badge}
-                  </span>
-                )}
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${mode.gradient} flex items-center justify-center text-lg shadow-sm`}>
-                  {mode.emoji}
-                </div>
-                <div>
-                  <p className="text-sm font-black text-primary">{mode.title}</p>
-                  <p className="text-xs text-secondary mt-0.5 leading-snug">{mode.desc}</p>
+            {MODES.map(m => (
+              <button key={m.id} onClick={() => setActiveSetup(m.id)}
+                disabled={subjects.length === 0}
+                className="relative flex flex-col items-start p-4 rounded-2xl text-left transition-all active:scale-[0.97] disabled:opacity-40 overflow-hidden shadow-sm hover:shadow-md">
+                <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-90`} />
+                <div className="relative z-10 w-full">
+                  {m.badge && (
+                    <span className="absolute top-0 right-0 text-[10px] font-black text-white bg-white/20 px-2 py-0.5 rounded-full">
+                      {m.badge}
+                    </span>
+                  )}
+                  <span className="text-2xl block mb-2">{m.emoji}</span>
+                  <p className="text-sm font-black text-white leading-tight">{m.title}</p>
+                  <p className="text-[11px] text-white/80 mt-1 leading-snug">{m.desc}</p>
                 </div>
               </button>
             ))}
           </div>
-
-          {/* Quick stats */}
-          {subjects.length > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
-                <p className="text-xl font-black text-primary">{subjects.length}</p>
-                <p className="text-[10px] text-secondary">Subjects</p>
-              </div>
-              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
-                <p className="text-xl font-black text-primary">50</p>
-                <p className="text-[10px] text-secondary">WAEC Qs</p>
-              </div>
-              <div className="bg-card rounded-2xl p-3 text-center shadow-sm">
-                <p className="text-xl font-black text-primary">160</p>
-                <p className="text-[10px] text-secondary">JAMB Qs</p>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {tab === 'history' && <HistoryTab sessions={sessions} loading={sessionsLoading} />}
+      {tab === 'history' && (
+        <HistoryTab sessions={sessions} loading={sessionsLoading} />
+      )}
     </div>
   )
 }
