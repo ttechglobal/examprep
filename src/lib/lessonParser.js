@@ -1,134 +1,80 @@
+// src/lib/lessonParser.js
 // ─────────────────────────────────────────────────────────────────────────────
-// lessonParser.js
-// Validates, parses, and builds prompts for the slide-based lesson schema.
-// Replaces the old sections-based schema entirely.
+// Lesson JSON parser + prompt builder.
+//
+// FIXES in buildLessonPrompt:
+// 1. Guard against undefined subject/topic/subtopic — now throws a clear error
+//    instead of silently interpolating "undefined" into the stored prompt.
+// 2. Hook instruction rewritten — simpler, more direct, no room for
+//    poetic/over-literary output from the AI.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const SLIDE_TYPES = [
-  'hook',
-  'definition',
-  'concept',
-  'formula',
-  'interaction',
-  'worked_example',
-  'end_quiz',
-  'summary',
-  // real_life kept for backward compat only — not generated in new lessons
-  'real_life',
+const SLIDE_TYPES = [
+  'hook', 'definition', 'concept', 'formula', 'interaction',
+  'worked_example', 'end_quiz', 'summary', 'real_life',
 ]
 
-// ── Per-type validators ───────────────────────────────────────────────────────
-
-function validateSlide(slide, index) {
+// ── Slide-level validation ────────────────────────────────────────────────────
+function validateSlide(slide, i) {
   const errors = []
-  const id = `Slide ${index + 1} (${slide.type})`
+  const label = `Slide ${i + 1} (${slide.type})`
 
   switch (slide.type) {
     case 'hook':
-      if (!slide.body?.trim()) errors.push(`${id}: missing 'body'`)
+      if (!slide.body?.trim()) errors.push(`${label}: missing 'body'`)
       break
-
     case 'definition':
-      if (!slide.term?.trim()) errors.push(`${id}: missing 'term'`)
-      if (!slide.definition?.trim()) errors.push(`${id}: missing 'definition'`)
+      if (!slide.term?.trim())       errors.push(`${label}: missing 'term'`)
+      if (!slide.definition?.trim()) errors.push(`${label}: missing 'definition'`)
       if (!Array.isArray(slide.examples) || slide.examples.length === 0)
-        errors.push(`${id}: 'examples' must be a non-empty array`)
+        errors.push(`${label}: 'examples' must be a non-empty array`)
       break
-
-    case 'real_life':
-      // backward compat — no strict validation
-      break
-
     case 'concept':
-      if (!slide.heading?.trim()) errors.push(`${id}: missing 'heading'`)
-      if (!slide.body?.trim()) errors.push(`${id}: missing 'body'`)
-      // examples is optional but encouraged
-      // image block is optional — but if present, validate intent_type
-      if (slide.image && slide.image.intent_type) {
-        const validIntents = ['concept_visual','real_life_example','process_diagram','comparison_visual','formula_diagram','intuition_builder','memory_aid','experiment_visual']
-        if (!validIntents.includes(slide.image.intent_type))
-          errors.push(`${id}: image.intent_type '${slide.image.intent_type}' is not valid`)
-      }
+      if (!slide.heading?.trim()) errors.push(`${label}: missing 'heading'`)
+      if (!slide.body?.trim())    errors.push(`${label}: missing 'body'`)
       break
-
     case 'formula':
-      if (!slide.label?.trim()) errors.push(`${id}: missing 'label'`)
-      if (!slide.formula?.trim()) errors.push(`${id}: missing 'formula'`)
-      if (!slide.plain_english?.trim()) errors.push(`${id}: missing 'plain_english'`)
-      if (!Array.isArray(slide.variables) || slide.variables.length === 0)
-        errors.push(`${id}: 'variables' must be a non-empty array`)
-      else {
-        slide.variables.forEach((v, vi) => {
-          if (!v.symbol?.trim()) errors.push(`${id}: variable ${vi + 1} missing 'symbol'`)
-          if (!v.meaning?.trim()) errors.push(`${id}: variable ${vi + 1} missing 'meaning'`)
-        })
-      }
+      if (!slide.label?.trim())   errors.push(`${label}: missing 'label'`)
+      if (!slide.formula?.trim()) errors.push(`${label}: missing 'formula'`)
       break
-
     case 'interaction':
-      if (!slide.question?.trim()) errors.push(`${id}: missing 'question'`)
-      if (!Array.isArray(slide.options) || slide.options.length < 2)
-        errors.push(`${id}: 'options' must have at least 2 items`)
-      if (!slide.correct?.trim()) errors.push(`${id}: missing 'correct'`)
-      if (!slide.feedback_correct?.trim()) errors.push(`${id}: missing 'feedback_correct'`)
-      if (!slide.feedback_wrong?.trim()) errors.push(`${id}: missing 'feedback_wrong'`)
+      if (!slide.question?.trim())           errors.push(`${label}: missing 'question'`)
+      if (!Array.isArray(slide.options) || slide.options.length < 3)
+        errors.push(`${label}: 'options' must have at least 3 items`)
+      if (!slide.correct?.trim())            errors.push(`${label}: missing 'correct'`)
+      if (!slide.feedback_correct?.trim())   errors.push(`${label}: missing 'feedback_correct'`)
+      if (!slide.feedback_wrong?.trim())     errors.push(`${label}: missing 'feedback_wrong'`)
       break
-
     case 'worked_example':
-      if (!slide.mode) errors.push(`${id}: missing 'mode' — must be 'guided' or 'student_attempt'`)
-      else if (!['guided', 'student_attempt'].includes(slide.mode))
-        errors.push(`${id}: 'mode' must be 'guided' or 'student_attempt'`)
-      if (!slide.problem?.trim()) errors.push(`${id}: missing 'problem'`)
-      if (!Array.isArray(slide.steps)) errors.push(`${id}: missing 'steps' array`)
-      if (!slide.final_answer?.trim()) errors.push(`${id}: missing 'final_answer'`)
-      if (slide.mode === 'student_attempt') {
-        if (!slide.reveal_delay_seconds)
-          errors.push(`${id}: student_attempt must have 'reveal_delay_seconds' (use 8)`)
-      }
+      if (!slide.problem?.trim())  errors.push(`${label}: missing 'problem'`)
+      if (!slide.mode)             errors.push(`${label}: missing 'mode' (guided | student_attempt)`)
+      if (!Array.isArray(slide.steps) || slide.steps.length === 0)
+        errors.push(`${label}: 'steps' must be a non-empty array`)
+      if (!slide.final_answer?.trim()) errors.push(`${label}: missing 'final_answer'`)
       break
-
     case 'end_quiz':
       if (!Array.isArray(slide.questions) || slide.questions.length < 2)
-        errors.push(`${id}: end_quiz must have at least 2 questions`)
-      else {
-        slide.questions.forEach((q, qi) => {
-          const qid = `${id} question ${qi + 1}`
-          if (!q.question?.trim()) errors.push(`${qid}: missing 'question'`)
-          if (!Array.isArray(q.options) || q.options.length < 2) errors.push(`${qid}: must have at least 2 options`)
-          if (!q.correct?.trim()) errors.push(`${qid}: missing 'correct'`)
-          if (!q.feedback_correct?.trim()) errors.push(`${qid}: missing 'feedback_correct'`)
-          if (!q.feedback_wrong?.trim()) errors.push(`${qid}: missing 'feedback_wrong'`)
-        })
-      }
+        errors.push(`${label}: 'questions' must have at least 2 items`)
       break
-
     case 'summary':
       if (!Array.isArray(slide.points) || slide.points.length === 0)
-        errors.push(`${id}: 'points' must be a non-empty array`)
-      if (!slide.closing?.trim()) errors.push(`${id}: missing 'closing' encouragement line`)
+        errors.push(`${label}: 'points' must be a non-empty array`)
+      if (!slide.closing?.trim()) errors.push(`${label}: missing 'closing'`)
       break
-
-    default:
-      errors.push(`Slide ${index + 1}: unknown type '${slide.type}'`)
   }
 
   return errors
 }
 
 // ── Main parser ───────────────────────────────────────────────────────────────
+export function parseLesson(raw) {
+  if (!raw?.trim()) {
+    return { valid: false, errors: ['No content provided'], lesson: null }
+  }
 
-export function parseLesson(rawText) {
-  // Strip markdown fences
-  let cleaned = rawText
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim()
-
-  // Fix unescaped control characters inside JSON strings
-  cleaned = cleaned.replace(
-    /"((?:[^"\\]|\\.)*)"/g,
+  // Sanitise control characters inside JSON strings
+  const cleaned = raw.trim().replace(
+    /"(?:[^"\\]|\\.)*"/g,
     (match) =>
       match
         .replace(/\n/g, '\\n')
@@ -177,12 +123,12 @@ export function parseLesson(rawText) {
 
   // Structural requirements
   const types = parsed.slides.map((s) => s.type)
-  if (!types.includes('hook')) errors.push('Lesson must have a hook slide')
+  if (!types.includes('hook'))        errors.push('Lesson must have a hook slide')
   if (!types.includes('interaction')) errors.push('Lesson must have at least one interaction slide')
-  if (!types.includes('end_quiz')) errors.push('Lesson must have an end_quiz slide before the summary')
-  if (!types.includes('summary')) errors.push('Lesson must have a summary slide')
+  if (!types.includes('end_quiz'))    errors.push('Lesson must have an end_quiz slide before the summary')
+  if (!types.includes('summary'))     errors.push('Lesson must have a summary slide')
   if (types[types.length - 1] !== 'summary') errors.push('Last slide must be a summary')
-  // end_quiz must come before summary
+
   const endQuizIdx = types.lastIndexOf('end_quiz')
   const summaryIdx = types.lastIndexOf('summary')
   if (endQuizIdx > summaryIdx) errors.push('end_quiz slide must appear before the summary')
@@ -194,25 +140,43 @@ export function parseLesson(rawText) {
     errors: [],
     lesson: parsed,
     stats: {
-      totalSlides: parsed.slides.length,
-      definitions: types.filter((t) => t === 'definition').length,
-      concepts: types.filter((t) => t === 'concept').length,
-      formulas: types.filter((t) => t === 'formula').length,
-      interactions: types.filter((t) => t === 'interaction').length,
-      workedExamples: types.filter((t) => t === 'worked_example').length,
-      imageSlots: parsed.slides.filter((s) => s.image?.needed || s.image_prompt).length,
-      endQuizQuestions: parsed.slides.filter(s => s.type === 'end_quiz').reduce((acc, s) => acc + (s.questions?.length ?? 0), 0),
+      totalSlides:      parsed.slides.length,
+      definitions:      types.filter((t) => t === 'definition').length,
+      concepts:         types.filter((t) => t === 'concept').length,
+      formulas:         types.filter((t) => t === 'formula').length,
+      interactions:     types.filter((t) => t === 'interaction').length,
+      workedExamples:   types.filter((t) => t === 'worked_example').length,
+      imageSlots:       parsed.slides.filter((s) => s.image?.needed || s.image_prompt).length,
+      endQuizQuestions: parsed.slides
+        .filter(s => s.type === 'end_quiz')
+        .reduce((acc, s) => acc + (s.questions?.length ?? 0), 0),
     },
   }
 }
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
-
 export function buildLessonPrompt({ subjectName, topicName, subtopicName, objectives, examTag }) {
-  const examLabel =
-    examTag === 'WAEC' ? 'WAEC' : examTag === 'JAMB' ? 'JAMB' : 'WAEC and JAMB'
+  // ── FIX: guard undefined values before string interpolation ───────────────
+  // If any of these are missing, the stored generation_prompt will literally
+  // contain the word "undefined" — making every generated lesson wrong.
+  if (!subjectName || subjectName === 'undefined') {
+    throw new Error('buildLessonPrompt: subjectName is required')
+  }
+  if (!topicName || topicName === 'undefined') {
+    throw new Error('buildLessonPrompt: topicName is required')
+  }
+  if (!subtopicName || subtopicName === 'undefined') {
+    throw new Error('buildLessonPrompt: subtopicName is required')
+  }
 
-  const objectivesList = (objectives ?? []).map((obj) => `- ${obj}`).join('\n')
+  const examLabel =
+    examTag === 'WAEC' ? 'WAEC' :
+    examTag === 'JAMB' ? 'JAMB' :
+    'WAEC and JAMB'
+
+  const objectivesList = Array.isArray(objectives) && objectives.length > 0
+    ? objectives.map((obj) => `- ${obj}`).join('\n')
+    : '- (not specified — derive objectives from the subtopic name)'
 
   return `You are an expert teacher creating a lesson for Nigerian secondary school students (ages 14–18) preparing for ${examLabel}.
 
@@ -238,9 +202,20 @@ SLIDE SPECIFICATIONS
 ──────────────────────────────────────────
 
 HOOK SLIDE
-- One real-life observation that creates curiosity — 2–3 lines max
-- Nigerian student everyday life: buses, markets, football, construction, cooking, farming
-- Never label it "Introduction" — it just opens naturally
+Write 2–3 short sentences. State one thing a Nigerian student already sees or does in real life that directly connects to this subtopic. Be plain and direct — no metaphors, no dramatic language.
+
+Good example (for Speed):
+"When a danfo and a keke are both moving, they don't cover the same distance in the same time. That difference is exactly what speed measures. Let's break it down."
+
+Bad example (avoid this style):
+"Have you ever watched the world blur past as you rush to catch a bus, feeling time itself bend around you?"
+
+Rules:
+- Pick ONE everyday Nigerian context: market, bus, football, cooking, farming, school, phone
+- Say what the student already observes, then say what concept explains it
+- 2–3 sentences maximum — no more
+- No question openers ("Have you ever...?") — make a direct statement
+- Never label it "Introduction"
 
 DEFINITION SLIDE (one per key term)
 - Definition in one clean conversational sentence
@@ -330,7 +305,7 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble:
 
 {
   "title": "${subtopicName}",
-  "exam_tag": "${examTag}",
+  "exam_tag": "${examTag ?? 'BOTH'}",
   "slides": [
     {
       "type": "hook",

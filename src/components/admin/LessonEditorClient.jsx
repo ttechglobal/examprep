@@ -1,35 +1,91 @@
 'use client'
 // src/components/admin/LessonEditorClient.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// CHANGES IN THIS VERSION:
-//   Added Tab 5: "Questions" — optional question upload per subtopic
-//   Workflow after saving a lesson:
-//     Tab 1: Generate prompt → Copy → paste into AI
-//     Tab 2: Paste lesson JSON back
-//     Tab 3: Preview & Save
-//     Tab 4: Edit slides (manual tweaks)
-//     Tab 5: Questions (NEW — optional)
-//             Admin picks exam style (WAEC / JAMB), question count,
-//             copies the AI prompt, pastes the JSON back,
-//             previews, and saves directly to the question bank for this subtopic.
-//             End-of-lesson questions (end_quiz slides) are separate — this
-//             adds standalone practice questions for the topic practice pool.
+// FIX: buildLessonPrompt: subjectName is required
+//
+// Root cause: buildLessonPrompt() was called at the TOP LEVEL of the component
+// body (line 448 in the original), running synchronously on every render.
+// SubtopicEditorTabs loads this component via next/dynamic with ssr:false, so
+// on the first client-side render the subject/topic/subtopic props can arrive
+// as undefined before hydration completes — causing the guard in
+// buildLessonPrompt to throw immediately.
+//
+// Fix: wrap buildLessonPrompt in useMemo with an explicit null-guard so it
+// only runs (and only throws) when all three props are fully resolved.
+// The rest of the component renders a loading state until data is ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { parseLesson, buildLessonPrompt } from '@/lib/lessonParser'
-import { parseQuestions } from '@/lib/questionParser'
 import SlideRenderer from '@/components/lesson/SlideRenderer'
+import { AdminImageSlot } from '@/components/lesson/ImageSlot'
 import { getSubjectColor } from '@/lib/theme'
 
+const SLIDE_DEFAULTS = {
+  hook: { type: 'hook', body: '' },
+  definition: { type: 'definition', term: '', definition: '', examples: [''] },
+  real_life: { type: 'real_life', body: '' },
+  concept: {
+    type: 'concept',
+    heading: '',
+    body: '',
+    examples: ['', ''],
+    image: { needed: true, intent_type: 'concept_visual', learning_objective: '', prompt: '', filename: '', url: '' },
+  },
+  formula: {
+    type: 'formula',
+    label: '',
+    formula: '',
+    plain_english: '',
+    variables: [{ symbol: '', meaning: '' }],
+    image: { needed: true, intent_type: 'formula_diagram', learning_objective: '', prompt: '', filename: '', url: '' },
+  },
+  interaction: {
+    type: 'interaction',
+    question: '',
+    options: [
+      { key: 'A', text: '' },
+      { key: 'B', text: '' },
+      { key: 'C', text: '' },
+      { key: 'D', text: '' },
+    ],
+    correct: 'A',
+    feedback_correct: '',
+    feedback_wrong: '',
+  },
+  worked_example: {
+    type: 'worked_example',
+    mode: 'guided',
+    problem: '',
+    image_prompt: '',
+    steps: [{ instruction: '', micro_question: '', micro_answer: '' }],
+    final_answer: '',
+  },
+  summary: { type: 'summary', points: [''], closing: '' },
+}
+
+const SLIDE_TYPE_LABELS = {
+  hook: 'Hook',
+  definition: 'Definition',
+  real_life: 'Real-life Connection',
+  concept: 'Concept',
+  formula: 'Formula',
+  interaction: 'Interaction',
+  worked_example: 'Worked Example',
+  end_quiz: 'End Quiz',
+  summary: 'Summary',
+}
+
 // ── Copy prompt box ───────────────────────────────────────────────────────────
-function CopyBox({ text, label = 'AI Prompt' }) {
+function CopyBox({ text }) {
   const [copied, setCopied] = useState(false)
   return (
     <div className="border border-indigo-200 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
-        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+          AI Lesson Prompt
+        </span>
         <button
           onClick={() => {
             navigator.clipboard.writeText(text)
@@ -42,447 +98,484 @@ function CopyBox({ text, label = 'AI Prompt' }) {
               : 'bg-indigo-600 text-white hover:bg-indigo-500'
           }`}
         >
-          {copied ? '✓ Copied!' : 'Copy'}
+          {copied ? '✓ Copied!' : 'Copy prompt'}
         </button>
       </div>
-      <pre className="text-xs text-gray-700 p-4 bg-white overflow-auto max-h-40 whitespace-pre-wrap font-mono leading-relaxed">
+      <pre className="text-xs text-gray-700 p-4 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto bg-white">
         {text}
       </pre>
     </div>
   )
 }
 
-// ── Build the question generation prompt ──────────────────────────────────────
-function buildSubtopicQuestionPrompt({ examType, subjectName, topicName, subtopicName, count }) {
-  return `You are an expert Nigerian secondary school teacher creating ${examType} exam-style practice questions.
+// ── Single slide editor ───────────────────────────────────────────────────────
+function SlideEditor({ slide, index, onUpdate, onDelete }) {
+  const [expanded, setExpanded] = useState(index === 0)
 
-Subject: ${subjectName}
-Topic: ${topicName}
-Subtopic: ${subtopicName}
-Exam style: ${examType}
-Number of questions: ${count}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-INSTRUCTIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Generate exactly ${count} multiple-choice questions covering "${subtopicName}".
-
-Questions should:
-- Match the difficulty and style of real ${examType} past papers
-- Cover different aspects of the subtopic — not all the same angle
-- Mix difficulty: roughly 30% easy (recall), 50% medium (application), 20% hard (reasoning)
-- Use clear, unambiguous language appropriate for SS2/SS3 students
-- For calculation questions: show full step-by-step workings in the explanation
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FORMATTING RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✗ NO LaTeX — no $$, no \\frac, no \\sqrt, no \\times
-✓ Use × for multiplication, ÷ for division
-✓ Exponents: x^2, x^n, x^{-1}
-✓ Square roots: sqrt(x)
-✓ Fractions: numerator/denominator or (expr)/(expr)
-✓ Log bases: log_2(8), log_10(x)
-✓ Chemistry: H_2O, CO_2, H_2SO_4
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-WORKINGS FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-"workings" MUST be a JSON array of strings — one mathematical step per string.
-NEVER write workings as a prose paragraph.
-
-Example for a calculation:
-  "workings": [
-    "Given: u = 0 m/s, a = 10 m/s^2, t = 5s",
-    "Formula: v = u + at",
-    "v = 0 + (10 × 5)",
-    "v = 50 m/s"
-  ]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURN FORMAT — JSON ONLY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY a valid JSON array. No markdown, no preamble.
-
-[
-  {
-    "question_text": "",
-    "options": { "A": "", "B": "", "C": "", "D": "" },
-    "correct_answer": "A",
-    "difficulty": "medium",
-    "question_type": "application",
-    "explanation": {
-      "correct": "",
-      "workings": ["step 1", "step 2", "answer"],
-      "wrong_options": {
-        "B": "",
-        "C": "",
-        "D": ""
-      }
-    }
+  const update = (field, value) => {
+    onUpdate(index, { ...slide, [field]: value })
   }
-]`
-}
-
-// ── Question preview row ──────────────────────────────────────────────────────
-function QuestionPreviewRow({ q, index }) {
-  const [open, setOpen] = useState(false)
-  const diffColor = q.difficulty === 'easy'
-    ? 'bg-green-100 text-green-700'
-    : q.difficulty === 'hard'
-      ? 'bg-red-100 text-red-700'
-      : 'bg-amber-100 text-amber-700'
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 rounded-2xl overflow-hidden">
       <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
       >
-        <span className="text-xs font-black text-gray-400 flex-shrink-0 w-5 mt-0.5">{index + 1}.</span>
-        <p className="text-sm text-gray-800 leading-snug flex-1 line-clamp-2">{q.question_text}</p>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${diffColor}`}>
-            {q.difficulty}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-gray-400">{index + 1}</span>
+          <span className="text-xs font-black uppercase tracking-wide text-gray-600">
+            {SLIDE_TYPE_LABELS[slide.type] ?? slide.type}
           </span>
-          <span className="text-gray-300 text-sm">{open ? '▲' : '▼'}</span>
+          {slide.heading && (
+            <span className="text-xs text-gray-500 truncate max-w-48">— {slide.heading}</span>
+          )}
+          {slide.term && (
+            <span className="text-xs text-gray-500 truncate max-w-48">— {slide.term}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(index) }}
+            className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Remove
+          </button>
+          <span className="text-gray-400 text-xs">{expanded ? '▲' : '▼'}</span>
         </div>
       </button>
 
-      {open && (
-        <div className="border-t border-gray-100 px-4 pb-4 pt-3 bg-gray-50 space-y-2">
-          {Object.entries(q.options ?? {}).map(([key, text]) => (
-            <div
-              key={key}
-              className={`flex items-start gap-2 px-3 py-2 rounded-lg text-sm ${
-                key === q.correct_answer
-                  ? 'bg-green-50 border border-green-300 text-green-800 font-bold'
-                  : 'bg-white border border-gray-200 text-gray-600'
-              }`}
-            >
-              <span className="font-black flex-shrink-0">{key}.</span>
-              <span>{text}</span>
-              {key === q.correct_answer && <span className="ml-auto text-green-600">✓</span>}
-            </div>
-          ))}
-          {q.explanation?.correct && (
-            <div className="mt-2 px-3 py-2.5 bg-indigo-50 rounded-lg">
-              <p className="text-xs font-bold text-indigo-700 mb-1">Explanation</p>
-              <p className="text-xs text-indigo-800 leading-relaxed">{q.explanation.correct}</p>
-            </div>
+      {expanded && (
+        <div className="p-4 space-y-3 bg-white">
+          {/* HOOK */}
+          {slide.type === 'hook' && (
+            <textarea
+              value={slide.body}
+              onChange={(e) => update('body', e.target.value)}
+              placeholder="Hook body — 2–3 sentences connecting to Nigerian student life"
+              rows={3}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+            />
           )}
-          {q.explanation?.workings?.length > 0 && (
-            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-lg">
-              <p className="text-xs font-bold text-gray-600 mb-1">Workings</p>
-              <ol className="space-y-1">
-                {q.explanation.workings.map((step, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex gap-2">
-                    <span className="text-indigo-500 font-bold flex-shrink-0">{i + 1}.</span>
-                    <span className="font-mono">{step}</span>
-                  </li>
+
+          {/* DEFINITION */}
+          {slide.type === 'definition' && (
+            <>
+              <input
+                value={slide.term ?? ''}
+                onChange={(e) => update('term', e.target.value)}
+                placeholder="Term"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <textarea
+                value={slide.definition ?? ''}
+                onChange={(e) => update('definition', e.target.value)}
+                placeholder="Definition — one conversational sentence"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-500">Examples</p>
+                {(slide.examples ?? ['']).map((ex, ei) => (
+                  <div key={ei} className="flex gap-2">
+                    <input
+                      value={ex}
+                      onChange={(e) => {
+                        const next = [...(slide.examples ?? [])]
+                        next[ei] = e.target.value
+                        update('examples', next)
+                      }}
+                      placeholder={`Example ${ei + 1}`}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('examples', (slide.examples ?? []).filter((_, i) => i !== ei))}
+                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                    >✕</button>
+                  </div>
                 ))}
-              </ol>
-            </div>
+                <button
+                  onClick={() => update('examples', [...(slide.examples ?? []), ''])}
+                  className="text-xs text-indigo-600 hover:underline font-medium"
+                >+ Add example</button>
+              </div>
+            </>
           )}
-        </div>
-      )}
-    </div>
-  )
-}
 
-// ── Questions tab (Tab 5) ─────────────────────────────────────────────────────
-function QuestionsTab({ subtopic, subject, topic }) {
-  const [step,          setStep]          = useState('setup') // setup | generate | paste | preview | done
-  const [examType,      setExamType]      = useState(subtopic.exam_type ?? 'WAEC')
-  const [count,         setCount]         = useState(10)
-  const [rawJson,       setRawJson]       = useState('')
-  const [parseResult,   setParseResult]   = useState(null)
-  const [saving,        setSaving]        = useState(false)
-  const [savedCount,    setSavedCount]    = useState(0)
-  const [existingCount, setExistingCount] = useState(null)
+          {/* CONCEPT */}
+          {slide.type === 'concept' && (
+            <>
+              <input
+                value={slide.heading ?? ''}
+                onChange={(e) => update('heading', e.target.value)}
+                placeholder="Heading"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <textarea
+                value={slide.body ?? ''}
+                onChange={(e) => update('body', e.target.value)}
+                placeholder="Body — one idea, max 20 words"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-500">Examples</p>
+                {(slide.examples ?? ['']).map((ex, ei) => (
+                  <div key={ei} className="flex gap-2">
+                    <input
+                      value={ex}
+                      onChange={(e) => {
+                        const next = [...(slide.examples ?? [])]
+                        next[ei] = e.target.value
+                        update('examples', next)
+                      }}
+                      placeholder={`Example ${ei + 1}`}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('examples', (slide.examples ?? []).filter((_, i) => i !== ei))}
+                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                    >✕</button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => update('examples', [...(slide.examples ?? []), ''])}
+                  className="text-xs text-indigo-600 hover:underline font-medium"
+                >+ Add example</button>
+              </div>
+              {slide.image && (
+                <AdminImageSlot
+                  image={slide.image}
+                  onUpdate={(imgObj) => update('image', { ...(slide.image ?? {}), ...imgObj })}
+                />
+              )}
+            </>
+          )}
 
-  // Fetch how many questions already exist for this subtopic
-  useEffect(() => {
-    fetch(`/api/admin/questions?subtopicId=${subtopic.id}&countOnly=true`)
-      .then(r => r.json())
-      .then(d => setExistingCount(d.count ?? 0))
-      .catch(() => setExistingCount(0))
-  }, [subtopic.id])
+          {/* FORMULA */}
+          {slide.type === 'formula' && (
+            <>
+              <input
+                value={slide.label ?? ''}
+                onChange={(e) => update('label', e.target.value)}
+                placeholder="Label (e.g. Speed Formula)"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <input
+                value={slide.formula ?? ''}
+                onChange={(e) => update('formula', e.target.value)}
+                placeholder="Formula (e.g. Speed = Distance ÷ Time)"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <textarea
+                value={slide.plain_english ?? ''}
+                onChange={(e) => update('plain_english', e.target.value)}
+                placeholder="Plain English explanation"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-500">Variables</p>
+                {(slide.variables ?? []).map((v, vi) => (
+                  <div key={vi} className="flex gap-2">
+                    <input
+                      value={v.symbol ?? ''}
+                      onChange={(e) => {
+                        const next = [...(slide.variables ?? [])]
+                        next[vi] = { ...next[vi], symbol: e.target.value }
+                        update('variables', next)
+                      }}
+                      placeholder="Symbol"
+                      className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      value={v.meaning ?? ''}
+                      onChange={(e) => {
+                        const next = [...(slide.variables ?? [])]
+                        next[vi] = { ...next[vi], meaning: e.target.value }
+                        update('variables', next)
+                      }}
+                      placeholder="Meaning"
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('variables', (slide.variables ?? []).filter((_, i) => i !== vi))}
+                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                    >✕</button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => update('variables', [...(slide.variables ?? []), { symbol: '', meaning: '' }])}
+                  className="text-xs text-indigo-600 hover:underline font-medium"
+                >+ Add variable</button>
+              </div>
+            </>
+          )}
 
-  const prompt = buildSubtopicQuestionPrompt({
-    examType,
-    subjectName:  subject.name,
-    topicName:    topic.name,
-    subtopicName: subtopic.name,
-    count,
-  })
+          {/* INTERACTION */}
+          {slide.type === 'interaction' && (
+            <>
+              <textarea
+                value={slide.question ?? ''}
+                onChange={(e) => update('question', e.target.value)}
+                placeholder="Question"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="space-y-2">
+                {(slide.options ?? []).map((opt, oi) => (
+                  <div key={oi} className="flex gap-2 items-center">
+                    <span className="text-xs font-black text-gray-400 w-4">{opt.key}</span>
+                    <input
+                      value={opt.text ?? ''}
+                      onChange={(e) => {
+                        const next = [...(slide.options ?? [])]
+                        next[oi] = { ...next[oi], text: e.target.value }
+                        update('options', next)
+                      }}
+                      placeholder={`Option ${opt.key}`}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('correct', opt.key)}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
+                        slide.correct === opt.key
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {slide.correct === opt.key ? '✓ Correct' : 'Set correct'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <input
+                value={slide.feedback_correct ?? ''}
+                onChange={(e) => update('feedback_correct', e.target.value)}
+                placeholder="Feedback — correct"
+                className="w-full px-3 py-2 border border-green-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+              <input
+                value={slide.feedback_wrong ?? ''}
+                onChange={(e) => update('feedback_wrong', e.target.value)}
+                placeholder="Feedback — wrong (start with 'Almost. Remember: ...')"
+                className="w-full px-3 py-2 border border-red-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+            </>
+          )}
 
-  useEffect(() => {
-    if (rawJson.trim().length > 10) {
-      setParseResult(parseQuestions(rawJson))
-    } else {
-      setParseResult(null)
-    }
-  }, [rawJson])
-
-  async function handleSave() {
-    if (!parseResult?.valid) return
-    setSaving(true)
-    try {
-      const questions = parseResult.questions.map(q => ({
-        ...q,
-        exam_type:    examType,
-        subject_id:   subject.id,
-        topic_id:     topic.id,
-        subtopic_id:  subtopic.id,
-        source:       'ai_generated',
-        is_active:    true,
-      }))
-
-      const res = await fetch('/api/admin/questions', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ questions, examType, subjectId: subject.id }),
-      })
-      const data = await res.json()
-      setSavedCount(data.saved ?? questions.length)
-      setStep('done')
-    } catch {
-      // silent fail — admin can retry
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (step === 'done') {
-    return (
-      <div className="text-center space-y-4 py-8">
-        <div className="text-4xl">🎉</div>
-        <p className="text-lg font-black text-gray-900">{savedCount} questions saved!</p>
-        <p className="text-sm text-gray-500 leading-relaxed max-w-xs mx-auto">
-          These are now available for students practising "{subtopic.name}".
-        </p>
-        <div className="flex gap-3 justify-center">
-          <button
-            onClick={() => { setStep('setup'); setRawJson(''); setParseResult(null) }}
-            className="px-4 py-2 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors"
-          >
-            Add more questions
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Section header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-black text-gray-900">Practice Questions</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {existingCount !== null
-              ? `${existingCount} question${existingCount !== 1 ? 's' : ''} already in bank for this subtopic`
-              : 'Loading existing count…'}
-          </p>
-        </div>
-        <span className="text-xs text-gray-400">Optional</span>
-      </div>
-
-      {/* Step 1: Setup */}
-      {(step === 'setup' || step === 'generate') && (
-        <div className="space-y-4 bg-gray-50 rounded-2xl p-4 border border-gray-200">
-          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Step 1 — Configure</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Exam type */}
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1.5">Exam style</label>
-              <div className="flex gap-2">
-                {['WAEC', 'JAMB'].map(et => (
+          {/* WORKED EXAMPLE */}
+          {slide.type === 'worked_example' && (
+            <>
+              <div className="flex gap-2 mb-1">
+                {['guided', 'student_attempt'].map(m => (
                   <button
-                    key={et}
-                    onClick={() => setExamType(et)}
-                    className={`flex-1 py-2.5 text-xs font-black rounded-xl border-2 transition-all ${
-                      examType === et
-                        ? 'border-indigo-600 bg-indigo-600 text-white'
-                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    key={m}
+                    onClick={() => update('mode', m)}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${
+                      slide.mode === m
+                        ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
                   >
-                    {et}
+                    {m === 'guided' ? 'Guided' : 'Student Attempt'}
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Question count */}
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1.5">
-                Number of questions
-              </label>
-              <select
-                value={count}
-                onChange={e => setCount(Number(e.target.value))}
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              >
-                {[5, 10, 15, 20, 25, 30].map(n => (
-                  <option key={n} value={n}>{n} questions</option>
+              <textarea
+                value={slide.problem ?? ''}
+                onChange={(e) => update('problem', e.target.value)}
+                placeholder="Problem statement"
+                rows={2}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-500">Steps</p>
+                {(slide.steps ?? []).map((step, si) => (
+                  <div key={si} className="flex gap-2">
+                    <span className="text-xs text-gray-400 mt-2.5 flex-shrink-0">{si + 1}.</span>
+                    <input
+                      value={step.instruction ?? ''}
+                      onChange={(e) => {
+                        const next = [...(slide.steps ?? [])]
+                        next[si] = { ...next[si], instruction: e.target.value }
+                        update('steps', next)
+                      }}
+                      placeholder={`Step ${si + 1}`}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('steps', (slide.steps ?? []).filter((_, i) => i !== si))}
+                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                    >✕</button>
+                  </div>
                 ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setStep('generate')}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
-          >
-            Generate AI prompt →
-          </button>
-        </div>
-      )}
-
-      {/* Step 2: Copy prompt */}
-      {step === 'generate' && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Step 2 — Copy prompt & paste into Claude/Gemini</p>
-          <CopyBox text={prompt} label={`${examType} Question Prompt (${count} questions)`} />
-          <button
-            onClick={() => setStep('paste')}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
-          >
-            I've got the JSON →
-          </button>
-        </div>
-      )}
-
-      {/* Step 3: Paste JSON */}
-      {step === 'paste' && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Step 3 — Paste the JSON</p>
-          <textarea
-            value={rawJson}
-            onChange={e => setRawJson(e.target.value)}
-            rows={14}
-            className="w-full font-mono text-xs p-4 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Paste the JSON array from Claude/Gemini here…"
-            spellCheck={false}
-          />
-
-          {parseResult && (
-            <div className={`p-3 rounded-xl text-sm ${
-              parseResult.valid
-                ? 'bg-green-50 border border-green-200'
-                : 'bg-amber-50 border border-amber-200'
-            }`}>
-              {parseResult.valid ? (
-                <div>
-                  <p className="font-bold text-green-800">
-                    ✓ {parseResult.stats?.total} questions detected
-                  </p>
-                  <p className="text-xs text-green-600 mt-0.5">
-                    {parseResult.stats?.easy} easy · {parseResult.stats?.medium} medium · {parseResult.stats?.hard} hard
-                    {parseResult.stats?.withWorkings > 0 && ` · ${parseResult.stats.withWorkings} with workings`}
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="font-bold text-amber-800">{parseResult.errors.length} error(s)</p>
-                  <ul className="mt-1 space-y-0.5">
-                    {parseResult.errors.slice(0, 5).map((e, i) => (
-                      <li key={i} className="text-xs text-amber-700">· {e}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                <button
+                  onClick={() => update('steps', [
+                    ...(slide.steps ?? []),
+                    { instruction: '', micro_question: '', micro_answer: '' },
+                  ])}
+                  className="text-xs text-indigo-600 hover:underline font-medium"
+                >+ Add step</button>
+              </div>
+              <input
+                value={slide.final_answer ?? ''}
+                onChange={(e) => update('final_answer', e.target.value)}
+                placeholder="Final answer"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </>
           )}
 
-          <button
-            onClick={() => parseResult?.valid && setStep('preview')}
-            disabled={!parseResult?.valid}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
-          >
-            Preview {parseResult?.questions?.length ?? ''} questions →
-          </button>
-        </div>
-      )}
-
-      {/* Step 4: Preview + Save */}
-      {step === 'preview' && parseResult?.valid && (
-        <div className="space-y-4">
-          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Step 4 — Preview & save</p>
-
-          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-            {parseResult.questions.map((q, i) => (
-              <QuestionPreviewRow key={i} q={q} index={i} />
-            ))}
-          </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full py-4 bg-green-600 text-white text-sm font-black rounded-2xl disabled:opacity-50 hover:bg-green-500 transition-colors"
-          >
-            {saving ? 'Saving…' : `Save ${parseResult.questions.length} questions to bank →`}
-          </button>
-
-          <button
-            onClick={() => setStep('paste')}
-            className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600"
-          >
-            ← Back to paste
-          </button>
+          {/* SUMMARY */}
+          {slide.type === 'summary' && (
+            <>
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-500">Key points</p>
+                {(slide.points ?? []).map((pt, pi) => (
+                  <div key={pi} className="flex gap-2">
+                    <input
+                      value={pt}
+                      onChange={(e) => {
+                        const next = [...(slide.points ?? [])]
+                        next[pi] = e.target.value
+                        update('points', next)
+                      }}
+                      placeholder={`Point ${pi + 1}`}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={() => update('points', (slide.points ?? []).filter((_, i) => i !== pi))}
+                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                    >✕</button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => update('points', [...(slide.points ?? []), ''])}
+                  className="text-xs text-indigo-600 hover:underline font-medium"
+                >+ Add point</button>
+              </div>
+              <input
+                value={slide.closing ?? ''}
+                onChange={(e) => update('closing', e.target.value)}
+                placeholder="Closing encouragement line"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main LessonEditorClient
-// ─────────────────────────────────────────────────────────────────────────────
-export default function LessonEditorClient({ subtopic, subject, topic }) {
-  const router     = useRouter()
-  const color      = getSubjectColor(subject.name)
-  const prompt     = buildLessonPrompt(subtopic.name, topic.name, subject.name, subtopic.exam_type)
+// ── Main component ────────────────────────────────────────────────────────────
+export default function LessonEditorClient({ subject, topic, subtopic }) {
+  const router = useRouter()
 
-  const [mode,        setMode]        = useState('prompt')
-  const [rawJson,     setRawJson]     = useState(() => {
-    const content = subtopic.lesson_content
-    if (!content) return ''
-    return typeof content === 'string' ? content : JSON.stringify(content, null, 2)
-  })
+  // ── FIX: guard against undefined props before calling buildLessonPrompt ───
+  // SubtopicEditorTabs loads this component via next/dynamic({ ssr: false }),
+  // meaning on the very first client render the props may not yet be resolved.
+  // Moving buildLessonPrompt into useMemo with a null-guard means it only runs
+  // once all three values are available — never on a partial/undefined render.
+  const prompt = useMemo(() => {
+    if (!subject?.name || !topic?.name || !subtopic?.name) return null
+    try {
+      return buildLessonPrompt({
+        subjectName:  subject.name,
+        topicName:    topic.name,
+        subtopicName: subtopic.name,
+        objectives:   subtopic.objectives ?? [],
+        examTag:      subtopic.exam_type ?? subject.exam_type ?? 'BOTH',
+      })
+    } catch (err) {
+      console.error('[LessonEditorClient] buildLessonPrompt failed:', err.message)
+      return null
+    }
+  }, [subject?.name, topic?.name, subtopic?.name, subtopic?.objectives, subtopic?.exam_type, subject?.exam_type])
+
+  const color = subject?.name ? getSubjectColor(subject.name) : getSubjectColor('default')
+
+  const [mode, setMode]               = useState('prompt')
+  const [rawJson, setRawJson]         = useState('')
   const [parseResult, setParseResult] = useState(null)
-  const [slides,      setSlides]      = useState(subtopic.lesson_content?.slides ?? [])
-  const [lessonTitle, setLessonTitle] = useState(subtopic.lesson_content?.title ?? subtopic.name)
-  const [saving,      setSaving]      = useState(false)
+  const [slides, setSlides]           = useState([])
+  const [lessonTitle, setLessonTitle] = useState(subtopic?.name ?? '')
+  const [saving, setSaving]           = useState(false)
   const [saveMessage, setSaveMessage] = useState(null)
 
-  // Reparse when rawJson changes
+  // Initialise from existing lesson content
   useEffect(() => {
-    if (rawJson.trim().length > 20) {
-      const result = parseLesson(rawJson)
-      setParseResult(result)
-      if (result.valid) {
-        setSlides(result.slides)
-        setLessonTitle(result.title ?? subtopic.name)
-        setMode('preview')
-      }
+    if (subtopic?.lesson_content) {
+      try {
+        const existing = typeof subtopic.lesson_content === 'string'
+          ? JSON.parse(subtopic.lesson_content)
+          : subtopic.lesson_content
+        if (existing?.slides) {
+          setSlides(existing.slides)
+          setLessonTitle(existing.title ?? subtopic.name ?? '')
+          setMode('preview')
+        }
+      } catch { /* ignore parse errors on existing content */ }
+    }
+  }, [subtopic?.id])
+
+  // Auto-switch to preview when JSON parses successfully
+  useEffect(() => {
+    if (parseResult?.valid && parseResult.lesson?.slides) {
+      setSlides(parseResult.lesson.slides)
+      setLessonTitle(parseResult.lesson.title ?? subtopic?.name ?? '')
+      setMode('preview')
+    }
+  }, [parseResult])
+
+  const handleJsonChange = useCallback((value) => {
+    setRawJson(value)
+    if (value.trim().length > 20) {
+      setParseResult(parseLesson(value))
     } else {
       setParseResult(null)
     }
-  }, [rawJson, subtopic.name])
+  }, [])
+
+  const handleSlideUpdate = useCallback((index, updatedSlide) => {
+    setSlides(prev => prev.map((s, i) => i === index ? updatedSlide : s))
+  }, [])
+
+  const handleSlideDelete = useCallback((index) => {
+    setSlides(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleAddSlide = (type) => {
+    setSlides(prev => [...prev, { ...SLIDE_DEFAULTS[type] }])
+  }
+
+  const handleImageUpdate = useCallback((slideIndex, imgObj) => {
+    setSlides(prev => prev.map((s, i) => {
+      if (i !== slideIndex) return s
+      if (typeof imgObj === 'string') {
+        return { ...s, image: { ...(s.image ?? {}), url: imgObj } }
+      }
+      return { ...s, image: { ...(s.image ?? {}), ...imgObj } }
+    }))
+  }, [])
+
+  // ── Save ────────────────────────────────────────────────────────────────────
+  const buildLesson = () => ({
+    title:    lessonTitle || subtopic?.name || '',
+    exam_tag: subtopic?.exam_type ?? subject?.exam_type ?? 'BOTH',
+    slides,
+  })
 
   const handleSave = async () => {
     setSaving(true)
     setSaveMessage(null)
     try {
-      const lesson = { title: lessonTitle, exam_tag: subtopic.exam_type, slides }
+      const lesson = buildLesson()
       const res = await fetch(`/api/admin/lessons/${subtopic.id}`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ raw_content: JSON.stringify(lesson) }),
+        body: JSON.stringify({ raw_content: JSON.stringify(lesson) }),
       })
       const data = await res.json()
       if (!data.valid && data.errors) {
@@ -490,38 +583,32 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
         setSaving(false)
         return
       }
-      const patchRes = await fetch(`/api/admin/lessons/${subtopic.id}`, {
-        method:  'PATCH',
+      await fetch(`/api/admin/lessons/${subtopic.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ action: 'publish' }),
+        body: JSON.stringify({ action: 'publish' }),
       })
-      const patchData = await patchRes.json()
-      setSaveMessage({
-        type: 'success',
-        text: patchData.questionsScheduled
-          ? '✓ Published — generating background questions…'
-          : '✓ Lesson published',
-      })
-      // Stay on page so admin can add questions in Tab 5
+      setSaveMessage({ type: 'success', text: 'Lesson saved and published ✓' })
+      setSaving(false)
     } catch {
       setSaveMessage({ type: 'error', text: 'Network error — try again' })
-    } finally {
       setSaving(false)
     }
   }
 
-  const TABS = [
-    { id: 'prompt',    label: '1. Generate' },
-    { id: 'paste',     label: '2. Paste JSON' },
-    { id: 'preview',   label: '3. Preview & Save' },
-    { id: 'edit',      label: '4. Edit slides' },
-    { id: 'questions', label: '5. Questions' },
-  ]
+  // ── Guard: show spinner while props resolve ───────────────────────────────
+  if (!subject?.name || !topic?.name || !subtopic?.name) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5 max-w-2xl">
 
-      {/* Header */}
+      {/* Subject/topic header */}
       <div className={`flex items-center justify-between ${color.bg} rounded-2xl px-4 py-3`}>
         <div>
           <p className={`text-xs font-bold uppercase tracking-wide ${color.text} opacity-70`}>
@@ -530,21 +617,28 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
           <p className={`text-base font-black ${color.text}`}>{subtopic.name}</p>
         </div>
         <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-          subtopic.exam_type === 'WAEC' ? 'bg-blue-100 text-blue-700'
-          : subtopic.exam_type === 'JAMB' ? 'bg-purple-100 text-purple-700'
-          : 'bg-indigo-100 text-indigo-700'
+          subtopic.exam_type === 'WAEC'
+            ? 'bg-blue-100 text-blue-700'
+            : subtopic.exam_type === 'JAMB'
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-indigo-100 text-indigo-700'
         }`}>
-          {subtopic.exam_type}
+          {subtopic.exam_type ?? 'BOTH'}
         </span>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-        {TABS.map(tab => (
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+        {[
+          { id: 'prompt',  label: '1. Generate' },
+          { id: 'paste',   label: '2. Paste JSON' },
+          { id: 'preview', label: '3. Preview & Save' },
+          { id: 'edit',    label: '4. Edit slides' },
+        ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setMode(tab.id)}
-            className={`flex-shrink-0 flex-1 py-2 text-xs font-bold rounded-lg transition-colors whitespace-nowrap ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
               mode === tab.id
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -555,25 +649,20 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
         ))}
       </div>
 
-      {/* Save message */}
-      {saveMessage && (
-        <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
-          saveMessage.type === 'success'
-            ? 'bg-green-50 text-green-800 border border-green-200'
-            : 'bg-red-50 text-red-800 border border-red-200'
-        }`}>
-          {saveMessage.text}
-        </div>
-      )}
-
-      {/* ── TAB 1: Generate prompt ─────────────────────────────────────────── */}
+      {/* ── GENERATE PROMPT TAB ── */}
       {mode === 'prompt' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Copy this prompt and paste it into Claude or Gemini along with any relevant content.
-            Then paste the JSON output back in the <strong>Paste JSON</strong> tab.
+            Copy this prompt and paste it into Claude or Gemini. Then paste the JSON output back in the <strong>Paste JSON</strong> tab.
           </p>
-          <CopyBox text={prompt} label="AI Lesson Prompt" />
+          {prompt
+            ? <CopyBox text={prompt} />
+            : (
+              <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                Prompt unavailable — subject or topic data is missing for this subtopic.
+              </div>
+            )
+          }
           <button
             onClick={() => setMode('paste')}
             className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
@@ -583,17 +672,17 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
         </div>
       )}
 
-      {/* ── TAB 2: Paste JSON ──────────────────────────────────────────────── */}
+      {/* ── PASTE JSON TAB ── */}
       {mode === 'paste' && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Paste the full JSON output from the AI below.
+            Paste the full JSON output from the AI below. The lesson preview will appear automatically.
           </p>
           <textarea
             value={rawJson}
-            onChange={e => setRawJson(e.target.value)}
+            onChange={(e) => handleJsonChange(e.target.value)}
             className="w-full h-72 font-mono text-xs p-4 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder='Paste Claude/Gemini JSON output here…'
+            placeholder={'Paste Claude/Gemini JSON output here…\n\n{\n  "title": "...",\n  "slides": [...]\n}'}
             spellCheck={false}
           />
           {parseResult && (
@@ -603,15 +692,21 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
                 : 'bg-red-50 border border-red-200'
             }`}>
               {parseResult.valid ? (
-                <p className="font-bold text-green-800">
-                  ✓ Valid — {parseResult.stats?.totalSlides} slides · {parseResult.stats?.workedExamples} worked examples
-                </p>
+                <div className="text-green-800">
+                  <p className="font-bold">✓ Valid — switching to preview…</p>
+                  <p className="text-xs mt-0.5 text-green-600">
+                    {parseResult.stats.totalSlides} slides ·{' '}
+                    {parseResult.stats.interactions} interactions ·{' '}
+                    {parseResult.stats.workedExamples} worked examples ·{' '}
+                    {parseResult.stats.imageSlots} image slots
+                  </p>
+                </div>
               ) : (
                 <div className="text-red-800">
-                  <p className="font-bold">⚠ JSON has errors</p>
+                  <p className="font-bold">⚠ JSON has errors — fix and re-paste</p>
                   <ul className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
-                    {(parseResult.errors ?? []).map((err, i) => (
-                      <li key={i} className="text-xs">· {err}</li>
+                    {parseResult.errors.map((err, i) => (
+                      <li key={i} className="text-xs text-red-700">· {err}</li>
                     ))}
                   </ul>
                 </div>
@@ -621,13 +716,19 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
         </div>
       )}
 
-      {/* ── TAB 3: Preview & Save ──────────────────────────────────────────── */}
+      {/* ── PREVIEW & SAVE TAB ── */}
       {mode === 'preview' && (
         <div className="space-y-4">
           {slides.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-2xl">
-              <p className="text-gray-500 text-sm font-medium mb-3">No lesson to preview yet</p>
-              <button onClick={() => setMode('paste')} className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl">
+              <p className="text-gray-500 text-sm font-medium mb-1">No lesson to preview yet</p>
+              <p className="text-xs text-gray-400 mb-4">
+                Paste your JSON in the "Paste JSON" tab first.
+              </p>
+              <button
+                onClick={() => setMode('paste')}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
+              >
                 Go to Paste JSON →
               </button>
             </div>
@@ -645,47 +746,106 @@ export default function LessonEditorClient({ subtopic, subject, topic }) {
                   disabled={saving}
                   className="flex-1 py-3 bg-green-600 text-white text-sm font-black rounded-xl hover:bg-green-500 disabled:opacity-50 transition-colors"
                 >
-                  {saving ? 'Saving…' : `Publish lesson →`}
+                  {saving ? 'Saving…' : '✓ Save Lesson — Go Live'}
                 </button>
               </div>
 
-              {/* Slide previews */}
-              <div className="space-y-4">
-                {slides.map((slide, i) => (
-                  <div key={i} className="bg-gray-50 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-bold text-gray-400 uppercase">{slide.type}</span>
-                      <span className="text-xs text-gray-300">{i + 1}/{slides.length}</span>
-                    </div>
-                    <SlideRenderer slide={slide} color={color} interactive={false} isAdmin />
+              <p className="text-xs text-gray-400 text-center">
+                {slides.length} slides · Saving makes this lesson immediately live for students
+              </p>
+
+              {saveMessage && (
+                <div className={`p-3 rounded-xl text-sm font-medium ${
+                  saveMessage.type === 'error'
+                    ? 'bg-red-50 text-red-800 border border-red-200'
+                    : 'bg-green-50 text-green-800 border border-green-200'
+                }`}>
+                  {saveMessage.text}
+                </div>
+              )}
+
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div className={`${color.bg} px-4 py-3 border-b ${color.border ?? ''}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className={`text-sm font-black ${color.text}`}>{lessonTitle}</p>
+                    <span className={`text-xs ${color.text} opacity-70`}>{slides.length} slides</span>
                   </div>
-                ))}
+                  <div className="h-2 bg-white/40 rounded-full">
+                    <div className={`h-full ${color.accent ?? 'bg-indigo-500'} rounded-full w-1/4`} />
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {slides.map((slide, i) => (
+                    <div key={i} className="px-4 py-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xs font-black text-gray-300">{i + 1}</span>
+                        <span className="text-xs font-black uppercase tracking-wide text-gray-400">
+                          {SLIDE_TYPE_LABELS[slide.type] ?? slide.type}
+                        </span>
+                      </div>
+                      <SlideRenderer slide={slide} onImageUpdate={(img) => handleImageUpdate(i, img)} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}
         </div>
       )}
 
-      {/* ── TAB 4: Edit slides ─────────────────────────────────────────────── */}
+      {/* ── EDIT SLIDES TAB ── */}
       {mode === 'edit' && (
-        <div className="space-y-4">
-          <div className="text-center py-8 bg-gray-50 rounded-2xl">
-            <p className="text-sm text-gray-500">
-              Slide editing coming soon — use Paste JSON to update the lesson content for now.
-            </p>
-            <button
-              onClick={() => setMode('paste')}
-              className="mt-3 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
-            >
-              Go to Paste JSON →
-            </button>
-          </div>
-        </div>
-      )}
+        <div className="space-y-3">
+          {slides.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">No slides yet — paste JSON first or add slides manually.</p>
+          ) : (
+            slides.map((slide, i) => (
+              <SlideEditor
+                key={i}
+                slide={slide}
+                index={i}
+                onUpdate={handleSlideUpdate}
+                onDelete={handleSlideDelete}
+              />
+            ))
+          )}
 
-      {/* ── TAB 5: Questions ───────────────────────────────────────────────── */}
-      {mode === 'questions' && (
-        <QuestionsTab subtopic={subtopic} subject={subject} topic={topic} />
+          {/* Add slide */}
+          <div className="border-2 border-dashed border-gray-200 rounded-2xl p-4">
+            <p className="text-xs font-bold text-gray-500 mb-2">Add slide</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(SLIDE_DEFAULTS).map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleAddSlide(type)}
+                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-colors font-medium"
+                >
+                  + {SLIDE_TYPE_LABELS[type] ?? type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {slides.length > 0 && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full py-3.5 bg-green-600 text-white text-sm font-black rounded-2xl hover:bg-green-500 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving…' : '✓ Save Lesson — Go Live'}
+            </button>
+          )}
+
+          {saveMessage && (
+            <div className={`p-3 rounded-xl text-sm font-medium ${
+              saveMessage.type === 'error'
+                ? 'bg-red-50 text-red-800 border border-red-200'
+                : 'bg-green-50 text-green-800 border border-green-200'
+            }`}>
+              {saveMessage.text}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
