@@ -87,7 +87,7 @@ function TopicRow({ topic }) {
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="w-16 h-2 bg-subtle rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ${
               pct >= 75 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'
@@ -199,7 +199,7 @@ export default function DiagnosticResultsPage() {
   }, [router])
 
   if (!summary) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-base flex items-center justify-center">
       <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
@@ -207,11 +207,11 @@ export default function DiagnosticResultsPage() {
   const tier = getScoreTier(summary.overallScore)
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-16">
+    <div className="min-h-screen bg-base pb-16">
       <div className="max-w-md mx-auto px-4 pt-8 space-y-5">
 
         {/* ── Hero score card ─────────────────────────────────────────────── */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-card rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
           <div className={`${tier.bg} px-6 pt-8 pb-6 text-center`}>
             <ScoreRing pct={summary.overallScore} color={tier.ring} />
             <div className="mt-4">
@@ -244,7 +244,7 @@ export default function DiagnosticResultsPage() {
 
         {/* ── Focus areas — weak topics called out visually ───────────────── */}
         {summary.weakTopics.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
+          <div className="bg-card rounded-2xl shadow-sm border border-red-100 overflow-hidden">
             <div className="px-4 pt-4 pb-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
               <span className="text-base">🎯</span>
               <div>
@@ -272,7 +272,7 @@ export default function DiagnosticResultsPage() {
         )}
 
         {/* ── Full topic breakdown ─────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 pt-4 pb-2 border-b border-gray-100">
             <p className="text-sm font-black text-gray-900">All topics</p>
           </div>
@@ -303,7 +303,7 @@ export default function DiagnosticResultsPage() {
               </Link>
               <Link
                 href="/student/practice"
-                className="flex items-center justify-center gap-2 w-full py-3.5 bg-white border border-gray-200 text-gray-700 font-bold text-sm rounded-2xl hover:bg-gray-50 active:scale-[0.98] transition-all"
+                className="flex items-center justify-center gap-2 w-full py-3.5 bg-card border border-gray-200 text-gray-700 font-bold text-sm rounded-2xl hover:bg-base active:scale-[0.98] transition-all"
               >
                 Practice now
               </Link>

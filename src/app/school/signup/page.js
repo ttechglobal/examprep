@@ -52,7 +52,7 @@ export default function SchoolSignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-base flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
 
         <div className="text-center mb-8">
@@ -60,7 +60,7 @@ export default function SchoolSignupPage() {
           <p className="text-gray-500 text-sm mt-1">School account setup</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-5">
             <span className="text-xl">🏫</span>
             <h2 className="text-lg font-black text-gray-900">Create school account</h2>

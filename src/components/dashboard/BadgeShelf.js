@@ -15,7 +15,7 @@ function BadgeModal({ earnedIds, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col"
+      <div className="bg-card dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col"
         style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.15)' }}
         onClick={e => e.stopPropagation()}>
 
@@ -27,7 +27,7 @@ function BadgeModal({ earnedIds, onClose }) {
             <h2 className="text-lg font-black text-gray-900 dark:text-gray-100">Badges</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{earnedIds.length} of {BADGE_DEFS.length} earned</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-600 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-subtle dark:hover:bg-gray-800 text-gray-400 dark:text-gray-600 transition-colors">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -37,7 +37,7 @@ function BadgeModal({ earnedIds, onClose }) {
           {categories.map(c => (
             <button key={c} onClick={() => setFilter(c)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-all ${
-                filter === c ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                filter === c ? 'bg-indigo-600 text-white' : 'bg-subtle dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}>
               {c}
             </button>
@@ -53,7 +53,7 @@ function BadgeModal({ earnedIds, onClose }) {
                 <div key={b.id} className={`rounded-2xl p-4 border-2 transition-all ${
                   earned
                     ? `${colors.bg} ${colors.ring} ring-1`
-                    : 'bg-gray-50 dark:bg-gray-800 border-transparent opacity-50'
+                    : 'bg-base dark:bg-gray-800 border-transparent opacity-50'
                 }`}>
                   <div className="text-2xl mb-2">{earned ? b.emoji : '🔒'}</div>
                   <p className={`text-sm font-black ${earned ? colors.text : 'text-gray-400 dark:text-gray-600'}`}>{b.label}</p>
@@ -86,7 +86,7 @@ export default function BadgeShelf({ completedLessons = 0, practiceSessions = 0,
   return (
     <>
       <button onClick={() => setModalOpen(true)}
-        className="w-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm px-5 py-4 flex items-center gap-4 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 active:scale-[0.98] transition-all text-left">
+        className="w-full bg-card dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm px-5 py-4 flex items-center gap-4 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 active:scale-[0.98] transition-all text-left">
         <div className="flex -space-x-1 flex-shrink-0">
           {recent.map(b => (
             <div key={b.id} className={`w-9 h-9 rounded-full border-2 border-white dark:border-gray-900 flex items-center justify-center text-base ${getBadgeColors(b.tier).bg}`}>

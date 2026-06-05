@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-base">
       {/* Hero */}
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <h1 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-4">
@@ -24,7 +24,7 @@ export default function HomePage() {
           </Link>
           <Link
             href="/login"
-            className="block w-full py-3.5 bg-white text-gray-700 text-sm font-semibold rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors"
+            className="block w-full py-3.5 bg-card text-gray-700 text-sm font-semibold rounded-2xl border border-gray-200 hover:bg-base transition-colors"
           >
             I already have an account
           </Link>
@@ -38,7 +38,7 @@ export default function HomePage() {
           { emoji: '📚', title: 'Topic-by-topic lessons', desc: 'Clear, structured lessons with inline checks to keep you engaged' },
           { emoji: '📊', title: 'Track your progress', desc: "See how much you've improved week by week" },
         ].map(f => (
-          <div key={f.title} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div key={f.title} className="bg-card rounded-2xl border border-gray-100 shadow-sm p-5">
             <span className="text-3xl">{f.emoji}</span>
             <h3 className="font-black text-gray-900 mt-2 mb-1">{f.title}</h3>
             <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
@@ -57,7 +57,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/school/signup"
-            className="inline-block px-8 py-3 bg-white text-indigo-600 text-sm font-black rounded-2xl hover:bg-indigo-50 transition-colors"
+            className="inline-block px-8 py-3 bg-card text-indigo-600 text-sm font-black rounded-2xl hover:bg-indigo-50 transition-colors"
           >
             Set up your school →
           </Link>

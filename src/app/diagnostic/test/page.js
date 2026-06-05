@@ -190,7 +190,7 @@ export default function DiagnosticTestPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-base flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-gray-500 text-sm">Loading your questions...</p>
@@ -201,7 +201,7 @@ export default function DiagnosticTestPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-base flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-red-600 text-sm mb-4">{error}</p>
           <button onClick={() => router.push('/diagnostic')} className="text-indigo-600 text-sm font-medium hover:underline">
@@ -223,11 +223,11 @@ export default function DiagnosticTestPage() {
   const selectedAnswer = currentAnswer?.selected ?? null
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-base">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+      <div className="bg-card border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <span className="text-sm font-medium text-gray-500">
             {currentIndex + 1} / {questions.length}
@@ -241,7 +241,7 @@ export default function DiagnosticTestPage() {
           </button>
         </div>
         <div className="max-w-lg mx-auto mt-2">
-          <div className="h-1.5 bg-gray-100 rounded-full">
+          <div className="h-1.5 bg-subtle rounded-full">
             <div
               className="h-full bg-indigo-500 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -258,7 +258,7 @@ export default function DiagnosticTestPage() {
             {currentQuestion.subjects?.name ?? currentQuestion.subject_name}
           </span>
           {(currentQuestion.topics?.name ?? currentQuestion.topic_name) && (
-            <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+            <span className="text-xs text-gray-500 bg-subtle px-2.5 py-1 rounded-full">
               {currentQuestion.topics?.name ?? currentQuestion.topic_name}
             </span>
           )}
@@ -297,7 +297,7 @@ export default function DiagnosticTestPage() {
           <div className="mt-4">
             <button
               onClick={handleSkip}
-              className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors"
+              className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-base transition-colors"
             >
               Skip
             </button>

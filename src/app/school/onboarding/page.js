@@ -64,7 +64,7 @@ export default function SchoolOnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-base flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
 
         <div className="text-center mb-8">
@@ -72,7 +72,7 @@ export default function SchoolOnboardingPage() {
           <p className="text-gray-500 text-sm mt-1">School setup</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xl">🏫</span>
             <h2 className="text-lg font-black text-gray-900">Tell us about your school</h2>
@@ -118,7 +118,7 @@ export default function SchoolOnboardingPage() {
                 <select
                   value={state}
                   onChange={e => setState(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-card"
                 >
                   <option value="">Select</option>
                   {NIGERIAN_STATES.map(s => (

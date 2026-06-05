@@ -1,15 +1,15 @@
 // src/app/api/practice/questions/route.js
-// FIX: removed .in('question_type', questionTypes) from all query branches
-//      — column was dropped from the questions table
+// Updated: exam_type → exam_types[] (contains filter via @>)
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sequenceQuestions, fetchCoreTopicMap, fetchStudentAccuracy } from '@/lib/topicSequencer'
+import { applyExamFilter, normaliseExamType } from '@/lib/examFilter'
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
-  let examType       = searchParams.get('exam') ?? 'WAEC'
+  let examType       = normaliseExamType(searchParams.get('exam') ?? 'WAEC')
   const count        = Math.min(parseInt(searchParams.get('count') ?? '20'), 200)
   const topicId      = searchParams.get('topic_id')
   const mode         = searchParams.get('mode') ?? 'practice'
@@ -20,7 +20,6 @@ export async function GET(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // Resolve subjects + authenticated user
   let subjects  = subjectNames
   let studentId = null
 
@@ -32,7 +31,7 @@ export async function GET(request) {
       const { data: profile } = await service
         .from('profiles').select('subjects, exam_type').eq('id', user.id).single()
       subjects = profile?.subjects ?? []
-      if (profile?.exam_type) examType = profile.exam_type
+      if (profile?.exam_type) examType = normaliseExamType(profile.exam_type)
     }
   }
 
@@ -48,14 +47,13 @@ export async function GET(request) {
   }
 
   const allQuestions = []
-  const examFilter   = examType === 'BOTH' ? ['WAEC', 'JAMB', 'BOTH'] : [examType, 'BOTH']
 
   // ── BRANCH A: Exam simulation ──────────────────────────────────────────────
   if (mode === 'exam') {
     const perSubject = examType === 'JAMB' ? 40 : 50
 
     for (const subject of subjectRows) {
-      const { data: questions } = await service
+      const baseQuery = service
         .from('questions')
         .select(`
           id, question_text, options, correct_answer, explanation,
@@ -63,10 +61,10 @@ export async function GET(request) {
           subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
         `)
         .eq('subject_id', subject.id)
-        .in('exam_type', examFilter)
         .eq('is_active', true)
-        // question_type filter removed — column dropped
         .limit(perSubject + 20)
+
+      const { data: questions } = await applyExamFilter(baseQuery, examType)
 
       if (questions?.length) {
         const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, perSubject)
@@ -86,7 +84,7 @@ export async function GET(request) {
   else if (topicId) {
     const subject = subjectRows[0]
 
-    const { data: questions } = await service
+    const baseQuery = service
       .from('questions')
       .select(`
         id, question_text, options, correct_answer, explanation,
@@ -95,9 +93,9 @@ export async function GET(request) {
       `)
       .eq('topic_id', topicId)
       .eq('is_active', true)
-      // question_type filter removed — column dropped
-      .in('exam_type', examFilter)
       .limit(count + 20)
+
+    const { data: questions } = await applyExamFilter(baseQuery, examType)
 
     if (questions?.length) {
       const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, count)
@@ -131,7 +129,7 @@ export async function GET(request) {
     for (const subject of subjectRows) {
       const fetchLimit = Math.max(perSubject * 5, 60)
 
-      const { data: rawQuestions } = await service
+      const baseQuery = service
         .from('questions')
         .select(`
           id, question_text, options, correct_answer, explanation,
@@ -139,10 +137,10 @@ export async function GET(request) {
           subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
         `)
         .eq('subject_id', subject.id)
-        .in('exam_type', examFilter)
         .eq('is_active', true)
-        // question_type filter removed — column dropped
         .limit(fetchLimit)
+
+      const { data: rawQuestions } = await applyExamFilter(baseQuery, examType)
 
       if (!rawQuestions?.length) continue
 
@@ -156,20 +154,10 @@ export async function GET(request) {
       }))
 
       const coreTopicIds = coreTopicMap[subject.id] ?? []
-      const sequenced    = sequenceQuestions({ questions: enriched, coreTopicIds, studentAcc, count: perSubject })
-      allQuestions.push(...sequenced)
+      const selected = sequenceQuestions(enriched, coreTopicIds, studentAcc, perSubject)
+      allQuestions.push(...selected)
     }
   }
 
-  if (!allQuestions.length) {
-    return NextResponse.json({
-      error: 'No questions available yet for these subjects. Check back soon!',
-    }, { status: 404 })
-  }
-
-  const final = (mode === 'exam' || topicId)
-    ? allQuestions.sort(() => Math.random() - 0.5).slice(0, count)
-    : allQuestions.slice(0, count)
-
-  return NextResponse.json({ questions: final, count: final.length, examType, mode })
+  return NextResponse.json({ questions: allQuestions })
 }

@@ -73,11 +73,11 @@ function MiniQuiz({ prereqData, threshold, onComplete, onSkip }) {
       {/* Options */}
       <div className="space-y-2">
         {Object.entries(q.options ?? {}).map(([key, text]) => {
-          let style = 'border-gray-200 bg-white text-gray-800'
+          let style = 'border-gray-200 bg-card text-gray-800'
           if (revealed) {
             if (key === correct)   style = 'border-green-400 bg-green-50 text-green-900'
             else if (key === selected) style = 'border-red-300 bg-red-50 text-red-800'
-            else                   style = 'border-gray-100 bg-gray-50 text-gray-400'
+            else                   style = 'border-gray-100 bg-base text-gray-400'
           } else if (key === selected) {
             style = 'border-indigo-400 bg-indigo-50 text-indigo-900'
           }
@@ -105,7 +105,7 @@ function MiniQuiz({ prereqData, threshold, onComplete, onSkip }) {
             }
           </div>
           {!isRight && q.explanation?.wrong_options?.[selected] && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-700">
+            <div className="bg-base border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-700">
               <span className="font-bold text-red-600">Why {selected} is wrong: </span>
               {q.explanation.wrong_options[selected]}
             </div>
@@ -188,7 +188,7 @@ function ScoreResult({ score, threshold, topicName, onContinue, onReviewLesson, 
         {c.showReview && (
           <button
             onClick={onReviewLesson}
-            className="w-full py-3 border border-gray-200 text-gray-600 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors"
+            className="w-full py-3 border border-gray-200 text-gray-600 text-sm font-medium rounded-2xl hover:bg-base transition-colors"
           >
             Review {topicName} first
           </button>
@@ -300,7 +300,7 @@ export default function PrerequisiteGate({
   // ── Modal wrapper ─────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-card rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="p-6">
 
           {/* ── Gate intro ── */}
@@ -316,7 +316,7 @@ export default function PrerequisiteGate({
 
               <div className="space-y-2">
                 {prereqs.map((p, i) => (
-                  <div key={p.topic.id} className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3">
+                  <div key={p.topic.id} className="flex items-center gap-3 bg-base rounded-2xl px-4 py-3">
                     <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black flex-shrink-0">
                       {i + 1}
                     </div>

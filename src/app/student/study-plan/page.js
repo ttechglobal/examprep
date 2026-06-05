@@ -236,7 +236,7 @@ function SubjectTab({ subject, isActive, onClick }) {
       {subject.name}
       {subject.weakCount > 0 && (
         <span className={`text-[9px] font-black min-w-[14px] h-3.5 px-1 rounded-full ${
-          isActive ? 'bg-white/40' : 'bg-red-100 text-red-600'
+          isActive ? 'bg-card/40' : 'bg-red-100 text-red-600'
         }`}>
           {subject.weakCount}
         </span>

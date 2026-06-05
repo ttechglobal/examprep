@@ -24,7 +24,7 @@ function ExitModal({ onKeep, onExit }) {
       className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0"
       style={{ backdropFilter: 'blur(6px)' }}
     >
-      <div className="bg-white dark:bg-[#1a2744] rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-gray-100 dark:border-white/10">
+      <div className="bg-card dark:bg-[#1a2744] rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-gray-100 dark:border-white/10">
         <div className="text-center space-y-1">
           <p className="text-lg font-black text-gray-900 dark:text-white">Leave this lesson?</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Your progress is saved automatically.</p>
@@ -33,7 +33,7 @@ function ExitModal({ onKeep, onExit }) {
           <button onClick={onKeep} className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
             Keep learning
           </button>
-          <button onClick={onExit} className="w-full py-3.5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+          <button onClick={onExit} className="w-full py-3.5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-2xl hover:bg-base dark:hover:bg-card/5 transition-colors">
             Exit lesson
           </button>
         </div>

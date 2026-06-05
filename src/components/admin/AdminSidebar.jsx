@@ -1,8 +1,5 @@
 'use client'
 // src/components/admin/AdminSidebar.jsx
-// Sidebar navigation for the admin panel.
-// Desktop: always visible fixed sidebar.
-// Mobile: drawer via hidden checkbox trick (no JS needed for toggle).
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -17,31 +14,31 @@ const NAV = [
   {
     section: 'Content',
     items: [
-      { href: '/admin/curriculum',        label: 'Curriculum',    icon: '🗂' },
-      { href: '/admin/subjects-manager',  label: 'Subjects',      icon: '📚' },
-      { href: '/admin/video-lessons',     label: 'Videos',        icon: '🎬' },
+      { href: '/admin/curriculum',       label: 'Curriculum',   icon: '🗂' },
+      { href: '/admin/subjects-manager', label: 'Subjects',     icon: '📚' },
+      { href: '/admin/video-lessons',    label: 'Videos',       icon: '🎬' },
     ],
   },
   {
     section: 'Questions',
     items: [
-      { href: '/admin/questions',         label: 'Question Bank', icon: '❓' },
-      { href: '/admin/questions/upload',  label: 'Upload',        icon: '⬆️' },
-      { href: '/admin/core-topics',       label: 'Core Topics',   icon: '⭐' },
+      { href: '/admin/past-questions',  label: 'Past Questions', icon: '📝' },
+      { href: '/admin/questions',       label: 'Question Bank',  icon: '❓' },
+      { href: '/admin/core-topics',     label: 'Core Topics',    icon: '⭐' },
     ],
   },
   {
     section: 'Users',
     items: [
-      { href: '/admin/users',             label: 'Students',      icon: '👥' },
-      { href: '/admin/reviewers',         label: 'Reviewers',     icon: '🔍' },
-      { href: '/admin/schools',           label: 'Schools',       icon: '🏫' },
+      { href: '/admin/users',           label: 'Students',       icon: '👥' },
+      { href: '/admin/reviewers',       label: 'Reviewers',      icon: '🔍' },
+      { href: '/admin/schools',         label: 'Schools',        icon: '🏫' },
     ],
   },
   {
     section: 'Analytics',
     items: [
-      { href: '/admin/analytics',         label: 'Platform Stats', icon: '📈' },
+      { href: '/admin/analytics',       label: 'Platform Stats', icon: '📈' },
     ],
   },
 ]
@@ -124,12 +121,12 @@ export default function AdminSidebar({ userName }) {
 
   return (
     <>
-      {/* ── Desktop sidebar (always visible) ─────────────────────────────── */}
+      {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-60 bg-white border-r border-gray-200 z-40">
         <SidebarContent pathname={pathname} />
       </aside>
 
-      {/* ── Mobile drawer (hidden checkbox trick) ─────────────────────────── */}
+      {/* ── Mobile drawer ─────────────────────────────────────────────────── */}
       <input type="checkbox" id="admin-drawer" className="peer hidden" />
 
       {/* Backdrop */}
@@ -143,7 +140,6 @@ export default function AdminSidebar({ userName }) {
                         -translate-x-full peer-checked:translate-x-0
                         transition-transform duration-200 ease-in-out
                         lg:hidden flex flex-col">
-        {/* Close button */}
         <div className="absolute top-4 right-4">
           <label htmlFor="admin-drawer" className="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100">
             <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

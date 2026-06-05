@@ -1,12 +1,6 @@
 // src/app/api/admin/core-topics/route.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin API for managing core topics per subject + exam type.
-//
-// GET    /api/admin/core-topics?subjectId=&examType=   → list
-// POST   /api/admin/core-topics                        → add
-// PATCH  /api/admin/core-topics                        → update priority / active
-// DELETE /api/admin/core-topics?id=                    → remove
-// ─────────────────────────────────────────────────────────────────────────────
+// FIXED: removed dead .eq('question_type','objective') — column dropped
+// FIXED: exam filter uses .in([examType,'BOTH']) so BOTH questions count too
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -26,7 +20,6 @@ async function requireAdmin() {
   return user
 }
 
-// ── GET — list core topics for a subject + exam type ─────────────────────────
 export async function GET(request) {
   try { await requireAdmin() } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 
@@ -38,68 +31,65 @@ export async function GET(request) {
 
   const db = svc()
 
-  // Fetch core topics for this subject (all exam types so UI can show all)
-  const { data: coreTopics, error } = await db
-    .from('core_topics')
-    .select('id, topic_id, exam_type, priority, is_active')
-    .eq('subject_id', subjectId)
-    .order('priority', { ascending: true })
+  const [{ data: allTopics }, { data: coreTopics }] = await Promise.all([
+    db.from('topics')
+      .select('id, name, slug, exam_type, order_index, subtopics ( id, lesson_status, lesson_generated )')
+      .eq('subject_id', subjectId)
+      .order('order_index', { ascending: true }),
+    db.from('core_topics')
+      .select('id, topic_id, exam_type, priority, is_active')
+      .eq('subject_id', subjectId)
+      .in('exam_type', [examType, 'BOTH']),
+  ])
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Fetch all topics for the subject so the UI can show the full list
-  const { data: allTopics } = await db
-    .from('topics')
-    .select('id, name, slug, exam_type, order_index')
-    .eq('subject_id', subjectId)
-    .order('order_index', { ascending: true })
-
-  // Count available questions per topic for the selected exam type
-  // (helps admin know which topics actually have questions to serve)
   const topicIds = (allTopics ?? []).map(t => t.id)
   let qCounts = {}
+
   if (topicIds.length) {
-    const examFilter = examType === 'BOTH' ? ['WAEC', 'JAMB', 'BOTH'] : [examType, 'BOTH']
+    // FIXED: include 'BOTH' questions in counts + no question_type filter
     const { data: counts } = await db
       .from('questions')
       .select('topic_id')
       .in('topic_id', topicIds)
-      .in('exam_type', examFilter)
+      .in('exam_type', [examType, 'BOTH'])
       .eq('is_active', true)
-      .eq('question_type', 'objective')
 
     ;(counts ?? []).forEach(r => {
       qCounts[r.topic_id] = (qCounts[r.topic_id] ?? 0) + 1
     })
   }
 
-  // Build a lookup of existing core topic rows keyed by topicId+examType
   const coreMap = {}
   ;(coreTopics ?? []).forEach(ct => {
-    const key = `${ct.topic_id}__${ct.exam_type}`
-    coreMap[key] = ct
+    if (!coreMap[ct.topic_id] || ct.exam_type === examType) coreMap[ct.topic_id] = ct
   })
 
-  // Annotate each topic with its core status
-  const topics = (allTopics ?? []).map(t => {
-    // Check if marked core for the requested examType OR for BOTH
-    const exactKey = `${t.id}__${examType}`
-    const bothKey  = `${t.id}__BOTH`
-    const coreEntry = coreMap[exactKey] ?? coreMap[bothKey] ?? null
+  function topicLessonStatus(subtopics = []) {
+    if (subtopics.some(s => s.lesson_status === 'published'))  return 'published'
+    if (subtopics.some(s => s.lesson_status === 'in_review'))  return 'in_review'
+    if (subtopics.some(s => s.lesson_generated))               return 'draft'
+    return null
+  }
 
+  const topics = (allTopics ?? []).map(t => {
+    const coreEntry = coreMap[t.id] ?? null
     return {
-      ...t,
+      id:             t.id,
+      name:           t.name,
+      slug:           t.slug,
+      exam_type:      t.exam_type,
+      order_index:    t.order_index,
       question_count: qCounts[t.id] ?? 0,
-      core_entry: coreEntry,    // null if not core
-      is_core:    !!coreEntry && coreEntry.is_active,
-      priority:   coreEntry?.priority ?? null,
+      lesson_status:  topicLessonStatus(t.subtopics ?? []),
+      core_entry:     coreEntry,
+      is_core:        !!coreEntry && coreEntry.is_active,
+      priority:       coreEntry?.priority ?? null,
     }
   })
 
   return NextResponse.json({ topics, examType })
 }
 
-// ── POST — mark a topic as core ───────────────────────────────────────────────
 export async function POST(request) {
   try { await requireAdmin() } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 
@@ -109,66 +99,45 @@ export async function POST(request) {
   }
 
   const db = svc()
-
-  // Get the next priority if not supplied
   let effectivePriority = priority
   if (!effectivePriority) {
     const { data: existing } = await db
-      .from('core_topics')
-      .select('priority')
-      .eq('subject_id', subjectId)
-      .eq('exam_type', examType)
-      .order('priority', { ascending: false })
-      .limit(1)
+      .from('core_topics').select('priority')
+      .eq('subject_id', subjectId).eq('exam_type', examType)
+      .order('priority', { ascending: false }).limit(1)
     effectivePriority = ((existing?.[0]?.priority ?? 0) + 1)
   }
 
   const { data, error } = await db
     .from('core_topics')
-    .upsert({
-      subject_id: subjectId,
-      topic_id:   topicId,
-      exam_type:  examType,
-      priority:   effectivePriority,
-      is_active:  true,
-    }, { onConflict: 'subject_id,topic_id,exam_type' })
-    .select()
-    .single()
+    .upsert(
+      { subject_id: subjectId, topic_id: topicId, exam_type: examType, priority: effectivePriority, is_active: true },
+      { onConflict: 'subject_id,topic_id,exam_type' }
+    )
+    .select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ core_topic: data })
+  return NextResponse.json(data)
 }
 
-// ── PATCH — update priority or is_active ─────────────────────────────────────
 export async function PATCH(request) {
   try { await requireAdmin() } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 
-  const body = await request.json()
-  const { id, priority, is_active } = body
-
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-
+  const { id, subjectId, topicId, examType, priority, is_active } = await request.json()
+  const db = svc()
   const updates = {}
   if (priority  !== undefined) updates.priority  = priority
   if (is_active !== undefined) updates.is_active = is_active
 
-  if (!Object.keys(updates).length) {
-    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
-  }
-
-  const db = svc()
-  const { data, error } = await db
-    .from('core_topics')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single()
+  const { error } = await (id
+    ? db.from('core_topics').update(updates).eq('id', id)
+    : db.from('core_topics').update(updates).eq('subject_id', subjectId).eq('topic_id', topicId).eq('exam_type', examType)
+  )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ core_topic: data })
+  return NextResponse.json({ success: true })
 }
 
-// ── DELETE — remove a core topic entry ───────────────────────────────────────
 export async function DELETE(request) {
   try { await requireAdmin() } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
 

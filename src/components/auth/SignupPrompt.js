@@ -5,7 +5,7 @@ import Link from 'next/link'
 export default function SignupPrompt({ subtopicName, onDismiss }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-xl">
+      <div className="bg-card rounded-3xl w-full max-w-sm p-6 shadow-xl">
         <div className="text-center mb-5">
           <div className="text-4xl mb-3">🎉</div>
           <h2 className="text-xl font-black text-gray-900 mb-1">
@@ -25,7 +25,7 @@ export default function SignupPrompt({ subtopicName, onDismiss }) {
           </Link>
           <Link
             href="/login?from=lesson"
-            className="block w-full py-3 border border-gray-200 text-gray-600 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors text-center"
+            className="block w-full py-3 border border-gray-200 text-gray-600 text-sm font-medium rounded-2xl hover:bg-base transition-colors text-center"
           >
             I already have an account
           </Link>

@@ -1,0 +1,263 @@
+'use client'
+// src/app/diagnostic/page.js
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX: Selected subject button uses inline styles (not dynamic Tailwind classes)
+//      so the colour always renders — Tailwind JIT can't purge inline styles.
+//      Each subject has a hardcoded selectedStyle with bg + border colour.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+const ALL_SUBJECTS = [
+  'Mathematics', 'English Language', 'Physics', 'Chemistry',
+  'Biology', 'Economics', 'Government', 'Literature in English',
+  'Geography', 'Agricultural Science', 'Further Mathematics', 'Commerce',
+]
+
+// Hardcoded per-subject selected styles — bg + border + text colour
+// These NEVER get purged by Tailwind because they're inline styles, not classes
+const SUBJECT_SELECTED_STYLE = {
+  'Mathematics':           { background: '#dbeafe', borderColor: '#93c5fd', color: '#1d4ed8' }, // blue-100 / blue-300 / blue-700
+  'English Language':      { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' }, // violet-100 / violet-300 / violet-700
+  'Physics':               { background: '#cffafe', borderColor: '#67e8f9', color: '#0e7490' }, // cyan-100 / cyan-300 / cyan-700
+  'Chemistry':             { background: '#dcfce7', borderColor: '#86efac', color: '#15803d' }, // green-100 / green-300 / green-700
+  'Biology':               { background: '#d1fae5', borderColor: '#6ee7b7', color: '#047857' }, // emerald-100 / emerald-300 / emerald-700
+  'Economics':             { background: '#fef3c7', borderColor: '#fcd34d', color: '#b45309' }, // amber-100 / amber-300 / amber-700
+  'Government':            { background: '#fee2e2', borderColor: '#fca5a5', color: '#b91c1c' }, // red-100 / red-300 / red-700
+  'Literature in English': { background: '#fce7f3', borderColor: '#f9a8d4', color: '#be185d' }, // pink-100 / pink-300 / pink-700
+  'Geography':             { background: '#ccfbf1', borderColor: '#5eead4', color: '#0f766e' }, // teal-100 / teal-300 / teal-700
+  'Agricultural Science':  { background: '#ecfccb', borderColor: '#bef264', color: '#4d7c0f' }, // lime-100 / lime-300 / lime-700
+  'Further Mathematics':   { background: '#e0f2fe', borderColor: '#7dd3fc', color: '#0369a1' }, // sky-100 / sky-300 / sky-700
+  'Commerce':              { background: '#ede9fe', borderColor: '#c4b5fd', color: '#6d28d9' }, // violet-100 / violet-300 / violet-700
+}
+
+const DEFAULT_SELECTED_STYLE = { background: '#e0e7ff', borderColor: '#a5b4fc', color: '#4338ca' } // indigo
+
+function getSelectedStyle(subject) {
+  return SUBJECT_SELECTED_STYLE[subject] ?? DEFAULT_SELECTED_STYLE
+}
+
+function DiagnosticSetup() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+
+  const presetSubject = searchParams.get('subject') ?? ''
+  const presetExam    = searchParams.get('exam') ?? ''
+
+  const [examType,          setExamType]         = useState(presetExam || '')
+  const [selectedSubject,   setSelectedSubject]  = useState(presetSubject || '')
+  const [enrolledSubjects,  setEnrolledSubjects] = useState([])
+  const [diagnosedSubjects, setDiagnosedSubjects]= useState(new Set())
+  const [isSignedIn,        setIsSignedIn]       = useState(false)
+  const [loadingProfile,    setLoadingProfile]   = useState(true)
+  const [error,             setError]            = useState(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setLoadingProfile(false); return }
+      setIsSignedIn(true)
+
+      const [{ data: profile }, { data: diagResults }] = await Promise.all([
+        supabase.from('profiles').select('subjects, exam_type').eq('id', user.id).single(),
+        supabase.from('diagnostic_results').select('subjects(name)').eq('student_id', user.id),
+      ])
+
+      let enrolled = []
+      if (profile?.subjects) {
+        try {
+          enrolled = Array.isArray(profile.subjects)
+            ? profile.subjects
+            : JSON.parse(profile.subjects)
+        } catch { enrolled = [] }
+      }
+      setEnrolledSubjects(enrolled)
+
+      if (!examType && profile?.exam_type) setExamType(profile.exam_type)
+
+      const safeResults = Array.isArray(diagResults) ? diagResults : []
+      const names = new Set(safeResults.map(r => r.subjects?.name).filter(Boolean))
+      setDiagnosedSubjects(names)
+
+      if (!presetSubject && enrolled.length) {
+        const firstUndone = enrolled.find(s => !names.has(s))
+        if (firstUndone) setSelectedSubject(firstUndone)
+      }
+
+      setLoadingProfile(false)
+    })
+  }, [])
+
+  const handleStart = () => {
+    if (!examType)        { setError('Please select your target exam'); return }
+    if (!selectedSubject) { setError('Please select a subject to test'); return }
+    setError(null)
+
+    sessionStorage.setItem('diagnostic_setup', JSON.stringify({
+      examType,
+      subjects:      [selectedSubject],
+      questionCount: 10,
+      isPractice:    isSignedIn,
+    }))
+
+    router.push('/diagnostic/test')
+  }
+
+  const subjectsToShow = isSignedIn && enrolledSubjects.length
+    ? enrolledSubjects
+    : ALL_SUBJECTS
+
+  if (loadingProfile) {
+    return (
+      <div className="min-h-screen bg-base flex items-center justify-center">
+        <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-base flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md space-y-6">
+
+        {/* Header */}
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-black text-gray-900">Diagnostic Test</h1>
+          <p className="text-sm text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
+            {isSignedIn
+              ? "Pick one subject. We'll find your weak areas and add them to your study plan."
+              : '10 quick questions to see where you stand. No account needed.'}
+          </p>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+          {/* Exam type */}
+          <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+              Target exam
+            </p>
+            <div className="flex gap-2">
+              {['WAEC', 'JAMB'].map(et => (
+                <button
+                  key={et}
+                  onClick={() => setExamType(et)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${
+                    examType === et
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {et}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Subject picker */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+              Choose one subject
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {subjectsToShow.map(subject => {
+                const isSelected = selectedSubject === subject
+                const isDone     = diagnosedSubjects.has(subject)
+                const selStyle   = getSelectedStyle(subject)
+
+                return (
+                  <button
+                    key={subject}
+                    onClick={() => setSelectedSubject(subject)}
+                    style={isSelected ? {
+                      backgroundColor: selStyle.background,
+                      borderColor:     selStyle.borderColor,
+                      color:           selStyle.color,
+                    } : {}}
+                    className={`
+                      w-full flex items-center justify-between px-4 py-3 rounded-xl
+                      border-2 text-left transition-all
+                      ${isSelected
+                        ? 'shadow-sm font-bold'
+                        : 'bg-base text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-card'
+                      }
+                    `}
+                  >
+                    <span className="text-sm font-bold">{subject}</span>
+                    {isDone && !isSelected && (
+                      <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                        retake
+                      </span>
+                    )}
+                    {isSelected && (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Info strip */}
+          <div className="mx-5 mb-4 px-4 py-3 bg-indigo-50 rounded-xl">
+            <p className="text-xs text-indigo-700 leading-relaxed">
+              <span className="font-black">10 questions · ~5 minutes</span>
+              {' '}— We'll draw from the most important topics first.
+              {isSignedIn && ' You can run a diagnostic for each subject separately.'}
+            </p>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mx-5 mb-4 px-4 py-3 bg-red-50 rounded-xl">
+              <p className="text-xs font-bold text-red-600">{error}</p>
+            </div>
+          )}
+
+          {/* Start button */}
+          <div className="px-5 pb-5">
+            <button
+              onClick={handleStart}
+              disabled={!examType || !selectedSubject}
+              className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl
+                hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {selectedSubject
+                ? `Start ${selectedSubject} diagnostic →`
+                : 'Select a subject to start →'}
+            </button>
+          </div>
+        </div>
+
+        {/* Already have a plan */}
+        {isSignedIn && (
+          <p className="text-center text-xs text-gray-400">
+            <a href="/student/study-plan" className="text-indigo-500 hover:underline font-medium">
+              View your study plan
+            </a>
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function DiagnosticPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-base flex items-center justify-center">
+        <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <DiagnosticSetup />
+    </Suspense>
+  )
+}

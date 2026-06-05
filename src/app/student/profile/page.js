@@ -171,7 +171,7 @@ export default function ProfilePage() {
       {/* Avatar header */}
       <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl p-6 text-white">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-card/20 flex items-center justify-center">
             <span className="text-2xl font-black">{initials}</span>
           </div>
           <div>
@@ -347,7 +347,7 @@ export default function ProfilePage() {
           <p className="text-sm font-medium text-primary">Enable parent reports</p>
           <button onClick={() => setParentReports(p => !p)}
             className={`relative w-11 h-6 rounded-full transition-colors ${parentReports ? 'bg-indigo-600' : 'bg-subtle border border-default'}`}>
-            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${parentReports ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-transform ${parentReports ? 'translate-x-5' : 'translate-x-0.5'}`} />
           </button>
         </div>
         <button onClick={saveParentSettings} disabled={saving}

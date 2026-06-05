@@ -220,7 +220,7 @@ export default function WeeklyGoals() {
             </p>
             {total > 0 && <span className="text-white/70 text-xs font-bold">{goalPct}%</span>}
           </div>
-          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-card/20 rounded-full overflow-hidden">
             <div className="h-full rounded-full transition-all duration-700"
               style={{ width: total === 0 ? '0%' : `${goalPct}%`, background: allDone ? '#4ade80' : 'rgba(255,255,255,0.85)' }} />
           </div>

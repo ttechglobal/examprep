@@ -111,14 +111,14 @@ function DiagnosticSetup() {
 
   if (loadingProfile) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-base flex items-center justify-center">
         <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-base flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
 
         {/* Header */}
@@ -136,7 +136,7 @@ function DiagnosticSetup() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 
           {/* Exam type */}
           <div className="px-5 pt-5 pb-4 border-b border-gray-100">
@@ -151,7 +151,7 @@ function DiagnosticSetup() {
                   className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${
                     examType === et
                       ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      : 'bg-subtle text-gray-500 hover:bg-gray-200'
                   }`}
                 >
                   {et}
@@ -185,13 +185,13 @@ function DiagnosticSetup() {
                       border-2 text-left transition-all
                       ${isSelected
                         ? 'shadow-sm font-bold'
-                        : 'bg-gray-50 text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-white'
+                        : 'bg-base text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-card'
                       }
                     `}
                   >
                     <span className="text-sm font-bold">{subject}</span>
                     {isDone && !isSelected && (
-                      <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-black text-gray-400 bg-subtle px-2 py-0.5 rounded-full">
                         retake
                       </span>
                     )}
@@ -253,7 +253,7 @@ function DiagnosticSetup() {
 export default function DiagnosticPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-base flex items-center justify-center">
         <div className="w-7 h-7 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     }>

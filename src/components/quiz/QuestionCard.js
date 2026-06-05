@@ -65,7 +65,7 @@ function ExplanationModal({ question, selectedKey, onClose }) {
       onClick={onClose}
     >
       <div
-        className="mt-auto bg-white rounded-t-3xl w-full max-w-lg mx-auto shadow-2xl flex flex-col max-h-[90vh] animate-slide-up"
+        className="mt-auto bg-card rounded-t-3xl w-full max-w-lg mx-auto shadow-2xl flex flex-col max-h-[90vh] animate-slide-up"
         onClick={e => e.stopPropagation()}
       >
         {/* Drag handle */}
@@ -107,7 +107,7 @@ function ExplanationModal({ question, selectedKey, onClose }) {
           {hasWorkings && (
             <div>
               <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">Workings</p>
-              <div className="bg-gray-50 rounded-2xl p-4">
+              <div className="bg-base rounded-2xl p-4">
                 <WorkingsBlock workings={explanation.workings} />
               </div>
             </div>
@@ -122,7 +122,7 @@ function ExplanationModal({ question, selectedKey, onClose }) {
                   <div key={key} className={`flex gap-3 px-4 py-3 rounded-2xl border ${
                     key === selectedKey
                       ? 'bg-red-50 border-red-200'
-                      : 'bg-gray-50 border-gray-100'
+                      : 'bg-base border-gray-100'
                   }`}>
                     <span className={`w-5 h-5 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5 ${
                       key === selectedKey ? 'bg-red-200 text-red-700' : 'bg-gray-200 text-gray-500'
@@ -140,7 +140,7 @@ function ExplanationModal({ question, selectedKey, onClose }) {
         </div>
 
         {/* Close */}
-        <div className="flex-shrink-0 px-5 pb-6 pt-2 bg-white border-t border-gray-100">
+        <div className="flex-shrink-0 px-5 pb-6 pt-2 bg-card border-t border-gray-100">
           <button
             onClick={onClose}
             className="w-full py-3.5 bg-gray-900 text-white text-sm font-black rounded-2xl hover:bg-gray-700 active:scale-[0.98] transition-all"
@@ -205,7 +205,7 @@ export default function QuestionCard({
 
       {/* Question image */}
       {question.has_image && question.image_url && (
-        <div className="rounded-2xl overflow-hidden bg-gray-50 border border-gray-100">
+        <div className="rounded-2xl overflow-hidden bg-base border border-gray-100">
           <img
             src={question.image_url}
             alt={question.image_description ?? 'Question diagram'}
@@ -237,7 +237,7 @@ export default function QuestionCard({
       <div className="space-y-2.5">
         {optionEntries.map(([key, text]) => {
           // ── Option styling ────────────────────────────────────────────────
-          let style    = 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/30'
+          let style    = 'border-gray-200 bg-card text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/30'
           let dotStyle = 'border-current text-current'
 
           if (revealed) {
@@ -248,7 +248,7 @@ export default function QuestionCard({
               style    = 'border-red-300 bg-red-50 text-red-700'
               dotStyle = 'border-red-300 bg-red-100 text-red-600'
             } else {
-              style    = 'border-gray-100 bg-gray-50/80 text-gray-400'
+              style    = 'border-gray-100 bg-base/80 text-gray-400'
               dotStyle = 'border-gray-200 text-gray-400'
             }
           } else if (key === selectedAnswer) {

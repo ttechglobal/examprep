@@ -23,7 +23,7 @@ export default function SchoolNav({ schoolName, schoolCity }) {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-56 bg-white border-r border-gray-200 z-40">
+      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-56 bg-card border-r border-gray-200 z-40">
         {/* School identity */}
         <div className="px-4 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export default function SchoolNav({ schoolName, schoolCity }) {
       </aside>
 
       {/* ── Mobile top bar ───────────────────────────────────────────── */}
-      <header className="lg:hidden sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3">
+      <header className="lg:hidden sticky top-0 z-40 bg-card border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
             <span className="text-white text-sm">🏫</span>

@@ -27,7 +27,7 @@ function DefinitionSection({ section, color }) {
           {section.term}
         </p>
       </div>
-      <div className="px-5 py-4 bg-white space-y-3">
+      <div className="px-5 py-4 bg-card space-y-3">
         <p className={`text-base font-bold ${color?.text ?? 'text-indigo-800'} leading-snug`}>
           {section.definition}
         </p>
@@ -35,7 +35,7 @@ function DefinitionSection({ section, color }) {
           {section.explanation}
         </p>
         {section.example && (
-          <div className="bg-gray-50 rounded-xl px-4 py-3">
+          <div className="bg-base rounded-xl px-4 py-3">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
               Example
             </p>
@@ -86,7 +86,7 @@ function FormulaSection({ section, color }) {
           {section.label}
         </p>
       </div>
-      <div className="bg-white px-5 py-5 space-y-4">
+      <div className="bg-card px-5 py-5 space-y-4">
         <div className="bg-gray-900 rounded-xl py-5 px-4 text-center">
           <p className="text-2xl font-black text-white font-mono tracking-wide">
             {section.formula}
@@ -133,7 +133,7 @@ function QuickCheckSection({ section, color, interactive }) {
             {section.question}
           </p>
         </div>
-        <div className="bg-white p-4 space-y-2">
+        <div className="bg-card p-4 space-y-2">
           {(section.options ?? []).map((opt, i) => (
             <div key={i} className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600">
               {opt}
@@ -157,17 +157,17 @@ function QuickCheckSection({ section, color, interactive }) {
           {section.question}
         </p>
       </div>
-      <div className="bg-white p-4 space-y-2">
+      <div className="bg-card p-4 space-y-2">
         {(section.options ?? []).map((opt, i) => {
           const optKey = opt.split('.')[0]?.trim()
           const isThisCorrect = optKey === correctKey || opt === section.correct
           const isThisSelected = optKey === selected || opt === selected
 
-          let style = 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+          let style = 'border-gray-200 bg-card text-gray-700 hover:border-gray-300'
           if (revealed) {
             if (isThisCorrect) style = 'border-green-400 bg-green-50 text-green-800'
             else if (isThisSelected) style = 'border-red-300 bg-red-50 text-red-700'
-            else style = 'border-gray-100 bg-gray-50 text-gray-400'
+            else style = 'border-gray-100 bg-base text-gray-400'
           } else if (isThisSelected) {
             style = 'border-indigo-400 bg-indigo-50 text-indigo-800'
           }
@@ -223,9 +223,9 @@ function GuidedExample({ section, color, isAdmin }) {
             Worked Example · Guided · {section.problem}
           </p>
         </div>
-        <div className="bg-white p-4 space-y-3">
+        <div className="bg-card p-4 space-y-3">
           {steps.map((s, i) => (
-            <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+            <div key={i} className="flex items-start gap-3 p-3 bg-base rounded-xl">
               <span className={`w-6 h-6 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0`}>
                 {i + 1}
               </span>
@@ -258,9 +258,9 @@ function GuidedExample({ section, color, isAdmin }) {
         </p>
       </div>
 
-      <div className="bg-white p-4 space-y-4">
+      <div className="bg-card p-4 space-y-4">
         {/* Problem */}
-        <div className="bg-gray-50 rounded-xl px-4 py-3">
+        <div className="bg-base rounded-xl px-4 py-3">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Problem</p>
           <p className="text-sm text-gray-800 leading-relaxed font-medium">{section.problem}</p>
         </div>
@@ -342,7 +342,7 @@ function GuidedExample({ section, color, isAdmin }) {
           <div className="space-y-3">
             <div className="space-y-2">
               {steps.map((s, i) => (
-                <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-xl">
+                <div key={i} className="flex items-start gap-3 p-2.5 bg-base rounded-xl">
                   <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
                     {i + 1}
                   </span>
@@ -394,9 +394,9 @@ function StudentAttemptExample({ section, color }) {
         </p>
       </div>
 
-      <div className="bg-white p-4 space-y-4">
+      <div className="bg-card p-4 space-y-4">
         {/* Problem */}
-        <div className="bg-gray-50 rounded-xl px-4 py-3">
+        <div className="bg-base rounded-xl px-4 py-3">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Problem</p>
           <p className="text-sm text-gray-800 leading-relaxed font-medium">{section.problem}</p>
         </div>
@@ -454,7 +454,7 @@ function StudentAttemptExample({ section, color }) {
           <div className="space-y-2">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Solution</p>
             {section.steps.map((s, i) => (
-              <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-xl">
+              <div key={i} className="flex items-start gap-3 p-2.5 bg-base rounded-xl">
                 <span className={`w-5 h-5 rounded-full ${color?.accent ?? 'bg-indigo-500'} text-white text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5`}>
                   {i + 1}
                 </span>
@@ -544,7 +544,7 @@ export default function SectionRenderer({
       return <SummarySection section={section} color={color} />
     default:
       return (
-        <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-400">
+        <div className="p-3 bg-base rounded-xl text-xs text-gray-400">
           Unknown section type: {section.type}
         </div>
       )

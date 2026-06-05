@@ -1,0 +1,141 @@
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+
+export default function SchoolSignupPage() {
+  const router = useRouter()
+  const supabase = createClient()
+
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSignup = async (e) => {
+    e.preventDefault()
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    setLoading(true)
+    setError(null)
+
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/school/onboarding`,
+      },
+    })
+
+    if (signupError) {
+      setError(signupError.message)
+      setLoading(false)
+      return
+    }
+
+    // Update role to school_admin
+    if (data.user) {
+      await supabase
+        .from('profiles')
+        .update({ role: 'school_admin' })
+        .eq('id', data.user.id)
+    }
+
+    router.push('/school/onboarding')
+    setLoading(false)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm">
+
+        <div className="text-center mb-8">
+          <Link href="/" className="text-2xl font-black text-indigo-600">ExamPrep</Link>
+          <p className="text-gray-500 text-sm mt-1">School account setup</p>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="text-xl">🏫</span>
+            <h2 className="text-lg font-black text-gray-900">Create school account</h2>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Your name
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g. Mrs. Adebayo"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                School email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="admin@yourschool.edu.ng"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="At least 8 characters"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Creating account...' : 'Continue →'}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-gray-500 mt-4">
+            Already have an account?{' '}
+            <Link href="/login" className="text-indigo-600 font-medium hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Setting up for students instead?{' '}
+          <Link href="/diagnostic" className="text-indigo-500 hover:underline">
+            Take the diagnostic test
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}

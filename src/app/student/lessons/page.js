@@ -86,7 +86,7 @@ export default function LessonsPage() {
                       {sub.mastery.emoji} {sub.mastery.label}
                     </span>
                   </div>
-                  <div className="h-2 bg-white/50 dark:bg-black/20 rounded-full overflow-hidden">
+                  <div className="h-2 bg-card/50 dark:bg-black/20 rounded-full overflow-hidden">
                     <div className={`h-full ${color.accent} rounded-full transition-all duration-700`}
                       style={{ width: `${sub.pct}%` }} />
                   </div>

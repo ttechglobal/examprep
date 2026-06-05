@@ -1,5 +1,6 @@
 // src/app/api/admin/questions/route.js
-// FIX: removed question_type from insert — column was dropped from DB
+// FIXED: exam filter now uses .in() with BOTH included so questions tagged
+//        'BOTH' appear when filtering for 'WAEC' or 'JAMB'.
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -22,6 +23,7 @@ export async function GET(request) {
   const hasImage   = searchParams.get('has_image')
   const untagged   = searchParams.get('untagged')
   const search     = searchParams.get('search')
+  const source     = searchParams.get('source') // 'past_paper' | 'ai_generated' | null = all
   const countOnly  = searchParams.get('countOnly') === 'true'
   const page       = parseInt(searchParams.get('page')  ?? '1')
   const limit      = parseInt(searchParams.get('limit') ?? '20')
@@ -31,22 +33,36 @@ export async function GET(request) {
     .from('questions')
     .select(`
       id, question_text, correct_answer, difficulty,
-      has_image, year, exam_type, is_active, is_flagged, created_at,
+      has_image, image_url, image_description,
+      explanation_has_image, explanation_image_url,
+      year, exam_type, source, is_active, is_flagged, created_at,
+      topic_id, subtopic_id, subject_id,
       subjects  ( id, name, slug ),
       topics    ( id, name, slug ),
-      subtopics ( id, name, slug )
+      subtopics ( id, name, slug ),
+      options, explanation
     `, { count: 'exact' })
+    .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (examType)          query = query.eq('exam_type',   examType)
-  if (subjectId)         query = query.eq('subject_id',  subjectId)
-  if (topicId)           query = query.eq('topic_id',    topicId)
-  if (subtopicId)        query = query.eq('subtopic_id', subtopicId)
-  if (difficulty)        query = query.eq('difficulty',  difficulty)
-  if (hasImage === 'true') query = query.eq('has_image', true)
+  // FIXED: when filtering by exam, include 'BOTH' rows so they always appear
+  if (examType) {
+    if (examType === 'BOTH') {
+      query = query.eq('exam_type', 'BOTH')
+    } else {
+      query = query.in('exam_type', [examType, 'BOTH'])
+    }
+  }
+
+  if (subjectId)           query = query.eq('subject_id',  subjectId)
+  if (topicId)             query = query.eq('topic_id',    topicId)
+  if (subtopicId)          query = query.eq('subtopic_id', subtopicId)
+  if (difficulty)          query = query.eq('difficulty',  difficulty)
+  if (hasImage === 'true') query = query.eq('has_image',   true)
   if (untagged === 'true') query = query.is('subtopic_id', null)
-  if (search)            query = query.ilike('question_text', `%${search}%`)
+  if (source)              query = query.eq('source',      source)
+  if (search)              query = query.ilike('question_text', `%${search}%`)
 
   const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -71,23 +87,22 @@ export async function POST(request) {
 
   for (const q of questions) {
     const { error } = await db.from('questions').insert({
-      upload_batch_id:   batchId           ?? null,
-      subject_id:        subjectId,
-      topic_id:          q.topic_id        ?? null,
-      subtopic_id:       q.subtopic_id     ?? null,
-      exam_type:         examType,
-      year:              q.year            ?? null,
-      question_text:     q.question_text,
-      has_image:         q.has_image       ?? false,
-      image_description: q.image_description ?? null,
-      image_url:         q.image_url       ?? null,
-      options:           q.options,
-      correct_answer:    q.correct_answer,
-      explanation:       q.explanation,
-      difficulty:        q.difficulty      ?? 'medium',
-      // question_type intentionally omitted — column was dropped from DB
-      source:            q.source          ?? 'past_paper',
-      is_active:         true,
+      upload_batch_id:    batchId            ?? null,
+      subject_id:         subjectId,
+      topic_id:           q.topic_id         ?? null,
+      subtopic_id:        q.subtopic_id      ?? null,
+      exam_type:          q.exam_type        ?? examType,
+      year:               q.year             ?? null,
+      question_text:      q.question_text,
+      has_image:          q.has_image        ?? false,
+      image_description:  q.image_description ?? null,
+      image_url:          q.image_url        ?? null,
+      options:            q.options,
+      correct_answer:     q.correct_answer,
+      explanation:        q.explanation      ?? {},
+      difficulty:         q.difficulty       ?? 'medium',
+      source:             q.source           ?? 'past_paper',
+      is_active:          true,
     })
 
     if (error) {

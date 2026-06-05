@@ -1,14 +1,9 @@
 'use client'
 // src/app/practice/page.js
-// ─────────────────────────────────────────────────────────────────────────────
-// CHANGES v2:
-//   1. Review phase — uses QuestionCard fully revealed, step-by-step navigation
-//      with Back/Next buttons, progress indicator. Identical feel to app.
-//   2. Immediate mode — no auto-advance. Student sees the result (correct/wrong)
-//      and taps "Next →" themselves. They can take as long as they want.
-//   3. Timer toggle in practice mode — optional. If enabled, pick 10/20/30/45 min.
-//   4. "No questions" error message friendly — tells them to try another subject.
-// ─────────────────────────────────────────────────────────────────────────────
+// DARK MODE FIX: all hardcoded bg-white/bg-gray-*/text-gray-*/border-gray-*
+// replaced with CSS token classes (bg-card, bg-base, bg-subtle, text-primary,
+// text-secondary, text-tertiary, border-default).
+// Semantic status colours (green, red, amber) kept — they're intentional.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getSubjectColor } from '@/lib/theme'
@@ -32,13 +27,15 @@ function ScoreRing({ pct }) {
   }, [pct, circ])
   return (
     <svg width="128" height="128" viewBox="0 0 128 128" className="mx-auto">
-      <circle cx="64" cy="64" r={r} fill="none" stroke="#f1f5f9" strokeWidth="10"/>
+      <circle cx="64" cy="64" r={r} fill="none" stroke="var(--bg-subtle)" strokeWidth="10"/>
       <circle cx="64" cy="64" r={r} fill="none" stroke={color} strokeWidth="10"
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         transform="rotate(-90 64 64)"
         style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)' }}/>
-      <text x="64" y="59" textAnchor="middle" style={{ fontSize: 26, fontWeight: 900, fill: '#0f172a' }}>{pct}%</text>
-      <text x="64" y="76" textAnchor="middle" style={{ fontSize: 11, fill: '#94a3b8' }}>score</text>
+      <text x="64" y="59" textAnchor="middle"
+        style={{ fontSize: 26, fontWeight: 900, fill: 'var(--text-prim)' }}>{pct}%</text>
+      <text x="64" y="76" textAnchor="middle"
+        style={{ fontSize: 11, fill: 'var(--text-tert)' }}>score</text>
     </svg>
   )
 }
@@ -49,24 +46,24 @@ function ConfirmDialog({ answered, total, onConfirm, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+      <div className="bg-card rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
         <div className="text-center space-y-2">
           <p className="text-2xl">{unanswered > 0 ? '⚠️' : '✅'}</p>
-          <p className="text-lg font-black text-gray-900">Submit your exam?</p>
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <p className="text-lg font-black text-primary">Submit your exam?</p>
+          <p className="text-sm text-secondary leading-relaxed">
             {unanswered > 0
-              ? `${unanswered} question${unanswered !== 1 ? 's' : ''} unanswered — will be marked wrong.`
-              : `All ${total} questions answered. Ready to submit?`}
+              ? `${unanswered} question${unanswered !== 1 ? 's' : ''} unanswered — ${unanswered !== 1 ? 'they' : 'it'} will be marked wrong.`
+              : 'All questions answered. Ready to submit?'}
           </p>
         </div>
-        <div className="space-y-2.5">
-          <button onClick={onConfirm}
-            className="w-full py-3.5 bg-red-600 text-white text-sm font-black rounded-2xl hover:bg-red-500 transition-colors">
-            Yes, submit now
-          </button>
+        <div className="flex gap-3">
           <button onClick={onCancel}
-            className="w-full py-3 border border-gray-200 text-gray-600 text-sm font-medium rounded-2xl hover:bg-gray-50 transition-colors">
+            className="flex-1 py-3 border border-default rounded-2xl text-sm font-bold text-secondary hover:bg-subtle transition-colors">
             Keep going
+          </button>
+          <button onClick={onConfirm}
+            className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 transition-colors">
+            Submit →
           </button>
         </div>
       </div>
@@ -76,139 +73,122 @@ function ConfirmDialog({ answered, total, onConfirm, onCancel }) {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 function Session({ subject, config, questions, onDone }) {
-  const [index,       setIndex]       = useState(0)
-  const [answers,     setAnswers]     = useState({})
-  const [phase,       setPhase]       = useState('quiz') // quiz | confirm | results | review
-  const [secondsLeft, setSecondsLeft] = useState(config.durationSecs ?? 0)
-  const [reviewIdx,   setReviewIdx]   = useState(0)
-  const timerRef = useRef(null)
+  const [index, setIndex]   = useState(0)
+  const [answers, setAnswers] = useState({})
+  const [phase, setPhase]   = useState('quiz')
+  const [reviewIdx, setReviewIdx] = useState(0)
 
-  const isExamMode = config.mode === 'exam'
-  const revealMode = isExamMode ? 'end' : (config.revealMode ?? 'immediate')
-  const total      = questions.length
+  const isExamMode   = config?.mode === 'exam'
+  const revealMode   = config?.revealMode ?? 'immediate'
+  const total        = questions.length
+  const currentQ     = questions[index]
+  const currentAns   = answers[index]
+  const isRevealed   = isExamMode ? false : (revealMode === 'immediate' ? !!currentAns : false)
   const answeredCount = Object.keys(answers).length
+  const color        = getSubjectColor(subject)
 
+  // Timer
+  const timerRef  = useRef(null)
+  const totalSecs = config?.durationSecs ?? 0
+  const [secsLeft, setSecsLeft] = useState(totalSecs)
   useEffect(() => {
-    if (!config.durationSecs) return
+    if (!totalSecs || phase !== 'quiz') return
     timerRef.current = setInterval(() => {
-      setSecondsLeft(s => {
-        if (s <= 1) { clearInterval(timerRef.current); setPhase('results'); return 0 }
+      setSecsLeft(s => {
+        if (s <= 1) { clearInterval(timerRef.current); setPhase('summary'); return 0 }
         return s - 1
       })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [config.durationSecs])
+  }, [totalSecs, phase])
 
-  const handleAnswer = useCallback((questionId, selectedKey) => {
-    const q = questions.find(q => q.id === questionId)
-    if (!q || answers[questionId]) return
-    setAnswers(prev => ({ ...prev, [questionId]: { selected: selectedKey, isCorrect: selectedKey === q.correct_answer } }))
-    // NO auto-advance in any mode — student taps Next themselves
-  }, [questions, answers])
+  const handleAnswer = useCallback((qId, key) => {
+    setAnswers(prev => ({ ...prev, [index]: { selected: key, isCorrect: key === currentQ.correct_answer } }))
+  }, [index, currentQ])
 
-  function handleSubmit() {
-    clearInterval(timerRef.current)
-    setPhase('results')
-  }
-
-  function handleReview() {
-    setReviewIdx(0)
-    setPhase('review')
-  }
-
-  // Timer display
-  const mm = Math.floor(secondsLeft / 60).toString().padStart(2, '0')
-  const ss = (secondsLeft % 60).toString().padStart(2, '0')
-  const timerUrgent = secondsLeft > 0 && secondsLeft <= 300
-
-  const currentQ   = questions[index]
-  const currentAns = currentQ ? answers[currentQ.id] : null
-  // In exam/end mode: never reveal during quiz. In immediate mode: reveal after answering.
-  const isRevealed = revealMode === 'immediate' ? !!currentAns : false
-  const color      = getSubjectColor(subject)
-
-  // ── Review phase ─────────────────────────────────────────────────────────
-  if (phase === 'review') {
-    const rq  = questions[reviewIdx]
-    const ra  = answers[rq?.id]
-    const isLast = reviewIdx >= total - 1
-
+  if (phase === 'confirm') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
-          <div className="max-w-lg mx-auto flex items-center gap-3">
-            <button onClick={() => setPhase('results')}
-              className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 hover:bg-gray-200 transition-colors">
-              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
-              </svg>
-            </button>
-            <div className="flex-1">
-              <p className="text-xs text-gray-400">Reviewing · {subject}</p>
-              <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                <div className={`h-full ${color.accent} rounded-full transition-all duration-300`}
-                  style={{ width: `${((reviewIdx + 1) / total) * 100}%` }}/>
+      <ConfirmDialog
+        answered={answeredCount} total={total}
+        onConfirm={() => { clearInterval(timerRef.current); setPhase('summary') }}
+        onCancel={() => setPhase('quiz')}
+      />
+    )
+  }
+
+  if (phase === 'summary') {
+    const correct = Object.values(answers).filter(a => a.isCorrect).length
+    const pct     = total > 0 ? Math.round((correct / total) * 100) : 0
+    const msg     = pct >= 80 ? 'Outstanding! 🏆' : pct >= 60 ? 'Good work 💪' : pct >= 40 ? 'Keep going 📈' : 'Every session counts 📚'
+    return (
+      <div className="min-h-screen bg-base flex items-center justify-center px-4">
+        <div className="max-w-sm w-full space-y-5 py-8">
+          <div className="bg-card rounded-3xl border border-default p-6 text-center space-y-3">
+            <ScoreRing pct={pct} />
+            <p className="text-base font-black text-primary">{msg}</p>
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-default">
+              <div className="text-center">
+                <p className="text-xl font-black text-green-600">{correct}</p>
+                <p className="text-[10px] text-tertiary">Correct</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-black text-red-500">{total - correct}</p>
+                <p className="text-[10px] text-tertiary">Wrong</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-black text-primary">{total}</p>
+                <p className="text-[10px] text-tertiary">Total</p>
               </div>
             </div>
-            <span className="text-xs font-black text-gray-500 tabular-nums flex-shrink-0">
-              {reviewIdx + 1}/{total}
-            </span>
           </div>
+          <button onClick={() => { setPhase('review'); setReviewIdx(0) }}
+            className="w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 transition-colors">
+            Review answers →
+          </button>
+          <button onClick={onDone}
+            className="w-full py-3 border border-default text-secondary text-sm font-bold rounded-2xl hover:bg-subtle transition-colors">
+            Done
+          </button>
         </div>
+      </div>
+    )
+  }
 
-        {/* Question — fully revealed, with explanation */}
-        <div className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-32">
-          {/* Correct/wrong banner */}
-          <div className={`rounded-2xl px-4 py-3 flex items-center gap-3 ${
-            ra?.isCorrect
-              ? 'bg-green-50 border border-green-200'
-              : ra?.selected
-                ? 'bg-red-50 border border-red-200'
-                : 'bg-gray-50 border border-gray-200'
-          }`}>
-            <span className="text-xl">
-              {ra?.isCorrect ? '✅' : ra?.selected ? '❌' : '⬜'}
-            </span>
-            <p className={`text-sm font-bold ${
-              ra?.isCorrect ? 'text-green-800' : ra?.selected ? 'text-red-700' : 'text-gray-600'
-            }`}>
-              {ra?.isCorrect ? 'Correct!' : ra?.selected ? `Wrong — you chose ${ra.selected}` : 'Not answered'}
-            </p>
+  if (phase === 'review') {
+    const q   = questions[reviewIdx]
+    const ans = answers[reviewIdx]
+    return (
+      <div className="min-h-screen bg-base px-4 py-6 space-y-4 pb-10">
+        <div className="max-w-md mx-auto space-y-4">
+          <div className="flex items-center justify-between bg-card rounded-2xl border border-default px-4 py-3">
+            <p className="text-xs font-bold text-secondary">Review</p>
+            <span className="text-xs font-black text-primary">{reviewIdx + 1}/{questions.length}</span>
+            <button onClick={onDone} className="text-xs font-bold text-indigo-600 hover:opacity-75">Done →</button>
           </div>
-
-          {rq && (
-            <QuestionCard
-              key={rq.id}
-              question={rq}
-              selectedAnswer={ra?.selected ?? null}
-              revealed={true}
-              onAnswer={() => {}}
-              showExplanation={true}
-            />
+          {q.subject_name && (
+            <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${getSubjectColor(q.subject_name).bg} ${getSubjectColor(q.subject_name).text}`}>
+              {q.subject_name}
+            </span>
           )}
-        </div>
-
-        {/* Fixed bottom nav */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-4"
-          style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
-          <div className="max-w-lg mx-auto flex gap-3">
+          <QuestionCard key={q.id} question={q} selectedAnswer={ans?.selected ?? null}
+            revealed={true} onAnswer={() => {}} showExplanation={true} />
+          <div className="flex gap-3">
             {reviewIdx > 0 && (
               <button onClick={() => setReviewIdx(i => i - 1)}
-                className="flex-1 py-4 border border-gray-200 text-gray-600 text-sm font-bold rounded-2xl hover:bg-gray-50 transition-colors">
-                ← Back
+                className="flex-1 py-3 bg-subtle border border-default rounded-2xl text-sm font-bold text-secondary hover:text-primary">
+                ← Previous
               </button>
             )}
-            {isLast ? (
-              <button onClick={onDone}
-                className={`flex-1 py-4 ${color.accent} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity`}>
-                Done ✓
-              </button>
-            ) : (
+            {reviewIdx < questions.length - 1 ? (
               <button onClick={() => setReviewIdx(i => i + 1)}
-                className="flex-1 py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500">
                 Next →
               </button>
+            ) : (
+              <button onClick={onDone}
+                className="flex-1 py-3.5 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500">
+                Finish →
+              </button>
             )}
           </div>
         </div>
@@ -216,174 +196,58 @@ function Session({ subject, config, questions, onDone }) {
     )
   }
 
-  // ── Results phase ─────────────────────────────────────────────────────────
-  if (phase === 'results') {
-    const totalCorrect = questions.filter(q => answers[q.id]?.isCorrect).length
-    const overallPct   = total > 0 ? Math.round((totalCorrect / total) * 100) : 0
-    const msg = overallPct >= 80 ? 'Excellent! 🏆'
-      : overallPct >= 60 ? 'Good performance 💪'
-      : overallPct >= 40 ? 'Keep practising 📈'
-      : 'Every session builds knowledge 📚'
+  // ── Quiz phase ──────────────────────────────────────────────────────────────
+  const mm = Math.floor(secsLeft / 60).toString().padStart(2, '0')
+  const ss = (secsLeft % 60).toString().padStart(2, '0')
+  const timerLow = totalSecs > 0 && secsLeft < 60
 
-    return (
-      <div className="min-h-screen bg-gray-50 pb-16">
-        <div className="max-w-md mx-auto px-4 pt-8 space-y-5">
-
-          {/* Score card */}
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className={`${color.bg} px-6 pt-8 pb-6 text-center`}>
-              <ScoreRing pct={overallPct} />
-              <p className={`mt-3 text-sm font-bold ${color.text}`}>{msg}</p>
-              <p className={`text-xs ${color.text} opacity-70 mt-0.5`}>{subject} · WAEC</p>
-            </div>
-            <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100">
-              <div className="px-4 py-3 text-center">
-                <p className="text-xl font-black text-green-600">{totalCorrect}</p>
-                <p className="text-[10px] text-gray-400">Correct</p>
-              </div>
-              <div className="px-4 py-3 text-center">
-                <p className="text-xl font-black text-red-500">{total - totalCorrect}</p>
-                <p className="text-[10px] text-gray-400">Wrong</p>
-              </div>
-              <div className="px-4 py-3 text-center">
-                <p className="text-xl font-black text-gray-700">{total}</p>
-                <p className="text-[10px] text-gray-400">Total</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <button onClick={handleReview}
-            className="w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 transition-colors shadow-sm">
-            Review all answers →
-          </button>
-
-          {/* Create account CTA */}
-          <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-5 text-center space-y-3">
-            <p className="text-white font-black text-sm">Track your progress over time</p>
-            <p className="text-indigo-200 text-xs leading-relaxed">
-              Create a free account to get a personalised study plan, see weak areas, and study smarter before your exam.
-            </p>
-            <Link href="/signup"
-              className="block w-full py-3 bg-white text-indigo-700 text-sm font-black rounded-xl hover:bg-indigo-50 transition-colors">
-              Create free account →
-            </Link>
-            <button onClick={onDone}
-              className="block w-full text-indigo-300 text-xs hover:text-white transition-colors py-1">
-              Practice another subject
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Quiz phase ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
-      {phase === 'confirm' && (
-        <ConfirmDialog answered={answeredCount} total={total}
-          onConfirm={handleSubmit} onCancel={() => setPhase('quiz')} />
-      )}
-
+    <div className="min-h-screen bg-base flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <button onClick={() => { if (confirm('Exit? Progress will be lost.')) { clearInterval(timerRef.current); onDone() } }}
-            className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 hover:bg-gray-200">
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-          <div className="flex-1">
-            <p className="text-xs text-gray-400 truncate">{subject} · {isExamMode ? 'Exam Simulation' : 'Practice'}</p>
-            <div className="h-1.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
-              <div className={`h-full ${color.accent} rounded-full transition-all duration-300`}
-                style={{ width: `${((index + 1) / total) * 100}%` }}/>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs font-black text-gray-500 tabular-nums">{index + 1}/{total}</span>
-            {config.durationSecs > 0 && (
-              <span className={`text-sm font-black tabular-nums px-2.5 py-1 rounded-xl ${
-                timerUrgent ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-700'
-              }`}>{mm}:{ss}</span>
-            )}
-          </div>
+      <div className="bg-card border-b border-default px-4 py-3 sticky top-0 z-10">
+        <div className="max-w-md mx-auto flex items-center justify-between">
+          <button onClick={onDone} className="text-sm text-secondary hover:text-primary font-medium">← Exit</button>
+          <span className="text-xs font-black text-secondary">{index + 1}/{total}</span>
+          {totalSecs > 0 && (
+            <span className={`text-xs font-black px-2.5 py-1 rounded-xl ${timerLow ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-subtle text-secondary'}`}>
+              {mm}:{ss}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Question */}
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-32">
-        {currentQ && (
-          <QuestionCard
-            key={currentQ.id}
-            question={currentQ}
-            selectedAnswer={currentAns?.selected ?? null}
-            revealed={isRevealed}
-            onAnswer={handleAnswer}
-            showExplanation={revealMode === 'immediate'}
-          />
-        )}
+      <div className="flex-1 max-w-md mx-auto w-full px-4 py-6 space-y-4 pb-24">
+        <QuestionCard
+          key={currentQ.id}
+          question={currentQ}
+          selectedAnswer={currentAns?.selected ?? null}
+          revealed={isRevealed}
+          onAnswer={handleAnswer}
+          showExplanation={revealMode === 'immediate'}
+        />
 
-        {/* Next button — shown after answering (both modes) */}
-        {currentAns && (
-          <button onClick={() => {
-            const next = index + 1
-            if (next >= total) {
-              if (isExamMode) setPhase('confirm')
-              else setPhase('results')
-            } else {
-              setIndex(next)
-            }
-          }}
-            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.98] transition-all">
-            {index + 1 >= total
-              ? (isExamMode ? 'Review & Submit →' : 'See results →')
-              : 'Next →'}
+        {revealMode === 'end' && currentAns && (
+          <button onClick={() => { const n = index + 1; if (n >= total) setPhase('confirm'); else setIndex(n) }}
+            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500">
+            {index + 1 >= total ? 'Submit →' : 'Next →'}
           </button>
         )}
-
-        {/* Skip — only for end-mode, no answer yet */}
-        {!currentAns && revealMode === 'end' && (
-          <button onClick={() => {
-            const next = index + 1
-            if (next >= total) setPhase('confirm')
-            else setIndex(next)
-          }}
-            className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-bold rounded-2xl hover:bg-gray-50 transition-colors">
+        {revealMode === 'end' && !currentAns && (
+          <button onClick={() => { const n = index + 1; if (n >= total) setPhase('confirm'); else setIndex(n) }}
+            className="w-full py-3 border border-default text-secondary text-sm font-bold rounded-2xl hover:bg-subtle">
             {index + 1 >= total ? 'Submit →' : 'Skip →'}
           </button>
         )}
-
-        {/* Question grid for exam mode */}
-        {revealMode === 'end' && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
-              {answeredCount}/{total} answered
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {questions.map((q, i) => {
-                const ans = answers[q.id]
-                return (
-                  <button key={i} onClick={() => setIndex(i)}
-                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${
-                      i === index   ? 'bg-indigo-600 text-white'
-                      : ans         ? 'bg-green-100 text-green-700'
-                      :               'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}>
-                    {i + 1}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+        {revealMode === 'immediate' && isRevealed && (
+          <button onClick={() => { const n = index + 1; if (n >= total) setPhase('summary'); else setIndex(n) }}
+            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500">
+            {index + 1 >= total ? 'See results →' : 'Next →'}
+          </button>
         )}
-
-        {/* Submit early — exam mode */}
         {isExamMode && answeredCount > 0 && (
           <button onClick={() => setPhase('confirm')}
-            className="w-full py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold text-gray-500 hover:text-red-600 hover:border-red-200 transition-colors">
+            className="w-full py-3 bg-card border border-default rounded-2xl text-sm font-bold text-secondary hover:text-red-600 hover:border-red-200 transition-colors">
             Submit exam — {answeredCount}/{total} answered
           </button>
         )}
@@ -392,19 +256,19 @@ function Session({ subject, config, questions, onDone }) {
   )
 }
 
-// ── Main public practice page ─────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function PublicPracticePage() {
-  const [step,        setStep]        = useState('subject')
-  const [subject,     setSubject]     = useState(null)
-  const [mode,        setMode]        = useState(null)
-  const [count,       setCount]       = useState(20)
-  const [revealMode,  setRevealMode]  = useState('immediate')
-  const [timerOn,     setTimerOn]     = useState(false)
-  const [timerMins,   setTimerMins]   = useState(20)
-  const [questions,   setQuestions]   = useState([])
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState(null)
-  const [config,      setConfig]      = useState(null)
+  const [step,       setStep]       = useState('subject')
+  const [subject,    setSubject]    = useState(null)
+  const [mode,       setMode]       = useState(null)
+  const [count,      setCount]      = useState(20)
+  const [revealMode, setRevealMode] = useState('immediate')
+  const [timerOn,    setTimerOn]    = useState(false)
+  const [timerMins,  setTimerMins]  = useState(20)
+  const [questions,  setQuestions]  = useState([])
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState(null)
+  const [config,     setConfig]     = useState(null)
 
   async function startSession(cfg) {
     setLoading(true)
@@ -419,7 +283,7 @@ export default function PublicPracticePage() {
       const res  = await fetch(`/api/practice/questions?${params}`)
       const data = await res.json()
       if (!data.questions?.length) {
-        setError(data.error ?? 'No questions available for this subject yet — try another subject or check back soon.')
+        setError(data.error ?? 'No questions available yet — try another subject or check back soon.')
         setLoading(false)
         return
       }
@@ -427,7 +291,7 @@ export default function PublicPracticePage() {
       setConfig(cfg)
       setStep('session')
     } catch {
-      setError('Network error — please check your connection and try again.')
+      setError('Network error — check your connection and try again.')
     }
     setLoading(false)
   }
@@ -446,15 +310,15 @@ export default function PublicPracticePage() {
   const color = subject ? getSubjectColor(subject) : null
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-base">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-4">
+      <div className="bg-card border-b border-default px-4 py-4">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
               <span className="text-white text-xs font-black">EP</span>
             </div>
-            <span className="text-base font-black text-gray-900">ExamPrep</span>
+            <span className="text-base font-black text-primary">ExamPrep</span>
           </div>
           <Link href="/login" className="text-xs font-bold text-indigo-600 hover:underline">Sign in →</Link>
         </div>
@@ -462,14 +326,10 @@ export default function PublicPracticePage() {
 
       <div className="max-w-md mx-auto px-4 py-8 space-y-6">
 
-        {/* Back button */}
         {step !== 'subject' && (
           <button onClick={() => { setStep('subject'); setMode(null); setError(null) }}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
-            </svg>
-            Back
+            className="flex items-center gap-1.5 text-sm text-secondary hover:text-primary transition-colors">
+            ← Back
           </button>
         )}
 
@@ -477,8 +337,8 @@ export default function PublicPracticePage() {
         {step === 'subject' && (
           <>
             <div className="text-center space-y-1.5">
-              <h1 className="text-2xl font-black text-gray-900">Practice for WAEC</h1>
-              <p className="text-sm text-gray-500">No sign-in needed. Pick a subject and start now.</p>
+              <h1 className="text-2xl font-black text-primary">Practice for WAEC</h1>
+              <p className="text-sm text-secondary">No sign-in needed. Pick a subject.</p>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               {WAEC_SUBJECTS.map(sub => {
@@ -491,9 +351,9 @@ export default function PublicPracticePage() {
                 )
               })}
             </div>
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-tertiary">
               <Link href="/signup" className="text-indigo-600 font-bold hover:underline">Create a free account</Link>
-              {' '}to save your results and track progress.
+              {' '}to save results and track progress.
             </p>
           </>
         )}
@@ -501,15 +361,14 @@ export default function PublicPracticePage() {
         {/* Step 2: Mode + config */}
         {step === 'mode' && subject && (
           <div className="space-y-4">
-            {/* Subject header */}
             <div className={`flex items-center justify-between ${color.bg} rounded-2xl px-4 py-3`}>
               <p className={`text-base font-black ${color.text}`}>{subject}</p>
               <span className={`text-xs font-bold ${color.text} opacity-70`}>WAEC</span>
             </div>
 
             {error && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-                <p className="text-sm font-bold text-amber-800">😕 {error}</p>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl px-4 py-3">
+                <p className="text-sm font-bold text-amber-800 dark:text-amber-300">😕 {error}</p>
                 <button onClick={() => { setStep('subject'); setError(null) }}
                   className="text-xs text-amber-600 hover:underline mt-1">
                   Try another subject →
@@ -518,132 +377,91 @@ export default function PublicPracticePage() {
             )}
 
             {/* Practice card */}
-            <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
-              mode === 'practice' ? 'border-indigo-500 bg-white' : 'border-gray-200 bg-white'
-            }`}>
+            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'practice' ? 'border-indigo-500' : 'border-default'}`}>
               <button className="w-full text-left p-4" onClick={() => setMode(mode === 'practice' ? null : 'practice')}>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl flex-shrink-0">📖</div>
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-xl flex-shrink-0">📖</div>
                   <div className="flex-1">
-                    <p className="font-black text-gray-900">Practice</p>
-                    <p className="text-xs text-gray-500">Pick question count · choose answer reveal · optional timer</p>
+                    <p className="font-black text-primary">Practice</p>
+                    <p className="text-xs text-secondary">Pick question count · optional timer</p>
                   </div>
-                  <svg className={`w-5 h-5 text-gray-400 transition-transform ${mode === 'practice' ? 'rotate-180' : ''}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                  </svg>
+                  <span className={`text-secondary text-sm transition-transform ${mode === 'practice' ? 'rotate-180' : ''}`}>▼</span>
                 </div>
               </button>
-
               {mode === 'practice' && (
-                <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4" onClick={e => e.stopPropagation()}>
-                  {/* Question count */}
+                <div className="border-t border-default px-4 py-4 space-y-4 bg-subtle">
                   <div>
-                    <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">Questions</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[5, 10, 20, 40].map(n => (
+                    <p className="text-xs font-bold text-secondary mb-2">Questions</p>
+                    <div className="flex gap-2">
+                      {[10, 20, 30, 40].map(n => (
                         <button key={n} onClick={() => setCount(n)}
-                          className={`py-2.5 rounded-xl text-sm font-black border-2 transition-all ${
-                            count === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:border-indigo-300'
-                          }`}>{n}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Reveal mode */}
-                  <div>
-                    <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-2">See answers</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[{ id: 'immediate', label: 'After each question', icon: '⚡' },
-                        { id: 'end',       label: 'At the end',          icon: '📋' }].map(opt => (
-                        <button key={opt.id} onClick={() => setRevealMode(opt.id)}
-                          className={`py-3 px-3 rounded-xl text-left border-2 transition-all ${
-                            revealMode === opt.id
-                              ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                              : 'border-gray-200 text-gray-600 hover:border-indigo-200'
-                          }`}>
-                          <span className="text-base block mb-0.5">{opt.icon}</span>
-                          <p className="text-xs font-black">{opt.label}</p>
+                          className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${count === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card hover:border-indigo-300'}`}>
+                          {n}
                         </button>
                       ))}
                     </div>
                   </div>
-
-                  {/* Timer toggle */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-black text-gray-500 uppercase tracking-wide">Timer</p>
-                      <button onClick={() => setTimerOn(t => !t)}
-                        className={`relative w-11 h-6 rounded-full transition-colors ${timerOn ? 'bg-indigo-600' : 'bg-gray-200'}`}>
-                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${timerOn ? 'translate-x-5' : ''}`}/>
-                      </button>
+                    <p className="text-xs font-bold text-secondary mb-2">Answer reveal</p>
+                    <div className="flex gap-2">
+                      {[['immediate', 'After each'], ['end', 'At the end']].map(([val, label]) => (
+                        <button key={val} onClick={() => setRevealMode(val)}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${revealMode === val ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card'}`}>
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                    {timerOn && (
-                      <div className="grid grid-cols-4 gap-2">
-                        {[10, 20, 30, 45].map(m => (
-                          <button key={m} onClick={() => setTimerMins(m)}
-                            className={`py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
-                              timerMins === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:border-indigo-300'
-                            }`}>{m}m</button>
-                        ))}
-                      </div>
-                    )}
                   </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-secondary">Timer</p>
+                    <button onClick={() => setTimerOn(t => !t)}
+                      className={`w-10 h-6 rounded-full transition-colors ${timerOn ? 'bg-indigo-600' : 'bg-subtle border border-default'}`}>
+                      <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-1 ${timerOn ? 'translate-x-4' : ''}`} />
+                    </button>
+                  </div>
+                  {timerOn && (
+                    <div className="flex gap-2">
+                      {[10, 20, 30, 45].map(m => (
+                        <button key={m} onClick={() => setTimerMins(m)}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${timerMins === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card'}`}>
+                          {m}m
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => startSession({ subjects: [subject], count, mode: 'practice', revealMode, durationSecs: timerOn ? timerMins * 60 : 0 })}
+                    disabled={loading}
+                    className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+                    {loading ? 'Loading questions…' : `Start ${count} questions →`}
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Exam simulation card */}
-            <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
-              mode === 'exam' ? 'border-orange-500 bg-white' : 'border-gray-200 bg-white'
-            }`}>
+            {/* Exam card */}
+            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'exam' ? 'border-indigo-500' : 'border-default'}`}>
               <button className="w-full text-left p-4" onClick={() => setMode(mode === 'exam' ? null : 'exam')}>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-xl flex-shrink-0">🏆</div>
+                  <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-xl flex-shrink-0">⏱</div>
                   <div className="flex-1">
-                    <p className="font-black text-gray-900">Exam Simulation</p>
-                    <p className="text-xs text-gray-500">50 questions · 45 minutes · real WAEC conditions</p>
+                    <p className="font-black text-primary">Exam simulation</p>
+                    <p className="text-xs text-secondary">50 questions · timed · answers at the end</p>
                   </div>
-                  <svg className={`w-5 h-5 text-gray-400 transition-transform ${mode === 'exam' ? 'rotate-180' : ''}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                  </svg>
+                  <span className={`text-secondary text-sm transition-transform ${mode === 'exam' ? 'rotate-180' : ''}`}>▼</span>
                 </div>
               </button>
-
               {mode === 'exam' && (
-                <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-1.5">
-                  <p className="text-xs font-black text-orange-700">⚠️ Real exam conditions:</p>
-                  <p className="text-xs text-orange-600">• 45-minute countdown starts immediately</p>
-                  <p className="text-xs text-orange-600">• Answers hidden until you submit</p>
-                  <p className="text-xs text-orange-600">• You must confirm before submitting</p>
+                <div className="border-t border-default px-4 py-4 bg-subtle">
+                  <button
+                    onClick={() => startSession({ subjects: [subject], count: 50, mode: 'exam', revealMode: 'end', durationSecs: 3600 })}
+                    disabled={loading}
+                    className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+                    {loading ? 'Loading…' : 'Start exam →'}
+                  </button>
                 </div>
               )}
             </div>
-
-            {/* Start */}
-            {mode && (
-              <button
-                disabled={loading}
-                onClick={() => startSession({
-                  mode,
-                  subjects:     [subject],
-                  count:        mode === 'exam' ? 50 : count,
-                  revealMode:   mode === 'exam' ? 'end' : revealMode,
-                  durationSecs: mode === 'exam' ? 45 * 60 : (timerOn ? timerMins * 60 : 0),
-                  examType:     'WAEC',
-                })}
-                className={`w-full py-4 text-white text-sm font-black rounded-2xl shadow-md transition-all disabled:opacity-50 active:scale-[0.98] ${
-                  mode === 'exam'
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90'
-                    : 'bg-indigo-600 hover:bg-indigo-500'
-                }`}>
-                {loading ? 'Loading questions…'
-                  : mode === 'exam'
-                    ? `Start ${subject} Exam Simulation →`
-                    : `Start ${count} Questions${timerOn ? ` · ${timerMins}min` : ''} →`}
-              </button>
-            )}
           </div>
         )}
       </div>

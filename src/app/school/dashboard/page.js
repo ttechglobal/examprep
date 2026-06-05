@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
 function accColor(pct) {
-  if (pct === null || pct === undefined) return { text: 'text-gray-400', bg: 'bg-gray-100', bar: 'bg-gray-200', label: '—' }
+  if (pct === null || pct === undefined) return { text: 'text-gray-400', bg: 'bg-subtle', bar: 'bg-gray-200', label: '—' }
   if (pct >= 70) return { text: 'text-green-700',  bg: 'bg-green-50',  bar: 'bg-green-500',  label: 'Strong' }
   if (pct >= 45) return { text: 'text-amber-700',  bg: 'bg-amber-50',  bar: 'bg-amber-400',  label: 'Fair'   }
   return           { text: 'text-red-700',    bg: 'bg-red-50',    bar: 'bg-red-500',    label: 'Weak'   }
@@ -20,7 +20,7 @@ function accColor(pct) {
 function AccBar({ pct, h = 'h-2' }) {
   const { bar } = accColor(pct)
   return (
-    <div className={`${h} bg-gray-100 rounded-full overflow-hidden`}>
+    <div className={`${h} bg-subtle rounded-full overflow-hidden`}>
       <div className={`h-full ${bar} rounded-full transition-all duration-700`} style={{ width: `${pct ?? 0}%` }} />
     </div>
   )
@@ -37,7 +37,7 @@ const TABS = [
 
 function MobileBottomTabs({ active, onChange }) {
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 px-1">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-gray-200 px-1">
       <div className="flex max-w-lg mx-auto">
         {TABS.map(t => (
           <button key={t.id} onClick={() => onChange(t.id)}
@@ -60,7 +60,7 @@ function StatCard({ label, value, sub, emoji, accent = 'indigo' }) {
   const colors = { indigo: 'bg-indigo-50 text-indigo-600', emerald: 'bg-emerald-50 text-emerald-600',
                    amber:  'bg-amber-50  text-amber-600',  red:    'bg-red-50    text-red-600' }
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col gap-2">
+    <div className="bg-card rounded-2xl border border-gray-200 p-4 flex flex-col gap-2">
       <div className={`w-9 h-9 rounded-xl ${colors[accent]} flex items-center justify-center text-lg flex-shrink-0`}>
         {emoji}
       </div>
@@ -98,9 +98,9 @@ function CreateCohortInline({ currentCohort, onCreated }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+    <div className="bg-card rounded-2xl border border-gray-200 overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-base transition-colors">
         <div className="flex items-center gap-2.5">
           <span className="text-lg">🎓</span>
           <div className="text-left">
@@ -116,7 +116,7 @@ function CreateCohortInline({ currentCohort, onCreated }) {
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 px-4 py-4 space-y-3 bg-gray-50">
+        <div className="border-t border-gray-100 px-4 py-4 space-y-3 bg-base">
           {currentCohort && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
               ⚠ "{currentCohort.name}" will be archived. Student data is preserved.
@@ -124,14 +124,14 @@ function CreateCohortInline({ currentCohort, onCreated }) {
           )}
           <input value={name} onChange={e => setName(e.target.value)}
             placeholder="Cohort name (e.g. SS3 Science 2026)"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-emerald-400" />
           <input value={session} onChange={e => setSession(e.target.value)}
             placeholder="Session (e.g. 2025/2026) — optional"
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-emerald-400" />
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">
             <button onClick={() => setOpen(false)}
-              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors">
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-subtle transition-colors">
               Cancel
             </button>
             <button onClick={handleCreate} disabled={saving || !name.trim()}
@@ -213,7 +213,7 @@ function OverviewSection({ data, onTabChange, onCohortCreated }) {
 
         {/* At-risk */}
         {atRisk.length > 0 && (
-          <div className="bg-white rounded-2xl border border-red-200 overflow-hidden">
+          <div className="bg-card rounded-2xl border border-red-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-red-100 flex items-center justify-between">
               <p className="text-sm font-black text-red-700">⚠ Needs attention ({atRisk.length})</p>
               <button onClick={() => onTabChange('students')} className="text-xs text-red-600 font-bold hover:underline">
@@ -230,7 +230,7 @@ function OverviewSection({ data, onTabChange, onCohortCreated }) {
                     <p className="text-sm font-medium text-gray-800">{s.full_name}</p>
                   </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    !s.isActiveThisWeek ? 'bg-gray-100 text-gray-500' : 'bg-red-100 text-red-600'
+                    !s.isActiveThisWeek ? 'bg-subtle text-gray-500' : 'bg-red-100 text-red-600'
                   }`}>
                     {!s.isActiveThisWeek ? 'Inactive' : `${s.accuracy}%`}
                   </span>
@@ -242,7 +242,7 @@ function OverviewSection({ data, onTabChange, onCohortCreated }) {
 
         {/* Weak topics */}
         {topWeak.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-card rounded-2xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <p className="text-sm font-black text-gray-900">Weakest Topics</p>
               <button onClick={() => onTabChange('topics')} className="text-xs text-emerald-600 font-bold hover:underline">
@@ -274,7 +274,7 @@ function OverviewSection({ data, onTabChange, onCohortCreated }) {
 
         {/* Weekly engagement */}
         {weeklyEngagement.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <div className="bg-card rounded-2xl border border-gray-200 p-4">
             <p className="text-sm font-black text-gray-900 mb-4">Weekly Engagement</p>
             <div className="flex items-end gap-2 h-24">
               {weeklyEngagement.map((w, i) => {
@@ -296,7 +296,7 @@ function OverviewSection({ data, onTabChange, onCohortCreated }) {
 
         {/* Streak leaders */}
         {streakLeaders.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-card rounded-2xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-sm font-black text-gray-900">🔥 Streak Leaders</p>
             </div>
@@ -351,7 +351,7 @@ function StudentsSection({ students, atRisk }) {
 
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Search students…"
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-card focus:outline-none focus:ring-2 focus:ring-emerald-400" />
 
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {[
@@ -381,7 +381,7 @@ function StudentsSection({ students, atRisk }) {
 
       <div className="space-y-2">
         {filtered.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-2xl border border-gray-200">
+          <div className="text-center py-12 bg-card rounded-2xl border border-gray-200">
             <p className="text-3xl mb-2">👥</p>
             <p className="text-sm text-gray-500">No students match</p>
           </div>
@@ -391,10 +391,10 @@ function StudentsSection({ students, atRisk }) {
           const isExpanded = expandedId === s.id
           const isAtRisk   = atRisk.includes(s.id)
           return (
-            <div key={s.id} className={`bg-white rounded-2xl border overflow-hidden ${isAtRisk ? 'border-red-200' : 'border-gray-200'}`}>
+            <div key={s.id} className={`bg-card rounded-2xl border overflow-hidden ${isAtRisk ? 'border-red-200' : 'border-gray-200'}`}>
               <button onClick={() => setExpandedId(isExpanded ? null : s.id)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 transition-colors">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${isAtRisk ? 'bg-red-100' : s.isActiveThisWeek ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-base transition-colors">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${isAtRisk ? 'bg-red-100' : s.isActiveThisWeek ? 'bg-emerald-100' : 'bg-subtle'}`}>
                   <span className={`text-sm font-black ${isAtRisk ? 'text-red-600' : s.isActiveThisWeek ? 'text-emerald-700' : 'text-gray-500'}`}>
                     {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
                   </span>
@@ -419,14 +419,14 @@ function StudentsSection({ students, atRisk }) {
                 </div>
               </button>
               {isExpanded && (
-                <div className="border-t border-gray-100 px-4 py-4 bg-gray-50 space-y-3">
+                <div className="border-t border-gray-100 px-4 py-4 bg-base space-y-3">
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { l: 'Accuracy',     v: s.accuracy !== null ? `${s.accuracy}%` : '—', col: c.text },
                       { l: 'Streak',       v: `${s.currentStreak}d`, col: 'text-orange-600' },
                       { l: 'Lessons/wk',   v: s.lessonsThisWeek,     col: 'text-indigo-600' },
                     ].map(stat => (
-                      <div key={stat.l} className="bg-white rounded-xl p-2.5 text-center border border-gray-100">
+                      <div key={stat.l} className="bg-card rounded-xl p-2.5 text-center border border-gray-100">
                         <p className={`text-lg font-black ${stat.col}`}>{stat.v}</p>
                         <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{stat.l}</p>
                       </div>
@@ -439,7 +439,7 @@ function StudentsSection({ students, atRisk }) {
                         const sacc = sa && sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
                         const sc = accColor(sacc)
                         return (
-                          <div key={sub} className="flex items-center gap-1.5 bg-white border border-gray-100 rounded-xl px-2.5 py-1.5">
+                          <div key={sub} className="flex items-center gap-1.5 bg-card border border-gray-100 rounded-xl px-2.5 py-1.5">
                             <p className="text-xs font-bold text-gray-700">{sub}</p>
                             {sacc !== null && (
                               <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>{sacc}%</span>
@@ -471,7 +471,7 @@ function TopicsSection({ subjectTopics }) {
     return (
       <div id="topics" className="pt-2 lg:pt-0">
         <h2 className="text-lg font-black text-gray-900 mb-4 hidden lg:block">Topics</h2>
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
+        <div className="text-center py-16 bg-card rounded-2xl border border-gray-200">
           <p className="text-3xl mb-2">📚</p>
           <p className="text-sm text-gray-500">Topic performance appears once students start practising</p>
         </div>
@@ -493,11 +493,11 @@ function TopicsSection({ subjectTopics }) {
           return (
             <button key={s.subjectName} onClick={() => setSelected(s.subjectName)}
               className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                selected === s.subjectName ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-200 text-gray-700 bg-white hover:border-emerald-300'
+                selected === s.subjectName ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-200 text-gray-700 bg-card hover:border-emerald-300'
               }`}>
               {s.subjectName}
               {s.accuracy !== null && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${selected === s.subjectName ? 'bg-white/20 text-white' : `${c.bg} ${c.text}`}`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${selected === s.subjectName ? 'bg-card/20 text-white' : `${c.bg} ${c.text}`}`}>
                   {s.accuracy}%
                 </span>
               )}
@@ -511,7 +511,7 @@ function TopicsSection({ subjectTopics }) {
           {subject.topics.map((t, i) => {
             const c = accColor(t.accuracy)
             return (
-              <div key={t.topicId} className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div key={t.topicId} className="bg-card rounded-2xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-gray-900 leading-snug">{t.topicName}</p>
@@ -561,7 +561,7 @@ function CohortSection({ cohort, allCohorts, totalStudents, onCohortCreated }) {
       <h2 className="text-lg font-black text-gray-900 hidden lg:block">Cohort</h2>
 
       {cohort ? (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-card rounded-2xl border border-gray-200 overflow-hidden">
           {/* Header */}
           <div className="px-4 py-4 border-b border-gray-100 flex items-start justify-between">
             <div>
@@ -578,7 +578,7 @@ function CohortSection({ cohort, allCohorts, totalStudents, onCohortCreated }) {
               <p className="text-5xl font-black text-emerald-700 tracking-[0.4em] font-mono">{cohort.invite_code}</p>
               <button onClick={copyCode}
                 className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-black border transition-colors ${
-                  copied ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                  copied ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-card border-emerald-200 text-emerald-700 hover:bg-emerald-50'
                 }`}>
                 {copied ? '✓ Copied!' : 'Copy'}
               </button>
@@ -612,9 +612,9 @@ function CohortSection({ cohort, allCohorts, totalStudents, onCohortCreated }) {
 
       {/* History */}
       {allCohorts.length > 1 && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-card rounded-2xl border border-gray-200 overflow-hidden">
           <button onClick={() => setShowHistory(h => !h)}
-            className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+            className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold text-gray-700 hover:bg-base transition-colors">
             <span>Past cohorts ({allCohorts.filter(c => !c.is_active).length})</span>
             <svg className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -941,7 +941,7 @@ function ReportsSection({ schoolName, cohortName }) {
       </div>
 
       {/* CSV download */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between">
+      <div className="bg-card rounded-2xl border border-gray-200 p-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-bold text-gray-900">Export to CSV / Excel</p>
           <p className="text-xs text-gray-400 mt-0.5">Student data table — open in Excel or Google Sheets</p>

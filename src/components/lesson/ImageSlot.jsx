@@ -46,20 +46,20 @@ function CopyPromptBox({ prompt }) {
   if (!prompt) return null
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+      <div className="flex items-center justify-between px-3 py-2 bg-base border-b border-gray-200">
         <span className="text-[10px] font-black uppercase tracking-wide text-gray-500">
           Image Generation Prompt
         </span>
         <button
           onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
           className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors ${
-            copied ? 'bg-green-100 text-green-700' : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+            copied ? 'bg-green-100 text-green-700' : 'bg-card border border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
           }`}
         >
           {copied ? '✓ Copied!' : 'Copy prompt'}
         </button>
       </div>
-      <p className="text-[11px] text-gray-600 px-3 py-2.5 leading-relaxed font-mono bg-white">
+      <p className="text-[11px] text-gray-600 px-3 py-2.5 leading-relaxed font-mono bg-card">
         {prompt}
       </p>
     </div>
@@ -209,7 +209,7 @@ export function AdminImageSlot({
           className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all ${
             dragging
               ? 'border-indigo-400 bg-indigo-50'
-              : 'border-gray-200 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/40'
+              : 'border-gray-200 bg-base hover:border-indigo-300 hover:bg-indigo-50/40'
           }`}
         >
           {uploading ? (

@@ -50,7 +50,7 @@ export default async function ReviewerDashboard() {
         </div>
 
         {pending.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
+          <div className="bg-card rounded-2xl border border-gray-200 p-6 text-center">
             <p className="text-3xl mb-2">✅</p>
             <p className="text-gray-500 text-sm">All caught up! No lessons waiting for review.</p>
           </div>
@@ -60,7 +60,7 @@ export default async function ReviewerDashboard() {
               <Link
                 key={subtopic.id}
                 href={`/reviewer/lessons/${subtopic.id}`}
-                className="flex items-center justify-between bg-white rounded-2xl border border-orange-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
+                className="flex items-center justify-between bg-card rounded-2xl border border-orange-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
               >
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{subtopic.name}</p>
@@ -89,7 +89,7 @@ export default async function ReviewerDashboard() {
               <Link
                 key={subtopic.id}
                 href={`/reviewer/lessons/${subtopic.id}`}
-                className="flex items-center justify-between bg-white rounded-2xl border border-gray-200 p-4 hover:border-indigo-200 transition-colors"
+                className="flex items-center justify-between bg-card rounded-2xl border border-gray-200 p-4 hover:border-indigo-200 transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium text-gray-700">{subtopic.name}</p>

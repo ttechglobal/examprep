@@ -21,7 +21,7 @@ export default async function SchoolLayout({ children }) {
   const school = profile?.schools
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-base">
       <SchoolNav schoolName={school?.name ?? 'School Dashboard'} schoolCity={school?.city ?? ''} />
       <div className="lg:ml-56">
         <main className="max-w-5xl mx-auto px-4 lg:px-8 pb-24 lg:pb-12 pt-4 lg:pt-8">

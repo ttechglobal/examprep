@@ -196,11 +196,11 @@ export default function SubjectPageClient({ subject, topics, progress, learningP
               {publishedSubtopics} of {totalSubtopics} lessons available
             </p>
           </div>
-          <span className={`text-xs font-bold px-2.5 py-1.5 rounded-full bg-white/60 dark:bg-black/20 ${mastery.color} flex-shrink-0`}>
+          <span className={`text-xs font-bold px-2.5 py-1.5 rounded-full bg-card/60 dark:bg-black/20 ${mastery.color} flex-shrink-0`}>
             {mastery.emoji} {mastery.label}
           </span>
         </div>
-        <div className="h-2.5 bg-white/50 dark:bg-black/20 rounded-full overflow-hidden">
+        <div className="h-2.5 bg-card/50 dark:bg-black/20 rounded-full overflow-hidden">
           <div
             className={`h-full ${color.accent} rounded-full transition-all duration-700`}
             style={{ width: `${overallPct}%` }}

@@ -1,7 +1,7 @@
 // src/app/student/layout.js
 // DARK MODE FIX: header and sidebar nav now use CSS token classes (bg-card,
 // border-default, text-primary, text-secondary) instead of hardcoded
-// bg-white dark:bg-gray-900 / text-gray-500 dark:text-gray-400 pairs.
+// bg-card dark:bg-gray-900 / text-gray-500 dark:text-gray-400 pairs.
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'

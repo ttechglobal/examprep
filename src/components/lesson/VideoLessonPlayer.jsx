@@ -220,7 +220,7 @@ export default function VideoLessonPlayer({ lesson }) {
         </div>
         <h1 className={`text-lg font-black ${color.text} leading-snug`}>{lesson.title}</h1>
         <div className="flex items-center gap-2 mt-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-white/50 dark:bg-black/20 ${color.text}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-card/50 dark:bg-black/20 ${color.text}`}>
             {lesson.exam_type}
           </span>
           {allQuestions.length > 0 && (

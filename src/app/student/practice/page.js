@@ -458,7 +458,7 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
               }`}>
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'JAMB' ? 'border-indigo-600 bg-indigo-600' : 'border-default'}`}>
-                  {examFormat === 'JAMB' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                  {examFormat === 'JAMB' && <div className="w-2.5 h-2.5 rounded-full bg-card" />}
                 </div>
                 <span className="text-sm font-black text-primary">JAMB / UTME</span>
                 <span className="ml-auto text-xs font-black text-white bg-indigo-600 px-2 py-0.5 rounded-full">4 subjects</span>
@@ -477,7 +477,7 @@ function ExamSimSetup({ subjects, profile, onStart, onClose }) {
               }`}>
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${examFormat === 'WAEC' ? 'border-emerald-600 bg-emerald-600' : 'border-default'}`}>
-                  {examFormat === 'WAEC' && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                  {examFormat === 'WAEC' && <div className="w-2.5 h-2.5 rounded-full bg-card" />}
                 </div>
                 <span className="text-sm font-black text-primary">WAEC / SSCE</span>
                 <span className="ml-auto text-xs font-black text-white bg-emerald-600 px-2 py-0.5 rounded-full">1 subject</span>
@@ -679,7 +679,7 @@ export default function PracticeHQPage() {
                 <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-90`} />
                 <div className="relative z-10 w-full">
                   {m.badge && (
-                    <span className="absolute top-0 right-0 text-[10px] font-black text-white bg-white/20 px-2 py-0.5 rounded-full">
+                    <span className="absolute top-0 right-0 text-[10px] font-black text-white bg-card/20 px-2 py-0.5 rounded-full">
                       {m.badge}
                     </span>
                   )}

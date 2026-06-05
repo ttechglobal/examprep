@@ -71,7 +71,7 @@ export default function TodaysFocus({ learningPaths, lessonProgress, subtopicMap
           <Link
             key={i}
             href={action.href}
-            className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 hover:border-indigo-200 hover:shadow-md transition-all group"
+            className="flex items-center gap-3 bg-card rounded-2xl border border-gray-100 shadow-sm px-4 py-3 hover:border-indigo-200 hover:shadow-md transition-all group"
           >
             {/* Icon */}
             <div className={`w-10 h-10 rounded-2xl ${action.color.bg} flex items-center justify-center flex-shrink-0`}>

@@ -30,7 +30,7 @@ function DefinitionPreview({ slide }) {
         </p>
         <p className="text-sm font-black text-white">{slide.term}</p>
       </div>
-      <div className="bg-white px-3 py-2.5 space-y-2">
+      <div className="bg-card px-3 py-2.5 space-y-2">
         <p className="text-xs font-bold text-indigo-800 leading-snug">{slide.definition}</p>
         {(slide.examples ?? []).slice(0, 2).map((ex, i) => (
           <div key={i} className="flex items-start gap-1.5">
@@ -227,7 +227,7 @@ export default function MobilePreview({ lesson }) {
   return (
     <div className="flex flex-col items-center gap-4">
       {/* Phone frame */}
-      <div className="w-[320px] h-[580px] bg-white rounded-[36px] border-4 border-gray-800 shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-[320px] h-[580px] bg-card rounded-[36px] border-4 border-gray-800 shadow-2xl overflow-hidden flex flex-col">
         {/* Status bar */}
         <div className="bg-gray-800 px-6 pt-2 pb-1 flex justify-between items-center flex-shrink-0">
           <span className="text-white text-[10px]">9:41</span>

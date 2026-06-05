@@ -330,7 +330,7 @@ export default function TopicStudyPage() {
             onClick={handleStudy}
             className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.97] transition-all text-white shadow-md shadow-indigo-200 dark:shadow-none"
           >
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-card/20 flex items-center justify-center">
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
               </svg>
@@ -346,7 +346,7 @@ export default function TopicStudyPage() {
           {/* Practice */}
           <button
             onClick={handlePractice}
-            className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 active:scale-[0.97] transition-all shadow-sm"
+            className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-card dark:bg-zinc-800 border-2 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 active:scale-[0.97] transition-all shadow-sm"
           >
             <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center">
               <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

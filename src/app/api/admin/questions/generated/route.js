@@ -1,5 +1,5 @@
-// src/app/api/questions/generated/route.js
-// FIX: removed question_type from insert — column was dropped from DB
+// src/app/api/admin/questions/generated/route.js
+// Updated: exam_type string → exam_types[] array
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -9,6 +9,12 @@ const service = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
+
+const toExamTypes = (raw) => {
+  if (raw === 'BOTH') return ['WAEC', 'JAMB']
+  if (raw === 'WAEC' || raw === 'JAMB') return [raw]
+  return ['WAEC']
+}
 
 export async function POST(request) {
   const supabase = await createClient()
@@ -26,6 +32,7 @@ export async function POST(request) {
 
   const db = service()
   const results = { saved: 0, errors: [] }
+  const examTypes = toExamTypes(examType ?? 'WAEC')
 
   for (const q of questions) {
     const explanation = {
@@ -35,18 +42,17 @@ export async function POST(request) {
     }
 
     const { error } = await db.from('questions').insert({
-      subject_id:     subjectId,
-      topic_id:       topicId    ?? null,
-      subtopic_id:    subtopicId,
-      exam_type:      examType   ?? 'BOTH',
-      year:           null,
+      subject_id:   subjectId,
+      topic_id:     topicId    ?? null,
+      subtopic_id:  subtopicId,
+      exam_types:   examTypes,
+      year:         null,
       question_text:  q.question_text,
       has_image:      false,
       options:        q.options,
       correct_answer: q.correct_answer,
       explanation,
       difficulty:     q.difficulty ?? 'medium',
-      // question_type intentionally omitted — column was dropped from DB
       source:         'ai_generated',
       is_active:      true,
     })

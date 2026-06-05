@@ -91,10 +91,10 @@ export default function ReviewerLessonClient({ subtopic, reviews, currentUserId 
                   key={review.id}
                   className={`p-3.5 rounded-xl text-sm ${
                     review.resolved
-                      ? 'bg-gray-50 border border-gray-100 text-gray-400'
+                      ? 'bg-base border border-gray-100 text-gray-400'
                       : review.reviewer_id === currentUserId
                       ? 'bg-indigo-50 border border-indigo-100 text-gray-700'
-                      : 'bg-white border border-gray-200 text-gray-700'
+                      : 'bg-card border border-gray-200 text-gray-700'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -125,7 +125,7 @@ export default function ReviewerLessonClient({ subtopic, reviews, currentUserId 
               placeholder="Add a review comment... (e.g. 'The explanation on slide 3 is unclear', 'Missing a callout for this formula')"
               className="w-full px-4 py-3 text-sm resize-none focus:outline-none"
             />
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-t border-gray-100">
+            <div className="flex items-center justify-between px-4 py-2 bg-base border-t border-gray-100">
               {error && <p className="text-xs text-red-600">{error}</p>}
               {!error && <p className="text-xs text-gray-400">Be specific — reference slide numbers if helpful</p>}
               <button
@@ -139,7 +139,7 @@ export default function ReviewerLessonClient({ subtopic, reviews, currentUserId 
           </div>
 
           {/* Guidelines */}
-          <div className="bg-gray-50 rounded-xl p-4">
+          <div className="bg-base rounded-xl p-4">
             <p className="text-xs font-bold text-gray-600 mb-2">Review guidelines</p>
             <ul className="text-xs text-gray-500 space-y-1">
               <li>· Check for factual accuracy in all slides</li>
