@@ -1,12 +1,29 @@
 'use client'
 // src/components/lesson/VideoLessonPlayer.jsx
-// Fixes:
-// - Full dark mode compliance using CSS tokens
-// - Practice questions: 5 at a time (not 10 at once)
-// - Cleaner question UI
+//
+// TAILWIND v4 COLOUR FIX:
+// - Progress bar fill: ${color.accent} → inline style
+// - Subject tag pill: ${color.bg} ${color.text} → inline style
+// - getSubjectColor replaced with SUBJECT_STYLES map
 
 import { useState } from 'react'
-import { getSubjectColor } from '@/lib/theme'
+
+const SUBJECT_STYLES = {
+  'Mathematics':           { bg: '#eff6ff', text: '#1d4ed8', accent: '#3b82f6' },
+  'Further Mathematics':   { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9' },
+  'English Language':      { bg: '#faf5ff', text: '#7e22ce', accent: '#a855f7' },
+  'Physics':               { bg: '#ecfeff', text: '#0e7490', accent: '#06b6d4' },
+  'Chemistry':             { bg: '#f0fdf4', text: '#15803d', accent: '#22c55e' },
+  'Biology':               { bg: '#ecfdf5', text: '#047857', accent: '#10b981' },
+  'Economics':             { bg: '#fffbeb', text: '#b45309', accent: '#f59e0b' },
+  'Government':            { bg: '#fef2f2', text: '#b91c1c', accent: '#ef4444' },
+  'Literature in English': { bg: '#fdf2f8', text: '#9d174d', accent: '#ec4899' },
+  'Geography':             { bg: '#f0fdfa', text: '#0f766e', accent: '#14b8a6' },
+  'Agricultural Science':  { bg: '#f7fee7', text: '#4d7c0f', accent: '#84cc16' },
+  'Commerce':              { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1' },
+  'default':               { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1' },
+}
+function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
 
 const DIFFICULTY_LABELS = {
   easy:   { label: 'Easy',   style: 'bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400' },
@@ -14,7 +31,7 @@ const DIFFICULTY_LABELS = {
   hard:   { label: 'Hard',   style: 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400' },
 }
 
-// ── Video embed ───────────────────────────────────────────────────────────────
+// ── Video embed ────────────────────────────────────────────────────────────────
 function VideoEmbed({ url }) {
   if (!url) {
     return (
@@ -26,7 +43,6 @@ function VideoEmbed({ url }) {
       </div>
     )
   }
-
   const isYouTube = /youtube\.com|youtu\.be/.test(url)
   if (isYouTube) {
     const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?/]+)/)
@@ -42,8 +58,8 @@ function VideoEmbed({ url }) {
   return <video src={url} controls className="w-full rounded-2xl bg-gray-900" playsInline />
 }
 
-// ── Single question ───────────────────────────────────────────────────────────
-function PracticeQuestion({ question, index, batchTotal, onNext, isLast, color }) {
+// ── Single question ────────────────────────────────────────────────────────────
+function PracticeQuestion({ question, index, batchTotal, onNext, isLast, subjectStyle }) {
   const [selected, setSelected] = useState(null)
   const [revealed, setRevealed] = useState(false)
 
@@ -61,43 +77,51 @@ function PracticeQuestion({ question, index, batchTotal, onNext, isLast, color }
 
   return (
     <div className="space-y-4">
-      {/* Progress */}
+      {/* Progress bar — inline style for fill colour */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-1.5 bg-subtle rounded-full overflow-hidden">
-          <div className={`h-full ${color.accent} rounded-full transition-all`}
-            style={{ width: `${((index + 1) / batchTotal) * 100}%` }} />
+          <div
+            style={{ width: `${((index + 1) / batchTotal) * 100}%`, backgroundColor: subjectStyle.accent }}
+            className="h-full rounded-full transition-all"
+          />
         </div>
         <span className="text-xs font-bold text-tertiary flex-shrink-0">{index + 1}/{batchTotal}</span>
       </div>
 
-      {/* Tags */}
+      {/* Tags — inline style for subject pill */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${color.bg} ${color.text}`}>
-          {question.subject_name ?? 'Question'}
+        <span
+          style={{ backgroundColor: subjectStyle.bg, color: subjectStyle.text }}
+          className="text-xs font-bold px-2.5 py-1 rounded-full"
+        >
+          {question.subject_name ?? 'General'}
         </span>
-        {diff && <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${diff.style}`}>{diff.label}</span>}
+        {diff && (
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${diff.style}`}>
+            {diff.label}
+          </span>
+        )}
       </div>
 
-      {/* Question text */}
-      <div className="bg-card border border-default rounded-2xl px-4 py-4">
-        <p className="text-sm font-medium text-primary leading-relaxed">{question.question}</p>
-      </div>
+      {/* Question */}
+      <p className="text-sm font-semibold text-primary leading-relaxed">{question.question_text}</p>
 
       {/* Options */}
       <div className="space-y-2">
-        {Object.entries(opts).map(([key, text]) => {
-          let cls = 'border-default bg-card text-primary hover:border-indigo-300 dark:hover:border-indigo-700'
+        {Object.entries(opts).map(([key, val]) => {
+          const isCorrect = key === correct
+          const isSelected = key === selected
+          let optStyle = 'bg-card border-default text-primary hover:border-indigo-300'
           if (revealed) {
-            if (key === correct)       cls = 'border-green-400 bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300'
-            else if (key === selected) cls = 'border-red-300 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300'
-            else                       cls = 'border-default bg-subtle text-tertiary'
-          } else if (key === selected) {
-            cls = 'border-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-200'
+            if (isCorrect)                     optStyle = 'bg-green-50 border-green-400 text-green-800 dark:bg-green-950/30 dark:border-green-600 dark:text-green-300'
+            else if (isSelected && !isCorrect) optStyle = 'bg-red-50 border-red-400 text-red-800 dark:bg-red-950/30 dark:border-red-600 dark:text-red-300'
+            else                               optStyle = 'bg-subtle border-default text-tertiary'
           }
           return (
-            <button key={key} onClick={() => pick(key)}
-              className={`w-full text-left text-sm px-4 py-3 rounded-2xl border-2 transition-all ${cls}`}>
-              <span className="font-bold mr-2">{key}.</span>{text}
+            <button key={key} onClick={() => pick(key)} disabled={revealed}
+              className={`w-full flex items-start gap-3 px-4 py-3 border-2 rounded-2xl text-left transition-all ${optStyle}`}>
+              <span className="font-black flex-shrink-0 text-sm w-5">{key}.</span>
+              <span className="text-sm leading-relaxed">{val}</span>
             </button>
           )
         })}
@@ -105,179 +129,154 @@ function PracticeQuestion({ question, index, batchTotal, onNext, isLast, color }
 
       {/* Explanation */}
       {revealed && (
-        <div className="space-y-2">
-          {isRight ? (
-            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-2xl p-4">
-              <p className="text-sm font-black text-green-700 dark:text-green-400 mb-1">✓ Correct!</p>
-              {expl.correct && <p className="text-sm text-green-800 dark:text-green-300 leading-relaxed">{expl.correct}</p>}
-            </div>
-          ) : (
-            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-2xl p-4">
-              <p className="text-sm font-black text-orange-700 dark:text-orange-400 mb-1">
-                The correct answer is {correct}
-              </p>
-              {expl.correct && <p className="text-sm text-orange-800 dark:text-orange-300 leading-relaxed">{expl.correct}</p>}
-            </div>
+        <div className={`rounded-2xl px-4 py-3 space-y-1 ${
+          isRight
+            ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
+            : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
+        }`}>
+          <p className={`text-xs font-black ${isRight ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+            {isRight ? '✓ Correct!' : `✗ Correct answer: ${correct}`}
+          </p>
+          {(expl.text || expl.summary) && (
+            <p className="text-xs text-secondary leading-relaxed">{expl.text ?? expl.summary}</p>
           )}
-
-          <button onClick={() => onNext({ selected, correct, isRight })}
-            className={`w-full py-4 ${color.accent} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity`}>
-            {isLast ? 'See my score 🏆' : 'Next question →'}
-          </button>
         </div>
       )}
 
-      {!revealed && selected === null && (
-        <p className="text-center text-xs text-tertiary">Tap an answer to continue</p>
+      {revealed && (
+        <button onClick={() => onNext()}
+          className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
+          {isLast ? 'See results →' : 'Next question →'}
+        </button>
       )}
     </div>
   )
 }
 
-// ── Score screen ──────────────────────────────────────────────────────────────
-function ScoreScreen({ score, total, onRetry, onNext, hasMore, color }) {
-  const pct     = Math.round((score / total) * 100)
-  const passing = pct >= 60
-
-  return (
-    <div className="space-y-4 text-center">
-      <div className={`${color.bg} rounded-3xl p-6`}>
-        <p className="text-5xl font-black" style={{ color: passing ? '#16a34a' : '#dc2626' }}>{pct}%</p>
-        <p className={`text-lg font-black mt-1 ${color.text}`}>{score} / {total} correct</p>
-        <p className={`text-sm mt-1 ${color.text} opacity-70`}>
-          {pct >= 80 ? 'Excellent work! 🏆' : pct >= 60 ? 'Good effort! Keep it up 💪' : 'Keep practising — you\'ll get there! 📚'}
-        </p>
-      </div>
-
-      <div className="flex gap-3">
-        <button onClick={onRetry}
-          className="flex-1 py-3.5 border border-default text-secondary text-sm font-bold rounded-2xl hover:bg-subtle transition-colors">
-          Retry batch
-        </button>
-        {hasMore && (
-          <button onClick={onNext}
-            className={`flex-1 py-3.5 ${color.accent} text-white text-sm font-black rounded-2xl hover:opacity-90`}>
-            Next 5 →
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── Main player ───────────────────────────────────────────────────────────────
-export default function VideoLessonPlayer({ lesson }) {
-  const subjectName = lesson.subjects?.name ?? ''
-  const color       = getSubjectColor(subjectName)
-  const allQuestions = lesson.practice_questions ?? []
-
-  // 5 questions per batch
-  const BATCH_SIZE = 5
-  const [phase, setPhase]           = useState('video')
+// ── Practice section ────────────────────────────────────────────────────────────
+function PracticeSection({ questions, subjectStyle }) {
+  const BATCH = 5
   const [batchStart, setBatchStart] = useState(0)
-  const [qIndex, setQIndex]         = useState(0)
-  const [answers, setAnswers]       = useState([])
+  const [qIndex,     setQIndex]     = useState(0)
+  const [phase,      setPhase]      = useState('quiz')
+  const [score,      setScore]      = useState(0)
 
-  const batch   = allQuestions.slice(batchStart, batchStart + BATCH_SIZE)
-  const hasMore = batchStart + BATCH_SIZE < allQuestions.length
+  const batch    = questions.slice(batchStart, batchStart + BATCH)
+  const total    = batch.length
+  const isLast   = qIndex === total - 1
+  const allDone  = batchStart + BATCH >= questions.length
 
-  function startQuestions() {
-    setBatchStart(0); setQIndex(0); setAnswers([]); setPhase('questions')
-  }
-
-  function handleAnswer(result) {
-    const next = [...answers, result]
-    setAnswers(next)
-    if (qIndex + 1 >= batch.length) {
-      setPhase('score')
+  function handleNext(wasCorrect) {
+    if (wasCorrect) setScore(s => s + 1)
+    if (isLast) {
+      setPhase('result')
     } else {
       setQIndex(i => i + 1)
     }
   }
 
-  function handleRetry() {
-    setQIndex(0); setAnswers([]); setPhase('questions')
+  function nextBatch() {
+    setBatchStart(s => s + BATCH)
+    setQIndex(0)
+    setScore(0)
+    setPhase('quiz')
   }
 
-  function handleNextBatch() {
-    setBatchStart(s => s + BATCH_SIZE); setQIndex(0); setAnswers([]); setPhase('questions')
+  if (phase === 'result') {
+    const pct = Math.round((score / total) * 100)
+    const resultColor = pct >= 70 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626'
+    return (
+      <div className="bg-card rounded-2xl border border-default p-5 text-center space-y-4">
+        <p className="text-3xl">{pct >= 70 ? '🎉' : pct >= 50 ? '💪' : '📚'}</p>
+        <div>
+          <p style={{ color: resultColor }} className="text-2xl font-black">{pct}%</p>
+          <p className="text-sm text-secondary mt-1">{score}/{total} correct</p>
+        </div>
+        {!allDone && (
+          <button onClick={nextBatch}
+            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500">
+            Next {Math.min(BATCH, questions.length - batchStart - BATCH)} questions →
+          </button>
+        )}
+        {allDone && (
+          <p className="text-xs text-tertiary">You've completed all {questions.length} practice questions for this video.</p>
+        )}
+      </div>
+    )
   }
-
-  const score = answers.filter(a => a.isRight).length
 
   return (
-    <div className="space-y-5 pb-8">
-      {/* Lesson header */}
-      <div className={`${color.bg} rounded-3xl px-5 py-4`}>
-        <div className="flex items-center gap-2 flex-wrap mb-1">
-          {lesson.subjects?.name && (
-            <span className={`text-xs font-black ${color.text} opacity-60`}>{lesson.subjects.name}</span>
-          )}
-          {lesson.topics?.name && (
-            <><span className={`text-xs ${color.text} opacity-40`}>·</span>
-            <span className={`text-xs ${color.text} opacity-60`}>{lesson.topics.name}</span></>
-          )}
-        </div>
-        <h1 className={`text-lg font-black ${color.text} leading-snug`}>{lesson.title}</h1>
-        <div className="flex items-center gap-2 mt-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-card/50 dark:bg-black/20 ${color.text}`}>
-            {lesson.exam_type}
+    <PracticeQuestion
+      question={batch[qIndex]}
+      index={qIndex}
+      batchTotal={total}
+      onNext={handleNext}
+      isLast={isLast}
+      subjectStyle={subjectStyle}
+    />
+  )
+}
+
+// ── Main player ────────────────────────────────────────────────────────────────
+export default function VideoLessonPlayer({ lesson }) {
+  const [showPractice, setShowPractice] = useState(false)
+  const subjectStyle = getSubjectStyle(lesson.subjects?.name ?? '')
+  const questions    = lesson.practice_questions ?? []
+
+  return (
+    <div className="space-y-5">
+      {/* Meta */}
+      <div>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          {/* Subject badge — inline style */}
+          <span
+            style={{ backgroundColor: subjectStyle.bg, color: subjectStyle.text }}
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+          >
+            {lesson.subjects?.name ?? 'General'}
           </span>
-          {allQuestions.length > 0 && (
-            <span className={`text-xs ${color.text} opacity-60`}>{allQuestions.length} practice questions</span>
+          {lesson.topics?.name && (
+            <span className="text-xs text-tertiary">{lesson.topics.name}</span>
           )}
         </div>
+        <h1 className="text-xl font-black text-primary leading-tight">{lesson.title}</h1>
       </div>
 
-      {/* Video phase */}
-      {phase === 'video' && (
-        <div className="space-y-4">
-          <VideoEmbed url={lesson.video_url} />
-          {allQuestions.length > 0 && (
-            <button onClick={startQuestions}
-              className={`w-full py-4 ${color.accent} text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity`}>
-              Start practice questions ({allQuestions.length}) →
-            </button>
+      {/* Video */}
+      <VideoEmbed url={lesson.video_url} />
+
+      {/* Practice toggle */}
+      {questions.length > 0 && (
+        <div className="space-y-3">
+          <button
+            onClick={() => setShowPractice(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3.5 bg-card border border-default rounded-2xl hover:bg-subtle transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div
+                style={{ backgroundColor: subjectStyle.bg }}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+              >
+                📝
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-primary">Practice questions</p>
+                <p className="text-xs text-secondary">{questions.length} questions · test your understanding</p>
+              </div>
+            </div>
+            <svg
+              className={`w-4 h-4 text-tertiary transition-transform flex-shrink-0 ${showPractice ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+
+          {showPractice && (
+            <div className="bg-card rounded-2xl border border-default p-4">
+              <PracticeSection questions={questions} subjectStyle={subjectStyle} />
+            </div>
           )}
         </div>
-      )}
-
-      {/* Questions phase — 5 at a time */}
-      {phase === 'questions' && batch.length > 0 && (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-secondary">
-              Questions {batchStart + 1}–{Math.min(batchStart + BATCH_SIZE, allQuestions.length)} of {allQuestions.length}
-            </p>
-            <button onClick={() => setPhase('video')} className="text-xs text-tertiary hover:text-secondary">← Back to video</button>
-          </div>
-          <PracticeQuestion
-            key={`${batchStart}-${qIndex}`}
-            question={batch[qIndex]}
-            index={qIndex}
-            batchTotal={batch.length}
-            isLast={qIndex + 1 >= batch.length}
-            color={color}
-            onNext={handleAnswer}
-          />
-        </>
-      )}
-
-      {/* Score phase */}
-      {phase === 'score' && (
-        <>
-          <ScoreScreen
-            score={score}
-            total={batch.length}
-            onRetry={handleRetry}
-            onNext={handleNextBatch}
-            hasMore={hasMore}
-            color={color}
-          />
-          <button onClick={() => setPhase('video')} className="w-full py-3 text-sm text-secondary hover:text-primary">
-            ← Back to video
-          </button>
-        </>
       )}
     </div>
   )

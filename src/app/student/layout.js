@@ -1,7 +1,6 @@
 // src/app/student/layout.js
-// DARK MODE FIX: header and sidebar nav now use CSS token classes (bg-card,
-// border-default, text-primary, text-secondary) instead of hardcoded
-// bg-card dark:bg-gray-900 / text-gray-500 dark:text-gray-400 pairs.
+// CHANGE: "Videos" replaced with "Practice" in both desktop header nav and sidebar.
+// Videos is still accessible via /student/videos — just no longer in primary nav.
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -41,12 +40,12 @@ export default async function StudentLayout({ children }) {
                 <span className="text-base font-black text-primary tracking-tight">ExamPrep</span>
               </Link>
 
+              {/* Desktop top nav — Videos replaced with Practice */}
               <nav className="hidden lg:flex items-center gap-1">
                 {[
                   { href: '/student/dashboard', label: 'Home'      },
                   { href: '/student/learn',     label: 'Learn'     },
                   { href: '/student/practice',  label: 'Practice'  },
-                  { href: '/student/videos',    label: 'Videos'    },
                   { href: '/student/community', label: 'Community' },
                   { href: '/student/profile',   label: 'Profile'   },
                 ].map(({ href, label }) => (
@@ -68,16 +67,16 @@ export default async function StudentLayout({ children }) {
 
           <main className="max-w-screen-xl mx-auto px-4 lg:px-8 py-5 pb-28 lg:pb-8 lg:grid lg:grid-cols-[240px_1fr] lg:gap-8 xl:grid-cols-[280px_1fr]">
 
-            {/* ── Desktop sidebar ───────────────────────────────────────────── */}
+            {/* ── Desktop sidebar — Videos replaced with Practice ───────────── */}
             <aside className="hidden lg:block">
               <nav className="sticky top-20 space-y-1">
                 {[
-                  { href: '/student/dashboard', label: 'Home',      emoji: '🏠' },
-                  { href: '/student/learn',     label: 'Learn Hub', emoji: '📚' },
-                  { href: '/student/practice',  label: 'Practice',  emoji: '✏️' },
-                  { href: '/student/videos',    label: 'Videos',    emoji: '🎬' },
-                  { href: '/student/community', label: 'Community', emoji: '👥' },
-                  { href: '/student/profile',   label: 'Profile',   emoji: '👤' },
+                  { href: '/student/dashboard', label: 'Home',        emoji: '🏠' },
+                  { href: '/student/learn',     label: 'Learn Hub',   emoji: '📚' },
+                  { href: '/student/practice',  label: 'Practice HQ', emoji: '✨' },
+                  { href: '/student/videos',    label: 'Videos',      emoji: '🎬' },
+                  { href: '/student/community', label: 'Community',   emoji: '👥' },
+                  { href: '/student/profile',   label: 'Profile',     emoji: '👤' },
                 ].map(({ href, label, emoji }) => (
                   <Link key={href} href={href}
                     className="flex items-center gap-3 px-4 py-2.5 rounded-xl

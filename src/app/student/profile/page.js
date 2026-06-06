@@ -1,17 +1,43 @@
-// src/app/student/profile/page.js
-// Fixes in this version:
-// 1. Exam label: 'BOTH' → 'WAEC & JAMB' everywhere it appears
-// 2. Subjects display: shows all subjects with JAMB/WAEC split when exam_type is BOTH
-// 3. All badge/pill backgrounds use theme-aware classes (no hardcoded colors that break in light mode)
-// 4. Exam selector buttons show 'WAEC & JAMB' instead of 'BOTH'
-
 'use client'
+// src/app/student/profile/page.js
+//
+// TAILWIND v4 COLOUR FIX:
+// - Subject pills: ${color.bg} ${color.text} → inline style via SUBJECT_STYLES
+// - Avatar bubble: bg-card/20 (CSS var + opacity — broken in v4) → bg-white/20
+// - getSubjectColor import removed
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { getSubjectColor } from '@/lib/theme'
 import GoalModal from '@/components/dashboard/GoalModal'
+
+// ── Subject colour map ─────────────────────────────────────────────────────────
+const SUBJECT_STYLES = {
+  'Mathematics':                    { bg: '#eff6ff', text: '#1d4ed8' },
+  'Further Mathematics':            { bg: '#f0f9ff', text: '#0369a1' },
+  'English Language':               { bg: '#faf5ff', text: '#7e22ce' },
+  'Use of English':                 { bg: '#faf5ff', text: '#7e22ce' },
+  'Physics':                        { bg: '#ecfeff', text: '#0e7490' },
+  'Chemistry':                      { bg: '#f0fdf4', text: '#15803d' },
+  'Biology':                        { bg: '#ecfdf5', text: '#047857' },
+  'Economics':                      { bg: '#fffbeb', text: '#b45309' },
+  'Government':                     { bg: '#fef2f2', text: '#b91c1c' },
+  'Literature in English':          { bg: '#fdf2f8', text: '#9d174d' },
+  'Geography':                      { bg: '#f0fdfa', text: '#0f766e' },
+  'Agricultural Science':           { bg: '#f7fee7', text: '#4d7c0f' },
+  'Commerce':                       { bg: '#eef2ff', text: '#4338ca' },
+  'History':                        { bg: '#fff7ed', text: '#c2410c' },
+  'Accounting':                     { bg: '#fefce8', text: '#a16207' },
+  'Computer Science':               { bg: '#f0f9ff', text: '#0369a1' },
+  'Civic Education':                { bg: '#f0fdf4', text: '#166534' },
+  'Christian Religious Studies':    { bg: '#fdf4ff', text: '#86198f' },
+  'Islamic Religious Studies':      { bg: '#fff7ed', text: '#9a3412' },
+  'Yoruba':                         { bg: '#fef9c3', text: '#713f12' },
+  'Igbo':                           { bg: '#fef9c3', text: '#713f12' },
+  'Hausa':                          { bg: '#fef9c3', text: '#713f12' },
+  'default':                        { bg: '#eef2ff', text: '#4338ca' },
+}
+function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function examLabel(examType) {
@@ -19,7 +45,6 @@ function examLabel(examType) {
   return examType ?? 'WAEC'
 }
 
-// JAMB subjects list (for splitting display when BOTH)
 const JAMB_SUBJECTS_SET = new Set([
   'Use of English', 'Mathematics', 'Physics', 'Chemistry', 'Biology',
   'Economics', 'Government', 'Geography', 'History', 'Commerce', 'Accounting',
@@ -36,9 +61,7 @@ function Section({ title, children, action }) {
         <h3 className="text-sm font-black text-primary uppercase tracking-wide">{title}</h3>
         {action}
       </div>
-      <div className="px-5 py-4 space-y-3">
-        {children}
-      </div>
+      <div className="px-5 py-4 space-y-3">{children}</div>
     </div>
   )
 }
@@ -61,11 +84,14 @@ function EditableField({ label, value, placeholder, onSave }) {
       <div className="flex-1 min-w-0">
         <p className="text-xs text-tertiary mb-0.5">{label}</p>
         {editing ? (
-          <input value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()}
+          <input value={val} onChange={e => setVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
             className="w-full text-sm border border-default rounded-xl px-3 py-2 bg-card text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400"
             autoFocus />
         ) : (
-          <p className="text-sm font-medium text-primary truncate">{value || <span className="text-tertiary">{placeholder}</span>}</p>
+          <p className="text-sm font-medium text-primary truncate">
+            {value || <span className="text-tertiary">{placeholder}</span>}
+          </p>
         )}
       </div>
       {editing ? (
@@ -82,6 +108,20 @@ function EditableField({ label, value, placeholder, onSave }) {
   )
 }
 
+// ── Subject pill — inline style, never transparent ───────────────────────────
+function SubjectPill({ name }) {
+  const s = getSubjectStyle(name)
+  return (
+    <span
+      style={{ backgroundColor: s.bg, color: s.text }}
+      className="text-xs px-2.5 py-1 rounded-full font-medium"
+    >
+      {name}
+    </span>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const router   = useRouter()
   const supabase = createClient()
@@ -129,26 +169,20 @@ export default function ProfilePage() {
     router.push('/login')
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center py-24">
+      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
 
-  const initials = (profile?.full_name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-  const examType = profile?.exam_type ?? 'WAEC'
-
-  // Split subjects for display when doing both exams
-  const allSubjects    = profile?.subjects ?? []
-  const jambSubjects   = allSubjects.filter(s => JAMB_SUBJECTS_SET.has(s))
-  // WAEC = all subjects the student has (they overlap, so just show all for WAEC)
-  // Show WAEC subjects as the full list since WAEC has more subjects
-  const waecSubjects   = allSubjects // all subjects apply to WAEC
+  const initials  = (profile?.full_name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const examType  = profile?.exam_type ?? 'WAEC'
+  const allSubjects  = profile?.subjects ?? []
+  const jambSubjects = allSubjects.filter(s => JAMB_SUBJECTS_SET.has(s))
+  const waecSubjects = allSubjects
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-8">
       {showGoalModal && profile && (
         <GoalModal
           profile={profile}
@@ -157,6 +191,7 @@ export default function ProfilePage() {
             supabase.from('profiles').select('*').eq('id', profile.id).single()
               .then(({ data }) => setProfile(data))
           }}
+          onSave={updated => { setProfile(updated); setShowGoalModal(false) }}
         />
       )}
 
@@ -165,18 +200,19 @@ export default function ProfilePage() {
           message.type === 'success'
             ? 'bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
             : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
-        }`}>{message.text}</div>
+        }`}>
+          {message.text}
+        </div>
       )}
 
-      {/* Avatar header */}
+      {/* Avatar header — bg-white/20 instead of bg-card/20 (v4 CSS var + opacity fix) */}
       <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl p-6 text-white">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-card/20 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
             <span className="text-2xl font-black">{initials}</span>
           </div>
           <div>
             <h2 className="text-xl font-black">{profile?.full_name}</h2>
-            {/* Fix: show WAEC & JAMB instead of BOTH */}
             <p className="text-indigo-200 text-sm">{examLabel(examType)} Student</p>
           </div>
         </div>
@@ -193,14 +229,13 @@ export default function ProfilePage() {
 
       {/* Exams & Subjects */}
       <Section title="Exams & Subjects">
-        {/* Exam selector — shows WAEC & JAMB instead of BOTH */}
         <div>
           <p className="text-xs text-tertiary mb-2">Exams you're sitting</p>
           <div className="flex gap-2 flex-wrap">
             {[
-              { value: 'WAEC',  label: 'WAEC' },
-              { value: 'JAMB',  label: 'JAMB' },
-              { value: 'BOTH',  label: 'WAEC & JAMB' },
+              { value: 'WAEC', label: 'WAEC' },
+              { value: 'JAMB', label: 'JAMB' },
+              { value: 'BOTH', label: 'WAEC & JAMB' },
             ].map(({ value, label }) => (
               <button key={value} onClick={() => updateProfile({ exam_type: value })}
                 className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${
@@ -215,27 +250,18 @@ export default function ProfilePage() {
           <p className="text-xs text-tertiary mt-2">Changing this updates your Learn tab immediately.</p>
         </div>
 
-        {/* Subjects — split by exam when doing BOTH */}
+        {/* Subject pills — SubjectPill uses inline style, never transparent */}
         {examType === 'BOTH' ? (
           <div className="space-y-4">
-            {/* WAEC subjects — all subjects */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-black text-white bg-emerald-600 px-2 py-0.5 rounded-full">WAEC</span>
                 <p className="text-xs text-tertiary">{waecSubjects.length} subjects</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {waecSubjects.map(subject => {
-                  const color = getSubjectColor(subject)
-                  return (
-                    <span key={`waec-${subject}`} className={`text-xs px-2.5 py-1 rounded-full font-medium ${color.bg} ${color.text}`}>
-                      {subject}
-                    </span>
-                  )
-                })}
+                {waecSubjects.map(s => <SubjectPill key={`waec-${s}`} name={s} />)}
               </div>
             </div>
-            {/* JAMB subjects */}
             {jambSubjects.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-2">
@@ -243,14 +269,7 @@ export default function ProfilePage() {
                   <p className="text-xs text-tertiary">{jambSubjects.length} subjects</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {jambSubjects.map(subject => {
-                    const color = getSubjectColor(subject)
-                    return (
-                      <span key={`jamb-${subject}`} className={`text-xs px-2.5 py-1 rounded-full font-medium ${color.bg} ${color.text}`}>
-                        {subject}
-                      </span>
-                    )
-                  })}
+                  {jambSubjects.map(s => <SubjectPill key={`jamb-${s}`} name={s} />)}
                 </div>
               </div>
             )}
@@ -259,14 +278,7 @@ export default function ProfilePage() {
           <div>
             <p className="text-xs text-tertiary mb-2">Your subjects</p>
             <div className="flex flex-wrap gap-2">
-              {allSubjects.map(subject => {
-                const color = getSubjectColor(subject)
-                return (
-                  <span key={subject} className={`text-xs px-2.5 py-1 rounded-full font-medium ${color.bg} ${color.text}`}>
-                    {subject}
-                  </span>
-                )
-              })}
+              {allSubjects.map(s => <SubjectPill key={s} name={s} />)}
             </div>
           </div>
         )}
@@ -298,7 +310,7 @@ export default function ProfilePage() {
           <p className="text-xs text-tertiary mt-1">Used to prioritise your study suggestions.</p>
         </div>
 
-        {/* WAEC target grades — ALL subjects, theme-aware pills */}
+        {/* WAEC target grades */}
         {Object.keys(profile?.waec_target_grades ?? {}).length > 0 && (
           <div>
             <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">WAEC Targets</p>
@@ -312,17 +324,15 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* JAMB target scores — theme-aware pills */}
+        {/* JAMB target scores */}
         {Object.keys(profile?.jamb_target_scores ?? {}).length > 0 && (
           <div>
             <p className="text-xs font-bold text-secondary uppercase tracking-wide mb-2">JAMB Targets</p>
-            <div className="flex items-center gap-2 mb-2">
-              {profile.jamb_total_target && (
-                <span className="text-sm font-black text-indigo-700 dark:text-indigo-300">
-                  {profile.jamb_total_target}<span className="text-xs font-normal text-tertiary">/400</span>
-                </span>
-              )}
-            </div>
+            {profile.jamb_total_target && (
+              <p className="text-sm font-black text-indigo-700 dark:text-indigo-300 mb-2">
+                {profile.jamb_total_target}<span className="text-xs font-normal text-tertiary">/400</span>
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(profile.jamb_target_scores).map(([sub, score]) => (
                 <span key={sub} className="text-xs px-2.5 py-1 rounded-xl font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
@@ -334,7 +344,7 @@ export default function ProfilePage() {
         )}
       </Section>
 
-      {/* Parent reports */}
+      {/* Parent Reports */}
       <Section title="Parent Reports">
         <div>
           <p className="text-xs text-tertiary mb-1.5">Parent's email address</p>
@@ -356,24 +366,11 @@ export default function ProfilePage() {
         </button>
       </Section>
 
-      {/* Account */}
-      <Section title="Account">
-        <button className="w-full flex items-center justify-between py-3 px-4 border border-default rounded-2xl hover:bg-subtle transition-colors">
-          <span className="text-sm font-medium text-primary">Change password</span>
-          <span className="text-secondary">→</span>
-        </button>
-        <button className="w-full flex items-center justify-between py-3 px-4 border border-default rounded-2xl hover:bg-subtle transition-colors">
-          <span className="text-sm font-medium text-primary">Notification preferences</span>
-          <span className="text-secondary">→</span>
-        </button>
-      </Section>
-
+      {/* Sign out */}
       <button onClick={handleSignOut}
-        className="w-full py-3 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-sm font-bold rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+        className="w-full py-3.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm font-black rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
         Sign out
       </button>
-
-      <div className="h-4" />
     </div>
   )
 }

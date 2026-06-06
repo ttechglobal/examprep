@@ -5,20 +5,25 @@
   --font-jakarta: var(--font-jakarta);
 }
 
-/*
-  ── Tailwind v4 safelist ───────────────────────────────────────────────────
-  All subject colour classes from src/lib/theme.js are assembled dynamically
-  at runtime (e.g. `${color.bg} ${color.text}`), so the Tailwind scanner
-  never sees them as static strings and won't generate their CSS.
-  @source inline forces Tailwind to generate every class listed here,
-  fixing the transparent/missing colour bug on ALL pages at once.
-  ────────────────────────────────────────────────────────────────────────── */
-@source inline("{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{50,100,200,300,400,500,700,800,900,950}");
-@source inline("dark:{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{50,100,200,300,400,500,700,800,900,950}");
-@source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{950}/40");
-@source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{900}/40");
-@source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{950}/40");
-@source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet}-{900}/40");
+
+/* Base colour utilities — bg, text, border across all subject palette shades */
+@source inline("{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
+@source inline("dark:{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
+
+/* Opacity-modified backgrounds — dark mode card/badge backgrounds */
+@source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{950}/40");
+@source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{900}/40");
+@source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{950}/40");
+@source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{900}/40");
+
+/* Gradient classes — practice mode cards, hero sections, CTA buttons */
+@source inline("from-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
+@source inline("to-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
+@source inline("via-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
+
+/* White/black opacity overlays — icon containers on subject cards (bg-white/20, bg-white/30) */
+@source inline("bg-white/{10,20,30,40,50}");
+@source inline("bg-black/{10,20,30,40,50}");
 
 /* ── Light mode CSS variables ─────────────────────────────────────────────── */
 :root {

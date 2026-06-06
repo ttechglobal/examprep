@@ -1,304 +1,128 @@
 'use client'
 // src/app/student/learn/LearnPage.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// CHANGES IN THIS VERSION:
-//   1. StudyPlanPreview replaced — now fetches from /api/student/study-plan
-//      (same API the study plan page uses) so it shows real weak topics with
-//      status (weak / improving / untested), not just learning path order.
-//   2. Subject label added to every study plan item — student sees:
-//      subject badge + topic name + status badge on each row.
-//   3. Items link to /student/study-plan/[topicId] — the full topic page
-//      where they can Study or Practice, not just a lesson directly.
-//   4. Subject cards unchanged — still show progress % per subject.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useMemo, memo, Suspense, lazy } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getSubjectColor, getMasteryLevel } from '@/lib/theme'
+import { getMasteryLevel } from '@/lib/theme'
 import { LearnHubSkeleton } from '@/components/ui/Skeletons'
+import { StudyPlanPreview } from '@/components/ui/StudyPlanCard'
 import Link from 'next/link'
 import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
-// ─── Subject SVG icons ─────────────────────────────────────────────────────────
-function SubjectIcon({ name, className = 'w-5 h-5' }) {
-  const s = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
+// ── Dark mode hook ────────────────────────────────────────────────────────────
+function useIsDark() {
+  const [dark, setDark] = useState(false)
+  useEffect(() => {
+    const check = () => setDark(document.documentElement.classList.contains('dark'))
+    check()
+    const obs = new MutationObserver(check)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+  return dark
+}
+
+// ── Subject colour map ─────────────────────────────────────────────────────────
+const SUBJECT_STYLES = {
+  'Mathematics':           { bg: '#eff6ff', text: '#1d4ed8', accent: '#3b82f6', darkBg: '#172554', darkText: '#93c5fd' },
+  'Further Mathematics':   { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9', darkBg: '#0c4a6e', darkText: '#7dd3fc' },
+  'English Language':      { bg: '#faf5ff', text: '#7e22ce', accent: '#a855f7', darkBg: '#3b0764', darkText: '#d8b4fe' },
+  'Physics':               { bg: '#ecfeff', text: '#0e7490', accent: '#06b6d4', darkBg: '#083344', darkText: '#67e8f9' },
+  'Chemistry':             { bg: '#f0fdf4', text: '#15803d', accent: '#22c55e', darkBg: '#052e16', darkText: '#86efac' },
+  'Biology':               { bg: '#ecfdf5', text: '#047857', accent: '#10b981', darkBg: '#022c22', darkText: '#6ee7b7' },
+  'Economics':             { bg: '#fffbeb', text: '#b45309', accent: '#f59e0b', darkBg: '#451a03', darkText: '#fcd34d' },
+  'Government':            { bg: '#fef2f2', text: '#b91c1c', accent: '#ef4444', darkBg: '#450a0a', darkText: '#fca5a5' },
+  'Literature in English': { bg: '#fdf2f8', text: '#9d174d', accent: '#ec4899', darkBg: '#500724', darkText: '#f9a8d4' },
+  'Geography':             { bg: '#f0fdfa', text: '#0f766e', accent: '#14b8a6', darkBg: '#042f2e', darkText: '#5eead4' },
+  'Agricultural Science':  { bg: '#f7fee7', text: '#4d7c0f', accent: '#84cc16', darkBg: '#1a2e05', darkText: '#bef264' },
+  'Commerce':              { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
+  'default':               { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
+}
+function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
+
+// ── Subject SVG icons ─────────────────────────────────────────────────────────
+function SubjectIcon({ name, color, size = 20 }) {
+  const s = { fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
   const icons = {
-    'Mathematics':         <svg className={className} viewBox="0 0 24 24" {...s}><path d="M18 4H6l6 8-6 8h12"/></svg>,
-    'Further Mathematics': <svg className={className} viewBox="0 0 24 24" {...s}><line x1="6" y1="4" x2="18" y2="4"/><line x1="9" y1="4" x2="9" y2="20"/><path d="M15 4v10a2 2 0 002 2"/></svg>,
-    'Physics':             <svg className={className} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><ellipse cx="12" cy="12" rx="10" ry="3.5"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(120 12 12)"/></svg>,
-    'Chemistry':           <svg className={className} viewBox="0 0 24 24" {...s}><path d="M9 3h6"/><path d="M10 3v5.5L5.5 17A2 2 0 007.3 20h9.4a2 2 0 001.8-2.9L14 8.5V3"/><line x1="7.5" y1="14" x2="16.5" y2="14"/></svg>,
-    'Biology':             <svg className={className} viewBox="0 0 24 24" {...s}><path d="M7 3s3.5 3 3.5 9S7 21 7 21"/><path d="M17 3s-3.5 3-3.5 9 3.5 9 3.5 9"/><line x1="12" y1="3" x2="12" y2="21"/></svg>,
-    'Economics':           <svg className={className} viewBox="0 0 24 24" {...s}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
-    'Government':          <svg className={className} viewBox="0 0 24 24" {...s}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-    'English Language':    <svg className={className} viewBox="0 0 24 24" {...s}><path d="M4 6h16M4 12h16M4 18h10"/></svg>,
+    'Mathematics':         <svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M18 4H6l6 8-6 8h12"/></svg>,
+    'Further Mathematics': <svg width={size} height={size} viewBox="0 0 24 24" {...s}><line x1="6" y1="4" x2="18" y2="4"/><line x1="9" y1="4" x2="9" y2="20"/><path d="M15 4v10a2 2 0 002 2"/></svg>,
+    'Physics':             <svg width={size} height={size} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="2" fill={color} stroke="none"/><ellipse cx="12" cy="12" rx="10" ry="3.5"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="3.5" transform="rotate(120 12 12)"/></svg>,
+    'Chemistry':           <svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M9 3h6"/><path d="M10 3v5.5L5.5 17A2 2 0 007.3 20h9.4a2 2 0 001.8-2.9L14 8.5V3"/><line x1="7.5" y1="14" x2="16.5" y2="14"/></svg>,
+    'Biology':             <svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M7 3s3.5 3 3.5 9S7 21 7 21"/><path d="M17 3s-3.5 3-3.5 9 3.5 9 3.5 9"/><line x1="12" y1="3" x2="12" y2="21"/></svg>,
+    'Economics':           <svg width={size} height={size} viewBox="0 0 24 24" {...s}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
+    'Government':          <svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+    'English Language':    <svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M4 6h16M4 12h16M4 18h10"/></svg>,
   }
-  const defaultIcon = (
-    <svg className={className} viewBox="0 0 24 24" {...s}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+  return icons[name] ?? (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...s}>
+      <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
     </svg>
   )
-  return icons[name] ?? defaultIcon
 }
 
-// ─── Status config matching study plan page ────────────────────────────────────
-const STATUS_CONFIG = {
-  weak:      { label: 'Needs work', badge: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400',     icon: '🎯' },
-  improving: { label: 'Improving',  badge: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400', icon: '📈' },
-  strong:    { label: 'Strong',     badge: 'bg-green-50 text-green-600 dark:bg-green-950/40 dark:text-green-400', icon: '✅' },
-  untested:  { label: 'New',        badge: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400', icon: '📖' },
-}
+// ── Subject card — full dark mode support ─────────────────────────────────────
+const SubjectCard = memo(function SubjectCard({ subject, pct, mastery, completed, total, isDark }) {
+  const s = getSubjectStyle(subject.name)
 
-// ─── Study Plan Preview — fetches real plan data ───────────────────────────────
-const StudyPlanPreview = memo(function StudyPlanPreview() {
-  const [items,    setItems]    = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [hasAny,   setHasAny]   = useState(false)
+  const headerBg    = isDark ? s.darkBg   : s.bg
+  const nameColor   = isDark ? s.darkText : s.text
+  const iconBg      = isDark ? `${s.accent}22` : `${s.accent}18`
+  const footerBg    = isDark ? '#1f2937'  : '#ffffff'
+  const trackColor  = isDark ? '#374151'  : '#f1f5f9'
+  const borderColor = isDark ? `${s.accent}30` : `${s.accent}25`
+  const pctColor    = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : isDark ? '#6b7280' : '#9ca3af'
+  const metaColor   = isDark ? '#6b7280' : '#9ca3af'
 
-  useEffect(() => {
-    fetch('/api/student/study-plan')
-      .then(r => r.json())
-      .then(data => {
-        const allItems = data.items ?? []
-        setHasAny(data.hasAnyAttempts ?? allItems.length > 0)
-
-        // Cross-subject interleave: pick top 2 weak/untested, one per subject
-        const bySubject = {}
-        allItems.forEach(item => {
-          if (!bySubject[item.subjectId]) bySubject[item.subjectId] = []
-          bySubject[item.subjectId].push(item)
-        })
-
-        // Sort each subject's items: weak first, then improving, then untested
-        const order = { weak: 0, improving: 1, untested: 2, strong: 3 }
-        Object.values(bySubject).forEach(arr =>
-          arr.sort((a, b) => {
-            const od = (order[a.status] ?? 2) - (order[b.status] ?? 2)
-            return od !== 0 ? od : a.accuracyPct - b.accuracyPct
-          })
-        )
-
-        // Round-robin across subjects, max 4 items
-        const result = []
-        const subjectIds = Object.keys(bySubject)
-        let round = 0
-        while (result.length < 4 && round < 10) {
-          let added = false
-          for (const sid of subjectIds) {
-            if (result.length >= 4) break
-            if (bySubject[sid][round]) {
-              result.push(bySubject[sid][round])
-              added = true
-            }
-          }
-          if (!added) break
-          round++
-        }
-
-        setItems(result)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="bg-card rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-5 pt-4 pb-3 border-b border-default">
-          <div className="h-4 w-32 bg-subtle rounded animate-pulse" />
-          <div className="h-3 w-48 bg-subtle rounded animate-pulse mt-1.5" />
-        </div>
-        <div className="divide-y divide-default">
-          {[1, 2].map(i => (
-            <div key={i} className="px-5 py-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-subtle animate-pulse flex-shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-3 w-16 bg-subtle rounded animate-pulse" />
-                <div className="h-4 w-48 bg-subtle rounded animate-pulse" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-card rounded-2xl shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-default">
-        <div>
-          <p className="text-sm font-black text-primary">Study Plan</p>
-          <p className="text-xs text-secondary mt-0.5">
-            {items.length > 0
-              ? `${items.length} topic${items.length !== 1 ? 's' : ''} to work on`
-              : 'Take a diagnostic to build your plan'}
-          </p>
-        </div>
-        <Link
-          href="/student/study-plan"
-          className="text-xs font-bold text-indigo-500 dark:text-indigo-400 hover:underline"
-        >
-          See all →
-        </Link>
-      </div>
-
-      {/* Empty state */}
-      {!hasAny || items.length === 0 ? (
-        <div className="px-5 py-6 text-center space-y-3">
-          <div className="text-3xl">🎯</div>
-          <div>
-            <p className="text-sm font-bold text-primary">No study plan yet</p>
-            <p className="text-xs text-secondary mt-1 leading-relaxed max-w-[200px] mx-auto">
-              Take the diagnostic test so we can show you what to focus on.
-            </p>
-          </div>
-          <Link
-            href="/diagnostic"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors"
-          >
-            Take diagnostic →
-          </Link>
-        </div>
-      ) : (
-        /* Topic rows */
-        <div className="divide-y divide-default">
-          {items.map((item, idx) => {
-            const color  = getSubjectColor(item.subjectName ?? '')
-            const cfg    = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.untested
-            const pct    = item.accuracyPct ?? 0
-
-            return (
-              <Link
-                key={item.topicId ?? idx}
-                href={`/student/study-plan/${item.topicId}`}
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem('study_plan_topic', JSON.stringify({
-                      topicId:        item.topicId,
-                      topicName:      item.topicName,
-                      subjectName:    item.subjectName,
-                      subjectId:      item.subjectId,
-                      examType:       item.examType ?? 'WAEC',
-                      attempts:       item.attemptCount ?? 0,
-                      correct:        Math.round((pct / 100) * (item.attemptCount ?? 0)),
-                      insightMessage: item.insightMessage,
-                    }))
-                  } catch {}
-                }}
-                className="flex items-center gap-3 px-5 py-3.5 hover:bg-subtle transition-colors group"
-              >
-                {/* Subject colour bubble with rank */}
-                <div className={`w-9 h-9 rounded-xl ${color.bg} flex items-center justify-center flex-shrink-0 flex-none`}>
-                  <span className={`text-xs font-black ${color.text}`}>{idx + 1}</span>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  {/* Subject + status badges */}
-                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${color.bg} ${color.text}`}>
-                      {item.subjectName}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                      {cfg.icon} {cfg.label}
-                    </span>
-                  </div>
-                  {/* Topic name */}
-                  <p className="text-sm font-bold text-primary truncate leading-snug">
-                    {item.topicName}
-                  </p>
-                </div>
-
-                {/* Accuracy + chevron */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {item.attemptCount > 0 && (
-                    <span className={`text-xs font-black tabular-nums ${
-                      pct >= 70 ? 'text-green-600 dark:text-green-400'
-                      : pct >= 50 ? 'text-amber-500 dark:text-amber-400'
-                      : 'text-red-500 dark:text-red-400'
-                    }`}>
-                      {pct}%
-                    </span>
-                  )}
-                  <svg
-                    className="w-4 h-4 text-tertiary group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-                  </svg>
-                </div>
-              </Link>
-            )
-          })}
-
-          {/* Footer */}
-          <Link
-            href="/student/study-plan"
-            className="flex items-center justify-center gap-1 px-5 py-3 text-xs font-black text-indigo-600 dark:text-indigo-400 hover:bg-subtle transition-colors"
-          >
-            View full study plan
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-            </svg>
-          </Link>
-        </div>
-      )}
-    </div>
-  )
-})
-
-// ─── Subject card ──────────────────────────────────────────────────────────────
-const SubjectCard = memo(function SubjectCard({ subject, pct, mastery, completed, total }) {
-  const color = getSubjectColor(subject.name)
   return (
     <Link
       href={`/student/subjects/${subject.slug}`}
-      className="block rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] bg-card"
+      className="block rounded-2xl overflow-hidden active:scale-[0.97] transition-all"
+      style={{ border: `1.5px solid ${borderColor}`, boxShadow: `0 2px 8px ${s.accent}15` }}
     >
-      <div className={`${color.bg} px-4 pt-4 pb-3`}>
-        <div className="flex items-start justify-between mb-2.5">
-          <div className="w-9 h-9 rounded-xl bg-card/30 flex items-center justify-center flex-shrink-0">
-            <SubjectIcon name={subject.name} className={`w-5 h-5 ${color.text}`} />
+      {/* Coloured top band */}
+      <div style={{ background: headerBg, padding: '14px 14px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: iconBg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <SubjectIcon name={subject.name} color={nameColor} size={18} />
           </div>
-          <span className="text-sm">{mastery.emoji}</span>
+          <span style={{ fontSize: 16 }}>{mastery.emoji}</span>
         </div>
-        <p className={`text-sm font-black ${color.text} leading-snug`}>{subject.name}</p>
+        <p style={{ fontSize: 13, fontWeight: 900, color: nameColor, lineHeight: 1.3 }}>{subject.name}</p>
       </div>
-      <div className="px-4 py-2.5 bg-card">
-        <div className="h-1.5 bg-subtle rounded-full overflow-hidden">
-          <div
-            className={`h-full ${color.accent} rounded-full transition-all duration-700`}
-            style={{ width: `${pct}%` }}
-          />
+
+      {/* Progress footer */}
+      <div style={{ background: footerBg, padding: '10px 14px 12px' }}>
+        <div style={{ height: 5, background: trackColor, borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+          <div style={{ height: '100%', borderRadius: 99, background: s.accent, width: `${pct}%`, transition: 'width 0.7s ease' }} />
         </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <p className="text-xs text-tertiary">{completed}/{total} topics</p>
-          <p className={`text-xs font-black ${
-            pct >= 70 ? 'text-green-600 dark:text-green-400' :
-            pct >= 40 ? 'text-amber-500 dark:text-amber-400' :
-            'text-tertiary'
-          }`}>{pct}%</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: metaColor }}>{completed}/{total} topics</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: pctColor }}>{pct}%</span>
         </div>
       </div>
     </Link>
   )
 })
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function LearnPage() {
   const router   = useRouter()
+  const isDark   = useIsDark()
   const supabase = useMemo(() => createClient(), [])
 
-  const [profile,        setProfile]       = useState(null)
-  const [subjectList,    setSubjectList]   = useState([])
-  const [completedIds,   setCompletedIds]  = useState(new Set())
-  const [learningPaths,  setLearningPaths] = useState([])
-  const [subtopicMap,    setSubtopicMap]   = useState({})
-  const [loading,        setLoading]       = useState(true)
-  const [showGoalModal,  setShowGoalModal] = useState(false)
+  const [profile,       setProfile]      = useState(null)
+  const [subjectList,   setSubjectList]  = useState([])
+  const [completedIds,  setCompletedIds] = useState(new Set())
+  const [learningPaths, setLearningPaths] = useState([])
+  const [loading,       setLoading]      = useState(true)
+  const [showGoalModal, setShowGoalModal] = useState(false)
 
   useEffect(() => { init() }, [])
 
@@ -321,29 +145,10 @@ export default function LearnPage() {
     setProfile(prof)
     setCompletedIds(new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id)))
     setLearningPaths(paths ?? [])
-
-    const subjects = (paths ?? []).map(p => p.subjects).filter(Boolean)
-    setSubjectList(subjects)
-
-    // Fetch subtopic details for subject progress cards
-    const allIds = [...new Set((paths ?? []).flatMap(p => p.ordered_subtopic_ids ?? []))]
-    if (allIds.length) {
-      const batches = []
-      for (let i = 0; i < allIds.length; i += 200) batches.push(allIds.slice(i, i + 200))
-      let allSubs = []
-      await Promise.all(batches.map(b =>
-        supabase.from('subtopics').select('id, name, slug, lesson_status').in('id', b)
-          .then(({ data }) => { if (data) allSubs = allSubs.concat(data) })
-      ))
-      const sMap = {}
-      allSubs.forEach(s => { sMap[s.id] = s })
-      setSubtopicMap(sMap)
-    }
-
+    setSubjectList((paths ?? []).map(p => p.subjects).filter(Boolean))
     setLoading(false)
   }
 
-  // Subject progress % for subject cards
   const subjectProgress = useMemo(() => {
     return subjectList.map(subject => {
       const path      = learningPaths.find(p => p.subject_id === subject.id)
@@ -351,7 +156,7 @@ export default function LearnPage() {
       const total     = ids.length
       const completed = ids.filter(id => completedIds.has(id)).length
       const pct       = total > 0 ? Math.round((completed / total) * 100) : 0
-      return { subject, path, pct, completed, total, mastery: getMasteryLevel(pct) }
+      return { subject, pct, mastery: getMasteryLevel(pct), completed, total }
     })
   }, [subjectList, learningPaths, completedIds])
 
@@ -362,7 +167,7 @@ export default function LearnPage() {
   return (
     <div className="space-y-6 pb-28">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-black text-primary leading-tight">
@@ -382,15 +187,17 @@ export default function LearnPage() {
         </button>
       </div>
 
-      {/* ── 1. Study Plan — the focal point ──────────────────────────────────── */}
+      {/* Study Plan — shared widget from StudyPlanCard */}
       <StudyPlanPreview />
 
-      {/* ── 2. Your Subjects ─────────────────────────────────────────────────── */}
+      {/* Subject cards */}
       {subjectProgress.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-black text-primary">Your Subjects</p>
-            <span className="text-xs text-tertiary">{subjectProgress.length} subject{subjectProgress.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-tertiary">
+              {subjectProgress.length} subject{subjectProgress.length !== 1 ? 's' : ''}
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {subjectProgress.map(({ subject, pct, mastery, completed, total }) => (
@@ -401,13 +208,14 @@ export default function LearnPage() {
                 mastery={mastery}
                 completed={completed}
                 total={total}
+                isDark={isDark}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* ── 3. No subjects yet ────────────────────────────────────────────────── */}
+      {/* No subjects yet */}
       {subjectProgress.length === 0 && !loading && (
         <div className="bg-card rounded-2xl border border-default p-6 text-center space-y-3">
           <div className="text-3xl">📚</div>
@@ -426,7 +234,7 @@ export default function LearnPage() {
         </div>
       )}
 
-      {/* ── Goal modal ─────────────────────────────────────────────────────────── */}
+      {/* Goal modal */}
       {showGoalModal && (
         <Suspense fallback={null}>
           <GoalModal

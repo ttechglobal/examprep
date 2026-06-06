@@ -4,6 +4,16 @@
 // replaced with CSS token classes (bg-card, bg-base, bg-subtle, text-primary,
 // text-secondary, text-tertiary, border-default).
 // Semantic status colours (green, red, amber) kept — they're intentional.
+//
+// TAILWIND v4 TRANSPARENT COLOUR FIX:
+// Subject card buttons and the selected-subject banner both used dynamic classes
+// like ${c.bg} and ${c.text} from getSubjectColor(). Tailwind v4 cannot scan
+// these at build time so they rendered as transparent/invisible.
+//
+// Fix: replace dynamic className strings with inline style for background and
+// colour values on the subject picker grid and the mode-step subject banner.
+// The SUBJECT_STYLES map provides explicit hex/rgb values that work without
+// any safelist, guaranteed in all environments.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getSubjectColor } from '@/lib/theme'
@@ -15,6 +25,29 @@ const WAEC_SUBJECTS = [
   'Economics', 'Government', 'Literature in English', 'Geography',
   'Agricultural Science', 'Further Mathematics', 'Commerce',
 ]
+
+// ── Subject inline styles — explicit values, no Tailwind dynamic class risk ──
+// These mirror the SUBJECT_COLORS in lib/theme.js but as concrete CSS values
+// so they work reliably regardless of Tailwind's build-time scanner.
+const SUBJECT_STYLES = {
+  'Mathematics':          { bg: '#eff6ff', color: '#1d4ed8', darkBg: 'rgba(23,37,84,0.4)', darkColor: '#93c5fd' },
+  'English Language':     { bg: '#faf5ff', color: '#7e22ce', darkBg: 'rgba(59,7,100,0.4)',  darkColor: '#d8b4fe' },
+  'Physics':              { bg: '#ecfeff', color: '#0e7490', darkBg: 'rgba(8,51,68,0.4)',   darkColor: '#67e8f9' },
+  'Chemistry':            { bg: '#f0fdf4', color: '#15803d', darkBg: 'rgba(5,46,22,0.4)',   darkColor: '#86efac' },
+  'Biology':              { bg: '#ecfdf5', color: '#047857', darkBg: 'rgba(2,44,34,0.4)',   darkColor: '#6ee7b7' },
+  'Economics':            { bg: '#fffbeb', color: '#b45309', darkBg: 'rgba(69,26,3,0.4)',   darkColor: '#fcd34d' },
+  'Government':           { bg: '#fef2f2', color: '#b91c1c', darkBg: 'rgba(69,10,10,0.4)', darkColor: '#fca5a5' },
+  'Literature in English':{ bg: '#fdf2f8', color: '#9d174d', darkBg: 'rgba(74,4,78,0.4)',  darkColor: '#f9a8d4' },
+  'Geography':            { bg: '#f0fdfa', color: '#0f766e', darkBg: 'rgba(4,47,46,0.4)',   darkColor: '#5eead4' },
+  'Agricultural Science': { bg: '#f7fee7', color: '#4d7c0f', darkBg: 'rgba(26,46,5,0.4)',  darkColor: '#bef264' },
+  'Further Mathematics':  { bg: '#f0f9ff', color: '#0369a1', darkBg: 'rgba(8,47,73,0.4)',  darkColor: '#7dd3fc' },
+  'Commerce':             { bg: '#eef2ff', color: '#4338ca', darkBg: 'rgba(30,27,75,0.4)', darkColor: '#a5b4fc' },
+  'default':              { bg: '#eef2ff', color: '#4338ca', darkBg: 'rgba(30,27,75,0.4)', darkColor: '#a5b4fc' },
+}
+
+function getSubjectStyle(name) {
+  return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default
+}
 
 // ── Score ring ────────────────────────────────────────────────────────────────
 function ScoreRing({ pct }) {
@@ -73,19 +106,19 @@ function ConfirmDialog({ answered, total, onConfirm, onCancel }) {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 function Session({ subject, config, questions, onDone }) {
-  const [index, setIndex]   = useState(0)
-  const [answers, setAnswers] = useState({})
-  const [phase, setPhase]   = useState('quiz')
+  const [index,     setIndex]     = useState(0)
+  const [answers,   setAnswers]   = useState({})
+  const [phase,     setPhase]     = useState('quiz')
   const [reviewIdx, setReviewIdx] = useState(0)
 
-  const isExamMode   = config?.mode === 'exam'
-  const revealMode   = config?.revealMode ?? 'immediate'
-  const total        = questions.length
-  const currentQ     = questions[index]
-  const currentAns   = answers[index]
-  const isRevealed   = isExamMode ? false : (revealMode === 'immediate' ? !!currentAns : false)
+  const isExamMode    = config?.mode === 'exam'
+  const revealMode    = config?.revealMode ?? 'immediate'
+  const total         = questions.length
+  const currentQ      = questions[index]
+  const currentAns    = answers[index]
+  const isRevealed    = isExamMode ? false : (revealMode === 'immediate' ? !!currentAns : false)
   const answeredCount = Object.keys(answers).length
-  const color        = getSubjectColor(subject)
+  const color         = getSubjectColor(subject)
 
   // Timer
   const timerRef  = useRef(null)
@@ -166,7 +199,13 @@ function Session({ subject, config, questions, onDone }) {
             <button onClick={onDone} className="text-xs font-bold text-indigo-600 hover:opacity-75">Done →</button>
           </div>
           {q.subject_name && (
-            <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${getSubjectColor(q.subject_name).bg} ${getSubjectColor(q.subject_name).text}`}>
+            <span
+              className="inline-block text-xs font-bold px-2.5 py-1 rounded-full"
+              style={(() => {
+                const s = getSubjectStyle(q.subject_name)
+                return { backgroundColor: s.bg, color: s.color }
+              })()}
+            >
               {q.subject_name}
             </span>
           )}
@@ -307,7 +346,9 @@ export default function PublicPracticePage() {
     )
   }
 
-  const color = subject ? getSubjectColor(subject) : null
+  // Inline style for the selected-subject banner — needed because the subject
+  // name is dynamic and Tailwind v4 cannot generate the class at build time.
+  const subjectStyle = subject ? getSubjectStyle(subject) : null
 
   return (
     <div className="min-h-screen bg-base">
@@ -333,7 +374,7 @@ export default function PublicPracticePage() {
           </button>
         )}
 
-        {/* Step 1: Subject */}
+        {/* Step 1: Subject picker */}
         {step === 'subject' && (
           <>
             <div className="text-center space-y-1.5">
@@ -342,11 +383,29 @@ export default function PublicPracticePage() {
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               {WAEC_SUBJECTS.map(sub => {
-                const c = getSubjectColor(sub)
+                /*
+                  FIX: was className={`... ${c.bg}`} with <span className={c.text}>.
+                  Both c.bg and c.text are dynamic strings assembled at runtime —
+                  Tailwind v4 never sees them so no CSS is generated and the cards
+                  render with transparent backgrounds and invisible text.
+
+                  Solution: use inline style with explicit CSS values from
+                  SUBJECT_STYLES. Works in all environments with no safelist needed.
+                */
+                const s = getSubjectStyle(sub)
                 return (
-                  <button key={sub} onClick={() => { setSubject(sub); setStep('mode') }}
-                    className={`flex items-center px-4 py-3.5 rounded-2xl text-left transition-all hover:shadow-sm active:scale-[0.97] ${c.bg}`}>
-                    <span className={`text-sm font-black ${c.text} leading-snug`}>{sub}</span>
+                  <button
+                    key={sub}
+                    onClick={() => { setSubject(sub); setStep('mode') }}
+                    style={{ backgroundColor: s.bg }}
+                    className="flex items-center px-4 py-3.5 rounded-2xl text-left transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.97]"
+                  >
+                    <span
+                      style={{ color: s.color }}
+                      className="text-sm font-black leading-snug"
+                    >
+                      {sub}
+                    </span>
                   </button>
                 )
               })}
@@ -359,11 +418,19 @@ export default function PublicPracticePage() {
         )}
 
         {/* Step 2: Mode + config */}
-        {step === 'mode' && subject && (
+        {step === 'mode' && subject && subjectStyle && (
           <div className="space-y-4">
-            <div className={`flex items-center justify-between ${color.bg} rounded-2xl px-4 py-3`}>
-              <p className={`text-base font-black ${color.text}`}>{subject}</p>
-              <span className={`text-xs font-bold ${color.text} opacity-70`}>WAEC</span>
+            {/*
+              FIX: was className={`... ${color.bg}`} with ${color.text} text.
+              Same dynamic class problem as the subject grid above.
+              Replaced with inline style using explicit CSS values.
+            */}
+            <div
+              style={{ backgroundColor: subjectStyle.bg }}
+              className="flex items-center justify-between rounded-2xl px-4 py-3"
+            >
+              <p style={{ color: subjectStyle.color }} className="text-base font-black">{subject}</p>
+              <span style={{ color: subjectStyle.color }} className="text-xs font-bold opacity-70">WAEC</span>
             </div>
 
             {error && (

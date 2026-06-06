@@ -1,5 +1,7 @@
 // src/app/api/student/study-plan/route.js
-// VERSION: 2025-STUDY-PLAN-FIX
+// FIX: items now include subjectName field.
+// Previously items only had subjectId — subjectName was never set,
+// so subject badges rendered nothing on every topic card.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -27,13 +29,15 @@ export async function GET() {
 
   const enrolledSubjects = (paths ?? []).map(p => p.subjects).filter(Boolean)
 
-  console.log('[study-plan] enrolled subjects:', enrolledSubjects.map(s => s.name))
-
   if (!enrolledSubjects.length) {
     return NextResponse.json({ subjects: [], items: [], hasAnyAttempts: false })
   }
 
   const subjectIds = enrolledSubjects.map(s => s.id)
+
+  // Build a lookup: subjectId → subjectName (the fix)
+  const subjectNameMap = {}
+  enrolledSubjects.forEach(s => { subjectNameMap[s.id] = s.name })
 
   // Get all attempts with topic_id
   const { data: rawAttempts, error: attErr } = await db
@@ -43,18 +47,12 @@ export async function GET() {
     .in('subject_id', subjectIds)
     .not('topic_id', 'is', null)
 
-  console.log('[study-plan] rawAttempts with topic_id:', rawAttempts?.length, 'error:', attErr?.message)
-
-  // Also check total attempts (including those without topic_id) for debugging
+  // Total attempts for hasAnyAttempts flag
   const { data: allAttempts } = await db
     .from('question_attempts')
     .select('topic_id, subject_id')
     .eq('student_id', user.id)
     .in('subject_id', subjectIds)
-
-  console.log('[study-plan] ALL attempts (any topic_id):', allAttempts?.length)
-  console.log('[study-plan] Attempts WITH topic_id:', allAttempts?.filter(a => a.topic_id)?.length)
-  console.log('[study-plan] Attempts WITHOUT topic_id:', allAttempts?.filter(a => !a.topic_id)?.length)
 
   const hasAnyAttempts = (allAttempts?.length ?? 0) > 0
 
@@ -66,8 +64,6 @@ export async function GET() {
     if (a.is_correct) accMap[a.topic_id].correct++
   })
 
-  console.log('[study-plan] topics with accuracy data:', Object.keys(accMap).length)
-
   // Get all topics for enrolled subjects
   const { data: allTopics } = await db
     .from('topics')
@@ -75,7 +71,7 @@ export async function GET() {
     .in('subject_id', subjectIds)
     .order('order_index', { ascending: true })
 
-  // Build plan items — only attempted, not yet mastered
+  // Build plan items — only attempted topics, not yet mastered
   const items = []
   for (const topic of (allTopics ?? [])) {
     const acc = accMap[topic.id]
@@ -90,10 +86,17 @@ export async function GET() {
       : "You're close — a bit more practice and you'll have this"
 
     items.push({
-      id: topic.id, subjectId: topic.subject_id,
-      topicId: topic.id, topicName: topic.name, topicSlug: topic.slug,
-      status, insightMessage, accuracyPct: pct,
-      attemptCount: acc.total, source: 'weak',
+      id:             topic.id,
+      subjectId:      topic.subject_id,
+      subjectName:    subjectNameMap[topic.subject_id] ?? '', // ← THE FIX
+      topicId:        topic.id,
+      topicName:      topic.name,
+      topicSlug:      topic.slug,
+      status,
+      insightMessage,
+      accuracyPct:    pct,
+      attemptCount:   acc.total,
+      source:         'weak',
     })
   }
 
@@ -103,12 +106,12 @@ export async function GET() {
   items.forEach(i => { itemCountBySubject[i.subjectId] = (itemCountBySubject[i.subjectId] ?? 0) + 1 })
 
   const subjects = enrolledSubjects.map(s => ({
-    id: s.id, name: s.name, slug: s.slug,
-    itemCount: itemCountBySubject[s.id] ?? 0,
+    id:              s.id,
+    name:            s.name,
+    slug:            s.slug,
+    itemCount:       itemCountBySubject[s.id] ?? 0,
     needsDiagnostic: !hasAnyAttempts,
   }))
-
-  console.log('[study-plan] returning', items.length, 'items across', subjects.length, 'subjects')
 
   return NextResponse.json({ subjects, items, hasAnyAttempts })
 }
