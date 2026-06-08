@@ -78,6 +78,7 @@ export async function GET(request) {
   if (hasImage === 'true') query = query.eq('has_image',   true)
   if (untagged === 'true') query = query.is('subtopic_id', null)
   if (source)              query = query.eq('source',      source)
+  if (searchParams.get('year')) query = query.eq('year', searchParams.get('year'))
   if (search)              query = query.ilike('question_text', `%${search}%`)
 
   // missing_image: questions that mention an image in text but have no image_url

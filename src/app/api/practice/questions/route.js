@@ -1,11 +1,39 @@
 // src/app/api/practice/questions/route.js
 // Updated: exam_type → exam_types[] (contains filter via @>)
+//
+// FIX: Added fallback for questions that still have the old single-value
+// exam_type column (pre-migration rows). If the exam_types[] contains filter
+// returns an error (column doesn't exist) OR returns no results, we retry
+// using the legacy .in('exam_type', [...]) filter so the public /practice
+// page never shows "No questions available" due to a DB migration state.
+// This mirrors the same pattern already used in api/admin/questions/coverage.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sequenceQuestions, fetchCoreTopicMap, fetchStudentAccuracy } from '@/lib/topicSequencer'
 import { applyExamFilter, normaliseExamType } from '@/lib/examFilter'
+
+// ── Helper: fetch questions with exam_types[] fallback ────────────────────────
+// Tries the new exam_types @> filter first. If that returns an error (column
+// doesn't exist yet) OR returns empty when we know there should be questions,
+// retries with the legacy exam_type .in() filter.
+async function fetchQuestionsWithFallback(baseQuery, examType) {
+  const { data, error } = await applyExamFilter(baseQuery, examType)
+
+  // If the contains filter errored (column missing on pre-migration DB),
+  // fall back to the old single-value exam_type column.
+  if (error) {
+    const legacyFilter = examType === 'BOTH'
+      ? ['WAEC', 'JAMB', 'BOTH']
+      : [examType, 'BOTH']
+    // baseQuery is already consumed, so we return null here — callers
+    // must re-build the query for the fallback path (see usage below).
+    return { data: null, error, needsFallback: true, legacyFilter }
+  }
+
+  return { data, error: null, needsFallback: false }
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
@@ -46,6 +74,11 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Subjects not found in database' }, { status: 404 })
   }
 
+  // Determine the legacy exam_type values to match (used in fallback queries)
+  const legacyExamFilter = examType === 'BOTH'
+    ? ['WAEC', 'JAMB', 'BOTH']
+    : [examType, 'BOTH']
+
   const allQuestions = []
 
   // ── BRANCH A: Exam simulation ──────────────────────────────────────────────
@@ -53,18 +86,31 @@ export async function GET(request) {
     const perSubject = examType === 'JAMB' ? 40 : 50
 
     for (const subject of subjectRows) {
-      const baseQuery = service
+      const selectClause = `
+        id, question_text, options, correct_answer, explanation,
+        difficulty, subtopic_id, topic_id, subject_id,
+        subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
+      `
+      let query = service
         .from('questions')
-        .select(`
-          id, question_text, options, correct_answer, explanation,
-          difficulty, subtopic_id, topic_id, subject_id,
-          subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
-        `)
+        .select(selectClause)
         .eq('subject_id', subject.id)
         .eq('is_active', true)
         .limit(perSubject + 20)
 
-      const { data: questions } = await applyExamFilter(baseQuery, examType)
+      let { data: questions, error } = await applyExamFilter(query, examType)
+
+      // Fallback to legacy exam_type column if new column not available or errored
+      if (error || !questions?.length) {
+        const fallback = await service
+          .from('questions')
+          .select(selectClause)
+          .eq('subject_id', subject.id)
+          .eq('is_active', true)
+          .in('exam_type', legacyExamFilter)
+          .limit(perSubject + 20)
+        questions = fallback.data ?? []
+      }
 
       if (questions?.length) {
         const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, perSubject)
@@ -83,19 +129,32 @@ export async function GET(request) {
   // ── BRANCH B: Topic-specific practice ─────────────────────────────────────
   else if (topicId) {
     const subject = subjectRows[0]
+    const selectClause = `
+      id, question_text, options, correct_answer, explanation,
+      difficulty, subtopic_id, topic_id, subject_id,
+      subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
+    `
 
-    const baseQuery = service
+    let query = service
       .from('questions')
-      .select(`
-        id, question_text, options, correct_answer, explanation,
-        difficulty, subtopic_id, topic_id, subject_id,
-        subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
-      `)
+      .select(selectClause)
       .eq('topic_id', topicId)
       .eq('is_active', true)
       .limit(count + 20)
 
-    const { data: questions } = await applyExamFilter(baseQuery, examType)
+    let { data: questions, error } = await applyExamFilter(query, examType)
+
+    // Fallback
+    if (error || !questions?.length) {
+      const fallback = await service
+        .from('questions')
+        .select(selectClause)
+        .eq('topic_id', topicId)
+        .eq('is_active', true)
+        .in('exam_type', legacyExamFilter)
+        .limit(count + 20)
+      questions = fallback.data ?? []
+    }
 
     if (questions?.length) {
       const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, count)
@@ -128,19 +187,32 @@ export async function GET(request) {
 
     for (const subject of subjectRows) {
       const fetchLimit = Math.max(perSubject * 5, 60)
+      const selectClause = `
+        id, question_text, options, correct_answer, explanation,
+        difficulty, subtopic_id, topic_id, subject_id,
+        subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
+      `
 
-      const baseQuery = service
+      let query = service
         .from('questions')
-        .select(`
-          id, question_text, options, correct_answer, explanation,
-          difficulty, subtopic_id, topic_id, subject_id,
-          subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
-        `)
+        .select(selectClause)
         .eq('subject_id', subject.id)
         .eq('is_active', true)
         .limit(fetchLimit)
 
-      const { data: rawQuestions } = await applyExamFilter(baseQuery, examType)
+      let { data: rawQuestions, error } = await applyExamFilter(query, examType)
+
+      // Fallback: exam_types[] column missing or not yet populated
+      if (error || !rawQuestions?.length) {
+        const fallback = await service
+          .from('questions')
+          .select(selectClause)
+          .eq('subject_id', subject.id)
+          .eq('is_active', true)
+          .in('exam_type', legacyExamFilter)
+          .limit(fetchLimit)
+        rawQuestions = fallback.data ?? []
+      }
 
       if (!rawQuestions?.length) continue
 
@@ -154,7 +226,7 @@ export async function GET(request) {
       }))
 
       const coreTopicIds = coreTopicMap[subject.id] ?? []
-      const selected = sequenceQuestions(enriched, coreTopicIds, studentAcc, perSubject)
+      const selected = sequenceQuestions({ questions: enriched, coreTopicIds, studentAcc, count: perSubject })
       allQuestions.push(...selected)
     }
   }
