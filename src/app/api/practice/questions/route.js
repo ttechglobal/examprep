@@ -1,12 +1,28 @@
 // src/app/api/practice/questions/route.js
-// Updated: exam_type → exam_types[] (contains filter via @>)
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX: separates past_paper questions from ai_generated questions.
 //
-// FIX: Added fallback for questions that still have the old single-value
-// exam_type column (pre-migration rows). If the exam_types[] contains filter
-// returns an error (column doesn't exist) OR returns no results, we retry
-// using the legacy .in('exam_type', [...]) filter so the public /practice
-// page never shows "No questions available" due to a DB migration state.
-// This mirrors the same pattern already used in api/admin/questions/coverage.
+// THE BUG: every branch of this route queried the `questions` table with no
+// `source` filter, so "Past Questions" practice mode was silently serving a
+// random mix of real WAEC/JAMB past papers AND AI-generated questions, with
+// no way for the student to tell which was which. The admin side already
+// enforces this separation correctly (separate tabs, separate source filter
+// in /api/admin/questions) — this route was the one place it leaked through.
+//
+// THE FIX: a new `source` query param, defaulting to 'past_paper' (since
+// "Past Questions" is the practice page's primary mode and the historical
+// expectation). Every branch now filters by source explicitly:
+//
+//   source=past_paper    → ONLY real WAEC/JAMB past paper questions (default)
+//   source=ai_generated  → ONLY AI-generated questions
+//   source=all           → both, explicitly opted into (e.g. for "mixed
+//                           practice" if that's ever offered as its own mode)
+//
+// Each branch's fallback query (for the legacy exam_type column) ALSO
+// applies the source filter — the original bug would have re-appeared in
+// the fallback path otherwise, since that path was hand-written separately
+// from the primary query.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -14,25 +30,16 @@ import { NextResponse } from 'next/server'
 import { sequenceQuestions, fetchCoreTopicMap, fetchStudentAccuracy } from '@/lib/topicSequencer'
 import { applyExamFilter, normaliseExamType } from '@/lib/examFilter'
 
-// ── Helper: fetch questions with exam_types[] fallback ────────────────────────
-// Tries the new exam_types @> filter first. If that returns an error (column
-// doesn't exist yet) OR returns empty when we know there should be questions,
-// retries with the legacy exam_type .in() filter.
-async function fetchQuestionsWithFallback(baseQuery, examType) {
-  const { data, error } = await applyExamFilter(baseQuery, examType)
+const VALID_SOURCES = ['past_paper', 'ai_generated', 'all']
 
-  // If the contains filter errored (column missing on pre-migration DB),
-  // fall back to the old single-value exam_type column.
-  if (error) {
-    const legacyFilter = examType === 'BOTH'
-      ? ['WAEC', 'JAMB', 'BOTH']
-      : [examType, 'BOTH']
-    // baseQuery is already consumed, so we return null here — callers
-    // must re-build the query for the fallback path (see usage below).
-    return { data: null, error, needsFallback: true, legacyFilter }
-  }
+function normaliseSource(raw) {
+  return VALID_SOURCES.includes(raw) ? raw : 'past_paper'
+}
 
-  return { data, error: null, needsFallback: false }
+// Applies the source filter to a query, unless source is 'all'
+function applySourceFilter(query, source) {
+  if (source === 'all') return query
+  return query.eq('source', source)
 }
 
 export async function GET(request) {
@@ -42,6 +49,7 @@ export async function GET(request) {
   const topicId      = searchParams.get('topic_id')
   const mode         = searchParams.get('mode') ?? 'practice'
   const subjectNames = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
+  const source       = normaliseSource(searchParams.get('source'))
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -74,7 +82,6 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Subjects not found in database' }, { status: 404 })
   }
 
-  // Determine the legacy exam_type values to match (used in fallback queries)
   const legacyExamFilter = examType === 'BOTH'
     ? ['WAEC', 'JAMB', 'BOTH']
     : [examType, 'BOTH']
@@ -82,13 +89,17 @@ export async function GET(request) {
   const allQuestions = []
 
   // ── BRANCH A: Exam simulation ──────────────────────────────────────────────
+  // Exam mode should ALWAYS be real past papers, regardless of the `source`
+  // param the caller passed — a mock exam built from AI-generated questions
+  // would misrepresent the real exam's difficulty/style. Hard-coded here.
   if (mode === 'exam') {
+    const examSource = 'past_paper'
     const perSubject = examType === 'JAMB' ? 40 : 50
 
     for (const subject of subjectRows) {
       const selectClause = `
         id, question_text, options, correct_answer, explanation,
-        difficulty, subtopic_id, topic_id, subject_id,
+        difficulty, subtopic_id, topic_id, subject_id, source,
         subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
       `
       let query = service
@@ -96,17 +107,18 @@ export async function GET(request) {
         .select(selectClause)
         .eq('subject_id', subject.id)
         .eq('is_active', true)
+        .eq('source', examSource)
         .limit(perSubject + 20)
 
       let { data: questions, error } = await applyExamFilter(query, examType)
 
-      // Fallback to legacy exam_type column if new column not available or errored
       if (error || !questions?.length) {
         const fallback = await service
           .from('questions')
           .select(selectClause)
           .eq('subject_id', subject.id)
           .eq('is_active', true)
+          .eq('source', examSource)
           .in('exam_type', legacyExamFilter)
           .limit(perSubject + 20)
         questions = fallback.data ?? []
@@ -131,7 +143,7 @@ export async function GET(request) {
     const subject = subjectRows[0]
     const selectClause = `
       id, question_text, options, correct_answer, explanation,
-      difficulty, subtopic_id, topic_id, subject_id,
+      difficulty, subtopic_id, topic_id, subject_id, source,
       subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
     `
 
@@ -141,19 +153,21 @@ export async function GET(request) {
       .eq('topic_id', topicId)
       .eq('is_active', true)
       .limit(count + 20)
+    query = applySourceFilter(query, source)
 
     let { data: questions, error } = await applyExamFilter(query, examType)
 
-    // Fallback
     if (error || !questions?.length) {
-      const fallback = await service
+      let fallback = service
         .from('questions')
         .select(selectClause)
         .eq('topic_id', topicId)
         .eq('is_active', true)
         .in('exam_type', legacyExamFilter)
         .limit(count + 20)
-      questions = fallback.data ?? []
+      fallback = applySourceFilter(fallback, source)
+      const fb = await fallback
+      questions = fb.data ?? []
     }
 
     if (questions?.length) {
@@ -189,7 +203,7 @@ export async function GET(request) {
       const fetchLimit = Math.max(perSubject * 5, 60)
       const selectClause = `
         id, question_text, options, correct_answer, explanation,
-        difficulty, subtopic_id, topic_id, subject_id,
+        difficulty, subtopic_id, topic_id, subject_id, source,
         subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
       `
 
@@ -199,19 +213,21 @@ export async function GET(request) {
         .eq('subject_id', subject.id)
         .eq('is_active', true)
         .limit(fetchLimit)
+      query = applySourceFilter(query, source)
 
       let { data: rawQuestions, error } = await applyExamFilter(query, examType)
 
-      // Fallback: exam_types[] column missing or not yet populated
       if (error || !rawQuestions?.length) {
-        const fallback = await service
+        let fallback = service
           .from('questions')
           .select(selectClause)
           .eq('subject_id', subject.id)
           .eq('is_active', true)
           .in('exam_type', legacyExamFilter)
           .limit(fetchLimit)
-        rawQuestions = fallback.data ?? []
+        fallback = applySourceFilter(fallback, source)
+        const fb = await fallback
+        rawQuestions = fb.data ?? []
       }
 
       if (!rawQuestions?.length) continue
@@ -231,5 +247,8 @@ export async function GET(request) {
     }
   }
 
-  return NextResponse.json({ questions: allQuestions })
+  return NextResponse.json({
+    questions: allQuestions,
+    source, // echoed back so the client can confirm/display what it got
+  })
 }

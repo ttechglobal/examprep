@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { MATH_KINGDOM_GAMES } from '@/lib/mathKingdomTheme'
 import RoomRunner from '@/components/mathKingdom/RoomRunner'
-import EquationEscapeRenderer from '@/components/mathkingdom/games/EquationEscapeRenderer'
+import EquationEscapeRenderer from '@/components/mathKingdom/games/EquationEscapeRenderer'
 
 function useIsDark() {
   const [dark, setDark] = useState(false)
