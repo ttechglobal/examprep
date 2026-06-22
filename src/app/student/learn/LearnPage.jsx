@@ -1,10 +1,20 @@
 'use client'
 // src/app/student/learn/LearnPage.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// FULL FILE — adds a "Practice your way" quick-access row (Games + Video
+// lessons) between the Study Plan preview and the Subject cards.
+//
+// Everything else is unchanged from the existing file: header, useIsDark,
+// SUBJECT_STYLES, SubjectIcon, SubjectCard, data loading, subjectProgress
+// memo, goal modal, FAB. Only addition is QuickAccessCard + GamesAndVideosRow
+// and their call site in the main return.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useMemo, memo, Suspense, lazy } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getMasteryLevel } from '@/lib/theme'
+import { getGameTypeTheme } from '@/lib/gameTheme'
 import { LearnHubSkeleton } from '@/components/ui/Skeletons'
 import { StudyPlanPreview } from '@/components/ui/StudyPlanCard'
 import Link from 'next/link'
@@ -30,16 +40,16 @@ const SUBJECT_STYLES = {
   'Mathematics':           { bg: '#eff6ff', text: '#1d4ed8', accent: '#3b82f6', darkBg: '#172554', darkText: '#93c5fd' },
   'Further Mathematics':   { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9', darkBg: '#0c4a6e', darkText: '#7dd3fc' },
   'English Language':      { bg: '#faf5ff', text: '#7e22ce', accent: '#a855f7', darkBg: '#3b0764', darkText: '#d8b4fe' },
-  'Physics':               { bg: '#ecfeff', text: '#0e7490', accent: '#06b6d4', darkBg: '#083344', darkText: '#67e8f9' },
-  'Chemistry':             { bg: '#f0fdf4', text: '#15803d', accent: '#22c55e', darkBg: '#052e16', darkText: '#86efac' },
-  'Biology':               { bg: '#ecfdf5', text: '#047857', accent: '#10b981', darkBg: '#022c22', darkText: '#6ee7b7' },
-  'Economics':             { bg: '#fffbeb', text: '#b45309', accent: '#f59e0b', darkBg: '#451a03', darkText: '#fcd34d' },
-  'Government':            { bg: '#fef2f2', text: '#b91c1c', accent: '#ef4444', darkBg: '#450a0a', darkText: '#fca5a5' },
-  'Literature in English': { bg: '#fdf2f8', text: '#9d174d', accent: '#ec4899', darkBg: '#500724', darkText: '#f9a8d4' },
-  'Geography':             { bg: '#f0fdfa', text: '#0f766e', accent: '#14b8a6', darkBg: '#042f2e', darkText: '#5eead4' },
-  'Agricultural Science':  { bg: '#f7fee7', text: '#4d7c0f', accent: '#84cc16', darkBg: '#1a2e05', darkText: '#bef264' },
-  'Commerce':              { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
-  'default':               { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
+  'Physics':                { bg: '#ecfeff', text: '#0e7490', accent: '#06b6d4', darkBg: '#083344', darkText: '#67e8f9' },
+  'Chemistry':              { bg: '#f0fdf4', text: '#15803d', accent: '#22c55e', darkBg: '#052e16', darkText: '#86efac' },
+  'Biology':                { bg: '#ecfdf5', text: '#047857', accent: '#10b981', darkBg: '#022c22', darkText: '#6ee7b7' },
+  'Economics':              { bg: '#fffbeb', text: '#b45309', accent: '#f59e0b', darkBg: '#451a03', darkText: '#fcd34d' },
+  'Government':             { bg: '#fef2f2', text: '#b91c1c', accent: '#ef4444', darkBg: '#450a0a', darkText: '#fca5a5' },
+  'Literature in English':  { bg: '#fdf2f8', text: '#9d174d', accent: '#ec4899', darkBg: '#500724', darkText: '#f9a8d4' },
+  'Geography':              { bg: '#f0fdfa', text: '#0f766e', accent: '#14b8a6', darkBg: '#042f2e', darkText: '#5eead4' },
+  'Agricultural Science':   { bg: '#f7fee7', text: '#4d7c0f', accent: '#84cc16', darkBg: '#1a2e05', darkText: '#bef264' },
+  'Commerce':               { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
+  'default':                { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
 }
 function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
 
@@ -108,6 +118,75 @@ const SubjectCard = memo(function SubjectCard({ subject, pct, mastery, completed
         </div>
       </div>
     </Link>
+  )
+})
+
+// ── Quick access card — Games / Video lessons ────────────────────────────────
+// Same visual weight as SubjectCard but laid out horizontally since there
+// are only two of these, not a grid. Colour comes from gameTheme.js so the
+// "Games" card always matches the colour students see again inside the
+// Games hub itself (consistency of meaning across the app).
+const QuickAccessCard = memo(function QuickAccessCard({ href, title, subtitle, emoji, solidColor, isDark }) {
+  const cardBg     = isDark ? '#111827' : '#ffffff'
+  const cardBorder = isDark ? '#1f2937' : '#ede9e3'
+
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-2xl overflow-hidden active:scale-[0.97] transition-all"
+      style={{
+        background: cardBg,
+        border: `1.5px solid ${cardBorder}`,
+        boxShadow: isDark ? 'none' : `0 2px 8px ${solidColor}15`,
+      }}
+    >
+      <div
+        className="w-14 h-14 flex items-center justify-center flex-shrink-0 text-2xl"
+        style={{ background: solidColor }}
+      >
+        {emoji}
+      </div>
+      <div className="flex-1 py-2 pr-2 min-w-0">
+        <p className="text-sm font-black text-primary leading-snug">{title}</p>
+        <p className="text-[11px] text-secondary mt-0.5 leading-snug">{subtitle}</p>
+      </div>
+      <svg className="w-4 h-4 text-tertiary flex-shrink-0 mr-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+    </Link>
+  )
+})
+
+// ── Games & Videos row ────────────────────────────────────────────────────────
+// Sits between the Study Plan preview and Subject cards. Per product brief:
+// past questions remain the focus of the hub, but Games and Video lessons
+// should be one tap away from the hub itself, not buried inside topic pages.
+const GamesAndVideosRow = memo(function GamesAndVideosRow({ isDark }) {
+  const sortTheme  = getGameTypeTheme('sort_it')
+  const matchTheme = getGameTypeTheme('connector')
+
+  return (
+    <div>
+      <p className="text-sm font-black text-primary mb-3">Practice your way</p>
+      <div className="grid grid-cols-1 gap-2.5">
+        <QuickAccessCard
+          href="/student/games"
+          title="Games"
+          subtitle="Sort, match and build your way to mastery"
+          emoji="🎮"
+          solidColor={isDark ? sortTheme.darkSolid : sortTheme.solid}
+          isDark={isDark}
+        />
+        <QuickAccessCard
+          href="/student/videos"
+          title="Video lessons"
+          subtitle="Watch short, focused lessons on any topic"
+          emoji="🎬"
+          solidColor={isDark ? matchTheme.darkSolid : matchTheme.solid}
+          isDark={isDark}
+        />
+      </div>
+    </div>
   )
 })
 
@@ -189,6 +268,9 @@ export default function LearnPage() {
 
       {/* Study Plan — shared widget from StudyPlanCard */}
       <StudyPlanPreview />
+
+      {/* Games & Video lessons quick access — NEW */}
+      <GamesAndVideosRow isDark={isDark} />
 
       {/* Subject cards */}
       {subjectProgress.length > 0 && (

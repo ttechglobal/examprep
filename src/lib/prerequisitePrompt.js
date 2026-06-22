@@ -1,7 +1,7 @@
 // src/lib/prerequisitePrompt.js
 // Two prompt builders:
 // 1. buildPrerequisiteMapPrompt  — AI generates the topic dependency graph for a subject
-// 2. buildGeneratedQuestionsPrompt — extends lesson generation to also produce 10 exam-style questions per subtopic
+// 2. buildGeneratedQuestionsPrompt — generates exam-style questions with enriched explanations
 
 // ── 1. Knowledge graph prompt ─────────────────────────────────────────────────
 
@@ -56,9 +56,25 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
 }
 
 
-// ── 2. Generated questions prompt (added to lesson generation) ────────────────
-// This is appended to the existing lesson prompt or run separately per subtopic.
-// Admin copies it, pastes into Claude, gets 10 WAEC/JAMB-style MCQs back.
+// ── 2. Generated questions prompt ─────────────────────────────────────────────
+// Admin copies this prompt, pastes into Claude, gets 10 WAEC/JAMB-style MCQs back.
+//
+// EXPLANATION SCHEMA (per question):
+//   concept          — one sentence: the core principle this question tests
+//   why_correct      — one clear sentence: why the right answer is correct,
+//                      applied specifically to this question (not generic)
+//   misconception    — one sentence: the most common wrong answer and the
+//                      exact thinking mistake behind it
+//   visual_needed    — boolean: true only if a diagram/graph meaningfully
+//                      helps (circuits, graphs, force diagrams, structures).
+//                      false for pure recall or language-based questions.
+//   workings         — array of step strings for calculation questions only.
+//                      Empty array [] for non-calculation questions.
+//   wrong_options    — object keyed by option letter (excluding correct answer):
+//                      one sentence per wrong option naming the specific mistake.
+//
+// BACKWARD COMPATIBILITY: The old `correct` field is still written alongside
+// the new fields so existing rendering code keeps working untouched.
 
 export function buildGeneratedQuestionsPrompt({
   subjectName,
@@ -90,7 +106,7 @@ QUESTION REQUIREMENTS:
 - Style must match real ${examLabel} exam questions — not textbook exercises
 - Each question must have exactly 4 options: A, B, C, D
 - One option is unambiguously correct
-- Wrong options (distractors) must represent REAL mistakes students commonly make — not random wrong answers. Each wrong option should be a plausible answer a confused student might choose.
+- Wrong options (distractors) must represent REAL mistakes students commonly make — not random wrong answers
 - Questions must vary in type:
   - 3 RECALL questions (direct knowledge check)
   - 4 APPLICATION questions (apply the concept to a situation or calculation)
@@ -105,9 +121,37 @@ LANGUAGE RULES:
 - Short, clear sentences — maximum 25 words per question stem
 - If a question involves a calculation, include all necessary values in the question
 
-EXPLANATION REQUIREMENTS — this is critical:
-- correct_explanation: 2–3 sentences. Explain clearly WHY the correct answer is right. Use plain language. Show working if it's a calculation.
-- wrong_explanations: For EVERY wrong option, write 1–2 sentences explaining the specific mistake that leads a student to choose that option. Be precise — don't just say "this is wrong". Name the misconception.
+EXPLANATION REQUIREMENTS — read carefully, this is the most important part:
+
+The goal is that a student who got the question WRONG should finish reading the explanation and truly understand the concept — not just know the answer. Write for the confused student, not the one who already knows.
+
+For each question, provide:
+
+1. concept — ONE sentence naming the underlying principle or idea this question is testing.
+   Example: "Ohm's Law states that voltage equals current multiplied by resistance."
+   NOT: "This question tests Ohm's Law." (too vague)
+   NOT: A paragraph. One sentence only.
+
+2. why_correct — ONE sentence explaining why the correct answer is right, applied to THIS specific question.
+   Show the key step or reasoning, not a general statement.
+   Example: "Since V = IR, with V = 12V and R = 4Ω, the current is 12 ÷ 4 = 3A."
+   NOT: "The correct answer is A because it applies Ohm's Law correctly."
+
+3. misconception — ONE sentence naming the most common wrong answer and the specific thinking mistake behind it.
+   Example: "Many students choose C because they divide resistance by voltage instead of voltage by resistance."
+   NOT: "Students often get confused with this topic."
+
+4. visual_needed — true if the concept becomes significantly clearer with a diagram, graph, or visual.
+   Set true for: circuit diagrams, force/motion diagrams, graphs, chemical structures, geometric problems, wave diagrams.
+   Set false for: definitions, processes described in words, pure arithmetic, recall questions.
+
+5. workings — for CALCULATION questions only: array of step-by-step strings showing every calculation step.
+   Example: ["Step 1: Write the formula — V = IR", "Step 2: Substitute values — 12 = I × 4", "Step 3: Solve — I = 12 ÷ 4 = 3A"]
+   For NON-CALCULATION questions: empty array []
+
+6. wrong_options — for EVERY wrong option (not the correct one): one sentence naming the specific mistake.
+   Be precise — name the exact misconception, not just "this is incorrect".
+   Example: { "B": "Students who choose B have confused the formula direction, dividing R by V instead of V by R." }
 
 Return ONLY valid JSON. No markdown, no explanation, no preamble.
 
@@ -124,8 +168,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "A",
       "difficulty": "easy",
       "question_type": "recall",
-      "correct_explanation": "",
-      "wrong_explanations": { "B": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "B": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -133,8 +181,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "B",
       "difficulty": "easy",
       "question_type": "recall",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -142,8 +194,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "C",
       "difficulty": "easy",
       "question_type": "recall",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "B": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "B": "", "D": "" }
     },
     {
       "question_text": "",
@@ -151,8 +207,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "A",
       "difficulty": "medium",
       "question_type": "application",
-      "correct_explanation": "",
-      "wrong_explanations": { "B": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "B": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -160,8 +220,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "B",
       "difficulty": "medium",
       "question_type": "application",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -169,8 +233,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "C",
       "difficulty": "medium",
       "question_type": "application",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "B": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "B": "", "D": "" }
     },
     {
       "question_text": "",
@@ -178,8 +246,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "D",
       "difficulty": "medium",
       "question_type": "application",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "B": "", "C": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "B": "", "C": "" }
     },
     {
       "question_text": "",
@@ -187,8 +259,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "A",
       "difficulty": "hard",
       "question_type": "reasoning",
-      "correct_explanation": "",
-      "wrong_explanations": { "B": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "B": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -196,8 +272,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "B",
       "difficulty": "hard",
       "question_type": "reasoning",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "C": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "C": "", "D": "" }
     },
     {
       "question_text": "",
@@ -205,8 +285,12 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
       "correct_answer": "C",
       "difficulty": "mixed",
       "question_type": "reasoning",
-      "correct_explanation": "",
-      "wrong_explanations": { "A": "", "B": "", "D": "" }
+      "concept": "",
+      "why_correct": "",
+      "misconception": "",
+      "visual_needed": false,
+      "workings": [],
+      "wrong_options": { "A": "", "B": "", "D": "" }
     }
   ]
 }`
@@ -267,8 +351,11 @@ export function parseGeneratedQuestions(rawText) {
     if (!q.options?.D)              errors.push(`${label}: missing option D`)
     if (!q.correct_answer)          errors.push(`${label}: missing correct_answer`)
     if (!q.difficulty)              errors.push(`${label}: missing difficulty`)
-    if (!q.correct_explanation)     errors.push(`${label}: missing correct_explanation`)
-    if (!q.wrong_explanations)      errors.push(`${label}: missing wrong_explanations`)
+    // New required fields
+    if (!q.concept?.trim())         errors.push(`${label}: missing concept`)
+    if (!q.why_correct?.trim())     errors.push(`${label}: missing why_correct`)
+    if (!q.misconception?.trim())   errors.push(`${label}: missing misconception`)
+    if (!q.wrong_options)           errors.push(`${label}: missing wrong_options`)
   })
 
   if (errors.length > 0) return { valid: false, errors, questions: [] }
