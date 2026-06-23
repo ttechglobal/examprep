@@ -12,35 +12,131 @@
 //   3. Loads all prerequisite edges for topics in the subject
 //   4. Determines which topics belong in the plan and at what status
 //   5. Injects prerequisite topics above weak topics where needed
-//   6. Upserts into student_study_plan_items (one row per student × topic)
-//   7. Removes mastered topics (accuracy ≥ 70%, ≥ 3 attempts) from the plan
+//   6. SR-1: updates spaced-repetition review schedule for attempted topics
+//   7. SR-2: injects topics due for review (source='review'), appended AFTER
+//      all active plan items — review never displaces a weak/improving gap
+//   8. Upserts into student_study_plan_items (one row per student × topic)
+//   9. Removes mastered topics (accuracy ≥ 70%, ≥ 3 attempts) from the plan
 //
 // Thresholds:
 //   MASTERY     : accuracy >= 70% AND attempts >= 3  → remove from plan
 //   IMPROVING   : accuracy >= 50% (but not mastered)
 //   WEAK        : accuracy < 50%
 //   UNTESTED    : 0 attempts (only included if seeded by core topics)
+//   REVIEW      : previously mastered/improving topic whose spaced-repetition
+//                 next_review_at has arrived — see spacedRepetition.js
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { updateReviewSchedule, getTopicsDueForReview } from '@/lib/spacedRepetition'
 
 const MASTERY_PCT       = 70
 const MASTERY_MIN_TRIES = 3
 const IMPROVING_PCT     = 50
 
-// ── Insight message generator ─────────────────────────────────────────────────
-function insightMessage(status, prereqForTopicName = null) {
+// ── Coaching-voice insight message generator ──────────────────────────────────
+// Replaces flat status labels with second-person, specific, forward-looking
+// language. Multiple variants per status, rotated by attemptCount so the same
+// student doesn't see the identical line every session.
+function insightMessage(status, prereqForTopicName = null, accuracyPct = null, attemptCount = 0) {
+  // ── Prerequisite injection ──────────────────────────────────────────────
   if (prereqForTopicName) {
-    return `Recommended before you continue with ${prereqForTopicName}`
+    return `You'll need this before ${prereqForTopicName} — it builds directly on it`
   }
+
   switch (status) {
-    case 'weak':
-      return "You struggled here in your last session — let's fix that"
-    case 'improving':
-      return "You're close — a bit more practice and you'll have this"
-    case 'untested':
-      return "Start here — this is a key topic for your exam"
+    case 'weak': {
+      const pctText = accuracyPct !== null ? `${accuracyPct}%` : null
+      const variants = pctText ? [
+        `You're getting ${pctText} here — the concept isn't clicking yet, but that's fixable. One focused session will shift this.`,
+        `${pctText} accuracy tells me there's a gap in the foundation. Let's close it — it won't take long.`,
+        `This is your biggest opportunity right now. You're at ${pctText} — a few targeted attempts and you'll be past it.`,
+      ] : [
+        `This is where you're losing marks. One focused session here is worth more than three on topics you already know.`,
+        `This topic is costing you points. Let's fix it — it's the highest-leverage thing you can do right now.`,
+        `You're dropping marks here. The fix is targeted practice, not more time — let's be efficient.`,
+      ]
+      return variants[attemptCount % variants.length]
+    }
+
+    case 'improving': {
+      const pctText = accuracyPct !== null ? `${accuracyPct}%` : null
+      const variants = pctText ? [
+        `You're at ${pctText} — you understand the basics. Push past 70% and this topic is done.`,
+        `${pctText} and climbing. You're close — one more session should get you over the line.`,
+        `Good progress — ${pctText} means the concept is landing. Keep the momentum, you're almost there.`,
+      ] : [
+        `You're improving here — keep going. You're in the zone where one good session makes a real difference.`,
+        `You're on the right track. Don't stop now — you're close to having this topic locked down.`,
+        `Progress is showing. A bit more practice and you can tick this one off completely.`,
+      ]
+      return variants[attemptCount % variants.length]
+    }
+
+    case 'untested': {
+      const variants = [
+        `You haven't touched this yet. It's a key exam topic — starting it today puts you ahead.`,
+        `This one is fresh ground. Starting now means you'll have more time to revisit it before your exam.`,
+        `Untested means opportunity. Get a baseline on this topic so you know exactly where you stand.`,
+      ]
+      return variants[attemptCount % variants.length]
+    }
+
     default:
-      return "Keep going — you're making progress"
+      return `Keep going — you're making real progress`
   }
+}
+
+// ── Review (spaced repetition) insight message ────────────────────────────────
+function reviewInsightMessage(lastTestedAt) {
+  if (!lastTestedAt) return "Time to revisit this — let's see if it's still solid"
+  const days = Math.floor((Date.now() - new Date(lastTestedAt).getTime()) / (1000 * 60 * 60 * 24))
+  if (days <= 1) return "You practiced this recently — a quick review keeps it sharp"
+  if (days <= 7) return `It's been ${days} days since you practiced this — time for a quick check`
+  if (days <= 14) return `${days} days since you last touched this — let's make sure it's still there`
+  return `It's been ${days} days. Memory fades — a short session now saves you later`
+}
+
+// ── Coach summary — the headline sentence at the top of the study plan page ──
+// Pure function, no DB calls. Called client-side or server-side with the
+// array of plan items for the active subject.
+//
+// Usage:
+//   import { buildCoachSummary } from '@/lib/studyPlanEngine'
+//   const summary = buildCoachSummary(activeItems, subjectName)
+export function buildCoachSummary(items, subjectName = null) {
+  if (!items || items.length === 0) return null
+
+  const weak      = items.filter(i => i.status === 'weak')
+  const improving = items.filter(i => i.status === 'improving')
+  const untested  = items.filter(i => i.status === 'untested')
+  const total     = items.length
+
+  const subj = subjectName ? ` in ${subjectName}` : ''
+
+  if (weak.length >= 3) {
+    return `You have ${weak.length} topics${subj} where you're dropping marks. Start with the first one — each session moves the needle.`
+  }
+  if (weak.length === 2) {
+    return `Two topics${subj} need real attention right now. Fix these and your score moves significantly.`
+  }
+  if (weak.length === 1) {
+    const topicName = weak[0].topicName
+    return `"${topicName}" is your clearest gap right now${subj}. One focused session here is your best move.`
+  }
+  if (improving.length >= 2) {
+    return `You're making progress${subj}. ${improving.length} topics are close to done — push them over the line.`
+  }
+  if (improving.length === 1) {
+    const topicName = improving[0].topicName
+    return `"${topicName}" is almost there${subj}. A bit more practice and you can tick it off.`
+  }
+  if (untested.length > 0) {
+    return `${untested.length} topic${untested.length !== 1 ? 's' : ''}${subj} still need${untested.length === 1 ? 's' : ''} a first look. Get a baseline so you know exactly where you stand.`
+  }
+  if (total > 0) {
+    return `You're in good shape${subj}. Keep the practice up and these remaining topics will fall into place.`
+  }
+  return null
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -246,6 +342,51 @@ async function rebuildSubjectPlan(db, studentId, subjectId) {
     sortIdx++
   }
 
+  // ── SR-1. Update spaced-repetition review schedule for attempted topics ──
+  // Fire-and-forget in spirit — if this fails it doesn't block the plan
+  // rebuild, since attempts are already saved and the schedule just catches
+  // up on the next rebuild.
+  const attemptedTopicIdsList = Object.keys(accMap)
+  try {
+    await updateReviewSchedule(db, studentId, accMap, attemptedTopicIdsList)
+  } catch (e) {
+    console.error('[studyPlan] updateReviewSchedule error:', e.message)
+  }
+
+  // ── SR-2. Inject topics due for review into the plan ─────────────────────
+  // Topics the student previously mastered (or improved) but whose review
+  // date has arrived are added back as source='review'. They do NOT
+  // displace weak/improving topics — they're appended at the end of the
+  // sorted plan so active gaps always come first.
+  try {
+    const reviewDue = await getTopicsDueForReview(db, studentId, subjectId)
+
+    for (const reviewItem of reviewDue) {
+      // Skip if already in the plan (weak/improving doesn't need review injection)
+      if (planTopicIds.has(reviewItem.topic_id)) continue
+
+      const topic = topicMap[reviewItem.topic_id]
+      if (!topic) continue
+
+      finalPlan.push({
+        topicId:                  reviewItem.topic_id,
+        topicName:                topic.name,
+        status:                   'review',
+        source:                   'review',
+        accuracyPct:               reviewItem.score ?? null,
+        attemptCount:              0, // not counted for sort — always lands at the end
+        sortOrder:                 sortIdx,
+        prerequisiteForTopicId:    null,
+        prerequisiteForTopicName:  null,
+        lastTestedAt:              reviewItem.last_tested_at ?? null,
+        nextReviewAt:              reviewItem.next_review_at ?? null,
+      })
+      sortIdx++
+    }
+  } catch (e) {
+    console.error('[studyPlan] review injection error:', e.message)
+  }
+
   // ── 8. Upsert into student_study_plan_items ───────────────────────────────
   if (finalPlan.length === 0) {
     // Nothing in the plan — still clean up any mastered rows
@@ -265,10 +406,14 @@ async function rebuildSubjectPlan(db, studentId, subjectId) {
     source:                    item.source,
     status:                    item.status,
     prerequisite_for_topic_id: item.prerequisiteForTopicId ?? null,
-    insight_message:           insightMessage(item.status, item.prerequisiteForTopicName ?? null),
+    insight_message:           item.status === 'review'
+      ? reviewInsightMessage(item.lastTestedAt)
+      : insightMessage(item.status, item.prerequisiteForTopicName ?? null, item.accuracyPct ?? null, item.attemptCount ?? 0),
     sort_order:                item.sortOrder,
     accuracy_pct:              item.accuracyPct ?? null,
     attempt_count:             item.attemptCount,
+    last_tested_at:            item.lastTestedAt ?? null,
+    next_review_at:            item.nextReviewAt ?? null,
     last_updated_at:           new Date().toISOString(),
   }))
 
@@ -332,7 +477,7 @@ export async function seedCoreTopicsForSubject(db, studentId, subjectId) {
     source:                    'core',
     status:                    'untested',
     prerequisite_for_topic_id: null,
-    insight_message:           'Start here — this is a key topic for your exam',
+    insight_message:           insightMessage('untested', null, null, 0),
     sort_order:                idx,
     accuracy_pct:              null,
     attempt_count:             0,

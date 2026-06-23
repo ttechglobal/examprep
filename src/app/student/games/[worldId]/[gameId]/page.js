@@ -18,25 +18,31 @@
 // (it's in a DB table or a sibling mission data file) — this page fetches/
 // imports that content based on game.dbGameId / game.missionSource before
 // handing off to the engine.
+//
+// IMPORT PATHS UPDATED for the games/ folder restructure:
+//   '@/lib/gameRegistry'                  → '@/lib/games/registry'
+//   '@/components/mathKingdom/RoomRunner' → '@/components/games/engines/DungeonEngine'
+//   '@/lib/chemLabMissions'               → '@/lib/games/missions/chemLab'
+// No other changes — dispatch logic, JSX, and data loading are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getWorld, getGame } from '@/lib/gameRegistry'
+import { getWorld, getGame } from '@/lib/games/registry'
 
 import SortEngine     from '@/components/games/engines/SortEngine'
 import MatchEngine    from '@/components/games/engines/MatchEngine'
 import BuildEngine    from '@/components/games/engines/BuildEngine'
-import DungeonEngine  from '@/components/mathKingdom/RoomRunner'
+import DungeonEngine  from '@/components/games/engines/DungeonEngine'
 import AssembleRunner from '@/components/games/engines/AssembleRunner'
 
 import EquationEscapeRenderer  from '@/components/games/renderers/equation-escape'
 import AtomBuilderRenderer     from '@/components/games/renderers/atom-builder'
 import EquationBalancerRenderer from '@/components/games/renderers/equation-balancer'
 
-import { ATOM_BUILDER_MISSIONS, EQUATION_BALANCER_REACTIONS } from '@/lib/chemLabMissions'
+import { ATOM_BUILDER_MISSIONS, EQUATION_BALANCER_REACTIONS } from '@/lib/games/missions/chemLab'
 
 function useIsDark() {
   const [dark, setDark] = useState(false)

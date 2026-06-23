@@ -1,13 +1,24 @@
 'use client'
 // src/components/games/engines/MatchEngine.jsx
-// (renamed from ConceptConnector.jsx — fixes "Module not found" build error.
-//  Logic unchanged from the original delivery.)
+// (renamed from ConceptConnector.jsx — fixes "Module not found" build error.)
+//
+// THEME FIX (this version): previously self-contained its own getResultTheme()
+// and useIsDarkLocal() instead of importing the real, shared
+// '@/lib/games/theme' and '@/lib/useIsDark' — a smaller duplication sitting
+// next to the same pattern that caused ConceptConnector.jsx/BuildEngine.js
+// to go stale. Swapped to real imports here; visual output is identical
+// since the inlined copy was a verbatim duplicate of getResultTheme's
+// great/okay/needsWork hex values. No behavior change, just one fewer
+// place these colours can drift out of sync if the real theme is ever
+// updated.
 // ─────────────────────────────────────────────────────────────────────────────
 // Tap a term, then tap its matching definition. No drag needed.
 // Correct pairs lock in green. Wrong pairs flash red and reset.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
+import { getResultTheme } from '@/lib/games/theme'
+import { useIsDark } from '@/lib/useIsDark'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -16,24 +27,6 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
-}
-
-function getResultTheme(pct) {
-  if (pct >= 80) return { solid: '#3b6d11', bg: '#eaf3de', text: '#27500a', border: '#c0dd97', darkSolid: '#639922', darkBg: '#173404', darkText: '#c0dd97', darkBorder: '#3b6d11' }
-  if (pct >= 50) return { solid: '#854f0b', bg: '#faeeda', text: '#633806', border: '#fac775', darkSolid: '#ba7517', darkBg: '#412402', darkText: '#fac775', darkBorder: '#854f0b' }
-  return { solid: '#a32d2d', bg: '#fcebeb', text: '#791f1f', border: '#f7c1c1', darkSolid: '#e24b4a', darkBg: '#501313', darkText: '#f7c1c1', darkBorder: '#a32d2d' }
-}
-
-function useIsDarkLocal() {
-  const [dark, setDark] = useState(false)
-  useEffect(() => {
-    const check = () => setDark(document.documentElement.classList.contains('dark'))
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => obs.disconnect()
-  }, [])
-  return dark
 }
 
 function ScoreRing({ correct, total, isDark }) {
@@ -70,7 +63,7 @@ function ScoreRing({ correct, total, isDark }) {
 }
 
 export default function MatchEngine({ game, onComplete }) {
-  const isDark = useIsDarkLocal()
+  const isDark = useIsDark()
   const solid = '#534ab7'
 
   const [terms,   setTerms]   = useState(() => shuffle(game.pairs.map((p, i) => ({ ...p, id: i }))))

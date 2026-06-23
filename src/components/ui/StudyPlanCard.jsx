@@ -4,28 +4,34 @@
 //
 // KEY DESIGN DECISIONS:
 //
-// 1. SUBJECT COLOUR — uses CSS custom properties set via the `style` attribute
-//    on each card. The SUBJECT_STYLES map provides both light and dark values.
-//    A `data-dark` attribute on the card wrapper switches which CSS var resolves.
-//    This is more robust than passing `isDark` as a prop because it responds to
-//    dynamic theme changes without re-renders.
+// 1. SUBJECT COLOUR — uses inline style (not Tailwind classes) driven by the
+//    SUBJECT_STYLES map, switched between light/dark values via the isDark hook.
+//    This is the proven-correct pattern for this codebase's Tailwind v4 setup.
 //
-// 2. MINI RING TRACK — was hardcoded #f1f5f9 (near-white), invisible in dark mode.
-//    Fixed to rgba(100,116,139,0.25) which reads well on both light and dark bg.
+// 2. MINI RING TRACK — rgba(100,116,139,0.2), reads well on both light and dark bg.
 //
-// 3. STATUS PILL — both light and dark values stored as CSS vars on the element,
-//    toggled by .dark on <html> via standard CSS variables.
+// 3. STATUS PILL — both light and dark values stored per status in STATUS_CONFIG.
 //
 // 4. CARD BG/BORDER — uses bg-card + border-default (CSS tokens) so they
 //    automatically adapt. No hardcoded #ffffff or #ede9e3.
+//
+// 5. NEW — 'review' status (spaced repetition). Topics surfaced back into the
+//    plan after their scheduled review date arrives. Distinct blue treatment,
+//    shows a "Last practiced N days ago" sub-line. Always sorts LAST — review
+//    items never compete with active weak/improving topics for attention.
+//
+// 6. NEW — CoachBanner. The "coach talking to you" headline shown above the
+//    topic list, built from buildCoachSummary() in studyPlanEngine.js. Colour
+//    variant (red/amber/indigo) reflects the mix of weak vs improving items
+//    in the currently active subject/items set.
 
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { buildCoachSummary } from '@/lib/studyPlanEngine'
 
 // ── Subject colour map ─────────────────────────────────────────────────────────
-// Each entry has light (bg/text) and dark (darkBg/darkText) values.
 const SUBJECT_STYLES = {
   'Mathematics':                 { bg: '#eff6ff', text: '#1d4ed8', accent: '#3b82f6', darkBg: '#172554', darkText: '#93c5fd' },
   'Further Mathematics':         { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9', darkBg: '#0c4a6e', darkText: '#7dd3fc' },
@@ -47,11 +53,13 @@ const SUBJECT_STYLES = {
   'default':                     { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
 }
 
+// STATUS_CONFIG — 'review' added alongside the existing four.
 const STATUS_CONFIG = {
   weak:      { label: 'Needs work', icon: '🎯', lightBg: '#fef2f2', lightText: '#dc2626', darkBg: '#450a0a', darkText: '#f87171', barColor: '#f87171' },
   improving: { label: 'Improving',  icon: '📈', lightBg: '#fffbeb', lightText: '#d97706', darkBg: '#451a03', darkText: '#fbbf24', barColor: '#fbbf24' },
   untested:  { label: 'New',        icon: '📖', lightBg: '#eef2ff', lightText: '#4338ca', darkBg: '#1e1b4b', darkText: '#a5b4fc', barColor: '#a5b4fc' },
   strong:    { label: 'Strong',     icon: '✅', lightBg: '#f0fdf4', lightText: '#16a34a', darkBg: '#052e16', darkText: '#4ade80', barColor: '#4ade80' },
+  review:    { label: 'Review due', icon: '🔁', lightBg: '#f0f9ff', lightText: '#0369a1', darkBg: '#0c4a6e', darkText: '#7dd3fc', barColor: '#7dd3fc' },
 }
 
 function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
@@ -61,15 +69,22 @@ function getStatus(key)        { return STATUS_CONFIG[key]   ?? STATUS_CONFIG.un
 function useIsDark() {
   const [isDark, setIsDark] = useState(false)
   useEffect(() => {
-    // Read once from <html> class
     const check = () => setIsDark(document.documentElement.classList.contains('dark'))
     check()
-    // Watch for changes (DarkModeToggle updates <html class>)
     const observer = new MutationObserver(check)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     return () => observer.disconnect()
   }, [])
   return isDark
+}
+
+// ── "Last practiced N days ago" label — for review-status cards ──────────────
+function daysSinceLabel(lastTestedAt) {
+  if (!lastTestedAt) return null
+  const days = Math.floor((Date.now() - new Date(lastTestedAt).getTime()) / (1000 * 60 * 60 * 24))
+  if (days === 0) return 'Practiced today'
+  if (days === 1) return 'Last practiced yesterday'
+  return `Last practiced ${days} days ago`
 }
 
 // ── Mini progress ring ─────────────────────────────────────────────────────────
@@ -81,7 +96,6 @@ export function MiniRing({ pct, size = 34 }) {
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
-      {/* Track — visible in both light and dark */}
       <circle cx={size/2} cy={size/2} r={r}
         fill="none" stroke="rgba(100,116,139,0.2)" strokeWidth="3.5" />
       <circle cx={size/2} cy={size/2} r={r}
@@ -103,6 +117,7 @@ export function StudyPlanCard({ item }) {
   const s      = getSubjectStyle(item.subjectName ?? '')
   const cfg    = getStatus(item.status)
   const pct    = item.accuracyPct ?? 0
+  const isReview = item.status === 'review'
 
   const subjectStyle = isDark
     ? { backgroundColor: s.darkBg, color: s.darkText }
@@ -160,6 +175,12 @@ export function StudyPlanCard({ item }) {
         <p className="text-sm font-black text-primary leading-snug truncate">
           {item.topicName}
         </p>
+        {/* Review sub-line — only for review-status items */}
+        {isReview && item.lastTestedAt && (
+          <p className="text-[10px] text-secondary mt-0.5 leading-tight">
+            {daysSinceLabel(item.lastTestedAt)}
+          </p>
+        )}
       </div>
 
       {/* Right: score ring or "New" badge + chevron */}
@@ -176,6 +197,37 @@ export function StudyPlanCard({ item }) {
         </svg>
       </div>
     </Link>
+  )
+}
+
+// ── Coach banner — the "coach talking to you" sentence at the top of the plan ─
+// Built from buildCoachSummary() in studyPlanEngine.js. Colour variant reflects
+// the mix of weak vs improving items in the items array passed in.
+export function CoachBanner({ items, subjectName }) {
+  const summary = buildCoachSummary(items, subjectName)
+  if (!summary) return null
+
+  const weak      = items.filter(i => i.status === 'weak').length
+  const improving = items.filter(i => i.status === 'improving').length
+
+  const variant =
+    weak >= 2      ? 'red' :
+    weak === 1     ? 'amber' :
+    improving >= 1 ? 'indigo' :
+    'indigo'
+
+  const styles = {
+    red:    'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-900 dark:text-red-100',
+    amber:  'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100',
+    indigo: 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-100',
+  }
+  const icons = { red: '🎯', amber: '📈', indigo: '✅' }
+
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl border ${styles[variant]}`}>
+      <span className="text-base leading-none flex-shrink-0 mt-0.5">{icons[variant]}</span>
+      <p className="text-sm leading-relaxed font-medium">{summary}</p>
+    </div>
   )
 }
 
@@ -198,7 +250,10 @@ function useStudyPlanItems(maxItems = 4) {
           bySubject[i.subjectId].push(i)
         })
 
-        const order = { weak: 0, improving: 1, untested: 2, strong: 3 }
+        // Sort order: weak < improving < untested < strong < review.
+        // Review always sorts last within a subject, matching the
+        // "never displaces active gaps" rule from studyPlanEngine.js.
+        const order = { weak: 0, improving: 1, untested: 2, strong: 3, review: 4 }
         Object.values(bySubject).forEach(arr =>
           arr.sort((a, b) => {
             const od = (order[a.status] ?? 2) - (order[b.status] ?? 2)
@@ -246,7 +301,8 @@ function CardSkeleton() {
 }
 
 // ── Full widget — used by Dashboard ───────────────────────────────────────────
-// Has its own data fetching, header, empty state, footer.
+// Has its own data fetching, header, empty state, footer. CoachBanner sits
+// above the topic list, built from the same items the section displays.
 export function StudyPlanSection() {
   const { items, loading, hasAny } = useStudyPlanItems(4)
 
@@ -282,8 +338,11 @@ export function StudyPlanSection() {
           )}
         </div>
       ) : (
-        <div className="space-y-2">
-          {items.map(item => <StudyPlanCard key={item.topicId} item={item} />)}
+        <div className="space-y-3">
+          <CoachBanner items={items} />
+          <div className="space-y-2">
+            {items.map(item => <StudyPlanCard key={item.topicId} item={item} />)}
+          </div>
         </div>
       )}
     </div>
@@ -291,7 +350,8 @@ export function StudyPlanSection() {
 }
 
 // ── Compact widget — used by LearnPage ────────────────────────────────────────
-// Wrapped in a card container with header + footer links.
+// Wrapped in a card container with header + footer links. CoachBanner sits
+// inside the card, below the header, above the topic list.
 export function StudyPlanPreview() {
   const { items, loading, hasAny } = useStudyPlanItems(4)
 
@@ -344,6 +404,9 @@ export function StudyPlanPreview() {
         </div>
       ) : (
         <>
+          <div className="px-4 pt-4">
+            <CoachBanner items={items} />
+          </div>
           <div className="p-4 space-y-2">
             {items.map(item => <StudyPlanCard key={item.topicId} item={item} />)}
           </div>

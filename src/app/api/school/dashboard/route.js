@@ -1,14 +1,30 @@
 // src/app/api/school/dashboard/route.js
 // REBUILT — now returns cohort-aware data with topic-level breakdown.
+//
+// UPDATED: at-risk segmentation. Previously a flat boolean filter
+// (!isActiveThisWeek || accuracy < 40). Now three tiers, giving teachers
+// a specific, actionable read instead of one generic "at risk" bucket:
+//
+//   dropped     — was active in the prior week, inactive THIS week
+//                 (a specific, recent drop-off — most actionable)
+//   inactive    — hasn't been active at all recently (longer-term disengagement)
+//   struggling  — active this week but accuracy < 40% (trying but failing)
+//
+// `atRisk` (flat array of IDs) is KEPT for backward compatibility with the
+// existing PDF report generator (school/report/route.js) and any other
+// caller expecting the old shape. `atRiskSegmented` is the new array with
+// tier info, additive — nothing that reads `atRisk` needs to change.
+//
 // Returns:
-//   school:          { id, name, city, state }
-//   cohort:          active cohort or null
-//   allCohorts:      all cohorts for this school (history)
-//   summary:         { totalStudents, activeThisWeek, avgAccuracy, lessonsThisWeek }
-//   students:        enriched student list with per-student accuracy + streak
-//   subjectTopics:   per-subject → per-topic cohort accuracy (the diagnostic lens)
+//   school:           { id, name, city, state }
+//   cohort:           active cohort or null
+//   allCohorts:       all cohorts for this school (history)
+//   summary:          { totalStudents, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek }
+//   students:         enriched student list with per-student accuracy + streak
+//   subjectTopics:    per-subject → per-topic cohort accuracy (the diagnostic lens)
 //   weeklyEngagement: last 4 weeks active student counts
-//   atRisk:          student ids with 0 activity in 7+ days OR <40% accuracy
+//   atRisk:           student ids with 0 activity in 7+ days OR <40% accuracy (legacy, unchanged shape)
+//   atRiskSegmented:  [{ id, tier }] — tier is 'dropped' | 'inactive' | 'struggling'
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -80,16 +96,17 @@ export async function GET() {
       school,
       cohort: activeCohort,
       allCohorts: allCohorts ?? [],
-      summary: { totalStudents: 0, activeThisWeek: 0, avgAccuracy: null, lessonsThisWeek: 0 },
+      summary: { totalStudents: 0, activeThisWeek: 0, avgAccuracy: null, lessonsThisWeek: 0, totalQuestionsThisWeek: 0 },
       students: [],
       subjectTopics: [],
       weeklyEngagement: [],
       atRisk: [],
+      atRiskSegmented: [],
     })
   }
 
   // Parallel data fetch
-  const weekAgo      = new Date(Date.now() - 7 * 86400000).toISOString()
+  const weekAgo       = new Date(Date.now() - 7 * 86400000).toISOString()
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
 
   const [
@@ -122,7 +139,8 @@ export async function GET() {
   const streakMap = {}
   ;(allStreaks ?? []).forEach(s => { streakMap[s.student_id] = s })
 
-  const weekAgoDate = new Date(Date.now() - 7 * 86400000)
+  const weekAgoDate   = new Date(Date.now() - 7 * 86400000)
+  const twoWeeksAgo    = new Date(Date.now() - 14 * 86400000)
 
   // ── Per-student enrichment ─────────────────────────────────────────────────
   const enrichedStudents = studentIds.map(id => {
@@ -139,7 +157,7 @@ export async function GET() {
       p => p.completed && p.started_at && new Date(p.started_at) >= weekAgoDate
     ).length
 
-    const lastActive      = streak?.last_active_date ?? null
+    const lastActive       = streak?.last_active_date ?? null
     const isActiveThisWeek = lastActive && new Date(lastActive) >= weekAgoDate
 
     // Per-subject accuracy for this student
@@ -176,10 +194,27 @@ export async function GET() {
     ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length) : null
   const lessonsThisWeek = enrichedStudents.reduce((a, s) => a + s.lessonsThisWeek, 0)
 
-  // ── At-risk students ───────────────────────────────────────────────────────
+  const totalQuestionsThisWeek = (allAttempts ?? []).filter(a => {
+    return a.created_at && new Date(a.created_at) >= weekAgoDate
+  }).length
+
+  // ── At-risk students — segmented into three tiers ─────────────────────────
+  // Legacy flat array kept for backward compat with existing PDF reports
+  // and any other caller still expecting the old shape.
   const atRisk = enrichedStudents
     .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
     .map(s => s.id)
+
+  const atRiskSegmented = enrichedStudents
+    .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
+    .map(s => {
+      const wasActiveLastWeek = s.lastActive && new Date(s.lastActive) >= twoWeeksAgo
+      const tier =
+        !s.isActiveThisWeek && wasActiveLastWeek ? 'dropped' :
+        !s.isActiveThisWeek                      ? 'inactive' :
+                                                    'struggling'
+      return { id: s.id, tier }
+    })
 
   // ── Topic-level diagnostic lens ────────────────────────────────────────────
   // Build: subjectName → topicName → { correct, total }
@@ -235,10 +270,11 @@ export async function GET() {
     school,
     cohort:           activeCohort,
     allCohorts:       allCohorts ?? [],
-    summary:          { totalStudents: studentIds.length, activeThisWeek, avgAccuracy, lessonsThisWeek },
+    summary:          { totalStudents: studentIds.length, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek },
     students:         enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
     subjectTopics,
     weeklyEngagement,
     atRisk,
+    atRiskSegmented,
   })
 }

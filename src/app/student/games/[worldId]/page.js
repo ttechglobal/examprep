@@ -3,17 +3,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // THE generic world landing page. Renders ANY world from the registry —
 // Math Kingdom, Biology Lab, Chemistry Workshop, all use this exact same
-// file. No per-world page code. Adding a new world to gameRegistry.js is
+// file. No per-world page code. Adding a new world to the registry is
 // the entire integration cost.
+//
+// IMPORT PATHS UPDATED for the games/ folder restructure:
+//   '@/lib/gameRegistry' → '@/lib/games/registry'
+//   '@/lib/gameLevels'   → '@/lib/games/levels'
+// No other changes — logic, JSX, and data loading are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getWorld, getGamesForWorld } from '@/lib/gameRegistry'
+import { getWorld, getGamesForWorld } from '@/lib/games/registry'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
-import { computeWorldLevel } from '@/lib/gameLevels'
+import { computeWorldLevel } from '@/lib/games/levels'
 import WorldHeader from '@/components/games/shared/WorldHeader'
 import GameCard from '@/components/games/shared/GameCard'
 

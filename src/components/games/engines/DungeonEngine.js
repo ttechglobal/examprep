@@ -1,28 +1,27 @@
 'use client'
-// src/components/mathKingdom/RoomRunner.jsx
-// Imported by the generic play dispatcher as `DungeonEngine`:
-//   src/app/student/games/[worldId]/[gameId]/page.js
-//   import DungeonEngine from '@/components/mathKingdom/RoomRunner'
+// src/components/games/engines/DungeonEngine.jsx
+// (moved + renamed from src/components/mathKingdom/RoomRunner.jsx as part of
+//  the games/ folder restructure. Update the dispatcher import from
+//  '@/components/mathKingdom/RoomRunner' to
+//  '@/components/games/engines/DungeonEngine'. Internal component name kept
+//  as RoomRunner export default's logic — only the file location and name
+//  changed, props/behavior are identical to the last working version.)
 // ─────────────────────────────────────────────────────────────────────────────
 // THE REUSABLE ENGINE — powers every 'dungeon' mechanic game in the registry
 // (Equation Escape today; Fraction Kitchen, Formula Lab, Word Problem
 // Detective, Graph Detective as they ship content).
 //
-// v2 — GAME-FEEL UPGRADE (visual layer only, contract unchanged):
+// GAME-FEEL UPGRADE (visual layer, contract unchanged from the original):
 //   - Same props: gameId, rooms, theme, RoomRenderer, isDark, onExit
 //   - Same phase machine: 'playing' | 'room_result' | 'dungeon_complete'
 //   - Same API calls: /api/mathkingdom/attempt, /api/points/award
 //   - Same soft-hearts philosophy (canProceed stays true always)
-//
-// WHAT CHANGED:
 //   - Added a HUD strip above the question card: streak flame + session
 //     XP pill, sitting above the existing room-progress/hearts row. Both
 //     are purely client-side session counters — no new API calls.
 //   - Icons stay emoji throughout (❤️ 🔥 ⭐ 💡), matching the existing
 //     convention in this file, WorldHeader.jsx, and GameCard.jsx. No icon
-//     font is loaded in this app (checked src/app/layout.js) — an earlier
-//     draft of this file used Tabler icon classes, which would have
-//     rendered as blank/invisible. Reverted.
+//     font is loaded in this app — confirmed against src/app/layout.js.
 //   - Exit moved to a small icon button top-left (was a full-width text
 //     link at the bottom) — frees the bottom for the primary CTA and
 //     reads like a game screen rather than a form.
@@ -30,13 +29,12 @@
 //     delta bar (see MASTERY DATA CONTRACT below). Purely additive — if
 //     the data isn't there, the bar doesn't render and nothing else changes.
 //
-// MASTERY DATA CONTRACT (read before wiring up the new mastery bar):
+// MASTERY DATA CONTRACT (read before wiring up the mastery bar):
 //   This component does NOT compute mastery — it only displays it.
-//   For the bar to show, your /api/mathkingdom/attempt response needs to
+//   For the bar to show, /api/mathkingdom/attempt's response needs to
 //   include: { masteryBefore: number, masteryAfter: number }  // 0-100
-//   I have not seen that route's actual response shape, so this is opt-in:
-//   confirm/update the route, or tell me its real shape and I'll wire the
-//   field names to match exactly instead of guessing.
+//   If that route doesn't return these fields yet, the bar simply doesn't
+//   render — safe no-op either way.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -74,7 +72,7 @@ function ScoreRing({ pct, isDark, color }) {
   )
 }
 
-// ── Hearts display (unchanged — emoji, same as before) ───────────────────────
+// ── Hearts display (unchanged — emoji) ────────────────────────────────────────
 function HeartsDisplay({ hearts, max = STARTING_HEARTS }) {
   return (
     <div className="flex items-center gap-1" aria-label={`${hearts} of ${max} hearts remaining`}>
@@ -104,7 +102,7 @@ function RoomProgress({ current, total, solidColor }) {
   )
 }
 
-// ── NEW: streak + XP HUD pill row — emoji, same style as WorldHeader's 🔥 badge ─
+// ── Streak + XP HUD pill row — emoji, same style as WorldHeader's 🔥 badge ───
 function GameStatsBar({ streak, points, softBg, softText }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -125,7 +123,7 @@ function GameStatsBar({ streak, points, softBg, softText }) {
   )
 }
 
-// ── NEW: mastery delta bar — only renders if before/after data is present ───
+// ── Mastery delta bar — only renders if before/after data is present ─────────
 function MasteryDeltaBar({ before, after, label, softBg, softText, isDark, border }) {
   if (before == null || after == null) return null
   const delta = Math.round(after - before)
@@ -159,10 +157,10 @@ function MasteryDeltaBar({ before, after, label, softBg, softText, isDark, borde
   )
 }
 
-export default function RoomRunner({
+export default function DungeonEngine({
   gameId,
   rooms,           // array of room defs from math_kingdom_room_defs
-  theme,           // from mathKingdomTheme.js
+  theme,           // accent object passed in by the dispatcher (game.accent)
   RoomRenderer,    // game-specific question UI component
   isDark,
   onExit,          // called when student exits mid-dungeon
@@ -177,10 +175,10 @@ export default function RoomRunner({
     total: 0,
     xpEarned: 0,
     startedAt: Date.now(),
-    streak: 0,           // NEW — consecutive correct-without-struggle, resets on miss
-    bestStreak: 0,        // NEW — for the dungeon_complete summary
-    masteryBefore: null,  // NEW — optional, see MASTERY DATA CONTRACT above
-    masteryAfter: null,   // NEW
+    streak: 0,
+    bestStreak: 0,
+    masteryBefore: null,
+    masteryAfter: null,
   })
   const [showHint,     setShowHint]     = useState(false)
   const [showSteps,    setShowSteps]    = useState(false)
@@ -213,20 +211,15 @@ export default function RoomRunner({
       const newHearts = hearts - 1
       setHearts(newHearts)
       if (newHearts <= 0) {
-        // SOFT HEARTS: reveal the worked steps, mark as struggled-through,
-        // but DO NOT block progress. canProceed stays true always.
         struggledOut = true
         setShowSteps(true)
       } else {
-        return // student gets to try again — hearts absorbed the miss
+        return
       }
     }
 
     const finalIsCorrect = isCorrect && !struggledOut
 
-    // Log the attempt (unchanged endpoint/payload — only reading more of
-    // the response now, via attemptData, which is additive and safe even
-    // if the route doesn't return the new fields)
     let attemptData = null
     try {
       const res = await fetch('/api/mathkingdom/attempt', {
@@ -247,7 +240,6 @@ export default function RoomRunner({
       attemptData = await res.json().catch(() => null)
     } catch { /* non-blocking */ }
 
-    // NEW — streak bookkeeping, purely client-side, no schema changes needed
     setSessionStats(prev => {
       const newStreak = finalIsCorrect ? prev.streak + 1 : 0
       return {
@@ -356,7 +348,6 @@ export default function RoomRunner({
           )}
         </div>
 
-        {/* NEW — only renders if the attempt API returned mastery data */}
         <MasteryDeltaBar
           before={masteryBefore}
           after={masteryAfter}
@@ -412,7 +403,6 @@ export default function RoomRunner({
           )}
         </div>
 
-        {/* NEW — only renders if mastery data made it into session stats */}
         <MasteryDeltaBar
           before={sessionStats.masteryBefore}
           after={sessionStats.masteryAfter}
@@ -437,7 +427,6 @@ export default function RoomRunner({
   // ── PLAYING SCREEN ───────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Exit — small icon button top-left, was a bottom text link before */}
       <div className="flex items-center justify-between gap-3">
         <button
           onClick={onExit}
@@ -453,7 +442,6 @@ export default function RoomRunner({
         <RoomProgress current={roomIdx + 1} total={totalRooms} solidColor={solid} />
       </div>
 
-      {/* NEW — streak + XP HUD row */}
       <GameStatsBar
         streak={sessionStats.streak}
         points={sessionStats.xpEarned}
@@ -461,7 +449,6 @@ export default function RoomRunner({
         softText={softText}
       />
 
-      {/* Game-specific question UI */}
       <div className="rounded-2xl overflow-hidden" style={{ background: cardBg, border: `1.5px solid ${cardBorder}` }}>
         <div style={{ height: 4, background: solid }} />
         <div className="p-5">
@@ -475,12 +462,10 @@ export default function RoomRunner({
         </div>
       </div>
 
-      {/* Hearts row — moved here from the top bar to sit with the card it protects */}
       <div className="flex items-center justify-center">
         <HeartsDisplay hearts={hearts} />
       </div>
 
-      {/* Hint (unchanged) */}
       {room.payload?.hint && !showHint && (
         <button
           onClick={handleUseHint}
