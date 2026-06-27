@@ -14,15 +14,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getSubjectColor } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 import Link from 'next/link'
 
 // ── Score helpers ─────────────────────────────────────────────────────────────
 function getScoreTier(pct) {
-  if (pct >= 80) return { label: 'Excellent',    emoji: '🏆', color: 'text-green-600',  bg: 'bg-green-50',  ring: '#16a34a' }
-  if (pct >= 60) return { label: 'Good',         emoji: '💪', color: 'text-blue-600',   bg: 'bg-blue-50',   ring: '#2563eb' }
-  if (pct >= 40) return { label: 'Building',     emoji: '📈', color: 'text-amber-600',  bg: 'bg-amber-50',  ring: '#d97706' }
-  return              { label: 'Getting started',emoji: '🌱', color: 'text-red-500',    bg: 'bg-red-50',    ring: '#ef4444' }
+  if (pct >= 80) return { label: 'Excellent',    emoji: '🏆', color: 'text-green-600 dark:text-green-400',  bg: 'bg-green-50 dark:bg-green-950/40',  ring: '#16a34a', ringDark: '#4ade80' }
+  if (pct >= 60) return { label: 'Good',         emoji: '💪', color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-50 dark:bg-blue-950/40',   ring: '#2563eb', ringDark: '#60a5fa' }
+  if (pct >= 40) return { label: 'Building',     emoji: '📈', color: 'text-amber-600 dark:text-amber-400',  bg: 'bg-amber-50 dark:bg-amber-950/40',  ring: '#d97706', ringDark: '#fbbf24' }
+  return              { label: 'Getting started',emoji: '🌱', color: 'text-red-500 dark:text-red-400',    bg: 'bg-red-50 dark:bg-red-950/40',    ring: '#ef4444', ringDark: '#f87171' }
 }
 
 function getEncouragement(pct) {
@@ -33,7 +34,7 @@ function getEncouragement(pct) {
 }
 
 // ── Score Ring ────────────────────────────────────────────────────────────────
-function ScoreRing({ pct, color }) {
+function ScoreRing({ pct, color, isDark }) {
   const r    = 46
   const circ = 2 * Math.PI * r
   const [dash, setDash] = useState(0)
@@ -43,9 +44,13 @@ function ScoreRing({ pct, color }) {
     return () => clearTimeout(t)
   }, [pct, circ])
 
+  const trackColor = isDark ? '#263352' : '#f1f5f9'
+  const numberColor = isDark ? '#f0f4ff' : '#0f172a'
+  const labelColor = isDark ? '#8899bb' : '#94a3b8'
+
   return (
     <svg width="128" height="128" viewBox="0 0 128 128" className="mx-auto">
-      <circle cx="64" cy="64" r={r} fill="none" stroke="#f1f5f9" strokeWidth="10" />
+      <circle cx="64" cy="64" r={r} fill="none" stroke={trackColor} strokeWidth="10" />
       <circle
         cx="64" cy="64" r={r} fill="none"
         stroke={color} strokeWidth="10"
@@ -54,10 +59,10 @@ function ScoreRing({ pct, color }) {
         transform="rotate(-90 64 64)"
         style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)' }}
       />
-      <text x="64" y="59" textAnchor="middle" style={{ fontSize: 26, fontWeight: 900, fill: '#0f172a' }}>
+      <text x="64" y="59" textAnchor="middle" style={{ fontSize: 26, fontWeight: 900, fill: numberColor }}>
         {pct}%
       </text>
-      <text x="64" y="76" textAnchor="middle" style={{ fontSize: 11, fill: '#94a3b8' }}>
+      <text x="64" y="76" textAnchor="middle" style={{ fontSize: 11, fill: labelColor }}>
         score
       </text>
     </svg>
@@ -65,38 +70,41 @@ function ScoreRing({ pct, color }) {
 }
 
 // ── Topic row ─────────────────────────────────────────────────────────────────
-function TopicRow({ topic }) {
-  const color  = getSubjectColor(topic.subjectName)
+function TopicRow({ topic, isDark }) {
+  const color  = resolveSubjectColors(topic.subjectName, isDark)
   const pct    = topic.total > 0 ? Math.round((topic.correct / topic.total) * 100) : 0
   const isWeak = pct < 60
 
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-50 last:border-0">
+    <div className="flex items-center gap-3 py-3 border-b border-default last:border-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${color.bg} ${color.text}`}>
+          <span
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+            style={{ background: color.bg, color: color.text }}
+          >
             {topic.subjectName}
           </span>
           {isWeak && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">
               Needs work
             </span>
           )}
         </div>
-        <p className="text-sm font-bold text-gray-900 truncate">{topic.name}</p>
+        <p className="text-sm font-bold text-primary truncate">{topic.name}</p>
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
         <div className="w-16 h-2 bg-subtle rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-700 ${
-              pct >= 75 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'
+              pct >= 75 ? 'bg-green-500 dark:bg-green-400' : pct >= 50 ? 'bg-amber-400 dark:bg-amber-500' : 'bg-red-400 dark:bg-red-500'
             }`}
             style={{ width: `${pct}%` }}
           />
         </div>
         <span className={`text-sm font-black w-10 text-right tabular-nums ${
-          pct >= 75 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600'
+          pct >= 75 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
         }`}>
           {pct}%
         </span>
@@ -151,6 +159,7 @@ export default function DiagnosticResultsPage() {
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [saveStatus, setSaveStatus] = useState('idle') // idle | saving | done | error
   const savedRef = useRef(false)
+  const isDark = useIsDark()
 
   useEffect(() => {
     // 1. Parse from sessionStorage synchronously — instant render
@@ -200,56 +209,57 @@ export default function DiagnosticResultsPage() {
 
   if (!summary) return (
     <div className="min-h-screen bg-base flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-indigo-500 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   const tier = getScoreTier(summary.overallScore)
+  const ringColor = isDark ? tier.ringDark : tier.ring
 
   return (
     <div className="min-h-screen bg-base pb-16">
       <div className="max-w-md mx-auto px-4 pt-8 space-y-5">
 
         {/* ── Hero score card ─────────────────────────────────────────────── */}
-        <div className="bg-card rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-card rounded-3xl shadow-sm border border-default overflow-hidden">
           <div className={`${tier.bg} px-6 pt-8 pb-6 text-center`}>
-            <ScoreRing pct={summary.overallScore} color={tier.ring} />
+            <ScoreRing pct={summary.overallScore} color={ringColor} isDark={isDark} />
             <div className="mt-4">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <span className="text-2xl">{tier.emoji}</span>
                 <span className={`text-lg font-black ${tier.color}`}>{tier.label}</span>
               </div>
-              <p className="text-sm text-gray-600 leading-relaxed max-w-xs mx-auto">
+              <p className="text-sm text-secondary leading-relaxed max-w-xs mx-auto">
                 {getEncouragement(summary.overallScore)}
               </p>
             </div>
           </div>
 
           {/* Stats strip */}
-          <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-gray-100">
+          <div className="grid grid-cols-3 divide-x divide-default border-t border-default">
             <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-gray-900">{summary.totalCorrect}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Correct</p>
+              <p className="text-xl font-black text-primary">{summary.totalCorrect}</p>
+              <p className="text-[10px] text-tertiary font-medium">Correct</p>
             </div>
             <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-gray-900">{summary.totalAnswered - summary.totalCorrect}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Missed</p>
+              <p className="text-xl font-black text-primary">{summary.totalAnswered - summary.totalCorrect}</p>
+              <p className="text-[10px] text-tertiary font-medium">Missed</p>
             </div>
             <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-gray-900">{summary.totalAnswered}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Total</p>
+              <p className="text-xl font-black text-primary">{summary.totalAnswered}</p>
+              <p className="text-[10px] text-tertiary font-medium">Total</p>
             </div>
           </div>
         </div>
 
         {/* ── Focus areas — weak topics called out visually ───────────────── */}
         {summary.weakTopics.length > 0 && (
-          <div className="bg-card rounded-2xl shadow-sm border border-red-100 overflow-hidden">
-            <div className="px-4 pt-4 pb-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
+          <div className="bg-card rounded-2xl shadow-sm border border-red-100 dark:border-red-900/50 overflow-hidden">
+            <div className="px-4 pt-4 pb-3 bg-red-50 dark:bg-red-950/40 border-b border-red-100 dark:border-red-900/50 flex items-center gap-2">
               <span className="text-base">🎯</span>
               <div>
-                <p className="text-sm font-black text-red-700">Focus here first</p>
-                <p className="text-xs text-red-500">
+                <p className="text-sm font-black text-red-700 dark:text-red-300">Focus here first</p>
+                <p className="text-xs text-red-500 dark:text-red-400">
                   {summary.weakTopics.length === 1
                     ? '1 topic needs your attention'
                     : `${summary.weakTopics.length} topics need your attention`}
@@ -258,12 +268,12 @@ export default function DiagnosticResultsPage() {
             </div>
             <div className="px-4">
               {summary.weakTopics.map((topic, i) => (
-                <TopicRow key={i} topic={topic} />
+                <TopicRow key={i} topic={topic} isDark={isDark} />
               ))}
             </div>
             {isSignedIn && (
-              <div className="px-4 py-3 border-t border-red-50">
-                <p className="text-xs text-red-500">
+              <div className="px-4 py-3 border-t border-red-50 dark:border-red-900/30">
+                <p className="text-xs text-red-500 dark:text-red-400">
                   ✓ These have been added to your study plan
                 </p>
               </div>
@@ -272,23 +282,23 @@ export default function DiagnosticResultsPage() {
         )}
 
         {/* ── Full topic breakdown ─────────────────────────────────────────── */}
-        <div className="bg-card rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
-            <p className="text-sm font-black text-gray-900">All topics</p>
+        <div className="bg-card rounded-2xl shadow-sm border border-default overflow-hidden">
+          <div className="px-4 pt-4 pb-2 border-b border-default">
+            <p className="text-sm font-black text-primary">All topics</p>
           </div>
           <div className="px-4">
             {summary.topics.map((topic, i) => (
-              <TopicRow key={i} topic={topic} />
+              <TopicRow key={i} topic={topic} isDark={isDark} />
             ))}
           </div>
         </div>
 
         {/* ── Save status indicator ────────────────────────────────────────── */}
         {saveStatus === 'saving' && (
-          <p className="text-center text-xs text-gray-400">Saving your results…</p>
+          <p className="text-center text-xs text-tertiary">Saving your results…</p>
         )}
         {saveStatus === 'error' && (
-          <p className="text-center text-xs text-red-400">Results couldn't be saved — try again later</p>
+          <p className="text-center text-xs text-red-400 dark:text-red-500">Results couldn't be saved — try again later</p>
         )}
 
         {/* ── CTAs ─────────────────────────────────────────────────────────── */}
@@ -297,31 +307,31 @@ export default function DiagnosticResultsPage() {
             <>
               <Link
                 href="/student/study-plan"
-                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 active:scale-[0.98] transition-all shadow-sm"
+                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 active:scale-[0.98] transition-all shadow-sm"
               >
                 View my study plan →
               </Link>
               <Link
                 href="/student/practice"
-                className="flex items-center justify-center gap-2 w-full py-3.5 bg-card border border-gray-200 text-gray-700 font-bold text-sm rounded-2xl hover:bg-base active:scale-[0.98] transition-all"
+                className="flex items-center justify-center gap-2 w-full py-3.5 bg-card border border-default text-secondary font-bold text-sm rounded-2xl hover:bg-base active:scale-[0.98] transition-all"
               >
                 Practice now
               </Link>
             </>
           ) : (
             <>
-              <p className="text-center text-sm text-gray-500">
+              <p className="text-center text-sm text-tertiary">
                 Create a free account to save your results and get a personalised study plan.
               </p>
               <Link
                 href="/signup"
-                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 active:scale-[0.98] transition-all shadow-sm"
+                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 active:scale-[0.98] transition-all shadow-sm"
               >
                 Create free account →
               </Link>
               <Link
                 href="/diagnostic"
-                className="flex items-center justify-center gap-2 w-full py-3 text-gray-500 text-sm font-medium"
+                className="flex items-center justify-center gap-2 w-full py-3 text-tertiary text-sm font-medium"
               >
                 Take another diagnostic
               </Link>

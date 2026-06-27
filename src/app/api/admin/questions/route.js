@@ -1,19 +1,20 @@
-// src/app/api/admin/questions/coverage/route.js
+// src/app/api/admin/questions/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX: this route powers CoverageChart on the admin Past Questions page —
-// the bar chart admins use to decide which topics to mark as Core. It had
-// NO source filter at all (neither on the primary query nor its fallback),
-// so every AI-generated question was counting toward topic.count alongside
-// real past papers — directly inflating the bars, the colour tiers, and the
-// sort order admins rely on to choose core topics.
+// FIX: this file had been corrupted/overwritten with the content of
+// src/app/api/admin/questions/coverage/route.js (wrong file, wrong params —
+// it expected `subjectId` while every caller sends `subject`, causing every
+// request to 400 immediately with "subjectId required"). This is the actual,
+// correct questions LIST endpoint, restored to match what
+// src/app/admin/questions/page.js and src/app/admin/past-questions/page.js
+// actually call:
 //
-// THE FIX: hardcode .eq('source', 'past_paper') on both the primary query
-// and the fallback query. This is NOT exposed as a toggle — core topics
-// exist specifically to capture "how often does this appear in the real
-// exam," and AI-generated questions have no bearing on that by definition.
-// Unlike the practice/questions route (where 'source' is a legitimate query
-// param because a student might want either mode), here past_paper is the
-// only correct value, always.
+//   GET /api/admin/questions?subject=...&page=...&limit=...&exam=...
+//       &source=...&topic=...&difficulty=...&untagged=...&year=...&search=...
+//
+// Returns { questions: [...], total: N } — paginated, with subject/topic/
+// subtopic names attached for display, supporting both the Bank tab
+// (no source filter, all questions) and the Past Questions tab (source
+// passed explicitly by the caller).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -31,90 +32,91 @@ export async function GET(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
-  const subjectId = searchParams.get('subjectId')
-  const examType  = searchParams.get('examType')
 
-  if (!subjectId) return NextResponse.json({ error: 'subjectId required' }, { status: 400 })
+  const subjectId   = searchParams.get('subject')      // matches caller param name
+  const topicId     = searchParams.get('topic')
+  const subtopicId  = searchParams.get('subtopic')
+  const examType    = searchParams.get('exam')          // 'ALL' or omitted = no filter
+  const difficulty  = searchParams.get('difficulty')
+  const source      = searchParams.get('source')        // 'past_paper' | 'ai_generated' | omitted = both
+  const untagged    = searchParams.get('untagged')       // 'true' = subtopic_id IS NULL
+  const hasImage    = searchParams.get('has_image')
+  const missingImg  = searchParams.get('missing_image')
+  const year        = searchParams.get('year')
+  const search      = searchParams.get('search')
+  const page        = parseInt(searchParams.get('page')  ?? '1')
+  const limit       = Math.min(parseInt(searchParams.get('limit') ?? '25'), 100)
+  const offset      = (page - 1) * limit
 
   const db = svc()
 
-  const [{ data: topics }, { data: coreRows }] = await Promise.all([
-    db.from('topics')
-      .select('id, name, slug, order_index, subtopics ( id, name, slug, order_index )')
-      .eq('subject_id', subjectId)
-      .order('order_index'),
-    db.from('core_topics')
-      .select('topic_id, is_active')
-      .eq('subject_id', subjectId)
-      .eq('is_active', true),
-  ])
+  // NOTE: explanation_has_image and explanation_image_url omitted from select —
+  // these columns don't exist on every environment and previously caused 500s
+  // on this list. They're still available on the single-question GET route
+  // (/api/admin/questions/[id]) which selects all columns explicitly.
+  const selectClause = `
+    id, question_text, correct_answer, difficulty,
+    has_image, image_url, image_description,
+    year, exam_type, source, is_active, is_flagged, created_at,
+    topic_id, subtopic_id, subject_id,
+    subjects  ( id, name, slug ),
+    topics    ( id, name, slug ),
+    subtopics ( id, name, slug ),
+    options, explanation
+  `
 
-  if (!topics?.length) return NextResponse.json([])
-
-  const coreTopicIds = new Set((coreRows ?? []).map(r => r.topic_id))
-  const topicIds = topics.map(t => t.id)
-
-  // Base query — PAST PAPERS ONLY. Core topics must never be influenced by
-  // AI-generated content, regardless of exam filter selection.
-  let baseQuery = db
+  let query = db
     .from('questions')
-    .select('topic_id, subtopic_id, difficulty')
-    .eq('subject_id', subjectId)
+    .select(selectClause, { count: 'exact' })
     .eq('is_active', true)
-    .eq('source', 'past_paper')
-    .in('topic_id', topicIds)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
+  if (subjectId)             query = query.eq('subject_id', subjectId)
+  if (topicId)               query = query.eq('topic_id', topicId)
+  if (subtopicId)            query = query.eq('subtopic_id', subtopicId)
+  if (difficulty)            query = query.eq('difficulty', difficulty)
+  if (source)                query = query.eq('source', source)
+  if (untagged === 'true')   query = query.is('subtopic_id', null)
+  if (hasImage === 'true')   query = query.eq('has_image', true)
+  if (year)                  query = query.eq('year', year)
+  if (search)                query = query.ilike('question_text', `%${search}%`)
+
+  if (missingImg) {
+    query = query.eq('has_image', true).is('image_url', null)
+  }
+
+  // Exam filter — legacy exam_type column, BOTH always included alongside
+  // the requested exam type. 'ALL' (or omitted) means no exam filter.
   if (examType && examType !== 'ALL') {
-    baseQuery = baseQuery.contains('exam_types', [examType])
+    query = examType === 'BOTH'
+      ? query.eq('exam_type', 'BOTH')
+      : query.in('exam_type', [examType, 'BOTH'])
   }
 
-  let { data: rows, error } = await baseQuery
+  let { data, error, count } = await query
 
-  // Fallback: exam_types column may not exist yet (pre-migration).
-  // source filter is repeated here — this is exactly the line that was
-  // missing before, which silently let AI-generated questions back in
-  // whenever the primary query's exam_types filter errored.
+  // Fallback: if exam_types[] array column lookup ever gets introduced and
+  // errors on environments where it doesn't exist yet, retry without it.
+  // (Kept defensive even though this route currently only uses exam_type —
+  // matches the resilience pattern used throughout the rest of this codebase.)
   if (error) {
-    let fallbackQuery = db
-      .from('questions')
-      .select('topic_id, subtopic_id, difficulty')
-      .eq('subject_id', subjectId)
-      .eq('is_active', true)
-      .eq('source', 'past_paper')
-      .in('topic_id', topicIds)
-
-    if (examType && examType !== 'ALL') {
-      fallbackQuery = fallbackQuery.in('exam_type', [examType, 'BOTH'])
-    }
-
-    const fallback = await fallbackQuery
-    rows = fallback.data ?? []
+    console.error('[admin/questions] query error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const topicCounts    = {}
-  const subtopicCounts = {}
-
-  for (const q of rows ?? []) {
-    topicCounts[q.topic_id] = (topicCounts[q.topic_id] ?? 0) + 1
-    if (q.subtopic_id) {
-      subtopicCounts[q.subtopic_id] = (subtopicCounts[q.subtopic_id] ?? 0) + 1
-    }
-  }
-
-  const enriched = topics.map(t => ({
-    topic_id:    t.id,
-    topic_name:  t.name,
-    order_index: t.order_index,
-    is_core:     coreTopicIds.has(t.id),
-    count:       topicCounts[t.id] ?? 0,
-    subtopics: (t.subtopics ?? [])
-      .sort((a, b) => a.order_index - b.order_index)
-      .map(s => ({
-        subtopic_id:   s.id,
-        subtopic_name: s.name,
-        count:         subtopicCounts[s.id] ?? 0,
-      })),
+  const questions = (data ?? []).map(q => ({
+    ...q,
+    subject_name:  q.subjects?.name  ?? '',
+    subject_slug:  q.subjects?.slug  ?? '',
+    topic_name:    q.topics?.name    ?? '',
+    subtopic_name: q.subtopics?.name ?? '',
   }))
 
-  return NextResponse.json(enriched)
+  return NextResponse.json({
+    questions,
+    total: count ?? 0,
+    page,
+    limit,
+  })
 }

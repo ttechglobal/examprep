@@ -10,6 +10,7 @@
 //   sort      → SortEngine      (config: { buckets, items })
 //   match     → MatchEngine     (config: { pairs })
 //   build     → BuildEngine     (config: { formula, inputs, output, quiz })
+//   hunt      → ElementHunterEngine (config: { missions, table, timers } — static, from elementHunter.js)
 //   dungeon   → DungeonEngine   (rooms fetched from math_kingdom_room_defs)
 //   assemble  → AssembleRunner  (missions from a static mission data file,
 //                                 variant picked by game.assembleVariant)
@@ -41,8 +42,14 @@ import AssembleRunner from '@/components/games/engines/AssembleRunner'
 import EquationEscapeRenderer  from '@/components/games/renderers/equation-escape'
 import AtomBuilderRenderer     from '@/components/games/renderers/atom-builder'
 import EquationBalancerRenderer from '@/components/games/renderers/equation-balancer'
+import ChemistryDetectiveRenderer from '@/components/games/renderers/chemistry-detective'
 
-import { ATOM_BUILDER_MISSIONS, EQUATION_BALANCER_REACTIONS } from '@/lib/games/missions/chemLab'
+import { EQUATION_BALANCER_REACTIONS } from '@/lib/games/missions/chemLab'
+import { buildAtomBuilderQueue } from '@/lib/games/missions/atomBuilder'
+import { shuffleCases } from '@/lib/games/missions/chemistryDetective'
+
+import ElementHunterEngine from '@/components/games/engines/ElementHunterEngine'
+import { ELEMENT_HUNTER_TABLE, ELEMENT_HUNTER_TIMERS } from '@/lib/games/missions/elementHunter'
 
 function useIsDark() {
   const [dark, setDark] = useState(false)
@@ -65,8 +72,9 @@ const DUNGEON_RENDERERS = {
 // Maps a game's id (assemble mechanic) to its mission array + renderer.
 // Extend this map as new assemble games ship.
 const ASSEMBLE_GAMES = {
-  'atom-builder': { missions: ATOM_BUILDER_MISSIONS, Renderer: AtomBuilderRenderer },
+  'atom-builder': { Renderer: AtomBuilderRenderer }, // missions built fresh per session, see dispatch block below
   'equation-balancer': { missions: EQUATION_BALANCER_REACTIONS, Renderer: EquationBalancerRenderer },
+  'chemistry-detective': { Renderer: ChemistryDetectiveRenderer }, // cases built fresh per session, see dispatch block below
 }
 
 function NotFoundBlock({ message }) {
@@ -97,6 +105,15 @@ export default function GamePlayPage() {
 
   const [loading, setLoading] = useState(true)
   const [dungeonRooms, setDungeonRooms] = useState([])
+  // Built once per play session (component mount), NOT once per module
+  // load — buildAtomBuilderQueue() shuffles, so this must be fresh per
+  // session or every student would see the same shuffle order for the
+  // lifetime of the server process. useState's initializer function runs
+  // exactly once per mount, which is what we want here.
+  const [atomBuilderQueue] = useState(() => buildAtomBuilderQueue(5))
+  // Same per-session-shuffle reasoning as atomBuilderQueue above — cases
+  // must shuffle fresh per mount, not once per module load.
+  const [detectiveCaseQueue] = useState(() => shuffleCases())
   const [resumeRoom, setResumeRoom] = useState(0)
 
   // For dungeon-mechanic games: fetch room content + saved progress from DB.
@@ -173,6 +190,17 @@ export default function GamePlayPage() {
     )
   }
 
+  if (game.mechanic === 'hunt') {
+    return (
+      <PlayShell worldId={worldId} game={game}>
+        <ElementHunterEngine
+          game={{ table: ELEMENT_HUNTER_TABLE, timers: ELEMENT_HUNTER_TIMERS }}
+          onComplete={handleComplete}
+        />
+      </PlayShell>
+    )
+  }
+
   if (game.mechanic === 'dungeon') {
     const RoomRenderer = DUNGEON_RENDERERS[game.dbGameId ?? game.id]
     if (!RoomRenderer) return <NotFoundBlock message={`${game.title} has no room content configured yet`} />
@@ -204,7 +232,11 @@ export default function GamePlayPage() {
         <BackLink worldId={worldId} world={world} />
         <AssembleRunner
           gameId={game.id}
-          missions={assembleGame.missions}
+          missions={
+            game.id === 'atom-builder' ? atomBuilderQueue
+            : game.id === 'chemistry-detective' ? detectiveCaseQueue
+            : assembleGame.missions
+          }
           theme={game.accent}
           MissionRenderer={assembleGame.Renderer}
           isDark={isDark}

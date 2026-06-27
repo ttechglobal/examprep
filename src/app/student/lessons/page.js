@@ -5,12 +5,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { getSubjectColor, getMasteryLevel } from '@/lib/theme'
+import { getMasteryLevel } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 import Link from 'next/link'
 
 export default function LessonsPage() {
   const router   = useRouter()
   const supabase = createClient()
+  const isDark   = useIsDark()
 
   const [subjects, setSubjects] = useState([])
   const [loading, setLoading]   = useState(true)
@@ -45,7 +48,7 @@ export default function LessonsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-indigo-500 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -63,14 +66,14 @@ export default function LessonsPage() {
           <p className="font-bold text-primary">No subjects yet</p>
           <p className="text-sm text-secondary">Take a quick diagnostic to get your study plan.</p>
           <Link href="/diagnostic"
-            className="inline-block px-6 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors">
+            className="inline-block px-6 py-2.5 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors">
             Take the diagnostic →
           </Link>
         </div>
       ) : (
         <div className="space-y-3">
           {subjects.map(sub => {
-            const color = getSubjectColor(sub.subjects?.name)
+            const color = resolveSubjectColors(sub.subjects?.name, isDark)
             return (
               <Link
                 key={sub.subject_id}
@@ -79,22 +82,22 @@ export default function LessonsPage() {
                            hover:border-indigo-200 dark:hover:border-indigo-700
                            hover:shadow-sm transition-all active:scale-[0.98]"
               >
-                <div className={`${color.bg} px-5 py-4`}>
+                <div className="px-5 py-4" style={{ background: color.bg }}>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className={`font-black text-base ${color.text}`}>{sub.subjects?.name}</h3>
+                    <h3 className="font-black text-base" style={{ color: color.text }}>{sub.subjects?.name}</h3>
                     <span className={`text-xs font-bold ${sub.mastery.color}`}>
                       {sub.mastery.emoji} {sub.mastery.label}
                     </span>
                   </div>
                   <div className="h-2 bg-card/50 dark:bg-black/20 rounded-full overflow-hidden">
-                    <div className={`h-full ${color.accent} rounded-full transition-all duration-700`}
-                      style={{ width: `${sub.pct}%` }} />
+                    <div className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${sub.pct}%`, background: color.solid }} />
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
-                    <p className={`text-xs ${color.text} opacity-80`}>
+                    <p className="text-xs opacity-80" style={{ color: color.text }}>
                       {sub.completed} of {sub.total} topics completed
                     </p>
-                    <p className={`text-xs font-black ${color.text}`}>{sub.pct}%</p>
+                    <p className="text-xs font-black" style={{ color: color.text }}>{sub.pct}%</p>
                   </div>
                 </div>
                 <div className="px-5 py-3 flex items-center justify-between bg-card">

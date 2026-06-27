@@ -20,7 +20,8 @@ import { useRouter } from 'next/navigation'
 import { parseLesson, buildLessonPrompt } from '@/lib/lessonParser'
 import SlideRenderer from '@/components/lesson/SlideRenderer'
 import { AdminImageSlot } from '@/components/lesson/ImageSlot'
-import { getSubjectColor } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 
 const SLIDE_DEFAULTS = {
   hook: { type: 'hook', body: '' },
@@ -81,9 +82,9 @@ const SLIDE_TYPE_LABELS = {
 function CopyBox({ text }) {
   const [copied, setCopied] = useState(false)
   return (
-    <div className="border border-indigo-200 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
-        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+    <div className="border border-indigo-200 dark:border-indigo-800 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/40 border-b border-indigo-200 dark:border-indigo-800">
+        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
           AI Lesson Prompt
         </span>
         <button
@@ -94,14 +95,14 @@ function CopyBox({ text }) {
           }}
           className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
             copied
-              ? 'bg-green-100 text-green-700'
-              : 'bg-indigo-600 text-white hover:bg-indigo-500'
+              ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+              : 'bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-500 dark:hover:bg-indigo-400'
           }`}
         >
           {copied ? '✓ Copied!' : 'Copy prompt'}
         </button>
       </div>
-      <pre className="text-xs text-gray-700 p-4 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto bg-white">
+      <pre className="text-xs text-secondary p-4 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto bg-card">
         {text}
       </pre>
     </div>
@@ -117,36 +118,36 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+    <div className="border border-default rounded-2xl overflow-hidden">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3 bg-subtle hover:bg-subtle transition-colors text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-gray-400">{index + 1}</span>
-          <span className="text-xs font-black uppercase tracking-wide text-gray-600">
+          <span className="text-xs font-black text-tertiary">{index + 1}</span>
+          <span className="text-xs font-black uppercase tracking-wide text-secondary">
             {SLIDE_TYPE_LABELS[slide.type] ?? slide.type}
           </span>
           {slide.heading && (
-            <span className="text-xs text-gray-500 truncate max-w-48">— {slide.heading}</span>
+            <span className="text-xs text-tertiary truncate max-w-48">— {slide.heading}</span>
           )}
           {slide.term && (
-            <span className="text-xs text-gray-500 truncate max-w-48">— {slide.term}</span>
+            <span className="text-xs text-tertiary truncate max-w-48">— {slide.term}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(index) }}
-            className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors"
+            className="text-xs text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-0.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
           >
             Remove
           </button>
-          <span className="text-gray-400 text-xs">{expanded ? '▲' : '▼'}</span>
+          <span className="text-tertiary text-xs">{expanded ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {expanded && (
-        <div className="p-4 space-y-3 bg-white">
+        <div className="p-4 space-y-3 bg-card">
           {/* HOOK */}
           {slide.type === 'hook' && (
             <textarea
@@ -154,7 +155,7 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
               onChange={(e) => update('body', e.target.value)}
               placeholder="Hook body — 2–3 sentences connecting to Nigerian student life"
               rows={3}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
             />
           )}
 
@@ -165,17 +166,17 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.term ?? ''}
                 onChange={(e) => update('term', e.target.value)}
                 placeholder="Term"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
               <textarea
                 value={slide.definition ?? ''}
                 onChange={(e) => update('definition', e.target.value)}
                 placeholder="Definition — one conversational sentence"
                 rows={2}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-500">Examples</p>
+                <p className="text-xs font-bold text-tertiary">Examples</p>
                 {(slide.examples ?? ['']).map((ex, ei) => (
                   <div key={ei} className="flex gap-2">
                     <input
@@ -186,11 +187,11 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('examples', next)
                       }}
                       placeholder={`Example ${ei + 1}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('examples', (slide.examples ?? []).filter((_, i) => i !== ei))}
-                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                      className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 text-xs px-2"
                     >✕</button>
                   </div>
                 ))}
@@ -209,17 +210,17 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.heading ?? ''}
                 onChange={(e) => update('heading', e.target.value)}
                 placeholder="Heading"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
               <textarea
                 value={slide.body ?? ''}
                 onChange={(e) => update('body', e.target.value)}
                 placeholder="Body — one idea, max 20 words"
                 rows={2}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-500">Examples</p>
+                <p className="text-xs font-bold text-tertiary">Examples</p>
                 {(slide.examples ?? ['']).map((ex, ei) => (
                   <div key={ei} className="flex gap-2">
                     <input
@@ -230,11 +231,11 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('examples', next)
                       }}
                       placeholder={`Example ${ei + 1}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('examples', (slide.examples ?? []).filter((_, i) => i !== ei))}
-                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                      className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 text-xs px-2"
                     >✕</button>
                   </div>
                 ))}
@@ -259,23 +260,23 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.label ?? ''}
                 onChange={(e) => update('label', e.target.value)}
                 placeholder="Label (e.g. Speed Formula)"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
               <input
                 value={slide.formula ?? ''}
                 onChange={(e) => update('formula', e.target.value)}
                 placeholder="Formula (e.g. Speed = Distance ÷ Time)"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2 border border-default rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
               <textarea
                 value={slide.plain_english ?? ''}
                 onChange={(e) => update('plain_english', e.target.value)}
                 placeholder="Plain English explanation"
                 rows={2}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-500">Variables</p>
+                <p className="text-xs font-bold text-tertiary">Variables</p>
                 {(slide.variables ?? []).map((v, vi) => (
                   <div key={vi} className="flex gap-2">
                     <input
@@ -286,7 +287,7 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('variables', next)
                       }}
                       placeholder="Symbol"
-                      className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="w-16 px-2 py-2 border border-default rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <input
                       value={v.meaning ?? ''}
@@ -296,11 +297,11 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('variables', next)
                       }}
                       placeholder="Meaning"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('variables', (slide.variables ?? []).filter((_, i) => i !== vi))}
-                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                      className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 text-xs px-2"
                     >✕</button>
                   </div>
                 ))}
@@ -320,12 +321,12 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 onChange={(e) => update('question', e.target.value)}
                 placeholder="Question"
                 rows={2}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
               <div className="space-y-2">
                 {(slide.options ?? []).map((opt, oi) => (
                   <div key={oi} className="flex gap-2 items-center">
-                    <span className="text-xs font-black text-gray-400 w-4">{opt.key}</span>
+                    <span className="text-xs font-black text-tertiary w-4">{opt.key}</span>
                     <input
                       value={opt.text ?? ''}
                       onChange={(e) => {
@@ -334,14 +335,14 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('options', next)
                       }}
                       placeholder={`Option ${opt.key}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('correct', opt.key)}
                       className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
                         slide.correct === opt.key
-                          ? 'bg-green-100 text-green-700 border border-green-300'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
+                          : 'bg-subtle text-tertiary hover:bg-active'
                       }`}
                     >
                       {slide.correct === opt.key ? '✓ Correct' : 'Set correct'}
@@ -353,13 +354,13 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.feedback_correct ?? ''}
                 onChange={(e) => update('feedback_correct', e.target.value)}
                 placeholder="Feedback — correct"
-                className="w-full px-3 py-2 border border-green-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                className="w-full px-3 py-2 border border-green-200 dark:border-green-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 dark:focus:ring-green-600"
               />
               <input
                 value={slide.feedback_wrong ?? ''}
                 onChange={(e) => update('feedback_wrong', e.target.value)}
                 placeholder="Feedback — wrong (start with 'Almost. Remember: ...')"
-                className="w-full px-3 py-2 border border-red-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                className="w-full px-3 py-2 border border-red-200 dark:border-red-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400 dark:focus:ring-red-600"
               />
             </>
           )}
@@ -374,8 +375,8 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                     onClick={() => update('mode', m)}
                     className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${
                       slide.mode === m
-                        ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700'
+                        : 'bg-subtle text-tertiary hover:bg-active'
                     }`}
                   >
                     {m === 'guided' ? 'Guided' : 'Student Attempt'}
@@ -387,13 +388,13 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 onChange={(e) => update('problem', e.target.value)}
                 placeholder="Problem statement"
                 rows={2}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-500">Steps</p>
+                <p className="text-xs font-bold text-tertiary">Steps</p>
                 {(slide.steps ?? []).map((step, si) => (
                   <div key={si} className="flex gap-2">
-                    <span className="text-xs text-gray-400 mt-2.5 flex-shrink-0">{si + 1}.</span>
+                    <span className="text-xs text-tertiary mt-2.5 flex-shrink-0">{si + 1}.</span>
                     <input
                       value={step.instruction ?? ''}
                       onChange={(e) => {
@@ -402,11 +403,11 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('steps', next)
                       }}
                       placeholder={`Step ${si + 1}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('steps', (slide.steps ?? []).filter((_, i) => i !== si))}
-                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                      className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 text-xs px-2"
                     >✕</button>
                   </div>
                 ))}
@@ -422,7 +423,7 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.final_answer ?? ''}
                 onChange={(e) => update('final_answer', e.target.value)}
                 placeholder="Final answer"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
             </>
           )}
@@ -431,7 +432,7 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
           {slide.type === 'summary' && (
             <>
               <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-500">Key points</p>
+                <p className="text-xs font-bold text-tertiary">Key points</p>
                 {(slide.points ?? []).map((pt, pi) => (
                   <div key={pi} className="flex gap-2">
                     <input
@@ -442,11 +443,11 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                         update('points', next)
                       }}
                       placeholder={`Point ${pi + 1}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="flex-1 px-3 py-2 border border-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
                     <button
                       onClick={() => update('points', (slide.points ?? []).filter((_, i) => i !== pi))}
-                      className="text-red-400 hover:text-red-600 text-xs px-2"
+                      className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 text-xs px-2"
                     >✕</button>
                   </div>
                 ))}
@@ -459,7 +460,7 @@ function SlideEditor({ slide, index, onUpdate, onDelete }) {
                 value={slide.closing ?? ''}
                 onChange={(e) => update('closing', e.target.value)}
                 placeholder="Closing encouragement line"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="w-full px-3 py-2.5 border border-default rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
             </>
           )}
@@ -494,7 +495,8 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
     }
   }, [subject?.name, topic?.name, subtopic?.name, subtopic?.objectives, subtopic?.exam_type, subject?.exam_type])
 
-  const color = subject?.name ? getSubjectColor(subject.name) : getSubjectColor('default')
+  const isDark = useIsDark()
+  const color = subject?.name ? resolveSubjectColors(subject.name, isDark) : resolveSubjectColors('default', isDark)
 
   const [mode, setMode]               = useState('prompt')
   const [rawJson, setRawJson]         = useState('')
@@ -609,26 +611,26 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
     <div className="space-y-5 max-w-2xl">
 
       {/* Subject/topic header */}
-      <div className={`flex items-center justify-between ${color.bg} rounded-2xl px-4 py-3`}>
+      <div className="flex items-center justify-between rounded-2xl px-4 py-3" style={{ background: color.bg }}>
         <div>
-          <p className={`text-xs font-bold uppercase tracking-wide ${color.text} opacity-70`}>
+          <p className="text-xs font-bold uppercase tracking-wide opacity-70" style={{ color: color.text }}>
             {subject.name} · {topic.name}
           </p>
-          <p className={`text-base font-black ${color.text}`}>{subtopic.name}</p>
+          <p className="text-base font-black" style={{ color: color.text }}>{subtopic.name}</p>
         </div>
         <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
           subtopic.exam_type === 'WAEC'
-            ? 'bg-blue-100 text-blue-700'
+            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
             : subtopic.exam_type === 'JAMB'
-            ? 'bg-purple-100 text-purple-700'
-            : 'bg-indigo-100 text-indigo-700'
+            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+            : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
         }`}>
           {subtopic.exam_type ?? 'BOTH'}
         </span>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+      <div className="flex gap-1 bg-subtle p-1 rounded-xl">
         {[
           { id: 'prompt',  label: '1. Generate' },
           { id: 'paste',   label: '2. Paste JSON' },
@@ -640,8 +642,8 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
             onClick={() => setMode(tab.id)}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
               mode === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-card text-primary shadow-sm'
+                : 'text-tertiary hover:text-secondary'
             }`}
           >
             {tab.label}
@@ -652,20 +654,20 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
       {/* ── GENERATE PROMPT TAB ── */}
       {mode === 'prompt' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-secondary">
             Copy this prompt and paste it into Claude or Gemini. Then paste the JSON output back in the <strong>Paste JSON</strong> tab.
           </p>
           {prompt
             ? <CopyBox text={prompt} />
             : (
-              <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+              <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-300">
                 Prompt unavailable — subject or topic data is missing for this subtopic.
               </div>
             )
           }
           <button
             onClick={() => setMode('paste')}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors"
+            className="w-full py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors"
           >
             I've generated the lesson → Paste JSON
           </button>
@@ -675,26 +677,26 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
       {/* ── PASTE JSON TAB ── */}
       {mode === 'paste' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-secondary">
             Paste the full JSON output from the AI below. The lesson preview will appear automatically.
           </p>
           <textarea
             value={rawJson}
             onChange={(e) => handleJsonChange(e.target.value)}
-            className="w-full h-72 font-mono text-xs p-4 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full h-72 font-mono text-xs p-4 border border-default rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder={'Paste Claude/Gemini JSON output here…\n\n{\n  "title": "...",\n  "slides": [...]\n}'}
             spellCheck={false}
           />
           {parseResult && (
             <div className={`p-3 rounded-xl text-sm ${
               parseResult.valid
-                ? 'bg-green-50 border border-green-200'
-                : 'bg-red-50 border border-red-200'
+                ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800'
             }`}>
               {parseResult.valid ? (
-                <div className="text-green-800">
+                <div className="text-green-800 dark:text-green-300">
                   <p className="font-bold">✓ Valid — switching to preview…</p>
-                  <p className="text-xs mt-0.5 text-green-600">
+                  <p className="text-xs mt-0.5 text-green-600 dark:text-green-400">
                     {parseResult.stats.totalSlides} slides ·{' '}
                     {parseResult.stats.interactions} interactions ·{' '}
                     {parseResult.stats.workedExamples} worked examples ·{' '}
@@ -702,11 +704,11 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
                   </p>
                 </div>
               ) : (
-                <div className="text-red-800">
+                <div className="text-red-800 dark:text-red-300">
                   <p className="font-bold">⚠ JSON has errors — fix and re-paste</p>
                   <ul className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
                     {parseResult.errors.map((err, i) => (
-                      <li key={i} className="text-xs text-red-700">· {err}</li>
+                      <li key={i} className="text-xs text-red-700 dark:text-red-400">· {err}</li>
                     ))}
                   </ul>
                 </div>
@@ -720,66 +722,66 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
       {mode === 'preview' && (
         <div className="space-y-4">
           {slides.length === 0 ? (
-            <div className="text-center py-16 bg-gray-50 rounded-2xl">
-              <p className="text-gray-500 text-sm font-medium mb-1">No lesson to preview yet</p>
-              <p className="text-xs text-gray-400 mb-4">
+            <div className="text-center py-16 bg-subtle rounded-2xl">
+              <p className="text-tertiary text-sm font-medium mb-1">No lesson to preview yet</p>
+              <p className="text-xs text-tertiary mb-4">
                 Paste your JSON in the "Paste JSON" tab first.
               </p>
               <button
                 onClick={() => setMode('paste')}
-                className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 transition-colors"
+                className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-bold rounded-xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors"
               >
                 Go to Paste JSON →
               </button>
             </div>
           ) : (
             <>
-              <div className="flex gap-3 sticky top-0 bg-white/95 backdrop-blur-sm py-3 z-10 -mx-1 px-1">
+              <div className="flex gap-3 sticky top-0 bg-card/95 backdrop-blur-sm py-3 z-10 -mx-1 px-1">
                 <button
                   onClick={() => setMode('edit')}
-                  className="flex-1 py-3 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-3 border border-default text-secondary text-sm font-bold rounded-xl hover:bg-subtle transition-colors"
                 >
                   Edit slides
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 py-3 bg-green-600 text-white text-sm font-black rounded-xl hover:bg-green-500 disabled:opacity-50 transition-colors"
+                  className="flex-1 py-3 bg-green-600 dark:bg-green-500 text-white text-sm font-black rounded-xl hover:bg-green-500 dark:hover:bg-green-400 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Saving…' : '✓ Save Lesson — Go Live'}
                 </button>
               </div>
 
-              <p className="text-xs text-gray-400 text-center">
+              <p className="text-xs text-tertiary text-center">
                 {slides.length} slides · Saving makes this lesson immediately live for students
               </p>
 
               {saveMessage && (
                 <div className={`p-3 rounded-xl text-sm font-medium ${
                   saveMessage.type === 'error'
-                    ? 'bg-red-50 text-red-800 border border-red-200'
-                    : 'bg-green-50 text-green-800 border border-green-200'
+                    ? 'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                    : 'bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
                 }`}>
                   {saveMessage.text}
                 </div>
               )}
 
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <div className={`${color.bg} px-4 py-3 border-b ${color.border ?? ''}`}>
+              <div className="bg-card rounded-2xl border border-default overflow-hidden">
+                <div className="px-4 py-3 border-b" style={{ background: color.bg, borderColor: color.border }}>
                   <div className="flex items-center justify-between mb-2">
-                    <p className={`text-sm font-black ${color.text}`}>{lessonTitle}</p>
-                    <span className={`text-xs ${color.text} opacity-70`}>{slides.length} slides</span>
+                    <p className="text-sm font-black" style={{ color: color.text }}>{lessonTitle}</p>
+                    <span className="text-xs opacity-70" style={{ color: color.text }}>{slides.length} slides</span>
                   </div>
                   <div className="h-2 bg-white/40 rounded-full">
-                    <div className={`h-full ${color.accent ?? 'bg-indigo-500'} rounded-full w-1/4`} />
+                    <div className="h-full rounded-full w-1/4" style={{ background: color.solid }} />
                   </div>
                 </div>
-                <div className="divide-y divide-gray-50">
+                <div className="divide-y divide-default">
                   {slides.map((slide, i) => (
                     <div key={i} className="px-4 py-5">
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs font-black text-gray-300">{i + 1}</span>
-                        <span className="text-xs font-black uppercase tracking-wide text-gray-400">
+                        <span className="text-xs font-black text-tertiary">{i + 1}</span>
+                        <span className="text-xs font-black uppercase tracking-wide text-tertiary">
                           {SLIDE_TYPE_LABELS[slide.type] ?? slide.type}
                         </span>
                       </div>
@@ -797,7 +799,7 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
       {mode === 'edit' && (
         <div className="space-y-3">
           {slides.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No slides yet — paste JSON first or add slides manually.</p>
+            <p className="text-sm text-tertiary text-center py-8">No slides yet — paste JSON first or add slides manually.</p>
           ) : (
             slides.map((slide, i) => (
               <SlideEditor
@@ -811,14 +813,14 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
           )}
 
           {/* Add slide */}
-          <div className="border-2 border-dashed border-gray-200 rounded-2xl p-4">
-            <p className="text-xs font-bold text-gray-500 mb-2">Add slide</p>
+          <div className="border-2 border-dashed border-default rounded-2xl p-4">
+            <p className="text-xs font-bold text-tertiary mb-2">Add slide</p>
             <div className="flex flex-wrap gap-2">
               {Object.keys(SLIDE_DEFAULTS).map(type => (
                 <button
                   key={type}
                   onClick={() => handleAddSlide(type)}
-                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-colors font-medium"
+                  className="text-xs px-3 py-1.5 bg-subtle text-secondary rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-medium"
                 >
                   + {SLIDE_TYPE_LABELS[type] ?? type}
                 </button>
@@ -830,7 +832,7 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="w-full py-3.5 bg-green-600 text-white text-sm font-black rounded-2xl hover:bg-green-500 disabled:opacity-50 transition-colors"
+              className="w-full py-3.5 bg-green-600 dark:bg-green-500 text-white text-sm font-black rounded-2xl hover:bg-green-500 dark:hover:bg-green-400 disabled:opacity-50 transition-colors"
             >
               {saving ? 'Saving…' : '✓ Save Lesson — Go Live'}
             </button>
@@ -839,8 +841,8 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
           {saveMessage && (
             <div className={`p-3 rounded-xl text-sm font-medium ${
               saveMessage.type === 'error'
-                ? 'bg-red-50 text-red-800 border border-red-200'
-                : 'bg-green-50 text-green-800 border border-green-200'
+                ? 'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
             }`}>
               {saveMessage.text}
             </div>

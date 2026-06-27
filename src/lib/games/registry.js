@@ -71,7 +71,7 @@ export const WORLDS = [
     subject:     'Chemistry',
     icon:        '🧪',
     description: 'Build atoms, balance equations, and see chemistry come alive.',
-    games:       ['atom-builder', 'equation-balancer', 'acids-bases', 'organic-functional-groups', 'ideal-gas'],
+    games:       ['atom-builder', 'equation-balancer', 'acids-bases', 'organic-functional-groups', 'ideal-gas', 'element-hunter', 'chemistry-detective'],
   },
   {
     id:          'physics_arena',
@@ -186,10 +186,10 @@ export const GAMES = {
   'atom-builder': {
     id: 'atom-builder', worldId: 'chem_lab', mechanic: 'assemble',
     title: 'Atom Builder', icon: '⚛️',
-    tagline: 'Build atoms from particles — see ions and isotopes come to life.',
+    tagline: 'Build an atom from a particle count, then identify what you made.',
     concept: 'Atomic Structure', difficulty: 'progressive', examTags: ['WAEC', 'JAMB'],
-    contentSource: 'static', missionSource: 'chemLabMissions.ATOM_BUILDER_MISSIONS',
-    assembleVariant: 'counter',
+    contentSource: 'static', missionSource: 'atomBuilder.ATOM_BUILDER_MISSIONS',
+    assembleVariant: 'identify',
     accent: { solid: '#dc2626', bg: '#fef2f2', text: '#991b1b', border: '#fecaca', darkSolid: '#f87171', darkBg: '#450a0a', darkText: '#fca5a5', darkBorder: '#dc2626' },
   },
   'equation-balancer': {
@@ -262,6 +262,23 @@ export const GAMES = {
         { question: 'Which law states that pressure and volume are inversely proportional at constant temperature?', answer: "Boyle's Law", options: ["Charles' Law", "Boyle's Law", "Gay-Lussac's Law", "Avogadro's Law"] },
       ],
     },
+  },
+  'element-hunter': {
+    id: 'element-hunter', worldId: 'chem_lab', mechanic: 'hunt',
+    title: 'Element Hunter', icon: '🎯',
+    tagline: 'A fast-paced scavenger hunt across the periodic table.',
+    concept: 'Periodic Table & Atomic Structure', difficulty: 'progressive', examTags: ['WAEC', 'JAMB'],
+    contentSource: 'static', missionSource: 'elementHunter.ELEMENT_HUNTER_MISSIONS',
+    accent: { solid: '#993556', bg: '#fbeaf0', text: '#72243e', border: '#ed93b1', darkSolid: '#d4537e', darkBg: '#4b1528', darkText: '#ed93b1', darkBorder: '#993556' },
+  },
+  'chemistry-detective': {
+    id: 'chemistry-detective', worldId: 'chem_lab', mechanic: 'assemble',
+    title: 'Chemistry Detective', icon: '🔍',
+    tagline: 'Follow the clues, eliminate suspects, name the mystery element.',
+    concept: 'Periodic Table & Classification', difficulty: 'progressive', examTags: ['WAEC', 'JAMB'],
+    contentSource: 'static', missionSource: 'chemistryDetective.CHEMISTRY_DETECTIVE_CASES',
+    assembleVariant: 'detective',
+    accent: { solid: '#185fa5', bg: '#e6f1fb', text: '#0c447c', border: '#85b7eb', darkSolid: '#378add', darkBg: '#042c53', darkText: '#85b7eb', darkBorder: '#185fa5' },
   },
 
   // ── Physics Arena ─────────────────────────────────────────────────────────────
@@ -495,4 +512,5 @@ export const MECHANIC_META = {
   build:    { label: 'Build It', icon: '🔧', engineId: 'build'    },
   dungeon:  { label: 'Dungeon',  icon: '🗝️', engineId: 'dungeon'  },
   assemble: { label: 'Assemble', icon: '⚛️', engineId: 'assemble' },
+  hunt:     { label: 'Hunt It',  icon: '🎯', engineId: 'hunt'     },
 }

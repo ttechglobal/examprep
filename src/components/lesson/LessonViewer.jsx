@@ -10,7 +10,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSubjectColor } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
+import SubjectIcon from '@/components/ui/SubjectIcon'
 import SlideRenderer from './SlideRenderer'
 import SignupPrompt from '@/components/auth/SignupPrompt'
 import { useLessonNav } from '@/contexts/LessonNavContext'
@@ -24,16 +26,16 @@ function ExitModal({ onKeep, onExit }) {
       className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0"
       style={{ backdropFilter: 'blur(6px)' }}
     >
-      <div className="bg-card dark:bg-[#1a2744] rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-gray-100 dark:border-white/10">
+      <div className="bg-card rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-default">
         <div className="text-center space-y-1">
-          <p className="text-lg font-black text-gray-900 dark:text-white">Leave this lesson?</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Your progress is saved automatically.</p>
+          <p className="text-lg font-black text-primary">Leave this lesson?</p>
+          <p className="text-sm text-secondary">Your progress is saved automatically.</p>
         </div>
         <div className="space-y-2.5">
-          <button onClick={onKeep} className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
+          <button onClick={onKeep} className="w-full py-3.5 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors">
             Keep learning
           </button>
-          <button onClick={onExit} className="w-full py-3.5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-2xl hover:bg-base dark:hover:bg-card/5 transition-colors">
+          <button onClick={onExit} className="w-full py-3.5 border border-default text-secondary text-sm font-medium rounded-2xl hover:bg-base transition-colors">
             Exit lesson
           </button>
         </div>
@@ -57,6 +59,7 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   const router = useRouter()
   const { open: openLesson, close: closeLesson } = useLessonNav()
   const { awardPoints } = usePoints()
+  const isDark = useIsDark()
 
   // lesson_content may arrive as a JSON string (Supabase text col) or parsed object (JSONB)
   const lesson = (() => {
@@ -68,7 +71,25 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   const slides      = lesson?.slides ?? []
   const totalSlides = slides.length
   const subjectName = subtopic.topics?.subjects?.name ?? ''
-  const color       = getSubjectColor(subjectName)
+  const color        = resolveSubjectColors(subjectName, isDark)
+  // Intro-screen stats — counted directly from real slide data, not invented.
+  const checkCount = slides.filter(s => s.type === 'interaction').length
+  const quizSlide   = slides.find(s => s.type === 'end_quiz')
+  const quizCount   = quizSlide?.questions?.length ?? 0
+  // Subject-coloured accent override — every var(--lesson-accent), var(--lesson-
+  // accent-shadow), and var(--lesson-option-sel*) reference throughout this
+  // file and SlideRenderer.jsx picks these up automatically, since they're
+  // set as inline custom properties on the root container below.
+  // --lesson-accent-shadow reuses the subject's darker `text` tone (rather
+  // than a one-off computed colour) for the offset "pressed" drop-shadow
+  // used throughout the illustrated slide styling.
+  const accentOverride = {
+    '--lesson-accent':        color.solid,
+    '--lesson-accent-shadow': `${color.text}40`, // ~25% opacity via hex alpha
+    '--lesson-option-sel':    color.bg,
+    '--lesson-option-selbd':  color.solid,
+    '--lesson-option-seltx':  color.text,
+  }
 
   const [currentIndex,     setCurrentIndex]     = useState(
     existingProgress?.slides_completed
@@ -80,6 +101,10 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   const [showExitModal,    setShowExitModal]    = useState(false)
   const [saving,           setSaving]           = useState(false)
   const [slideUnlocked,    setSlideUnlocked]    = useState(false)
+  // Intro screen always shows first, even when resuming progress — confirmed
+  // deliberate choice: re-orients the student on what they're about to study
+  // every time, rather than only on a first-ever visit.
+  const [showIntro,        setShowIntro]        = useState(true)
 
   useEffect(() => {
     openLesson?.()
@@ -127,25 +152,114 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
     router.back()
   }, [currentIndex, saveProgress, closeLesson, router])
 
+  // ── Intro screen ──────────────────────────────────────────────────────────
+  // Always shown first (even when resuming) — orients the student on what
+  // they're about to study before jumping into slide 1.
+  if (showIntro) {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center px-6"
+        style={{ background: 'var(--lesson-bg)', ...accentOverride }}>
+        <style>{lessonCssVars}</style>
+        <div className="text-center max-w-sm w-full">
+
+          {/* Topic icon badge */}
+          <div
+            className="mx-auto mb-5 flex items-center justify-center"
+            style={{
+              width: 96, height: 96, borderRadius: 26,
+              background: 'var(--lesson-surface)',
+              border: '3px solid var(--lesson-accent)',
+              boxShadow: '0 5px 0 var(--lesson-accent-shadow)',
+            }}
+          >
+            <SubjectIcon name={subjectName} color={color.text} size={48} />
+          </div>
+
+          <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--lesson-accent)', letterSpacing: '0.12em' }}>
+            {subjectName}{subtopic.topics?.name ? ` · ${subtopic.topics.name}` : ''}
+          </p>
+          <h1 className="font-bold mb-2.5" style={{
+            fontFamily: "'Baloo 2', 'Inter', sans-serif",
+            fontSize: 'clamp(1.5rem, 5.5vw, 2rem)',
+            color: 'var(--lesson-text)',
+            lineHeight: 1.2,
+          }}>
+            {subtopic.name}
+          </h1>
+          {subtopic.intro_blurb && (
+            <p className="text-sm mb-6" style={{ color: 'var(--lesson-text-muted)', lineHeight: 1.55 }}>
+              {subtopic.intro_blurb}
+            </p>
+          )}
+
+          {/* Lesson stats card */}
+          <div className="rounded-3xl p-5 mb-5 w-full"
+            style={{ background: 'var(--lesson-card)', border: '2px solid var(--lesson-border)' }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-lg font-black" style={{ color: 'var(--lesson-text)' }}>{totalSlides}</p>
+                <p className="text-[11px]" style={{ color: 'var(--lesson-text-muted)' }}>Slides</p>
+              </div>
+              <div>
+                <p className="text-lg font-black" style={{ color: 'var(--lesson-text)' }}>{checkCount}</p>
+                <p className="text-[11px]" style={{ color: 'var(--lesson-text-muted)' }}>Quick checks</p>
+              </div>
+              <div>
+                <p className="text-lg font-black" style={{ color: 'var(--lesson-text)' }}>{quizCount}</p>
+                <p className="text-[11px]" style={{ color: 'var(--lesson-text-muted)' }}>Quiz questions</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowIntro(false)}
+            className="w-full text-white font-bold rounded-2xl transition-opacity hover:opacity-90"
+            style={{
+              fontFamily: "'Baloo 2', 'Inter', sans-serif",
+              fontSize: 16, padding: '16px',
+              background: 'var(--lesson-accent)',
+              boxShadow: '0 5px 0 var(--lesson-accent-shadow)',
+            }}
+          >
+            {existingProgress?.slides_completed > 0 ? 'Continue lesson' : 'Start lesson'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Completion screen ──────────────────────────────────────────────────────
   if (completed) {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center px-6"
-        style={{ background: 'var(--lesson-bg)' }}>
+        style={{ background: 'var(--lesson-bg)', ...accentOverride }}>
         <style>{lessonCssVars}</style>
         <div className="text-center max-w-sm w-full space-y-6">
-          <div className="w-20 h-20 rounded-3xl mx-auto flex items-center justify-center text-4xl shadow-lg"
-            style={{ background: 'var(--lesson-card)' }}>
+          <div
+            className="mx-auto flex items-center justify-center text-4xl"
+            style={{
+              width: 96, height: 96, borderRadius: 28,
+              background: 'var(--lesson-surface)',
+              border: '3px solid var(--lesson-accent)',
+              boxShadow: '0 5px 0 var(--lesson-accent-shadow)',
+            }}
+          >
             🎉
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-black" style={{ color: 'var(--lesson-text)' }}>Lesson Complete!</h2>
+            <h2 style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif", fontSize: 26, fontWeight: 700, color: 'var(--lesson-text)' }}>Lesson Complete!</h2>
             <p className="text-sm" style={{ color: 'var(--lesson-text-muted)' }}>
               You finished <span className="font-bold" style={{ color: 'var(--lesson-text)' }}>{subtopic.name}</span>
             </p>
             {earnedPoints > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-black text-amber-700 dark:text-amber-300"
-                style={{ background: 'var(--lesson-highlight)' }}>
+              <div
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold text-amber-700 dark:text-amber-300"
+                style={{
+                  fontFamily: "'Baloo 2', 'Inter', sans-serif",
+                  background: 'var(--lesson-highlight)',
+                  boxShadow: '0 3px 0 rgba(0,0,0,0.08)',
+                }}
+              >
                 +{earnedPoints} pts earned ⭐
               </div>
             )}
@@ -154,14 +268,22 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
           <div className="space-y-2.5 w-full">
             <Link
               href={subtopic.topics?.subjects?.slug ? `/student/subjects/${subtopic.topics.subjects.slug}` : '/student/learn'}
-              className="block w-full py-4 text-white text-sm font-black rounded-2xl hover:opacity-90 transition-opacity text-center"
-              style={{ background: 'var(--lesson-accent)' }}>
+              className="block w-full text-white font-bold rounded-2xl hover:opacity-90 transition-opacity text-center"
+              style={{
+                fontFamily: "'Baloo 2', 'Inter', sans-serif",
+                fontSize: 15, padding: '15px',
+                background: 'var(--lesson-accent)',
+                boxShadow: '0 4px 0 var(--lesson-accent-shadow)',
+              }}>
               Continue learning →
             </Link>
             <button
-              onClick={() => { setCompleted(false); setCurrentIndex(0); setEarnedPoints(0); setSlideUnlocked(false) }}
-              className="block w-full py-3.5 text-sm font-bold rounded-2xl transition-colors text-center"
-              style={{ background: 'var(--lesson-card)', color: 'var(--lesson-text)', border: '1px solid var(--lesson-border)' }}>
+              onClick={() => {
+                setCompleted(false); setCurrentIndex(0); setEarnedPoints(0)
+                setSlideUnlocked(false); setShowIntro(true)
+              }}
+              className="block w-full text-sm font-bold rounded-2xl transition-colors text-center"
+              style={{ padding: '13px', background: 'var(--lesson-card)', color: 'var(--lesson-text)', border: '2px solid var(--lesson-border)' }}>
               Retake lesson
             </button>
             <Link href="/student/dashboard"
@@ -178,15 +300,22 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   // Guard: if lesson has no slides, show a clear message instead of blank screen
   if (!lesson || slides.length === 0) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" style={{ background: 'var(--lesson-bg)' }}>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" style={{ background: 'var(--lesson-bg)', ...accentOverride }}>
         <style>{lessonCssVars}</style>
         <div className="text-center space-y-4 max-w-sm">
           <div className="text-5xl">📖</div>
-          <h2 className="text-lg font-black" style={{ color: 'var(--lesson-text)' }}>Lesson content not found</h2>
+          <h2 style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif", fontSize: 18, fontWeight: 700, color: 'var(--lesson-text)' }}>Lesson content not found</h2>
           <p className="text-sm" style={{ color: 'var(--lesson-text-muted)' }}>
             This lesson may still be loading or hasn't been published yet.
           </p>
-          <button onClick={() => router.back()} className="px-6 py-3 rounded-2xl text-sm font-black text-white" style={{ background: 'var(--lesson-accent)' }}>
+          <button onClick={() => router.back()}
+            className="text-sm font-bold text-white"
+            style={{
+              fontFamily: "'Baloo 2', 'Inter', sans-serif",
+              padding: '12px 24px', borderRadius: 16,
+              background: 'var(--lesson-accent)',
+              boxShadow: '0 4px 0 var(--lesson-accent-shadow)',
+            }}>
             ← Go back
           </button>
         </div>
@@ -198,7 +327,7 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   const isLastSlide = currentIndex + 1 >= totalSlides
 
   return (
-    <div className="fixed inset-0 flex flex-col z-[100]" style={{ background: 'var(--lesson-bg)' }}>
+    <div className="fixed inset-0 flex flex-col z-[100]" style={{ background: 'var(--lesson-bg)', ...accentOverride }}>
       <style>{lessonCssVars}</style>
 
       {showSignupPrompt && (
@@ -213,8 +342,13 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
         <div className="flex items-center gap-3 max-w-lg mx-auto">
           <button
             onClick={() => setShowExitModal(true)}
-            className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors"
-            style={{ background: 'var(--lesson-card)', color: 'var(--lesson-text-muted)' }}
+            className="flex items-center justify-center flex-shrink-0 transition-colors"
+            style={{
+              width: 34, height: 34, borderRadius: 12,
+              background: 'var(--lesson-surface)',
+              border: '2px solid var(--lesson-border)',
+              color: 'var(--lesson-text-muted)',
+            }}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -225,12 +359,12 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
             <p className="text-xs truncate" style={{ color: 'var(--lesson-text-muted)' }}>
               {subjectName}{subtopic.topics?.name ? ` · ${subtopic.topics.name}` : ''}
             </p>
-            <p className="text-sm font-black truncate" style={{ color: 'var(--lesson-text)' }}>{subtopic.name}</p>
+            <p className="text-sm font-bold truncate" style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif", color: 'var(--lesson-text)' }}>{subtopic.name}</p>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Progress bar */}
-            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--lesson-track)' }}>
+            <div className="w-20 h-2 rounded-full overflow-hidden" style={{ background: 'var(--lesson-track)' }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{ width: `${progressPct}%`, background: 'var(--lesson-accent)' }}

@@ -1,5 +1,13 @@
 'use client'
 // src/app/admin/core-topics/page.js
+//
+// FIX: TopicRow's handleToggle/handlePrioritySave/handleMove never checked
+// the fetch response status. A failed request (e.g. a 500 from the API)
+// was silently swallowed — onChanged() still fired, reloading the SAME
+// unchanged data, making it look like "the toggle does nothing." Now every
+// mutation checks res.ok, surfaces the real server error inline under the
+// row, and skips onChanged() when the save actually failed (reloading after
+// a failed save just re-confirms the wrong state, which is misleading).
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
@@ -30,23 +38,44 @@ const TopicRow = memo(function TopicRow({ topic, subjectId, examType, onChanged 
   const [saving, setSaving] = useState(false)
   const [editPriority, setEditPriority] = useState(false)
   const [priorityVal, setPriorityVal] = useState(String(topic.priority ?? 1))
+  const [error, setError] = useState(null)
 
   const isCore  = topic.is_core
   const entryId = topic.core_entry?.id
 
+  // Shared response handler — checks res.ok, extracts the real server error
+  // message, and returns true/false so callers know whether to proceed.
+  async function checkResponse(res) {
+    if (res.ok) return true
+    let message = `Request failed (${res.status})`
+    try {
+      const data = await res.json()
+      if (data?.error) message = data.error
+    } catch { /* response wasn't JSON — keep the generic message */ }
+    setError(message)
+    console.error('[core-topics] request failed:', message)
+    return false
+  }
+
   async function handleToggle() {
     setSaving(true)
+    setError(null)
     try {
+      let res
       if (isCore && entryId) {
-        await fetch(`/api/admin/core-topics?id=${entryId}`, { method: 'DELETE' })
+        res = await fetch(`/api/admin/core-topics?id=${entryId}`, { method: 'DELETE' })
       } else {
-        await fetch('/api/admin/core-topics', {
+        res = await fetch('/api/admin/core-topics', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subjectId, topicId: topic.id, examType }),
         })
       }
-      onChanged()
+      const ok = await checkResponse(res)
+      if (ok) onChanged() // only reload if the save actually succeeded
+    } catch (e) {
+      setError(e.message ?? 'Network error — please try again')
+      console.error('[core-topics] network error:', e)
     } finally {
       setSaving(false)
     }
@@ -55,14 +84,18 @@ const TopicRow = memo(function TopicRow({ topic, subjectId, examType, onChanged 
   async function handlePrioritySave() {
     if (!entryId) return
     setSaving(true)
+    setError(null)
     setEditPriority(false)
     try {
-      await fetch('/api/admin/core-topics', {
+      const res = await fetch('/api/admin/core-topics', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: entryId, priority: parseInt(priorityVal, 10) || 1 }),
       })
-      onChanged()
+      const ok = await checkResponse(res)
+      if (ok) onChanged()
+    } catch (e) {
+      setError(e.message ?? 'Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -71,13 +104,17 @@ const TopicRow = memo(function TopicRow({ topic, subjectId, examType, onChanged 
   async function handleMove(delta) {
     if (!entryId) return
     setSaving(true)
+    setError(null)
     try {
-      await fetch('/api/admin/core-topics', {
+      const res = await fetch('/api/admin/core-topics', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: entryId, priority: Math.max(1, (topic.priority ?? 1) + delta) }),
       })
-      onChanged()
+      const ok = await checkResponse(res)
+      if (ok) onChanged()
+    } catch (e) {
+      setError(e.message ?? 'Network error — please try again')
     } finally {
       setSaving(false)
     }
@@ -88,80 +125,92 @@ const TopicRow = memo(function TopicRow({ topic, subjectId, examType, onChanged 
   const allCount  = topic.all_question_count ?? 0
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0 transition-colors group ${isCore ? 'bg-indigo-50/50' : 'hover:bg-gray-50/80'}`}>
+    <div>
+      <div className={`flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0 transition-colors group ${isCore ? 'bg-indigo-50/50' : 'hover:bg-gray-50/80'}`}>
 
-      {/* Core toggle */}
-      <button
-        onClick={handleToggle}
-        disabled={saving}
-        title={isCore ? 'Remove from core topics' : 'Mark as core topic'}
-        className={`relative w-10 h-5 rounded-full flex-shrink-0 transition-colors ${isCore ? 'bg-indigo-600' : 'bg-gray-200 hover:bg-gray-300'} ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isCore ? 'translate-x-5' : ''}`} />
-      </button>
+        {/* Core toggle */}
+        <button
+          onClick={handleToggle}
+          disabled={saving}
+          title={isCore ? 'Remove from core topics' : 'Mark as core topic'}
+          className={`relative w-10 h-5 rounded-full flex-shrink-0 transition-colors ${isCore ? 'bg-indigo-600' : 'bg-gray-200 hover:bg-gray-300'} ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isCore ? 'translate-x-5' : ''}`} />
+        </button>
 
-      {/* Priority (core topics only) */}
-      <div className="w-[56px] flex-shrink-0">
-        {isCore && (
-          <div className="flex items-center gap-0.5">
-            <button onClick={() => handleMove(-1)} disabled={saving || (topic.priority ?? 1) <= 1}
-              className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-indigo-500 disabled:opacity-20 text-[9px]">▲</button>
-            {editPriority ? (
-              <input
-                type="number" min="1" max="99" value={priorityVal}
-                onChange={e => setPriorityVal(e.target.value)}
-                onBlur={handlePrioritySave}
-                onKeyDown={e => e.key === 'Enter' && handlePrioritySave()}
-                className="w-7 text-center text-xs border border-indigo-300 rounded px-0.5 focus:outline-none"
-                autoFocus
-              />
-            ) : (
-              <button onClick={() => setEditPriority(true)}
-                className="w-7 text-center text-xs font-black text-indigo-600 hover:underline tabular-nums"
-                title="Click to edit">#{topic.priority}</button>
-            )}
-            <button onClick={() => handleMove(1)} disabled={saving}
-              className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-indigo-500 disabled:opacity-20 text-[9px]">▼</button>
-          </div>
-        )}
-      </div>
-
-      {/* Topic name */}
-      <div className="w-40 flex-shrink-0">
-        <p className={`text-sm leading-snug truncate ${isCore ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-          {topic.name}
-        </p>
-        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+        {/* Priority (core topics only) */}
+        <div className="w-[56px] flex-shrink-0">
           {isCore && (
-            <span className="text-[9px] font-black text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-              CORE
-            </span>
-          )}
-          {hasLesson ? (
-            <span className="text-[9px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full capitalize">
-              ✓ {topic.lesson_status}
-            </span>
-          ) : pastCount >= 5 ? (
-            <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-              needs lesson
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Frequency bar */}
-      <div className="flex-1 min-w-0 flex items-center gap-3">
-        <FreqBar pct={topic.pct_of_max ?? 0} isCore={isCore} />
-        <div className="flex-shrink-0 text-right">
-          <span className="text-sm font-black text-gray-700 tabular-nums">{pastCount}</span>
-          <span className="text-[10px] text-gray-400"> past</span>
-          {allCount > pastCount && (
-            <span className="text-[10px] text-gray-300 ml-1">+{allCount - pastCount} AI</span>
+            <div className="flex items-center gap-0.5">
+              <button onClick={() => handleMove(-1)} disabled={saving || (topic.priority ?? 1) <= 1}
+                className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-indigo-500 disabled:opacity-20 text-[9px]">▲</button>
+              {editPriority ? (
+                <input
+                  type="number" min="1" max="99" value={priorityVal}
+                  onChange={e => setPriorityVal(e.target.value)}
+                  onBlur={handlePrioritySave}
+                  onKeyDown={e => e.key === 'Enter' && handlePrioritySave()}
+                  className="w-7 text-center text-xs border border-indigo-300 rounded px-0.5 focus:outline-none"
+                  autoFocus
+                />
+              ) : (
+                <button onClick={() => setEditPriority(true)}
+                  className="w-7 text-center text-xs font-black text-indigo-600 hover:underline tabular-nums"
+                  title="Click to edit">#{topic.priority}</button>
+              )}
+              <button onClick={() => handleMove(1)} disabled={saving}
+                className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-indigo-500 disabled:opacity-20 text-[9px]">▼</button>
+            </div>
           )}
         </div>
+
+        {/* Topic name */}
+        <div className="w-40 flex-shrink-0">
+          <p className={`text-sm leading-snug truncate ${isCore ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+            {topic.name}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            {isCore && (
+              <span className="text-[9px] font-black text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                CORE
+              </span>
+            )}
+            {hasLesson ? (
+              <span className="text-[9px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full capitalize">
+                ✓ {topic.lesson_status}
+              </span>
+            ) : pastCount >= 5 ? (
+              <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                needs lesson
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Frequency bar */}
+        <div className="flex-1 min-w-0 flex items-center gap-3">
+          <FreqBar pct={topic.pct_of_max ?? 0} isCore={isCore} />
+          <div className="flex-shrink-0 text-right">
+            <span className="text-sm font-black text-gray-700 tabular-nums">{pastCount}</span>
+            <span className="text-[10px] text-gray-400"> past</span>
+            {allCount > pastCount && (
+              <span className="text-[10px] text-gray-300 ml-1">+{allCount - pastCount} AI</span>
+            )}
+          </div>
+        </div>
+
+        {saving && <Spinner />}
       </div>
 
-      {saving && <Spinner />}
+      {/* Inline error — only shown when a mutation actually failed */}
+      {error && (
+        <p className="text-[11px] text-red-600 px-4 pb-2 -mt-1 flex items-center gap-1.5">
+          <span>⚠</span> {error}
+          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600 text-[10px] font-bold">
+            dismiss
+          </button>
+        </p>
+      )}
     </div>
   )
 })
@@ -310,10 +359,10 @@ export default function CoreTopicsPage() {
       {!loading && topics.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Core topics',       value: `${coreCount}/${topics.length}`,   color: 'indigo', sub: 'marked as core'        },
-            { label: 'Past questions',    value: totalPast.toLocaleString(),         color: 'blue',   sub: 'across all topics'     },
-            { label: 'Topics with Qs',   value: `${withQuestions}/${topics.length}`, color: 'green',  sub: '1+ past paper question'},
-            { label: 'Top 5 marked',      value: `${top5Marked}/5`,                 color: top5Marked >= 4 ? 'green' : 'amber', sub: 'most frequent marked'},
+            { label: 'Core topics',     value: `${coreCount}/${topics.length}`,     color: 'indigo', sub: 'marked as core'         },
+            { label: 'Past questions',  value: totalPast.toLocaleString(),          color: 'blue',   sub: 'across all topics'      },
+            { label: 'Topics with Qs',  value: `${withQuestions}/${topics.length}`, color: 'green',  sub: '1+ past paper question' },
+            { label: 'Top 5 marked',    value: `${top5Marked}/5`,                   color: top5Marked >= 4 ? 'green' : 'amber', sub: 'most frequent marked' },
           ].map(s => (
             <div key={s.label} className={`rounded-xl border px-4 py-3 ${
               s.color === 'indigo' ? 'bg-indigo-50 border-indigo-100' :

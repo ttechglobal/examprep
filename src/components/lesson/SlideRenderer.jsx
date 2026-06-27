@@ -1,15 +1,27 @@
 'use client'
 // src/components/lesson/SlideRenderer.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// REDESIGN:
-// 1. ALL slides use CSS custom properties (--lesson-*) from LessonViewer
-//    so they automatically respect light/dark mode without any hardcoded colours
-// 2. Worked examples (guided AND student_attempt) are fully step-by-step:
-//    one step revealed at a time, user presses "Next step →" to advance.
-//    onUnlock fires only after the LAST step is revealed.
-// 3. Quiz options (interaction + end_quiz) have sharp, high-contrast selected/
-//    correct/wrong states that are beautiful and unmistakably clear.
-// 4. Warm learning-environment aesthetic throughout.
+// ILLUSTRATED STYLE — restyled to match the illustrated lesson prototypes:
+// badge-pill labels (not plain uppercase text), floating corner icon badges,
+// chunky 3px accent borders with offset "pressed" drop-shadows, bigger/bolder
+// body text. Still 100% driven by --lesson-* CSS custom properties from
+// LessonViewer.jsx, so light/dark mode and subject colour continue to work
+// automatically — only the JSX structure and a few new --lesson-* variables
+// (shadow offset, badge colours) changed.
+//
+// Per-slide badge/icon mapping (kept consistent across all 9 slide types):
+//   hook            → amber badge,  💡
+//   definition      → accent banner (term), 📘 corner icon
+//   real_life       → teal badge,   🌍
+//   concept         → accent badge, 🧠
+//   formula         → accent badge, 🧮
+//   interaction     → accent banner (question), ✏️ corner icon
+//   worked_example  → accent/purple banner, ✏️ / 🧠 corner icon
+//   end_quiz        → accent banner, 📝 corner icon
+//   summary         → accent badge, 📋
+//
+// onUnlock fires only after the LAST step is revealed (worked example) or
+// the question is answered (interaction / end_quiz) — unchanged from before.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
@@ -17,7 +29,7 @@ import { useState, useEffect, useRef } from 'react'
 // ── Shared: render text with basic line breaks ────────────────────────────────
 function BodyText({ text, style }) {
   if (!text) return null
-  return <p style={{ fontSize: 16, lineHeight: 1.7, margin: 0, ...style }}>{text}</p>
+  return <p style={{ fontSize: 17, lineHeight: 1.7, margin: 0, fontWeight: 600, ...style }}>{text}</p>
 }
 
 // ── Shared: image slot ────────────────────────────────────────────────────────
@@ -25,25 +37,88 @@ function StudentImageSlot({ image }) {
   const url = typeof image === 'string' ? image : image?.url
   if (!url) return null
   return (
-    <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--lesson-border)' }}>
+    <div style={{ borderRadius: 18, overflow: 'hidden', border: '3px solid var(--lesson-accent)' }}>
       <img src={url} alt="" style={{ width: '100%', display: 'block', objectFit: 'cover' }} />
     </div>
   )
 }
 
-// ── Slide type label ──────────────────────────────────────────────────────────
-function SlideLabel({ text, accent }) {
+// ── Shared: badge-pill label (replaces the old plain uppercase SlideLabel) ───
+// bg/color default to a warm amber tone; pass overrides for slide-specific colours.
+function Badge({ icon, text, bg = '#fff3da', color = '#9a6a14' }) {
   return (
-    <p style={{
-      fontSize: 10,
-      fontWeight: 900,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: accent ?? 'var(--lesson-text-muted)',
-      marginBottom: 10,
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      background: bg,
+      color: color,
+      fontFamily: "'Baloo 2', 'Inter', sans-serif",
+      fontWeight: 700,
+      fontSize: 12,
+      padding: '6px 12px',
+      borderRadius: 20,
+      marginBottom: 14,
     }}>
+      {icon && <span>{icon}</span>}
       {text}
-    </p>
+    </span>
+  )
+}
+
+// ── Shared: floating corner icon badge ────────────────────────────────────────
+function IconBadge({ icon }) {
+  if (!icon) return null
+  return (
+    <div style={{
+      position: 'absolute',
+      top: -14,
+      right: 16,
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      background: 'var(--lesson-card)',
+      border: '3px solid var(--lesson-accent)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: 20,
+      boxShadow: '0 3px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))',
+    }}>
+      {icon}
+    </div>
+  )
+}
+
+// ── Shared: illustrated card wrapper — 3px accent border + bouncy drop-shadow ─
+function IllustratedCard({ children, style, icon }) {
+  return (
+    <div style={{
+      position: 'relative',
+      borderRadius: 24,
+      padding: '24px 20px',
+      background: 'var(--lesson-surface)',
+      border: '3px solid var(--lesson-accent)',
+      boxShadow: '0 5px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))',
+      ...style,
+    }}>
+      <IconBadge icon={icon} />
+      {children}
+    </div>
+  )
+}
+
+// ── Shared: numbered step circle (used across several slide types) ──────────
+function StepNumber({ n, size = 24 }) {
+  return (
+    <span style={{
+      minWidth: size, height: size, borderRadius: size >= 28 ? 10 : 8,
+      background: 'var(--lesson-accent)', color: '#fff',
+      fontSize: size >= 28 ? 13 : 11, fontWeight: 900,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+      boxShadow: '0 2px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.15))',
+    }}>{n}</span>
   )
 }
 
@@ -53,15 +128,10 @@ function SlideLabel({ text, accent }) {
 function HookSlide({ slide, color }) {
   return (
     <div style={{ animation: 'lessonFadeIn 0.35s ease' }}>
-      <div style={{
-        borderRadius: 20,
-        padding: '24px 20px',
-        background: 'var(--lesson-surface)',
-        borderLeft: `4px solid var(--lesson-accent)`,
-      }}>
-        <SlideLabel text="Did you know? 💡" />
-        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 600, fontSize: 18 }} />
-      </div>
+      <IllustratedCard icon="💡">
+        <Badge icon="⚡" text="Did you know?" />
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)' }} />
+      </IllustratedCard>
     </div>
   )
 }
@@ -73,35 +143,30 @@ function DefinitionSlide({ slide, color }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
       {/* Term banner */}
-      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', background: 'var(--lesson-accent)' }}>
-          <SlideLabel text="Definition" accent="rgba(255,255,255,0.7)" />
-          <p style={{ fontSize: 26, fontWeight: 900, color: '#fff', margin: 0, lineHeight: 1.2 }}>{slide.term}</p>
+      <div style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', border: '3px solid var(--lesson-accent)', boxShadow: '0 5px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))' }}>
+        <IconBadge icon="📘" />
+        <div style={{ padding: '18px 20px 14px', background: 'var(--lesson-accent)' }}>
+          <Badge icon="📘" text="Definition" bg="rgba(255,255,255,0.25)" color="#fff" />
+          <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 26, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>{slide.term}</p>
         </div>
-        <div style={{ padding: '16px 20px', background: 'var(--lesson-card)', borderTop: '1px solid var(--lesson-border)' }}>
-          <BodyText text={slide.definition} style={{ color: 'var(--lesson-text)', fontWeight: 500 }} />
+        <div style={{ padding: '16px 20px', background: 'var(--lesson-card)' }}>
+          <BodyText text={slide.definition} style={{ color: 'var(--lesson-text)', fontSize: 15 }} />
         </div>
       </div>
 
       {/* Examples */}
       {slide.examples?.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <SlideLabel text="Examples" />
+          <Badge icon="✏️" text="Examples" />
           {slide.examples.map((ex, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '12px 16px', borderRadius: 14,
+              padding: '12px 16px', borderRadius: 16,
               background: 'var(--lesson-surface)',
-              border: '1px solid var(--lesson-border)',
+              border: '2px solid var(--lesson-border)',
             }}>
-              <span style={{
-                minWidth: 24, height: 24, borderRadius: 8,
-                background: 'var(--lesson-accent)', color: '#fff',
-                fontSize: 11, fontWeight: 900,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, marginTop: 2,
-              }}>{i + 1}</span>
-              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0 }}>{ex}</p>
+              <StepNumber n={i + 1} />
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0, fontWeight: 500 }}>{ex}</p>
             </div>
           ))}
         </div>
@@ -116,21 +181,10 @@ function DefinitionSlide({ slide, color }) {
 function RealLifeSlide({ slide, color }) {
   return (
     <div style={{ animation: 'lessonFadeIn 0.35s ease' }}>
-      <div style={{
-        borderRadius: 20, padding: '24px 20px',
-        background: 'var(--lesson-surface)',
-        border: '1px solid var(--lesson-border)',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', top: 0, right: 0,
-          width: 80, height: 80,
-          background: 'var(--lesson-accent)',
-          opacity: 0.06, borderRadius: '0 20px 0 80px',
-        }} />
-        <SlideLabel text="Real-life connection 🌍" />
-        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 500, fontSize: 16 }} />
-      </div>
+      <IllustratedCard icon="🌍">
+        <Badge icon="🌍" text="Real-life connection" bg="rgba(20,184,166,0.15)" color="#0f766e" />
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontSize: 16 }} />
+      </IllustratedCard>
     </div>
   )
 }
@@ -142,32 +196,28 @@ function ConceptSlide({ slide, color }) {
   const hasImage = slide.image?.url || (typeof slide.image === 'string' && slide.image)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
-      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)' }}>
+      <IllustratedCard icon="🧠">
+        <Badge icon="🧠" text="Key Concept" />
         {slide.heading && (
-          <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--lesson-text)', margin: '0 0 12px' }}>{slide.heading}</p>
+          <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 20, fontWeight: 700, color: 'var(--lesson-text)', margin: '0 0 12px' }}>{slide.heading}</p>
         )}
-        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontWeight: 500 }} />
-      </div>
+        <BodyText text={slide.body} style={{ color: 'var(--lesson-text)', fontSize: 15 }} />
+      </IllustratedCard>
 
       {hasImage && <StudentImageSlot image={slide.image ?? slide.image_url} />}
 
       {slide.examples?.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <SlideLabel text="Examples" />
+          <Badge icon="✏️" text="Examples" />
           {slide.examples.map((ex, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '12px 16px', borderRadius: 14,
+              padding: '12px 16px', borderRadius: 16,
               background: 'var(--lesson-surface)',
-              border: '1px solid var(--lesson-border)',
+              border: '2px solid var(--lesson-border)',
             }}>
-              <span style={{
-                minWidth: 22, height: 22, borderRadius: 6,
-                background: 'var(--lesson-accent)', color: '#fff',
-                fontSize: 11, fontWeight: 900,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
-              }}>{i + 1}</span>
-              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0 }}>{ex}</p>
+              <StepNumber n={i + 1} />
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0, fontWeight: 500 }}>{ex}</p>
             </div>
           ))}
         </div>
@@ -183,30 +233,30 @@ function FormulaSlide({ slide, color }) {
   const hasImage = slide.image?.url || (typeof slide.image === 'string' && slide.image)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
-      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)' }}>
-        <SlideLabel text={slide.label ?? 'Formula'} />
+      <IllustratedCard icon="🧮">
+        <Badge icon="🧮" text={slide.label ?? 'Formula'} />
         {/* Formula block */}
         <div style={{
           fontFamily: 'monospace', fontSize: 22, fontWeight: 900,
           color: 'var(--lesson-text)',
           background: 'var(--lesson-card)',
-          borderRadius: 14, padding: '16px 20px',
-          margin: '12px 0', border: '1px solid var(--lesson-border)',
+          borderRadius: 16, padding: '16px 20px',
+          margin: '12px 0', border: '2px solid var(--lesson-border)',
           wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.4,
         }}>
           {slide.formula}
         </div>
-        <BodyText text={slide.plain_english} style={{ color: 'var(--lesson-text-muted)', fontSize: 14 }} />
-      </div>
+        <BodyText text={slide.plain_english} style={{ color: 'var(--lesson-text-muted)', fontSize: 14, fontWeight: 500 }} />
+      </IllustratedCard>
 
       {slide.variables?.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <SlideLabel text="Variables" />
+          <Badge icon="🔤" text="Variables" />
           {slide.variables.map((v, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 16px', borderRadius: 12,
-              background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+              padding: '10px 16px', borderRadius: 14,
+              background: 'var(--lesson-card)', border: '2px solid var(--lesson-border)',
             }}>
               <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 15, color: 'var(--lesson-accent)', minWidth: 32 }}>{v.symbol}</span>
               <p style={{ fontSize: 14, color: 'var(--lesson-text)', margin: 0, lineHeight: 1.5 }}>{v.meaning}</p>
@@ -249,9 +299,10 @@ function InteractionSlide({ slide, color, interactive, onUnlock }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'lessonFadeIn 0.35s ease' }}>
       {/* Question header */}
-      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', background: 'var(--lesson-accent)' }}>
-          <SlideLabel text="✏️ Quick Check" accent="rgba(255,255,255,0.7)" />
+      <div style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', border: '3px solid var(--lesson-accent)', boxShadow: '0 5px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))' }}>
+        <IconBadge icon="✏️" />
+        <div style={{ padding: '18px 18px 16px', background: 'var(--lesson-accent)' }}>
+          <Badge icon="⚡" text="Quick Check" bg="rgba(255,255,255,0.25)" color="#fff" />
           <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{slide.question}</p>
         </div>
       </div>
@@ -297,14 +348,15 @@ function InteractionSlide({ slide, color, interactive, onUnlock }) {
               disabled={revealed || !interactive}
               style={{
                 width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
-                padding: '14px 16px', borderRadius: 16,
+                padding: '14px 16px', borderRadius: 18,
                 background: bg, border,
+                boxShadow: isThisSelected || (revealed && isThisCorrect) ? '0 3px 0 rgba(0,0,0,0.08)' : 'none',
                 cursor: revealed || !interactive ? 'default' : 'pointer',
                 textAlign: 'left', transition: 'all 0.18s ease',
               }}
             >
               <span style={{
-                minWidth: 28, height: 28, borderRadius: 8,
+                minWidth: 28, height: 28, borderRadius: 9,
                 background: labelBg, color: labelColor,
                 fontSize: 13, fontWeight: 900,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -325,9 +377,9 @@ function InteractionSlide({ slide, color, interactive, onUnlock }) {
       {/* Feedback */}
       {revealed && (
         <div style={{
-          padding: '14px 18px', borderRadius: 16,
+          padding: '14px 18px', borderRadius: 18,
           background: isCorrect ? 'var(--lesson-correct-bg)' : 'var(--lesson-wrong-bg)',
-          border: `1px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
+          border: `2px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
           animation: 'lessonFadeIn 0.25s ease',
         }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: isCorrect ? 'var(--lesson-correct-tx)' : 'var(--lesson-wrong-tx)', margin: 0, lineHeight: 1.5 }}>
@@ -393,11 +445,14 @@ function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
 
       {/* Header */}
-      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', background: isAttempt ? '#7c3aed' : 'var(--lesson-accent)' }}>
-          <SlideLabel
-            text={isAttempt ? '🧠 Your Turn — Try This' : '✏️ Worked Example'}
-            accent="rgba(255,255,255,0.7)"
+      <div style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', border: `3px solid ${isAttempt ? '#7c3aed' : 'var(--lesson-accent)'}`, boxShadow: '0 5px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))' }}>
+        <IconBadge icon={isAttempt ? '🧠' : '✏️'} />
+        <div style={{ padding: '18px 18px 16px', background: isAttempt ? '#7c3aed' : 'var(--lesson-accent)' }}>
+          <Badge
+            icon={isAttempt ? '🧠' : '✏️'}
+            text={isAttempt ? 'Your Turn — Try This' : 'Worked Example'}
+            bg="rgba(255,255,255,0.25)"
+            color="#fff"
           />
           {/* Problem statement */}
           <p style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
@@ -409,36 +464,31 @@ function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
       {/* Attempt countdown */}
       {isAttempt && !timerDone && (
         <div style={{
-          padding: '14px 18px', borderRadius: 16, textAlign: 'center',
-          background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)',
+          padding: '16px 18px', borderRadius: 18, textAlign: 'center',
+          background: 'var(--lesson-surface)', border: '2px solid var(--lesson-border)',
         }}>
-          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: '0 0 6px' }}>
+          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: '0 0 6px', fontWeight: 600 }}>
             Try solving it yourself first…
           </p>
-          <p style={{ fontSize: 28, fontWeight: 900, color: 'var(--lesson-accent)', margin: 0 }}>{secondsLeft}s</p>
+          <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 30, fontWeight: 700, color: 'var(--lesson-accent)', margin: 0 }}>{secondsLeft}s</p>
         </div>
       )}
 
       {/* Steps revealed so far */}
       {revealedCount > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <SlideLabel text={isAttempt ? 'Solution walkthrough' : 'Step-by-step solution'} />
+          <Badge icon="🪜" text={isAttempt ? 'Solution walkthrough' : 'Step-by-step solution'} />
           {steps.slice(0, revealedCount).map((s, i) => (
             <div
               key={i}
               style={{
                 display: 'flex', alignItems: 'flex-start', gap: 14,
-                padding: '14px 16px', borderRadius: 16,
-                background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+                padding: '14px 16px', borderRadius: 18,
+                background: 'var(--lesson-card)', border: '2px solid var(--lesson-border)',
                 animation: 'lessonFadeIn 0.3s ease',
               }}
             >
-              <span style={{
-                minWidth: 28, height: 28, borderRadius: 8,
-                background: 'var(--lesson-accent)', color: '#fff',
-                fontSize: 12, fontWeight: 900,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>{i + 1}</span>
+              <StepNumber n={i + 1} size={28} />
               <p style={{
                 fontFamily: /[=÷×]/.test(s.instruction) ? 'monospace' : 'inherit',
                 fontSize: 15, lineHeight: 1.65, color: 'var(--lesson-text)',
@@ -452,13 +502,12 @@ function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
       {/* Final answer — only shown when all steps are revealed */}
       {isDone && slide.final_answer && (
         <div style={{
-          padding: '16px 20px', borderRadius: 16, textAlign: 'center',
-          background: 'var(--lesson-correct-bg)', border: `2px solid var(--lesson-correct-bd)`,
+          padding: '18px 20px', borderRadius: 18, textAlign: 'center',
+          background: 'var(--lesson-correct-bg)', border: `3px solid var(--lesson-correct-bd)`,
+          boxShadow: '0 4px 0 rgba(0,0,0,0.08)',
           animation: 'lessonFadeIn 0.3s ease',
         }}>
-          <p style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--lesson-correct-tx)', margin: '0 0 6px' }}>
-            Final Answer
-          </p>
+          <Badge icon="🏁" text="Final Answer" bg="rgba(255,255,255,0.4)" color="var(--lesson-correct-tx)" />
           <p style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 900, color: 'var(--lesson-correct-tx)', margin: 0 }}>
             {slide.final_answer}
           </p>
@@ -470,7 +519,7 @@ function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {steps.map((_, i) => (
             <div key={i} style={{
-              flex: 1, height: 4, borderRadius: 4,
+              flex: 1, height: 6, borderRadius: 6,
               background: i < revealedCount ? 'var(--lesson-accent)' : 'var(--lesson-track)',
               transition: 'background 0.3s',
             }} />
@@ -483,10 +532,12 @@ function WorkedExampleSlide({ slide, color, interactive, onUnlock }) {
         <button
           onClick={handleRevealNext}
           style={{
-            width: '100%', padding: '14px', borderRadius: 16,
+            width: '100%', padding: '15px', borderRadius: 18,
             background: canRevealNext ? 'var(--lesson-accent)' : 'var(--lesson-surface)',
             color: canRevealNext ? '#fff' : 'var(--lesson-text-muted)',
-            fontSize: 14, fontWeight: 900, border: 'none',
+            fontFamily: "'Baloo 2', sans-serif",
+            fontSize: 15, fontWeight: 700, border: 'none',
+            boxShadow: canRevealNext ? '0 4px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.15))' : 'none',
             cursor: canRevealNext ? 'pointer' : 'not-allowed',
             transition: 'all 0.18s',
           }}
@@ -559,15 +610,16 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
         <div style={{
-          borderRadius: 20, padding: '24px 20px', textAlign: 'center',
+          borderRadius: 24, padding: '28px 20px', textAlign: 'center',
           background: great ? 'var(--lesson-correct-bg)' : 'var(--lesson-surface)',
-          border: `2px solid ${great ? 'var(--lesson-correct-bd)' : 'var(--lesson-border)'}`,
+          border: `3px solid ${great ? 'var(--lesson-correct-bd)' : 'var(--lesson-border)'}`,
+          boxShadow: '0 5px 0 rgba(0,0,0,0.08)',
         }}>
-          <p style={{ fontSize: 40, margin: '0 0 12px' }}>{great ? '🏆' : '📖'}</p>
-          <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--lesson-text)', margin: '0 0 4px' }}>
+          <p style={{ fontSize: 44, margin: '0 0 12px' }}>{great ? '🏆' : '📖'}</p>
+          <p style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: 24, fontWeight: 700, color: 'var(--lesson-text)', margin: '0 0 4px' }}>
             {correctCount}/{total} correct
           </p>
-          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--lesson-text-muted)', margin: 0, fontWeight: 500 }}>
             {great ? 'Excellent work! You\'re ready to move on.' : 'Good effort — review the lesson to strengthen these concepts.'}
           </p>
         </div>
@@ -576,10 +628,10 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
           {answers.map((a, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-              borderRadius: 12, background: 'var(--lesson-card)', border: '1px solid var(--lesson-border)',
+              borderRadius: 14, background: 'var(--lesson-card)', border: '2px solid var(--lesson-border)',
             }}>
               <span style={{ fontSize: 16 }}>{a.wasCorrect ? '✅' : '❌'}</span>
-              <p style={{ fontSize: 13, color: 'var(--lesson-text)', margin: 0, flex: 1 }}>Question {i + 1}</p>
+              <p style={{ fontSize: 13, color: 'var(--lesson-text)', margin: 0, flex: 1, fontWeight: 500 }}>Question {i + 1}</p>
               {!a.wasCorrect && (
                 <p style={{ fontSize: 12, color: 'var(--lesson-text-muted)', margin: 0 }}>Answer: {a.correct}</p>
               )}
@@ -600,7 +652,7 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {questions.map((_, i) => (
           <div key={i} style={{
-            flex: 1, height: 5, borderRadius: 4,
+            flex: 1, height: 6, borderRadius: 6,
             background: i < currentQ ? 'var(--lesson-accent)' : i === currentQ ? 'var(--lesson-accent)' : 'var(--lesson-track)',
             opacity: i === currentQ ? 1 : i < currentQ ? 0.5 : 0.3,
             transition: 'all 0.3s',
@@ -612,9 +664,10 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
       </div>
 
       {/* Question */}
-      <div style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', background: 'var(--lesson-accent)' }}>
-          <SlideLabel text="📝 End Quiz" accent="rgba(255,255,255,0.7)" />
+      <div style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', border: '3px solid var(--lesson-accent)', boxShadow: '0 5px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.12))' }}>
+        <IconBadge icon="📝" />
+        <div style={{ padding: '18px 18px 16px', background: 'var(--lesson-accent)' }}>
+          <Badge icon="📝" text="End Quiz" bg="rgba(255,255,255,0.25)" color="#fff" />
           <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{q.question}</p>
         </div>
       </div>
@@ -651,13 +704,14 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
               disabled={revealed || !interactive}
               style={{
                 width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
-                padding: '14px 16px', borderRadius: 16, background: bg, border,
+                padding: '14px 16px', borderRadius: 18, background: bg, border,
+                boxShadow: isThisSelected || (revealed && isThisCorrect) ? '0 3px 0 rgba(0,0,0,0.08)' : 'none',
                 cursor: revealed || !interactive ? 'default' : 'pointer',
                 textAlign: 'left', transition: 'all 0.18s ease',
               }}
             >
               <span style={{
-                minWidth: 28, height: 28, borderRadius: 8,
+                minWidth: 28, height: 28, borderRadius: 9,
                 background: labelBg, color: labelColor,
                 fontSize: 13, fontWeight: 900,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -674,9 +728,9 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
       {/* Feedback */}
       {revealed && (
         <div style={{
-          padding: '14px 18px', borderRadius: 16,
+          padding: '14px 18px', borderRadius: 18,
           background: isCorrect ? 'var(--lesson-correct-bg)' : 'var(--lesson-wrong-bg)',
-          border: `1px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
+          border: `2px solid ${isCorrect ? 'var(--lesson-correct-bd)' : 'var(--lesson-wrong-bd)'}`,
           animation: 'lessonFadeIn 0.25s ease',
         }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: isCorrect ? 'var(--lesson-correct-tx)' : 'var(--lesson-wrong-tx)', margin: 0, lineHeight: 1.5 }}>
@@ -692,9 +746,11 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
         <button
           onClick={handleNext}
           style={{
-            width: '100%', padding: '14px', borderRadius: 16,
+            width: '100%', padding: '15px', borderRadius: 18,
             background: 'var(--lesson-accent)', color: '#fff',
-            fontSize: 14, fontWeight: 900, border: 'none', cursor: 'pointer',
+            fontFamily: "'Baloo 2', sans-serif",
+            fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer',
+            boxShadow: '0 4px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.15))',
             transition: 'opacity 0.18s', animation: 'lessonFadeIn 0.25s ease',
           }}
         >
@@ -711,26 +767,22 @@ function EndQuizSlide({ slide, color, interactive, onUnlock, onQuizComplete }) {
 function SummarySlide({ slide, color }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'lessonFadeIn 0.35s ease' }}>
-      <div style={{ padding: '20px', borderRadius: 20, background: 'var(--lesson-surface)', border: '1px solid var(--lesson-border)' }}>
-        <SlideLabel text="📋 What you learned" />
+      <IllustratedCard icon="📋">
+        <Badge icon="📋" text="What you learned" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(slide.points ?? []).map((pt, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <span style={{
-                minWidth: 22, height: 22, borderRadius: 6,
-                background: 'var(--lesson-accent)', color: '#fff',
-                fontSize: 11, fontWeight: 900,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
-              }}>{i + 1}</span>
+              <StepNumber n={i + 1} />
               <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--lesson-text)', margin: 0, fontWeight: 500 }}>{pt}</p>
             </div>
           ))}
         </div>
-      </div>
+      </IllustratedCard>
       {slide.closing && (
         <div style={{
-          borderRadius: 18, padding: '16px 20px', textAlign: 'center',
+          borderRadius: 20, padding: '18px 20px', textAlign: 'center',
           background: 'var(--lesson-accent)',
+          boxShadow: '0 4px 0 var(--lesson-accent-shadow, rgba(0,0,0,0.15))',
         }}>
           <p style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.5 }}>{slide.closing}</p>
         </div>
