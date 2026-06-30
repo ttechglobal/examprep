@@ -17,6 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback } from 'react'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 import QuestionCard from '@/components/quiz/QuestionCard'
 import { scoreQuestion } from '@/lib/mathRenderer'
 
@@ -67,6 +69,7 @@ function QABadge({ score, issues }) {
 
 // ── Main preview component ────────────────────────────────────────────────────
 export default function QuestionStudentPreview({ question, showRawTab = true }) {
+  const isDark = useIsDark()
   const [tab,            setTab]            = useState('preview')
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [revealed,       setRevealed]       = useState(false)
@@ -82,6 +85,10 @@ export default function QuestionStudentPreview({ question, showRawTab = true }) 
   }
 
   const { score, issues } = scoreQuestion(question)
+  // Falls back to no colour (component's own default) if this admin question
+  // object doesn't carry subject data in this context — defensive, not a crash.
+  const subjName = question.subjects?.name ?? question.subject_name
+  const color = subjName ? resolveSubjectColors(subjName, isDark) : undefined
 
   return (
     <div className="space-y-4">
@@ -143,6 +150,7 @@ export default function QuestionStudentPreview({ question, showRawTab = true }) 
                 revealed={revealed}
                 onAnswer={handleAnswer}
                 showExplanation={true}
+                color={color}
               />
             </div>
           </div>

@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
+import { LESSON_CSS_VARS_ROOT as lessonCssVars, getAccentOverride } from '@/lib/lessonCssVars'
 import SubjectIcon from '@/components/ui/SubjectIcon'
 import SlideRenderer from './SlideRenderer'
 import SignupPrompt from '@/components/auth/SignupPrompt'
@@ -80,16 +81,9 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   // accent-shadow), and var(--lesson-option-sel*) reference throughout this
   // file and SlideRenderer.jsx picks these up automatically, since they're
   // set as inline custom properties on the root container below.
-  // --lesson-accent-shadow reuses the subject's darker `text` tone (rather
-  // than a one-off computed colour) for the offset "pressed" drop-shadow
-  // used throughout the illustrated slide styling.
-  const accentOverride = {
-    '--lesson-accent':        color.solid,
-    '--lesson-accent-shadow': `${color.text}40`, // ~25% opacity via hex alpha
-    '--lesson-option-sel':    color.bg,
-    '--lesson-option-selbd':  color.solid,
-    '--lesson-option-seltx':  color.text,
-  }
+  // Shared with the admin lesson editor's preview via @/lib/lessonCssVars,
+  // so both surfaces compute subject colour identically.
+  const accentOverride = getAccentOverride(color)
 
   const [currentIndex,     setCurrentIndex]     = useState(
     existingProgress?.slides_completed
@@ -449,56 +443,6 @@ export default function LessonViewer({ subtopic, userId, existingProgress }) {
   )
 }
 
-// ── CSS custom properties — light and dark lesson environment ─────────────────
-// Light: warm parchment (#faf7f2) — like a quality notebook, not sterile white
-// Dark:  deep navy (#0f1729) — like studying at night with a warm desk lamp
-const lessonCssVars = `
-  :root {
-    --lesson-bg:          #faf7f2;
-    --lesson-header:      #f5f1ea;
-    --lesson-card:        #ffffff;
-    --lesson-border:      #e8e2d9;
-    --lesson-text:        #1a1612;
-    --lesson-text-muted:  #7c6f5e;
-    --lesson-track:       #e8e2d9;
-    --lesson-highlight:   #fef3c7;
-    --lesson-accent:      #4f46e5;
-    --lesson-surface:     #f0ece4;
-    --lesson-correct-bg:  #f0fdf4;
-    --lesson-correct-bd:  #86efac;
-    --lesson-correct-tx:  #15803d;
-    --lesson-wrong-bg:    #fef2f2;
-    --lesson-wrong-bd:    #fca5a5;
-    --lesson-wrong-tx:    #b91c1c;
-    --lesson-option-bg:   #ffffff;
-    --lesson-option-bd:   #e8e2d9;
-    --lesson-option-tx:   #1a1612;
-    --lesson-option-sel:  #eef2ff;
-    --lesson-option-selbd:#6366f1;
-    --lesson-option-seltx:#4338ca;
-  }
-  .dark {
-    --lesson-bg:          #0f1729;
-    --lesson-header:      #0d1525;
-    --lesson-card:        #1a2744;
-    --lesson-border:      #263352;
-    --lesson-text:        #f0f4ff;
-    --lesson-text-muted:  #8899bb;
-    --lesson-track:       #263352;
-    --lesson-highlight:   rgba(251,191,36,0.15);
-    --lesson-accent:      #6366f1;
-    --lesson-surface:     #162038;
-    --lesson-correct-bg:  rgba(16,185,129,0.12);
-    --lesson-correct-bd:  #059669;
-    --lesson-correct-tx:  #6ee7b7;
-    --lesson-wrong-bg:    rgba(239,68,68,0.12);
-    --lesson-wrong-bd:    #dc2626;
-    --lesson-wrong-tx:    #fca5a5;
-    --lesson-option-bg:   #1a2744;
-    --lesson-option-bd:   #263352;
-    --lesson-option-tx:   #f0f4ff;
-    --lesson-option-sel:  rgba(99,102,241,0.2);
-    --lesson-option-selbd:#818cf8;
-    --lesson-option-seltx:#c7d2fe;
-  }
-`
+// --lesson-* CSS custom properties (light: warm parchment, dark: deep navy)
+// now live in @/lib/lessonCssVars.js, shared with the admin lesson editor's
+// preview pane — see lessonCssVars import above.

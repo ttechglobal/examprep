@@ -67,7 +67,7 @@ export default function ReviewerLessonClient({ subtopic, reviews, currentUserId 
         {/* Left: mobile preview */}
         <div>
           <h2 className="text-sm font-medium text-gray-700 mb-3">Lesson Preview</h2>
-          <MobilePreview lesson={subtopic.lesson_content} />
+          <MobilePreview lesson={subtopic.lesson_content} subjectName={subtopic.topics?.subjects?.name} />
         </div>
 
         {/* Right: review panel */}

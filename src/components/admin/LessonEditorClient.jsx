@@ -17,11 +17,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { parseLesson, buildLessonPrompt } from '@/lib/lessonParser'
+import { parseLesson, buildLessonPrompt, SLIDE_TYPE_LABELS } from '@/lib/lessonParser'
 import SlideRenderer from '@/components/lesson/SlideRenderer'
 import { AdminImageSlot } from '@/components/lesson/ImageSlot'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
+import { LESSON_CSS_VARS_SCOPED, getAccentOverride } from '@/lib/lessonCssVars'
 
 const SLIDE_DEFAULTS = {
   hook: { type: 'hook', body: '' },
@@ -64,18 +65,6 @@ const SLIDE_DEFAULTS = {
     final_answer: '',
   },
   summary: { type: 'summary', points: [''], closing: '' },
-}
-
-const SLIDE_TYPE_LABELS = {
-  hook: 'Hook',
-  definition: 'Definition',
-  real_life: 'Real-life Connection',
-  concept: 'Concept',
-  formula: 'Formula',
-  interaction: 'Interaction',
-  worked_example: 'Worked Example',
-  end_quiz: 'End Quiz',
-  summary: 'Summary',
 }
 
 // ── Copy prompt box ───────────────────────────────────────────────────────────
@@ -776,7 +765,11 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
                     <div className="h-full rounded-full w-1/4" style={{ background: color.solid }} />
                   </div>
                 </div>
-                <div className="divide-y divide-default">
+                <style>{LESSON_CSS_VARS_SCOPED('admin-lesson-preview')}</style>
+                <div
+                  className={`admin-lesson-preview divide-y divide-default${isDark ? ' dark' : ''}`}
+                  style={getAccentOverride(color)}
+                >
                   {slides.map((slide, i) => (
                     <div key={i} className="px-4 py-5">
                       <div className="flex items-center gap-2 mb-3">

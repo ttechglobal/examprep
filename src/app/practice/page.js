@@ -1,22 +1,17 @@
 'use client'
 // src/app/practice/page.js
-// DARK MODE FIX: all hardcoded bg-white/bg-gray-*/text-gray-*/border-gray-*
-// replaced with CSS token classes (bg-card, bg-base, bg-subtle, text-primary,
-// text-secondary, text-tertiary, border-default).
-// Semantic status colours (green, red, amber) kept — they're intentional.
+// Public, no-sign-in practice page for WAEC subjects.
 //
-// TAILWIND v4 TRANSPARENT COLOUR FIX:
-// Subject card buttons and the selected-subject banner both used dynamic classes
-// like ${c.bg} and ${c.text} from getSubjectColor(). Tailwind v4 cannot scan
-// these at build time so they rendered as transparent/invisible.
-//
-// Fix: replace dynamic className strings with inline style for background and
-// colour values on the subject picker grid and the mode-step subject banner.
-// The SUBJECT_STYLES map provides explicit hex/rgb values that work without
-// any safelist, guaranteed in all environments.
+// Uses resolveSubjectColors() from @/lib/subjectTheme (the canonical subject
+// colour source) via inline style — never dynamic className strings — since
+// Tailwind v4 cannot statically scan template-built class names like ${c.bg}.
+// Switched via the shared useIsDark hook from @/lib/useIsDark.
+// Semantic status colours (green, red, amber) kept as Tailwind dark: classes
+// — they're static strings, not dynamic, so they scan fine.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getSubjectColor } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 import Link from 'next/link'
 import QuestionCard from '@/components/quiz/QuestionCard'
 
@@ -25,29 +20,6 @@ const WAEC_SUBJECTS = [
   'Economics', 'Government', 'Literature in English', 'Geography',
   'Agricultural Science', 'Further Mathematics', 'Commerce',
 ]
-
-// ── Subject inline styles — explicit values, no Tailwind dynamic class risk ──
-// These mirror the SUBJECT_COLORS in lib/theme.js but as concrete CSS values
-// so they work reliably regardless of Tailwind's build-time scanner.
-const SUBJECT_STYLES = {
-  'Mathematics':          { bg: '#eff6ff', color: '#1d4ed8', darkBg: 'rgba(23,37,84,0.4)', darkColor: '#93c5fd' },
-  'English Language':     { bg: '#faf5ff', color: '#7e22ce', darkBg: 'rgba(59,7,100,0.4)',  darkColor: '#d8b4fe' },
-  'Physics':              { bg: '#ecfeff', color: '#0e7490', darkBg: 'rgba(8,51,68,0.4)',   darkColor: '#67e8f9' },
-  'Chemistry':            { bg: '#f0fdf4', color: '#15803d', darkBg: 'rgba(5,46,22,0.4)',   darkColor: '#86efac' },
-  'Biology':              { bg: '#ecfdf5', color: '#047857', darkBg: 'rgba(2,44,34,0.4)',   darkColor: '#6ee7b7' },
-  'Economics':            { bg: '#fffbeb', color: '#b45309', darkBg: 'rgba(69,26,3,0.4)',   darkColor: '#fcd34d' },
-  'Government':           { bg: '#fef2f2', color: '#b91c1c', darkBg: 'rgba(69,10,10,0.4)', darkColor: '#fca5a5' },
-  'Literature in English':{ bg: '#fdf2f8', color: '#9d174d', darkBg: 'rgba(74,4,78,0.4)',  darkColor: '#f9a8d4' },
-  'Geography':            { bg: '#f0fdfa', color: '#0f766e', darkBg: 'rgba(4,47,46,0.4)',   darkColor: '#5eead4' },
-  'Agricultural Science': { bg: '#f7fee7', color: '#4d7c0f', darkBg: 'rgba(26,46,5,0.4)',  darkColor: '#bef264' },
-  'Further Mathematics':  { bg: '#f0f9ff', color: '#0369a1', darkBg: 'rgba(8,47,73,0.4)',  darkColor: '#7dd3fc' },
-  'Commerce':             { bg: '#eef2ff', color: '#4338ca', darkBg: 'rgba(30,27,75,0.4)', darkColor: '#a5b4fc' },
-  'default':              { bg: '#eef2ff', color: '#4338ca', darkBg: 'rgba(30,27,75,0.4)', darkColor: '#a5b4fc' },
-}
-
-function getSubjectStyle(name) {
-  return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default
-}
 
 // ── Score ring ────────────────────────────────────────────────────────────────
 function ScoreRing({ pct }) {
@@ -95,7 +67,7 @@ function ConfirmDialog({ answered, total, onConfirm, onCancel }) {
             Keep going
           </button>
           <button onClick={onConfirm}
-            className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 transition-colors">
+            className="flex-1 py-3 bg-indigo-600 dark:bg-indigo-500 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors">
             Submit →
           </button>
         </div>
@@ -105,7 +77,7 @@ function ConfirmDialog({ answered, total, onConfirm, onCancel }) {
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
-function Session({ subject, config, questions, onDone }) {
+function Session({ subject, config, questions, onDone, isDark }) {
   const [index,     setIndex]     = useState(0)
   const [answers,   setAnswers]   = useState({})
   const [phase,     setPhase]     = useState('quiz')
@@ -118,7 +90,7 @@ function Session({ subject, config, questions, onDone }) {
   const currentAns    = answers[index]
   const isRevealed    = isExamMode ? false : (revealMode === 'immediate' ? !!currentAns : false)
   const answeredCount = Object.keys(answers).length
-  const color         = getSubjectColor(subject)
+  const color         = resolveSubjectColors(subject, isDark)
 
   // Timer
   const timerRef  = useRef(null)
@@ -175,7 +147,7 @@ function Session({ subject, config, questions, onDone }) {
             </div>
           </div>
           <button onClick={() => { setPhase('review'); setReviewIdx(0) }}
-            className="w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 transition-colors">
+            className="w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors">
             Review answers →
           </button>
           <button onClick={onDone}
@@ -196,21 +168,22 @@ function Session({ subject, config, questions, onDone }) {
           <div className="flex items-center justify-between bg-card rounded-2xl border border-default px-4 py-3">
             <p className="text-xs font-bold text-secondary">Review</p>
             <span className="text-xs font-black text-primary">{reviewIdx + 1}/{questions.length}</span>
-            <button onClick={onDone} className="text-xs font-bold text-indigo-600 hover:opacity-75">Done →</button>
+            <button onClick={onDone} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:opacity-75">Done →</button>
           </div>
           {q.subject_name && (
             <span
               className="inline-block text-xs font-bold px-2.5 py-1 rounded-full"
               style={(() => {
-                const s = getSubjectStyle(q.subject_name)
-                return { backgroundColor: s.bg, color: s.color }
+                const s = resolveSubjectColors(q.subject_name, isDark)
+                return { backgroundColor: s.bg, color: s.text }
               })()}
             >
               {q.subject_name}
             </span>
           )}
           <QuestionCard key={q.id} question={q} selectedAnswer={ans?.selected ?? null}
-            revealed={true} onAnswer={() => {}} showExplanation={true} />
+            revealed={true} onAnswer={() => {}} showExplanation={true}
+            color={q.subject_name ? resolveSubjectColors(q.subject_name, isDark) : undefined} />
           <div className="flex gap-3">
             {reviewIdx > 0 && (
               <button onClick={() => setReviewIdx(i => i - 1)}
@@ -220,12 +193,12 @@ function Session({ subject, config, questions, onDone }) {
             )}
             {reviewIdx < questions.length - 1 ? (
               <button onClick={() => setReviewIdx(i => i + 1)}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500">
+                className="flex-1 py-3 bg-indigo-600 dark:bg-indigo-500 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 dark:hover:bg-indigo-400">
                 Next →
               </button>
             ) : (
               <button onClick={onDone}
-                className="flex-1 py-3.5 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500">
+                className="flex-1 py-3.5 bg-indigo-600 dark:bg-indigo-500 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 dark:hover:bg-indigo-400">
                 Finish →
               </button>
             )}
@@ -264,11 +237,12 @@ function Session({ subject, config, questions, onDone }) {
           revealed={isRevealed}
           onAnswer={handleAnswer}
           showExplanation={revealMode === 'immediate'}
+          color={resolveSubjectColors(subject, isDark)}
         />
 
         {revealMode === 'end' && currentAns && (
           <button onClick={() => { const n = index + 1; if (n >= total) setPhase('confirm'); else setIndex(n) }}
-            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500">
+            className="w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400">
             {index + 1 >= total ? 'Submit →' : 'Next →'}
           </button>
         )}
@@ -280,7 +254,7 @@ function Session({ subject, config, questions, onDone }) {
         )}
         {revealMode === 'immediate' && isRevealed && (
           <button onClick={() => { const n = index + 1; if (n >= total) setPhase('summary'); else setIndex(n) }}
-            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500">
+            className="w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400">
             {index + 1 >= total ? 'See results →' : 'Next →'}
           </button>
         )}
@@ -297,6 +271,7 @@ function Session({ subject, config, questions, onDone }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PublicPracticePage() {
+  const isDark = useIsDark()
   const [step,       setStep]       = useState('subject')
   const [subject,    setSubject]    = useState(null)
   const [mode,       setMode]       = useState(null)
@@ -342,13 +317,14 @@ export default function PublicPracticePage() {
         config={config}
         questions={questions}
         onDone={() => { setStep('subject'); setQuestions([]); setConfig(null); setSubject(null); setMode(null) }}
+        isDark={isDark}
       />
     )
   }
 
-  // Inline style for the selected-subject banner — needed because the subject
-  // name is dynamic and Tailwind v4 cannot generate the class at build time.
-  const subjectStyle = subject ? getSubjectStyle(subject) : null
+  // Inline style for the selected-subject banner — uses resolveSubjectColors,
+  // the canonical subject colour source, via inline style.
+  const subjectStyle = subject ? resolveSubjectColors(subject, isDark) : null
 
   return (
     <div className="min-h-screen bg-base">
@@ -361,7 +337,7 @@ export default function PublicPracticePage() {
             </div>
             <span className="text-base font-black text-primary">ExamPrep</span>
           </div>
-          <Link href="/login" className="text-xs font-bold text-indigo-600 hover:underline">Sign in →</Link>
+          <Link href="/login" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">Sign in →</Link>
         </div>
       </div>
 
@@ -384,15 +360,12 @@ export default function PublicPracticePage() {
             <div className="grid grid-cols-2 gap-2.5">
               {WAEC_SUBJECTS.map(sub => {
                 /*
-                  FIX: was className={`... ${c.bg}`} with <span className={c.text}>.
-                  Both c.bg and c.text are dynamic strings assembled at runtime —
-                  Tailwind v4 never sees them so no CSS is generated and the cards
-                  render with transparent backgrounds and invisible text.
-
-                  Solution: use inline style with explicit CSS values from
-                  SUBJECT_STYLES. Works in all environments with no safelist needed.
+                  Uses resolveSubjectColors() from @/lib/subjectTheme (the
+                  canonical subject colour source) via inline style — never
+                  dynamic className strings — since Tailwind v4 cannot
+                  statically scan template-built class names.
                 */
-                const s = getSubjectStyle(sub)
+                const s = resolveSubjectColors(sub, isDark)
                 return (
                   <button
                     key={sub}
@@ -401,7 +374,7 @@ export default function PublicPracticePage() {
                     className="flex items-center px-4 py-3.5 rounded-2xl text-left transition-all hover:shadow-sm hover:brightness-95 active:scale-[0.97]"
                   >
                     <span
-                      style={{ color: s.color }}
+                      style={{ color: s.text }}
                       className="text-sm font-black leading-snug"
                     >
                       {sub}
@@ -411,7 +384,7 @@ export default function PublicPracticePage() {
               })}
             </div>
             <p className="text-center text-xs text-tertiary">
-              <Link href="/signup" className="text-indigo-600 font-bold hover:underline">Create a free account</Link>
+              <Link href="/signup" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Create a free account</Link>
               {' '}to save results and track progress.
             </p>
           </>
@@ -429,22 +402,22 @@ export default function PublicPracticePage() {
               style={{ backgroundColor: subjectStyle.bg }}
               className="flex items-center justify-between rounded-2xl px-4 py-3"
             >
-              <p style={{ color: subjectStyle.color }} className="text-base font-black">{subject}</p>
-              <span style={{ color: subjectStyle.color }} className="text-xs font-bold opacity-70">WAEC</span>
+              <p style={{ color: subjectStyle.text }} className="text-base font-black">{subject}</p>
+              <span style={{ color: subjectStyle.text }} className="text-xs font-bold opacity-70">WAEC</span>
             </div>
 
             {error && (
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl px-4 py-3">
                 <p className="text-sm font-bold text-amber-800 dark:text-amber-300">😕 {error}</p>
                 <button onClick={() => { setStep('subject'); setError(null) }}
-                  className="text-xs text-amber-600 hover:underline mt-1">
+                  className="text-xs text-amber-600 dark:text-amber-400 hover:underline mt-1">
                   Try another subject →
                 </button>
               </div>
             )}
 
             {/* Practice card */}
-            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'practice' ? 'border-indigo-500' : 'border-default'}`}>
+            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'practice' ? 'border-indigo-500 dark:border-indigo-400' : 'border-default'}`}>
               <button className="w-full text-left p-4" onClick={() => setMode(mode === 'practice' ? null : 'practice')}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-xl flex-shrink-0">📖</div>
@@ -462,7 +435,7 @@ export default function PublicPracticePage() {
                     <div className="flex gap-2">
                       {[10, 20, 30, 40].map(n => (
                         <button key={n} onClick={() => setCount(n)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${count === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card hover:border-indigo-300'}`}>
+                          className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${count === n ? 'bg-indigo-600 dark:bg-indigo-500 border-indigo-600 dark:border-indigo-500 text-white' : 'border-default text-secondary bg-card hover:border-indigo-300 dark:hover:border-indigo-700'}`}>
                           {n}
                         </button>
                       ))}
@@ -473,7 +446,7 @@ export default function PublicPracticePage() {
                     <div className="flex gap-2">
                       {[['immediate', 'After each'], ['end', 'At the end']].map(([val, label]) => (
                         <button key={val} onClick={() => setRevealMode(val)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${revealMode === val ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card'}`}>
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${revealMode === val ? 'bg-indigo-600 dark:bg-indigo-500 border-indigo-600 dark:border-indigo-500 text-white' : 'border-default text-secondary bg-card'}`}>
                           {label}
                         </button>
                       ))}
@@ -482,7 +455,7 @@ export default function PublicPracticePage() {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-secondary">Timer</p>
                     <button onClick={() => setTimerOn(t => !t)}
-                      className={`w-10 h-6 rounded-full transition-colors ${timerOn ? 'bg-indigo-600' : 'bg-subtle border border-default'}`}>
+                      className={`w-10 h-6 rounded-full transition-colors ${timerOn ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-subtle border border-default'}`}>
                       <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-1 ${timerOn ? 'translate-x-4' : ''}`} />
                     </button>
                   </div>
@@ -490,7 +463,7 @@ export default function PublicPracticePage() {
                     <div className="flex gap-2">
                       {[10, 20, 30, 45].map(m => (
                         <button key={m} onClick={() => setTimerMins(m)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${timerMins === m ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-default text-secondary bg-card'}`}>
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${timerMins === m ? 'bg-indigo-600 dark:bg-indigo-500 border-indigo-600 dark:border-indigo-500 text-white' : 'border-default text-secondary bg-card'}`}>
                           {m}m
                         </button>
                       ))}
@@ -499,7 +472,7 @@ export default function PublicPracticePage() {
                   <button
                     onClick={() => startSession({ subjects: [subject], count, mode: 'practice', revealMode, durationSecs: timerOn ? timerMins * 60 : 0 })}
                     disabled={loading}
-                    className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+                    className="w-full py-3.5 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 disabled:opacity-50 transition-colors">
                     {loading ? 'Loading questions…' : `Start ${count} questions →`}
                   </button>
                 </div>
@@ -507,7 +480,7 @@ export default function PublicPracticePage() {
             </div>
 
             {/* Exam card */}
-            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'exam' ? 'border-indigo-500' : 'border-default'}`}>
+            <div className={`rounded-2xl border-2 overflow-hidden transition-all bg-card ${mode === 'exam' ? 'border-indigo-500 dark:border-indigo-400' : 'border-default'}`}>
               <button className="w-full text-left p-4" onClick={() => setMode(mode === 'exam' ? null : 'exam')}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-xl flex-shrink-0">⏱</div>
@@ -523,7 +496,7 @@ export default function PublicPracticePage() {
                   <button
                     onClick={() => startSession({ subjects: [subject], count: 50, mode: 'exam', revealMode: 'end', durationSecs: 3600 })}
                     disabled={loading}
-                    className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+                    className="w-full py-3.5 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 disabled:opacity-50 transition-colors">
                     {loading ? 'Loading…' : 'Start exam →'}
                   </button>
                 </div>

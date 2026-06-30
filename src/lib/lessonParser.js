@@ -9,10 +9,26 @@
 //    poetic/over-literary output from the AI.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SLIDE_TYPES = [
+export const SLIDE_TYPES = [
   'hook', 'definition', 'concept', 'formula', 'interaction',
   'worked_example', 'end_quiz', 'summary', 'real_life',
 ]
+
+// Human-readable labels per slide type — single source of truth, shared by
+// the admin lesson editor's slide list and MobilePreview's phone-frame pills.
+// Previously duplicated locally in LessonEditorClient.jsx and re-invented
+// inline (as "{i+1} · {s.type}") in MobilePreview.jsx.
+export const SLIDE_TYPE_LABELS = {
+  hook: 'Hook',
+  definition: 'Definition',
+  real_life: 'Real-life Connection',
+  concept: 'Concept',
+  formula: 'Formula',
+  interaction: 'Interaction',
+  worked_example: 'Worked Example',
+  end_quiz: 'End Quiz',
+  summary: 'Summary',
+}
 
 // ── Slide-level validation ────────────────────────────────────────────────────
 function validateSlide(slide, i) {

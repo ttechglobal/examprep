@@ -9,7 +9,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import QuestionCard from '@/components/quiz/QuestionCard'
-import { getSubjectColor } from '@/lib/theme'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 
 function totalSeconds(cfg) {
   if (cfg.durationSecs) return cfg.durationSecs
@@ -142,7 +143,7 @@ function SummaryScreen({ questions, answers, onReview, onFinish }) {
 }
 
 // ── Review mode ───────────────────────────────────────────────────────────────
-function ReviewMode({ questions, answers, onDone }) {
+function ReviewMode({ questions, answers, onDone, isDark }) {
   const [idx, setIdx] = useState(0)
   const q   = questions[idx]
   const ans = answers[idx]
@@ -166,7 +167,10 @@ function ReviewMode({ questions, answers, onDone }) {
         {/* Tags */}
         <div className="flex items-center gap-2 flex-wrap">
           {q.subject_name && (
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${getSubjectColor(q.subject_name).bg} ${getSubjectColor(q.subject_name).text}`}>
+            <span
+              className="text-xs font-bold px-2.5 py-1 rounded-full"
+              style={{ background: resolveSubjectColors(q.subject_name, isDark).bg, color: resolveSubjectColors(q.subject_name, isDark).text }}
+            >
               {q.subject_name}
             </span>
           )}
@@ -185,6 +189,7 @@ function ReviewMode({ questions, answers, onDone }) {
           revealed={true}
           onAnswer={() => {}}
           showExplanation={true}
+          color={q.subject_name ? resolveSubjectColors(q.subject_name, isDark) : undefined}
         />
 
         {/* Navigation */}
@@ -221,6 +226,7 @@ function ReviewMode({ questions, answers, onDone }) {
 // ── Main session page ─────────────────────────────────────────────────────────
 export default function PracticeSessionPage() {
   const router = useRouter()
+  const isDark = useIsDark()
 
   const [config,      setConfig]      = useState(null)
   const [questions,   setQuestions]   = useState([])
@@ -385,6 +391,7 @@ export default function PracticeSessionPage() {
       questions={questions}
       answers={answersArr}
       onDone={() => finishSession(answers, questions)}
+      isDark={isDark}
     />
   )
 
@@ -469,7 +476,10 @@ export default function PracticeSessionPage() {
         {!isExamMode && currentQ && (
           <div className="flex items-center gap-2 flex-wrap">
             {currentQ.subject_name && (
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${getSubjectColor(currentQ.subject_name).bg} ${getSubjectColor(currentQ.subject_name).text}`}>
+              <span
+                className="text-xs font-bold px-2.5 py-1 rounded-full"
+                style={{ background: resolveSubjectColors(currentQ.subject_name, isDark).bg, color: resolveSubjectColors(currentQ.subject_name, isDark).text }}
+              >
                 {currentQ.subject_name}
               </span>
             )}
@@ -490,6 +500,7 @@ export default function PracticeSessionPage() {
             revealed={isRevealed}
             onAnswer={handleAnswer}
             showExplanation={revealMode === 'immediate'}
+            color={currentQ.subject_name ? resolveSubjectColors(currentQ.subject_name, isDark) : undefined}
           />
         )}
 

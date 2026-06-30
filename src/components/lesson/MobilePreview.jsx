@@ -1,218 +1,43 @@
 'use client'
 
 import { useState } from 'react'
+import SlideRenderer from './SlideRenderer'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { LESSON_CSS_VARS_SCOPED, getAccentOverride } from '@/lib/lessonCssVars'
+import { SLIDE_TYPE_LABELS } from '@/lib/lessonParser'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MobilePreview.jsx
-// Lightweight phone-frame slide preview used in the admin lesson uploader.
-// Updated for the slide-based schema (lesson.slides instead of lesson.sections).
+// Phone-frame slide preview used in the admin lesson uploader/reviewer.
+//
+// PREVIOUSLY: this file had its own complete set of slide-type renderers
+// (HookPreview, DefinitionPreview, ConceptPreview, etc.) — a second,
+// independent reimplementation of what SlideRenderer.jsx already does.
+// That meant every improvement to SlideRenderer (the illustrated restyle,
+// dark mode, subject colour) silently did NOT apply here, and this preview
+// was missing a slide type entirely (end_quiz fell through to "Unknown
+// type"). Same failure mode as the old duplicated SUBJECT_STYLES maps.
+//
+// NOW: this component is just chrome (phone frame, status bar, slide-type
+// pills, prev/next nav) around the one real SlideRenderer. Any future
+// SlideRenderer change — new slide type, restyle, bugfix — appears here
+// automatically, with zero changes needed in this file.
+//
+// subjectName + isDark are optional props. If a consumer doesn't pass them
+// (neither current consumer does yet), the preview still renders correctly
+// using SlideRenderer's built-in default --lesson-accent (indigo), just
+// without subject colour. Pass them in when available for full fidelity
+// with what the student actually sees.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Minimal per-type preview renderers (no interaction, just display) ─────────
-
-function HookPreview({ slide }) {
-  return (
-    <div className="p-4">
-      <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1.5">
-        Think about this
-      </p>
-      <p className="text-xs font-bold text-gray-900 leading-relaxed">{slide.body}</p>
-    </div>
-  )
-}
-
-function DefinitionPreview({ slide }) {
-  return (
-    <div className="overflow-hidden rounded-xl mx-3 my-2 border border-indigo-200">
-      <div className="bg-indigo-600 px-3 py-2.5">
-        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-200 mb-0.5">
-          Definition
-        </p>
-        <p className="text-sm font-black text-white">{slide.term}</p>
-      </div>
-      <div className="bg-card px-3 py-2.5 space-y-2">
-        <p className="text-xs font-bold text-indigo-800 leading-snug">{slide.definition}</p>
-        {(slide.examples ?? []).slice(0, 2).map((ex, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
-              {i + 1}
-            </span>
-            <p className="text-[10px] text-gray-600 leading-relaxed">{ex}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function RealLifePreview({ slide }) {
-  return (
-    <div className="p-4">
-      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
-        🌍 Where you see this
-      </p>
-      <div className="bg-indigo-50 rounded-xl px-3 py-3">
-        <p className="text-xs font-medium text-indigo-900 leading-relaxed">{slide.body}</p>
-      </div>
-    </div>
-  )
-}
-
-function ConceptPreview({ slide }) {
-  return (
-    <div className="p-4 space-y-2">
-      <p className="text-sm font-black text-gray-900 leading-snug">{slide.heading}</p>
-      {slide.image_prompt && (
-        <div className="w-full h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-          <p className="text-[8px] text-gray-400 italic px-3 text-center line-clamp-2">
-            {slide.image_prompt}
-          </p>
-        </div>
-      )}
-      <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{slide.body}</p>
-    </div>
-  )
-}
-
-function FormulaPreview({ slide }) {
-  return (
-    <div className="p-4 space-y-2.5">
-      <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-        📐 {slide.label}
-      </p>
-      <div className="bg-gray-900 rounded-xl py-4 text-center">
-        <p className="text-sm font-black text-white font-mono">{slide.formula}</p>
-      </div>
-      {slide.plain_english && (
-        <p className="text-xs text-indigo-700 font-medium leading-relaxed">{slide.plain_english}</p>
-      )}
-      {(slide.variables ?? []).slice(0, 3).map((v, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <span className="text-[10px] font-black font-mono text-indigo-600 w-5">{v.symbol}</span>
-          <span className="text-[10px] text-gray-500">= {v.meaning}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function InteractionPreview({ slide }) {
-  const options = (slide.options ?? []).map((opt) => {
-    if (typeof opt === 'string') {
-      return { key: opt.split('.')[0]?.trim(), text: opt.split('.').slice(1).join('.').trim() || opt }
-    }
-    return opt
-  })
-  return (
-    <div className="p-4 space-y-2.5">
-      <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500">
-        ✏️ Quick Check
-      </p>
-      <p className="text-xs font-bold text-gray-900 leading-snug">{slide.question}</p>
-      <div className="space-y-1.5">
-        {options.map((opt) => (
-          <div
-            key={opt.key}
-            className={`px-2.5 py-2 rounded-lg border text-[10px] ${
-              opt.key === slide.correct
-                ? 'border-green-400 bg-green-50 text-green-800 font-bold'
-                : 'border-gray-200 text-gray-600'
-            }`}
-          >
-            <span className="font-black mr-1">{opt.key}.</span>
-            {opt.text}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function WorkedExamplePreview({ slide }) {
-  const steps = slide.steps ?? []
-  return (
-    <div className="p-4 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-          {slide.mode === 'student_attempt' ? '🧠 Your Turn' : '✏️ Worked Example'}
-        </span>
-      </div>
-      <div className="bg-gray-900 rounded-xl px-3 py-2.5">
-        <p className="text-xs font-bold text-white leading-relaxed">{slide.problem}</p>
-      </div>
-      {slide.mode === 'student_attempt' ? (
-        <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
-          <p className="text-[10px] text-indigo-600 font-medium">
-            Solution reveals after {slide.reveal_delay_seconds ?? 8}s
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {steps.slice(0, 3).map((s, i) => (
-            <div key={i} className="flex items-start gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
-                {i + 1}
-              </span>
-              <p className="text-[10px] text-gray-600 leading-relaxed">{s.instruction}</p>
-            </div>
-          ))}
-          {steps.length > 3 && (
-            <p className="text-[9px] text-gray-400 pl-5">+{steps.length - 3} more steps…</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SummaryPreview({ slide }) {
-  return (
-    <div className="p-4 space-y-2.5">
-      <p className="text-sm font-black text-gray-900">📋 What you learned</p>
-      <div className="space-y-1.5">
-        {(slide.points ?? []).map((pt, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
-              {i + 1}
-            </span>
-            <p className="text-[10px] text-gray-700 leading-relaxed">{pt}</p>
-          </div>
-        ))}
-      </div>
-      {slide.closing && (
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl px-3 py-2.5 text-center">
-          <p className="text-[10px] font-bold text-white leading-relaxed">{slide.closing}</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SlidePreview({ slide }) {
-  if (!slide) return null
-  switch (slide.type) {
-    case 'hook': return <HookPreview slide={slide} />
-    case 'definition': return <DefinitionPreview slide={slide} />
-    case 'real_life': return <RealLifePreview slide={slide} />
-    case 'concept': return <ConceptPreview slide={slide} />
-    case 'formula': return <FormulaPreview slide={slide} />
-    case 'interaction': return <InteractionPreview slide={slide} />
-    case 'worked_example': return <WorkedExamplePreview slide={slide} />
-    case 'summary': return <SummaryPreview slide={slide} />
-    default:
-      return <div className="p-4 text-[10px] text-gray-400">Unknown type: {slide.type}</div>
-  }
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
-export default function MobilePreview({ lesson }) {
+export default function MobilePreview({ lesson, subjectName, isDark = false }) {
   const [currentSlide, setCurrentSlide] = useState(0)
 
   if (!lesson) {
     return (
       <div className="flex items-center justify-center h-[600px]">
-        <div className="w-[320px] h-[580px] bg-gray-100 rounded-[36px] border-4 border-gray-300 flex items-center justify-center">
-          <p className="text-gray-400 text-sm text-center px-8">
+        <div className="w-[320px] h-[580px] bg-gray-100 dark:bg-gray-800 rounded-[36px] border-4 border-gray-300 dark:border-gray-700 flex items-center justify-center">
+          <p className="text-gray-400 dark:text-gray-500 text-sm text-center px-8">
             Paste valid lesson JSON to see the preview
           </p>
         </div>
@@ -223,9 +48,13 @@ export default function MobilePreview({ lesson }) {
   const slides = lesson.slides ?? []
   const slide = slides[currentSlide]
   const progress = slides.length > 0 ? ((currentSlide + 1) / slides.length) * 100 : 0
+  const color = subjectName ? resolveSubjectColors(subjectName, isDark) : null
+  const accentOverride = color ? getAccentOverride(color) : {}
 
   return (
     <div className="flex flex-col items-center gap-4">
+      <style>{LESSON_CSS_VARS_SCOPED('mobile-preview-scope')}</style>
+
       {/* Phone frame */}
       <div className="w-[320px] h-[580px] bg-card rounded-[36px] border-4 border-gray-800 shadow-2xl overflow-hidden flex flex-col">
         {/* Status bar */}
@@ -235,56 +64,74 @@ export default function MobilePreview({ lesson }) {
           <span className="text-white text-[10px]">●●●</span>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-1 bg-gray-100 flex-shrink-0">
+        {/* Progress bar — subject-coloured when subjectName is provided */}
+        <div className="h-1 bg-gray-100 dark:bg-gray-700 flex-shrink-0">
           <div
-            className="h-full bg-indigo-500 transition-all duration-300"
-            style={{ width: `${progress}%` }}
+            className="h-full transition-all duration-300"
+            style={{ width: `${progress}%`, background: color?.solid ?? '#6366f1' }}
           />
         </div>
 
-        {/* Slide content */}
-        <div className="flex-1 overflow-y-auto">
-          <SlidePreview slide={slide} />
+        {/* Slide content — delegates to the real SlideRenderer, scoped to
+            this preview's own --lesson-* variables so it doesn't depend on
+            (or interfere with) whatever full-page lesson vars might exist
+            elsewhere on this admin page. */}
+        <div
+          className={`mobile-preview-scope${isDark ? ' dark' : ''} flex-1 overflow-y-auto`}
+          style={accentOverride}
+        >
+          {slide ? (
+            <div className="p-4">
+              <SlideRenderer slide={slide} />
+            </div>
+          ) : (
+            <div className="p-4 text-xs text-gray-400">No slides yet</div>
+          )}
         </div>
 
         {/* Navigation */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
           <button
             onClick={() => setCurrentSlide((s) => Math.max(0, s - 1))}
             disabled={currentSlide === 0}
-            className="text-sm text-gray-500 disabled:opacity-30 font-medium"
+            className="text-sm text-gray-500 dark:text-gray-400 disabled:opacity-30 font-medium"
           >
             ← Back
           </button>
-          <span className="text-xs text-gray-400">
-            {currentSlide + 1} / {slides.length}
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {slides.length > 0 ? `${currentSlide + 1} / ${slides.length}` : '0 / 0'}
           </span>
           <button
             onClick={() => setCurrentSlide((s) => Math.min(slides.length - 1, s + 1))}
-            disabled={currentSlide === slides.length - 1}
-            className="text-sm text-indigo-600 disabled:opacity-30 font-medium"
+            disabled={currentSlide >= slides.length - 1}
+            className="text-sm font-medium disabled:opacity-30"
+            style={{ color: color?.solid ?? '#4f46e5' }}
           >
             Next →
           </button>
         </div>
       </div>
 
-      {/* Slide type pills */}
+      {/* Slide type pills — same SLIDE_TYPE_LABELS used by the admin editor's
+          slide list, not a third re-invention of "what do we call this type". */}
       <div className="flex flex-wrap gap-1 w-[320px] justify-center">
-        {slides.map((s, i) => (
-          <button
-            key={i}
-            onClick={() => setCurrentSlide(i)}
-            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
-              i === currentSlide
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'text-gray-500 border-gray-300 hover:border-indigo-300'
-            }`}
-          >
-            {i + 1} · {s.type}
-          </button>
-        ))}
+        {slides.map((s, i) => {
+          const isActive = i === currentSlide
+          return (
+            <button
+              key={i}
+              onClick={() => setCurrentSlide(i)}
+              style={isActive ? { background: color?.solid ?? '#4f46e5', borderColor: color?.solid ?? '#4f46e5' } : undefined}
+              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                isActive
+                  ? 'text-white'
+                  : 'text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-600'
+              }`}
+            >
+              {i + 1} · {SLIDE_TYPE_LABELS[s.type] ?? s.type}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

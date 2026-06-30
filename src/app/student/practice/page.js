@@ -43,6 +43,7 @@ const MODES = [
   { id: 'timed', emoji: '⏱',  title: 'Timed Practice',  desc: 'Mixed questions with a live countdown timer',       gradient: 'from-blue-500 to-cyan-500',     badge: null },
   { id: 'mock',  emoji: '📋', title: 'Mock Test',        desc: 'Full subject test — all difficulty levels mixed',  gradient: 'from-emerald-500 to-teal-500',  badge: 'Popular' },
   { id: 'exam',  emoji: '🏆', title: 'Exam Simulation', desc: 'Real JAMB or WAEC format with official timing',    gradient: 'from-orange-500 to-red-500',    badge: 'Challenge' },
+  { id: 'games', emoji: '🎮', title: 'Games',            desc: 'Practice that feels like play',                    gradient: 'from-amber-500 to-orange-500',  badge: null, href: '/student/games' },
 ]
 
 // ── Bottom sheet shell ────────────────────────────────────────────────────────
@@ -649,7 +650,7 @@ export default function PracticeHQPage() {
 
       <div>
         <h1 className="text-2xl font-black text-primary">Practice HQ</h1>
-        <p className="text-sm text-secondary mt-0.5">Every type of practice, all in one place</p>
+        <p className="text-sm text-secondary mt-0.5">A little every day beats a lot once in a while</p>
       </div>
 
       <div className="flex gap-1 bg-subtle p-1 rounded-2xl w-fit">
@@ -673,8 +674,8 @@ export default function PracticeHQPage() {
           )}
           <div className="grid grid-cols-2 gap-3">
             {MODES.map(m => (
-              <button key={m.id} onClick={() => setActiveSetup(m.id)}
-                disabled={subjects.length === 0}
+              <button key={m.id} onClick={() => m.href ? router.push(m.href) : setActiveSetup(m.id)}
+                disabled={!m.href && subjects.length === 0}
                 className="relative flex flex-col items-start p-4 rounded-2xl text-left transition-all active:scale-[0.97] disabled:opacity-40 overflow-hidden shadow-sm hover:shadow-md">
                 <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-90`} />
                 <div className="relative z-10 w-full">

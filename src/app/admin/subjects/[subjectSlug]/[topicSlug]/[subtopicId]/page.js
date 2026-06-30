@@ -257,7 +257,10 @@ export default function LessonEditorPage() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Mobile Preview
           </label>
-          <MobilePreview lesson={parseResult?.valid ? parseResult.lesson : null} />
+          <MobilePreview
+            lesson={parseResult?.valid ? parseResult.lesson : null}
+            subjectName={subtopic?.topics?.subjects?.name}
+          />
         </div>
       </div>
     </div>

@@ -15,6 +15,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ToastStack } from '@/components/ui/Toast'
 import QuestionCard from '@/components/quiz/QuestionCard'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 import {
   getTotalSeconds,
   getWarningThresholds,
@@ -24,6 +26,7 @@ import {
 
 export default function DiagnosticTestPage() {
   const router = useRouter()
+  const isDark = useIsDark()
   const [setup, setSetup] = useState(null)
   const [questions, setQuestions] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -278,6 +281,10 @@ export default function DiagnosticTestPage() {
           revealed={isRevealed}
           onAnswer={handleAnswer}
           showExplanation={true}
+          color={(() => {
+            const subjName = currentQuestion.subjects?.name ?? currentQuestion.subject_name
+            return subjName ? resolveSubjectColors(subjName, isDark) : undefined
+          })()}
         />
 
         {/* Next / See results button — shown after answering */}
