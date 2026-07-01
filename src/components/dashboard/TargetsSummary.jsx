@@ -1,12 +1,16 @@
+'use client'
 // src/components/dashboard/TargetsSummary.jsx
 //
-// Restored previous design: emoji icon bubbles, sectioned layout, colour-coded
-// score pills. Dark mode aware — bg/border/text all adapt.
+// Collapsed by default — shows a 1-line summary so the homepage isn't
+// cluttered, but everything is one tap away. The full detail (course,
+// university, score targets, per-subject WAEC grades) expands inline.
+// Dark mode aware throughout.
 
-'use client'
-import { memo } from 'react'
+import { useState, memo } from 'react'
 
 export const TargetsSummary = memo(function TargetsSummary({ profile, onEdit, isDark }) {
+  const [open, setOpen] = useState(false)
+
   const waecGrades = profile?.waec_target_grades  ?? {}
   const jambScores = profile?.jamb_target_scores  ?? {}
   const examType   = profile?.exam_type ?? ''
@@ -19,188 +23,150 @@ export const TargetsSummary = memo(function TargetsSummary({ profile, onEdit, is
   const jambTotal  = profile?.jamb_total_target
     ?? Object.values(jambScores).reduce((s, v) => s + (Number(v) || 0), 0)
 
-  // Theme-aware surface colours
-  const cardBg     = isDark ? '#111827' : '#fdfcfa'
-  const cardBorder = isDark ? '#1f2937' : '#ede9e3'
-  const divider    = isDark ? '#1f2937' : '#ede9e3'
+  // Two-line summary for the collapsed row
+  const line1Parts = []
+  const line2Parts = []
+  if (hasCourse) line1Parts.push(profile.university_course)
+  if (hasUni)    line1Parts.push(profile.target_university)
+  if (hasJamb && jambTotal) line2Parts.push(`JAMB target: ${jambTotal}`)
+  if (hasWaec)              line2Parts.push(`WAEC: ${Object.keys(waecGrades).length} subjects`)
+  const line1 = line1Parts.join(' · ') || (line2Parts.length ? '' : 'No targets set yet')
+  const line2 = line2Parts.join(' · ')
 
-  // Icon bubble colours — subtle tints that work in both modes
+  const cardBg     = isDark ? '#111827' : '#ffffff'
+  const cardBorder = isDark ? '#1f2937' : '#e5e7eb'
+  const divider    = isDark ? '#1f2937' : '#f3f4f6'
   const bubbleCourse = isDark ? '#2e1065' : '#ede9fe'
   const bubbleUni    = isDark ? '#1e3a5f' : '#dbeafe'
   const bubbleJamb   = isDark ? '#1e1b4b' : '#e0e7ff'
   const bubbleWaec   = isDark ? '#052e16' : '#d1fae5'
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm"
-      style={{ border: `1px solid ${cardBorder}`, background: cardBg }}>
+    <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 20, overflow: 'hidden' }}>
 
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between"
-        style={{ borderBottom: `1px solid ${divider}` }}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center"
-            style={{ background: isDark ? '#451a03' : '#fef3c7' }}>
-            <span className="text-base">🎯</span>
-          </div>
-          <p className="text-sm font-black text-primary">My Targets</p>
-        </div>
-        <button onClick={onEdit}
-          className="text-xs font-bold text-secondary hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30">
-          Edit
-        </button>
-      </div>
-
-      {/* Empty state */}
-      {!hasAny ? (
-        <div className="px-5 py-5 text-center space-y-3">
-          <p className="text-xs text-secondary leading-relaxed">
-            Set your targets to stay motivated and track your progress.
+      {/* Collapsed row — always visible, tap to expand */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center',
+          gap: 12, padding: '14px 16px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          borderBottom: open ? `1px solid ${divider}` : 'none',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 18, flexShrink: 0 }}>🎯</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#6b7280' : '#9ca3af', marginBottom: 2 }}>
+            My targets
           </p>
-          <button onClick={onEdit}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-xs font-black rounded-xl hover:bg-amber-400 transition-colors">
-            Set targets →
-          </button>
+          {line1 && (
+            <p style={{ fontSize: 13, fontWeight: 700, color: isDark ? '#f3f4f6' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: line2 ? 2 : 0 }}>
+              {line1}
+            </p>
+          )}
+          {line2 && (
+            <p style={{ fontSize: 12, fontWeight: 600, color: isDark ? '#9ca3af' : '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {line2}
+            </p>
+          )}
+          {!line1 && !line2 && (
+            <p style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#6b7280' : '#9ca3af' }}>
+              No targets set yet
+            </p>
+          )}
         </div>
-      ) : (
-        <div className="px-5 py-4 space-y-5">
+        {/* Chevron */}
+        <svg
+          width="16" height="16" fill="none" viewBox="0 0 24 24"
+          stroke={isDark ? '#4b5563' : '#9ca3af'} strokeWidth={2.5}
+          style={{ flexShrink: 0, transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
 
-          {/* Target Course */}
-          {hasCourse && (
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: bubbleCourse }}>
-                <span className="text-base">🎓</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary mb-0.5">
-                  Target Course
-                </p>
-                <p className="text-sm font-black text-primary truncate">
-                  {profile.university_course}
-                </p>
-              </div>
+      {/* Expanded detail */}
+      {open && (
+        <div style={{ padding: '16px 16px 4px' }}>
+
+          {!hasAny ? (
+            <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+              <p style={{ fontSize: 13, color: isDark ? '#6b7280' : '#9ca3af', marginBottom: 12 }}>
+                Set your targets to stay motivated and track your progress.
+              </p>
+              <button onClick={onEdit} style={{
+                padding: '8px 20px', borderRadius: 12, background: '#f59e0b',
+                color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer',
+              }}>
+                Set targets →
+              </button>
             </div>
-          )}
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Target University */}
-          {hasUni && (
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: bubbleUni }}>
-                <span className="text-base">🏛️</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-secondary mb-0.5">
-                  Target University
-                </p>
-                <p className="text-sm font-black text-primary truncate">
-                  {profile.target_university}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* JAMB Target */}
-          {hasJamb && (
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: bubbleJamb }}>
-                  <span className="text-base">📊</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">
-                    JAMB Target
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-sm font-black text-primary">{jambTotal} total</span>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white"
-                      style={{ background: '#4f46e5' }}>
-                      JAMB
-                    </span>
+              {hasCourse && (
+                <Row icon="🎓" bg={bubbleCourse} label="Target course" value={profile.university_course} isDark={isDark} />
+              )}
+              {hasUni && (
+                <Row icon="🏛️" bg={bubbleUni} label="Target university" value={profile.target_university} isDark={isDark} />
+              )}
+              {hasJamb && jambTotal > 0 && (
+                <Row icon="📊" bg={bubbleJamb} label="JAMB target" value={`${jambTotal} total`} isDark={isDark} />
+              )}
+              {hasWaec && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 12, background: bubbleWaec, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: 16 }}>📝</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: isDark ? '#6b7280' : '#9ca3af', marginBottom: 6 }}>
+                      WAEC target grades
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {Object.entries(waecGrades).map(([sub, grade]) => {
+                        const n     = parseInt(grade.replace(/\D/g, '')) || 0
+                        const bg    = isDark ? (n <= 3 ? '#052e16' : n <= 6 ? '#451a03' : '#450a0a') : (n <= 3 ? '#d1fae5' : n <= 6 ? '#fef3c7' : '#fee2e2')
+                        const color = isDark ? (n <= 3 ? '#4ade80' : n <= 6 ? '#fbbf24' : '#f87171') : (n <= 3 ? '#065f46' : n <= 6 ? '#92400e' : '#991b1b')
+                        return (
+                          <div key={sub} style={{ padding: '4px 10px', borderRadius: 10, background: bg, display: 'flex', gap: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color }}>{sub}</span>
+                            <span style={{ fontSize: 11, fontWeight: 900, color }}>{grade}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {/* Per-subject score pills */}
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(jambScores).map(([sub, score]) => {
-                  const n      = Number(score)
-                  const bg     = isDark
-                    ? (n >= 70 ? '#052e16' : n >= 50 ? '#451a03' : '#450a0a')
-                    : (n >= 70 ? '#e0e7ff' : n >= 50 ? '#e0e7ff' : '#e0e7ff')
-                  const border = isDark
-                    ? (n >= 70 ? '#166534' : n >= 50 ? '#92400e' : '#991b1b')
-                    : '#c7d2fe'
-                  const color  = isDark
-                    ? (n >= 70 ? '#4ade80' : n >= 50 ? '#fbbf24' : '#f87171')
-                    : '#3730a3'
-                  const scoreColor = isDark
-                    ? (n >= 70 ? '#4ade80' : n >= 50 ? '#fbbf24' : '#f87171')
-                    : '#4f46e5'
-                  return (
-                    <div key={sub}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl"
-                      style={{ background: bg, border: `1px solid ${border}` }}>
-                      <span className="text-xs font-bold" style={{ color }}>{sub}</span>
-                      <span className="text-xs font-black" style={{ color: scoreColor }}>{score}</span>
-                    </div>
-                  )
-                })}
+              )}
+
+              {/* Edit link */}
+              <div style={{ borderTop: `1px solid ${divider}`, paddingTop: 12, paddingBottom: 12 }}>
+                <button onClick={onEdit} style={{
+                  fontSize: 12, fontWeight: 700, color: '#6366f1',
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                }}>
+                  Edit targets →
+                </button>
               </div>
             </div>
           )}
-
-          {/* WAEC Target */}
-          {hasWaec && (
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: bubbleWaec }}>
-                  <span className="text-base">📝</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">
-                    WAEC Target Grades
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-sm font-black text-primary">
-                      {Object.keys(waecGrades).length} subjects
-                    </span>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white"
-                      style={{ background: '#059669' }}>
-                      WAEC
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {/* Per-subject grade pills — colour-coded: A1-B3 green, C4-C6 amber, D7+ red */}
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(waecGrades).map(([sub, grade]) => {
-                  const n      = parseInt(grade.replace(/\D/g, '')) || 0
-                  const bg     = isDark
-                    ? (n <= 3 ? '#052e16' : n <= 6 ? '#451a03' : '#450a0a')
-                    : (n <= 3 ? '#d1fae5' : n <= 6 ? '#fef3c7' : '#fee2e2')
-                  const color  = isDark
-                    ? (n <= 3 ? '#4ade80' : n <= 6 ? '#fbbf24' : '#f87171')
-                    : (n <= 3 ? '#065f46' : n <= 6 ? '#92400e' : '#991b1b')
-                  const border = isDark
-                    ? (n <= 3 ? '#166534' : n <= 6 ? '#92400e' : '#991b1b')
-                    : (n <= 3 ? '#6ee7b7' : n <= 6 ? '#fcd34d' : '#fca5a5')
-                  return (
-                    <div key={sub}
-                      className="flex items-center gap-1 px-3 py-2 rounded-xl"
-                      style={{ background: bg, border: `1px solid ${border}` }}>
-                      <span className="text-xs font-bold" style={{ color }}>{sub}</span>
-                      <span className="text-xs font-black ml-1" style={{ color }}>{grade}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
         </div>
       )}
     </div>
   )
 })
+
+function Row({ icon, bg, label, value, isDark }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ fontSize: 16 }}>{icon}</span>
+      </div>
+      <div>
+        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: isDark ? '#6b7280' : '#9ca3af', marginBottom: 1 }}>{label}</p>
+        <p style={{ fontSize: 13, fontWeight: 800, color: isDark ? '#f9fafb' : '#111827' }}>{value}</p>
+      </div>
+    </div>
+  )
+}
