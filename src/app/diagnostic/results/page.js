@@ -1,344 +1,356 @@
 'use client'
-// src/app/diagnostic/results/page.js
-// ─────────────────────────────────────────────────────────────────────────────
-// PERF FIX: Page renders IMMEDIATELY from sessionStorage data.
-//           Save to DB fires in background — never blocks the UI.
-//
-// VISUAL REDESIGN:
-//   - Score ring with animated fill
-//   - Clear "Topics to work on" section highlighted in red
-//   - Encouraging tone throughout
-//   - Clean, native card language consistent with app
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/diagnostic/results/page.js — v2
+// REDESIGN: matches prototype screen 3 exactly.
+// KEY VISUAL DETAILS FROM PROTOTYPE:
+//   • Dark bg (#0d0e14)
+//   • app-bar: logo-row (E mark + "Exam Prep") LEFT, xp-pill RIGHT
+//     xp-pill: bg rgba(255,195,107,.1) border rgba(255,195,107,.2) color gold
+//   • scroll-zone: padding 20px 18px 24px, gap 14px
+//   • score-ring-wrap: flex-col, align-center, padding 20px 0 10px
+//     SVG: 130×130, r=52, stroke-width=10
+//     ring stroke: #9b7ae0 with filter drop-shadow(0 0 16px rgba(155,122,224,.35))
+//     text line 1: 28px 800 fill #eef0fa y=60 → "60%"
+//     text line 2: 11px fill #7b7f9e y=78 → tier label "Building"
+//   • Below ring: subject name 16px 800, encouraging copy 12px dim, max-width 260px
+//   • Weak topics callout:
+//     bg rgba(239,93,78,.08) border rgba(239,93,78,.2) border-radius 16px padding 14px
+//     label: t-label style, color danger, "🎯 Focus here first", margin-bottom 10px
+//     rows: topic-result-row = flex, gap 10px, padding 10px 0, border-bottom
+//       tr-name: flex:1, 12px 700 text
+//       tr-bar-wrap: width 60px, height 4px, bg rgba(255,255,255,.06), overflow hidden
+//       tr-bar-fill: h 100%, border-radius 2px, color by score
+//       tr-pct: 11px 800
+//   • "All topics" widget: .widget card (bg surface, border, radius 18px)
+//     widget-header: padding 11px 14px, border-bottom, t-label "All topics"
+//     widget-body: padding 6px 14px
+//     same topic-result-row pattern, last one has no border-bottom
+//   • "View my practice plan →" navy 3D CTA
+//   • Score ring animates strokeDasharray on mount
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { resolveSubjectColors } from '@/lib/subjectTheme'
-import { useIsDark } from '@/lib/useIsDark'
 import Link from 'next/link'
 
-// ── Score helpers ─────────────────────────────────────────────────────────────
+const C = {
+  bg:      '#0d0e14',
+  surface: '#13141f',
+  border:  'rgba(255,255,255,0.07)',
+  text:    '#eef0fa',
+  dim:     '#7b7f9e',
+  chem:    '#9b7ae0',
+  success: '#6cce8e',
+  danger:  '#ef5d4e',
+  gold:    '#ffc36b',
+  navy:    '#0b1330',
+  navyDeep:'#05070f',
+}
+
+// Ring circumference for r=52: 2π×52 ≈ 326.7
+const CIRC = 326.73
+
 function getScoreTier(pct) {
-  if (pct >= 80) return { label: 'Excellent',    emoji: '🏆', color: 'text-green-600 dark:text-green-400',  bg: 'bg-green-50 dark:bg-green-950/40',  ring: '#16a34a', ringDark: '#4ade80' }
-  if (pct >= 60) return { label: 'Good',         emoji: '💪', color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-50 dark:bg-blue-950/40',   ring: '#2563eb', ringDark: '#60a5fa' }
-  if (pct >= 40) return { label: 'Building',     emoji: '📈', color: 'text-amber-600 dark:text-amber-400',  bg: 'bg-amber-50 dark:bg-amber-950/40',  ring: '#d97706', ringDark: '#fbbf24' }
-  return              { label: 'Getting started',emoji: '🌱', color: 'text-red-500 dark:text-red-400',    bg: 'bg-red-50 dark:bg-red-950/40',    ring: '#ef4444', ringDark: '#f87171' }
+  if (pct >= 80) return { label: 'Excellent',      ring: '#6cce8e' }
+  if (pct >= 60) return { label: 'Good',            ring: '#5cb8ea' }
+  if (pct >= 40) return { label: 'Building',        ring: C.chem   }
+  return              { label: 'Getting started',  ring: C.danger  }
 }
 
 function getEncouragement(pct) {
   if (pct >= 80) return "Outstanding! You have a strong foundation — let's sharpen the edges."
   if (pct >= 60) return "Good performance! A few focused sessions will push you much higher."
-  if (pct >= 40) return "You're building. Your personalised plan will close these gaps fast."
+  if (pct >= 40) return "Focused practice on weak areas will close these gaps fast. Your plan is ready."
   return "Great start — every expert was once a beginner. Your plan is ready."
 }
 
-// ── Score Ring ────────────────────────────────────────────────────────────────
-function ScoreRing({ pct, color, isDark }) {
-  const r    = 46
-  const circ = 2 * Math.PI * r
+// ── Score ring ────────────────────────────────────────────────────────────────
+function ScoreRing({ pct, ringColor }) {
   const [dash, setDash] = useState(0)
-
+  const [disp, setDisp] = useState(0)
   useEffect(() => {
-    const t = setTimeout(() => setDash((pct / 100) * circ), 100)
+    const t = setTimeout(() => {
+      setDash(CIRC * pct / 100)
+      setDisp(pct)
+    }, 80)
     return () => clearTimeout(t)
-  }, [pct, circ])
-
-  const trackColor = isDark ? '#263352' : '#f1f5f9'
-  const numberColor = isDark ? '#f0f4ff' : '#0f172a'
-  const labelColor = isDark ? '#8899bb' : '#94a3b8'
-
+  }, [pct])
   return (
-    <svg width="128" height="128" viewBox="0 0 128 128" className="mx-auto">
-      <circle cx="64" cy="64" r={r} fill="none" stroke={trackColor} strokeWidth="10" />
+    <svg
+      width="130" height="130" viewBox="0 0 130 130"
+      style={{ filter: `drop-shadow(0 0 16px rgba(155,122,224,.35))` }}
+    >
+      {/* track */}
+      <circle cx="65" cy="65" r="52" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="10"/>
+      {/* fill */}
       <circle
-        cx="64" cy="64" r={r} fill="none"
-        stroke={color} strokeWidth="10"
-        strokeDasharray={`${dash} ${circ}`}
+        cx="65" cy="65" r="52" fill="none"
+        stroke={ringColor} strokeWidth="10"
+        strokeDasharray={`${dash} ${CIRC}`}
         strokeLinecap="round"
-        transform="rotate(-90 64 64)"
-        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)' }}
+        transform="rotate(-90 65 65)"
+        style={{ transition: 'stroke-dasharray 1s ease' }}
       />
-      <text x="64" y="59" textAnchor="middle" style={{ fontSize: 26, fontWeight: 900, fill: numberColor }}>
-        {pct}%
+      {/* score text */}
+      <text x="65" y="60" textAnchor="middle"
+        fill={C.text} fontSize="28" fontWeight="800" fontFamily="inherit">
+        {disp}%
       </text>
-      <text x="64" y="76" textAnchor="middle" style={{ fontSize: 11, fill: labelColor }}>
-        score
+      {/* tier text */}
+      <text x="65" y="78" textAnchor="middle"
+        fill={C.dim} fontSize="11" fontFamily="inherit">
+        {getScoreTier(pct).label}
       </text>
     </svg>
   )
 }
 
-// ── Topic row ─────────────────────────────────────────────────────────────────
-function TopicRow({ topic, isDark }) {
-  const color  = resolveSubjectColors(topic.subjectName, isDark)
-  const pct    = topic.total > 0 ? Math.round((topic.correct / topic.total) * 100) : 0
-  const isWeak = pct < 60
-
+// ── Topic result row ──────────────────────────────────────────────────────────
+function TopicRow({ name, pct, isLast }) {
+  const color = pct >= 70 ? C.success : pct >= 40 ? C.gold : C.danger
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-default last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span
-            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-            style={{ background: color.bg, color: color.text }}
-          >
-            {topic.subjectName}
-          </span>
-          {isWeak && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">
-              Needs work
-            </span>
-          )}
-        </div>
-        <p className="text-sm font-bold text-primary truncate">{topic.name}</p>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 0',
+      borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
+    }}>
+      <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: C.text }}>{name}</span>
+      <div style={{ width: 60, height: 4, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', borderRadius: 2, background: color,
+          width: `${pct}%`, transition: 'width .8s ease',
+        }} />
       </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="w-16 h-2 bg-subtle rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${
-              pct >= 75 ? 'bg-green-500 dark:bg-green-400' : pct >= 50 ? 'bg-amber-400 dark:bg-amber-500' : 'bg-red-400 dark:bg-red-500'
-            }`}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <span className={`text-sm font-black w-10 text-right tabular-nums ${
-          pct >= 75 ? 'text-green-600 dark:text-green-400' : pct >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
-        }`}>
-          {pct}%
-        </span>
-      </div>
+      <span style={{ fontSize: 11, fontWeight: 800, color }}>{pct}%</span>
     </div>
   )
 }
 
-// ── Summary builder (pure, sync — no async) ───────────────────────────────────
-function buildSummary({ answers, questions }) {
-  if (!answers || !questions) return null
-  const byTopic = {}
-  let totalCorrect  = 0
-  let totalAnswered = 0
-
-  questions.forEach(q => {
-    const attempt = answers?.[q.id] ?? answers?.find?.(a => a.questionId === q.id)
-    const isCorrect = attempt?.is_correct ?? attempt?.isCorrect ?? false
-    const key = q.topic_name || q.subtopic_name || 'General'
-
-    if (!byTopic[key]) {
-      byTopic[key] = {
-        name:        key,
-        subjectName: q.subject_name ?? '',
-        subtopicId:  q.subtopic_id,
-        topicId:     q.topic_id,
-        total: 0, correct: 0,
-      }
-    }
-    byTopic[key].total++
-    totalAnswered++
-    if (isCorrect) { byTopic[key].correct++; totalCorrect++ }
-  })
-
-  const topics      = Object.values(byTopic).sort((a, b) => {
-    const pa = a.total > 0 ? a.correct / a.total : 0
-    const pb = b.total > 0 ? b.correct / b.total : 0
-    return pa - pb
-  })
-  const overallScore = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0
-  const weakTopics   = topics.filter(t => t.total > 0 && Math.round((t.correct / t.total) * 100) < 60)
-
-  return { topics, overallScore, totalCorrect, totalAnswered, weakTopics }
+// ── 3D navy CTA ───────────────────────────────────────────────────────────────
+function Cta3D({ href, onClick, children }) {
+  const [p, setP] = useState(false)
+  const base = {
+    display: 'block', width: '100%', padding: 15, borderRadius: 14,
+    background: C.navy, color: '#fff',
+    fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer',
+    textAlign: 'center', letterSpacing: '-0.01em',
+    transform: p ? 'translateY(3px)' : '',
+    boxShadow: p
+      ? `0 3px 0 ${C.navyDeep}`
+      : `0 6px 0 ${C.navyDeep}, 0 10px 24px rgba(0,0,0,.4)`,
+    transition: 'transform .1s, box-shadow .1s',
+  }
+  const handlers = {
+    onMouseDown: () => setP(true), onMouseUp: () => setP(false),
+    onMouseLeave: () => setP(false),
+    onTouchStart: () => setP(true), onTouchEnd: () => setP(false),
+  }
+  if (href) return <Link href={href} style={base}>{children}</Link>
+  return <button onClick={onClick} style={base} {...handlers}>{children}</button>
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <>
+      <style>{`@keyframes ep-spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: `3px solid ${C.chem}`, borderTopColor: 'transparent', animation: 'ep-spin .8s linear infinite' }} />
+    </>
+  )
+}
+
 export default function DiagnosticResultsPage() {
   const router = useRouter()
-
-  // Render immediately — no waiting
-  const [summary,    setSummary]    = useState(null)
-  const [isSignedIn, setIsSignedIn] = useState(false)
-  const [saveStatus, setSaveStatus] = useState('idle') // idle | saving | done | error
-  const savedRef = useRef(false)
-  const isDark = useIsDark()
+  const [summary,    setSummary]   = useState(null)
+  const [saveStatus, setSaveStatus] = useState('idle')
+  const [isSignedIn, setSignedIn]  = useState(false)
+  const saved = useRef(false)
 
   useEffect(() => {
-    // 1. Parse from sessionStorage synchronously — instant render
     const raw = sessionStorage.getItem('diagnostic_results')
-    if (!raw) { router.push('/diagnostic'); return }
+    if (!raw) { router.push('/'); return }
 
-    const data = JSON.parse(raw)
-    const built = buildSummary(data)
-    setSummary(built)
+    let data
+    try { data = JSON.parse(raw) } catch { router.push('/'); return }
 
-    // 2. Fire background save — don't await, don't block
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return
-      setIsSignedIn(true)
+    const { answers = {}, questions = [] } = data
+    const total   = questions.length
+    const correct = questions.filter(q => answers[q.id]?.is_correct).length
+    const pct     = total > 0 ? Math.round((correct / total) * 100) : 0
 
-      const setupRaw = sessionStorage.getItem('diagnostic_setup')
-      if (!setupRaw || savedRef.current) return
-      savedRef.current = true
+    // Build topic breakdown
+    const topicMap = {}
+    questions.forEach(q => {
+      const name = q.topic_name || 'General'
+      if (!topicMap[name]) topicMap[name] = { total: 0, correct: 0 }
+      topicMap[name].total++
+      if (answers[q.id]?.is_correct) topicMap[name].correct++
+    })
+    const topics = Object.entries(topicMap)
+      .map(([name, d]) => ({ name, pct: d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0 }))
+      .sort((a, b) => a.pct - b.pct)
 
-      const setup = JSON.parse(setupRaw)
+    const weakTopics = topics.filter(t => t.pct < 60)
+
+    setSummary({ pct, total, correct, topics, weakTopics, xp: correct * 10 })
+
+    // Save to DB in background — never blocks UI
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      setSignedIn(!!user)
+      if (!user || saved.current) return
+      saved.current = true
       setSaveStatus('saving')
-
-      try {
-        const res = await fetch('/api/diagnostic/save', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            examType:  setup.examType,
-            subjects:  setup.subjects,
-            answers:   data.answers,
-            questions: data.questions,
-          }),
-        })
-        if (res.ok) {
-          sessionStorage.removeItem('diagnostic_results')
-          sessionStorage.removeItem('diagnostic_setup')
-          setSaveStatus('done')
-        } else {
-          setSaveStatus('error')
-        }
-      } catch {
-        setSaveStatus('error')
-      }
+      fetch('/api/diagnostic/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answers, questions,
+          examType: data.setup?.examType ?? 'WAEC',
+          subjects: data.setup?.subjects ?? [],
+        }),
+      })
+        .then(r => setSaveStatus(r.ok ? 'done' : 'error'))
+        .catch(() => setSaveStatus('error'))
     })
   }, [router])
 
   if (!summary) return (
-    <div className="min-h-screen bg-base flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-indigo-500 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
+    <div style={{ minHeight: '100dvh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Spinner />
     </div>
   )
 
-  const tier = getScoreTier(summary.overallScore)
-  const ringColor = isDark ? tier.ringDark : tier.ring
+  const tier = getScoreTier(summary.pct)
+  const subjectLabel = (() => { try { return JSON.parse(sessionStorage.getItem('diagnostic_setup') ?? '{}').subjects?.[0] ?? 'Diagnostic' } catch { return 'Diagnostic' } })()
 
   return (
-    <div className="min-h-screen bg-base pb-16">
-      <div className="max-w-md mx-auto px-4 pt-8 space-y-5">
+    <div style={{ minHeight: '100dvh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
 
-        {/* ── Hero score card ─────────────────────────────────────────────── */}
-        <div className="bg-card rounded-3xl shadow-sm border border-default overflow-hidden">
-          <div className={`${tier.bg} px-6 pt-8 pb-6 text-center`}>
-            <ScoreRing pct={summary.overallScore} color={ringColor} isDark={isDark} />
-            <div className="mt-4">
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <span className="text-2xl">{tier.emoji}</span>
-                <span className={`text-lg font-black ${tier.color}`}>{tier.label}</span>
-              </div>
-              <p className="text-sm text-secondary leading-relaxed max-w-xs mx-auto">
-                {getEncouragement(summary.overallScore)}
-              </p>
-            </div>
-          </div>
-
-          {/* Stats strip */}
-          <div className="grid grid-cols-3 divide-x divide-default border-t border-default">
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-primary">{summary.totalCorrect}</p>
-              <p className="text-[10px] text-tertiary font-medium">Correct</p>
-            </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-primary">{summary.totalAnswered - summary.totalCorrect}</p>
-              <p className="text-[10px] text-tertiary font-medium">Missed</p>
-            </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black text-primary">{summary.totalAnswered}</p>
-              <p className="text-[10px] text-tertiary font-medium">Total</p>
-            </div>
-          </div>
+      {/* ── App bar ─────────────────────────────────────────────────────────── */}
+      <div style={{
+        height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 18px', borderBottom: `1px solid ${C.border}`,
+        background: 'rgba(13,14,20,.96)', backdropFilter: 'blur(14px)', flexShrink: 0,
+      }}>
+        {/* Logo row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 9, background: C.navy,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 800, color: '#fff',
+            boxShadow: `0 3px 0 ${C.navyDeep}`,
+          }}>E</div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+            Exam <span style={{ color: C.dim, fontWeight: 500 }}>Prep</span>
+          </span>
         </div>
 
-        {/* ── Focus areas — weak topics called out visually ───────────────── */}
+        {/* XP pill */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          background: 'rgba(255,195,107,.1)', border: '1px solid rgba(255,195,107,.2)',
+          padding: '4px 9px', borderRadius: 999,
+          fontSize: 11, fontWeight: 700, color: C.gold,
+        }}>
+          ✦ +{summary.xp} XP
+        </div>
+      </div>
+
+      {/* ── Scroll zone ─────────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1, overflowY: 'auto',
+        padding: '0 18px 32px',
+        display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+
+        {/* Score ring + subject + encouragement */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '20px 0 10px',
+        }}>
+          <ScoreRing pct={summary.pct} ringColor={tier.ring} />
+          <p style={{ fontSize: 16, fontWeight: 800, color: C.text, marginTop: 4 }}>
+            {subjectLabel} Diagnostic
+          </p>
+          <p style={{
+            fontSize: 12, color: C.dim, textAlign: 'center',
+            maxWidth: 260, marginTop: 4, lineHeight: 1.6,
+          }}>
+            {getEncouragement(summary.pct)}
+          </p>
+        </div>
+
+        {/* Weak topics callout */}
         {summary.weakTopics.length > 0 && (
-          <div className="bg-card rounded-2xl shadow-sm border border-red-100 dark:border-red-900/50 overflow-hidden">
-            <div className="px-4 pt-4 pb-3 bg-red-50 dark:bg-red-950/40 border-b border-red-100 dark:border-red-900/50 flex items-center gap-2">
-              <span className="text-base">🎯</span>
-              <div>
-                <p className="text-sm font-black text-red-700 dark:text-red-300">Focus here first</p>
-                <p className="text-xs text-red-500 dark:text-red-400">
-                  {summary.weakTopics.length === 1
-                    ? '1 topic needs your attention'
-                    : `${summary.weakTopics.length} topics need your attention`}
-                </p>
-              </div>
-            </div>
-            <div className="px-4">
-              {summary.weakTopics.map((topic, i) => (
-                <TopicRow key={i} topic={topic} isDark={isDark} />
-              ))}
-            </div>
+          <div style={{
+            background: 'rgba(239,93,78,.08)', border: '1px solid rgba(239,93,78,.2)',
+            borderRadius: 16, padding: 14,
+          }}>
+            <p style={{
+              fontSize: 9, fontWeight: 800, textTransform: 'uppercase',
+              letterSpacing: '0.09em', color: C.danger, marginBottom: 10,
+            }}>
+              🎯 Focus here first
+            </p>
+            {summary.weakTopics.map((t, i) => (
+              <TopicRow
+                key={t.name} name={t.name} pct={t.pct}
+                isLast={i === summary.weakTopics.length - 1}
+              />
+            ))}
             {isSignedIn && (
-              <div className="px-4 py-3 border-t border-red-50 dark:border-red-900/30">
-                <p className="text-xs text-red-500 dark:text-red-400">
-                  ✓ These have been added to your study plan
-                </p>
-              </div>
+              <p style={{ fontSize: 10, color: C.danger, marginTop: 8 }}>
+                ✓ These have been added to your practice plan
+              </p>
             )}
           </div>
         )}
 
-        {/* ── Full topic breakdown ─────────────────────────────────────────── */}
-        <div className="bg-card rounded-2xl shadow-sm border border-default overflow-hidden">
-          <div className="px-4 pt-4 pb-2 border-b border-default">
-            <p className="text-sm font-black text-primary">All topics</p>
+        {/* All topics widget */}
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 18, overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '11px 14px', borderBottom: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center',
+          }}>
+            <span style={{
+              fontSize: 9, fontWeight: 800, textTransform: 'uppercase',
+              letterSpacing: '0.09em', color: C.dim,
+            }}>All topics</span>
           </div>
-          <div className="px-4">
-            {summary.topics.map((topic, i) => (
-              <TopicRow key={i} topic={topic} isDark={isDark} />
+          <div style={{ padding: '6px 14px' }}>
+            {summary.topics.map((t, i) => (
+              <TopicRow
+                key={t.name} name={t.name} pct={t.pct}
+                isLast={i === summary.topics.length - 1}
+              />
             ))}
           </div>
         </div>
 
-        {/* ── Save status indicator ────────────────────────────────────────── */}
+        {/* Save status */}
         {saveStatus === 'saving' && (
-          <p className="text-center text-xs text-tertiary">Saving your results…</p>
+          <p style={{ textAlign: 'center', fontSize: 11, color: C.dim }}>Saving your results…</p>
         )}
         {saveStatus === 'error' && (
-          <p className="text-center text-xs text-red-400 dark:text-red-500">Results couldn't be saved — try again later</p>
+          <p style={{ textAlign: 'center', fontSize: 11, color: C.danger }}>Couldn't save results right now</p>
         )}
 
-        {/* ── CTAs ─────────────────────────────────────────────────────────── */}
-        <div className="space-y-3 pb-8">
-          {isSignedIn ? (
-            <>
-              <Link
-                href="/student/study-plan"
-                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 active:scale-[0.98] transition-all shadow-sm"
-              >
-                View my study plan →
-              </Link>
-              <Link
-                href="/student/practice"
-                className="flex items-center justify-center gap-2 w-full py-3.5 bg-card border border-default text-secondary font-bold text-sm rounded-2xl hover:bg-base active:scale-[0.98] transition-all"
-              >
-                Practice now
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="text-center text-sm text-tertiary">
-                Create a free account to save your results and get a personalised study plan.
-              </p>
-              <Link
-                href="/signup"
-                className="flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 dark:bg-indigo-500 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 dark:hover:bg-indigo-400 active:scale-[0.98] transition-all shadow-sm"
-              >
-                Create free account →
-              </Link>
-              <Link
-                href="/diagnostic"
-                className="flex items-center justify-center gap-2 w-full py-3 text-tertiary text-sm font-medium"
-              >
-                Take another diagnostic
-              </Link>
-            </>
-          )}
-        </div>
-
+        {/* CTAs */}
+        {isSignedIn ? (
+          <Cta3D href="/student/dashboard">View my practice plan →</Cta3D>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Cta3D href="/signup?from=diagnostic">Save results &amp; create account →</Cta3D>
+            <Link
+              href="/student/dashboard"
+              style={{ display: 'block', textAlign: 'center', fontSize: 12, color: C.dim, fontWeight: 600 }}
+            >
+              Continue without saving
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )

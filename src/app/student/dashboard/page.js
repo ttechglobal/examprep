@@ -1,5 +1,5 @@
 'use client'
-// src/app/student/dashboard/page.js  — v3
+// src/app/student/dashboard/page.js  — v4
 // ─────────────────────────────────────────────────────────────────────────────
 // FIXES vs v2:
 //   1. Font: uses the app font (Plus Jakarta Sans via font-family:inherit / var(--font-jakarta))
@@ -163,21 +163,8 @@ const PracticeHeroCard = memo(function PracticeHeroCard({ sub, planItem, isDark 
       }}>
         <AmbientPattern cfg={cfg} />
 
-        {/* ① Subject tag pill — top left, subject name ONCE */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '4px 11px 4px 8px', borderRadius: 999,
-          background: `${cfg.accent}20`, border: `1px solid ${cfg.accent}38`,
-          fontSize: 10, fontWeight: 800, letterSpacing: '0.07em',
-          textTransform: 'uppercase', color: cfg.accent,
-          position: 'relative', zIndex: 1, alignSelf: 'flex-start',
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.accent, display: 'inline-block' }} />
-          {subjectName}
-        </div>
-
-        {/* ② Spacer — pushes icon + topic toward bottom */}
-        <div style={{ flex: 1, minHeight: 28 }} />
+        {/* Spacer — pushes icon + topic toward bottom */}
+        <div style={{ flex: 1, minHeight: 48 }} />
 
         {/* ③ Icon + topic block — floated toward bottom */}
         <div style={{ position: 'relative', zIndex: 1, marginBottom: 16 }}>
@@ -347,45 +334,55 @@ function TargetsWidget({ profile, onEdit, isDark }) {
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-          padding: '13px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
+          width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '14px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
           textAlign: 'left',
         }}
       >
         <div style={{
-          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+          width: 34, height: 34, borderRadius: 10, flexShrink: 0, marginTop: 2,
           background: 'rgba(255,195,107,.12)', border: '1px solid rgba(255,195,107,.22)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
         }}>🎯</div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, marginBottom: 1 }}>
+          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.09em', color: labelColor, marginBottom: 8 }}>
             My Targets
           </p>
 
-          {/* ── COLLAPSED VIEW: all lines stacked ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* ── COLLAPSED: always-visible rows, each on its own line, generous spacing ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {course && (
-              <p style={{ fontSize: 12, fontWeight: 700, color: valueColor, lineHeight: 1.3 }}>{course}</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>Course</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>{course}</span>
+              </div>
             )}
             {university && (
-              <p style={{ fontSize: 12, fontWeight: 600, color: labelColor, lineHeight: 1.3 }}>{university}</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>Uni</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>{university}</span>
+              </div>
             )}
             {hasWaec && (
-              <p style={{ fontSize: 11, fontWeight: 600, color: labelColor, lineHeight: 1.3 }}>
-                WAEC · {Object.entries(waecGrades).slice(0, 2).map(([, g]) => g).join(', ')}{Object.keys(waecGrades).length > 2 ? '…' : ''}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>WAEC</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>
+                  {Object.keys(waecGrades).length} subjects targeted
+                </span>
+              </div>
             )}
             {hasJamb && jambTotal > 0 && (
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#9b7ae0', lineHeight: 1.3 }}>
-                JAMB · {jambTotal} / 400
-              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>JAMB</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#9b7ae0', lineHeight: 1.2 }}>{jambTotal} / 400</span>
+              </div>
             )}
           </div>
         </div>
 
         <svg
-          style={{ width: 16, height: 16, flexShrink: 0, transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : '', color: labelColor }}
+          style={{ width: 16, height: 16, flexShrink: 0, marginTop: 4, transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : '', color: labelColor }}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

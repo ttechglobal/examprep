@@ -1,316 +1,297 @@
 'use client'
+// src/app/signup/page.js — v2
+// REDESIGN: matches prototype screen 1 exactly.
+// KEY CHANGES FROM v1:
+//   • Single scroll — NO multi-step wizard. Everything visible at once:
+//     exam chips → subject 2-col grid → CTA → sign-in link.
+//     (Matches prototype: user scrolls down and taps "Take free diagnostic →")
+//   • Onboard background: linear-gradient(170deg, #0e0a1c 0%, #0d0e14 60%)
+//   • Logo: 60×60 navy mark with big 3D shadow (0 8px 0 #05070f)
+//   • Exam chips: 3-across flex row, 14px border-radius, 2px border
+//   • Subject grid: 2-col, 12px border-radius, 2px border, left-aligned text
+//   • Single CTA: "Take free diagnostic →" navy 3D button
+//   • Account creation happens AFTER the diagnostic flow (not before)
+//     — if user has no account, they get prompted on the results page.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-const AVAILABLE_SUBJECTS = [
-  'Mathematics', 'English Language', 'Physics', 'Chemistry',
-  'Biology', 'Economics', 'Government', 'Literature in English',
-  'Geography', 'Agricultural Science', 'Further Mathematics', 'Commerce',
+// ── Tokens ────────────────────────────────────────────────────────────────────
+const C = {
+  bg:       '#0d0e14',
+  surface:  '#13141f',
+  surface2: '#1a1b28',
+  border:   'rgba(255,255,255,0.07)',
+  text:     '#eef0fa',
+  dim:      '#7b7f9e',
+  faint:    '#44475e',
+  chem:     '#9b7ae0',
+  navy:     '#0b1330',
+  navyDeep: '#05070f',
+}
+
+const SUBJECTS = [
+  { name: 'Chemistry',         tag: 'WAEC · JAMB' },
+  { name: 'Physics',           tag: 'WAEC · JAMB' },
+  { name: 'Mathematics',       tag: 'WAEC · JAMB' },
+  { name: 'Biology',           tag: 'WAEC · JAMB' },
+  { name: 'English Language',  tag: 'WAEC'        },
+  { name: 'Economics',         tag: 'WAEC · JAMB' },
+  { name: 'Government',        tag: 'WAEC · JAMB' },
+  { name: 'Geography',         tag: 'WAEC · JAMB' },
+  { name: 'Literature in English', tag: 'WAEC'   },
+  { name: 'Agricultural Science',  tag: 'WAEC'   },
+  { name: 'Further Mathematics',   tag: 'WAEC · JAMB' },
+  { name: 'Commerce',          tag: 'WAEC · JAMB' },
 ]
 
-function SignupForm() {
-  const searchParams = useSearchParams()
-  // "from=diagnostic" param kept for backward compat — same flow, different copy
-  const fromPractice = searchParams.get('from') === 'diagnostic'
-
-  const [step, setStep] = useState(1)
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [examType, setExamType] = useState('')
-  const [selectedSubjects, setSelectedSubjects] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [done, setDone] = useState(false)
-
-  // Practice data from sessionStorage — preserved across signup
-  const [practiceData, setPracticeData] = useState(null)
-
-  useEffect(() => {
-    // sessionStorage keys kept as-is — internal only
-    const resultsRaw = sessionStorage.getItem('diagnostic_results')
-    const setupRaw = sessionStorage.getItem('diagnostic_setup')
-    if (resultsRaw && setupRaw) {
-      try {
-        const results = JSON.parse(resultsRaw)
-        const setup = JSON.parse(setupRaw)
-        setPracticeData({ results, setup })
-        if (setup.examType) setExamType(setup.examType)
-        if (setup.subjects?.length) setSelectedSubjects(setup.subjects)
-      } catch (e) {
-        console.error('Could not parse practice data:', e)
-      }
-    }
-  }, [])
-
-  const toggleSubject = (subject) => {
-    setSelectedSubjects(prev =>
-      prev.includes(subject)
-        ? prev.filter(s => s !== subject)
-        : prev.length < 9 ? [...prev, subject] : prev
-    )
-  }
-
-  const handleStep1 = (e) => {
-    e.preventDefault()
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
-    setError(null)
-    if (practiceData) {
-      handleSignup(null, true)
-    } else {
-      setStep(2)
-    }
-  }
-
-  const handleSignup = async (e, skipStep2 = false) => {
-    if (e) e.preventDefault()
-    if (!skipStep2) {
-      if (!examType) { setError('Please select your target exam'); return }
-      if (selectedSubjects.length < 1) { setError('Please select at least one subject'); return }
-    }
-
-    setLoading(true)
-    setError(null)
-
-    const supabase = createClient()
-
-    const { data: authData, error: signupError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    })
-
-    if (signupError) {
-      setError(signupError.message)
-      setLoading(false)
-      return
-    }
-
-    const user = authData?.user
-    if (user) {
-      await supabase
-        .from('profiles')
-        .update({ exam_type: examType, subjects: selectedSubjects })
-        .eq('id', user.id)
-
-      if (practiceData) {
-        sessionStorage.setItem('pending_diagnostic', JSON.stringify({
-          userId: user.id,
-          examType: practiceData.setup.examType,
-          subjects: practiceData.setup.subjects,
-          answers: practiceData.results.answers,
-          questions: practiceData.results.questions,
-        }))
-        sessionStorage.removeItem('diagnostic_results')
-        sessionStorage.removeItem('diagnostic_setup')
-      }
-    }
-
-    setDone(true)
-    setLoading(false)
-  }
-
-  if (done) {
-    return (
-      <div className="text-center py-4">
-        <div className="text-5xl mb-4">📬</div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
-        <p className="text-gray-500 text-sm mb-2">
-          We sent a confirmation link to <strong>{email}</strong>.
-        </p>
-        {practiceData && (
-          <p className="text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-4">
-            Your practice results are saved — your study plan will be ready when you sign in.
-          </p>
-        )}
-        <p className="text-gray-400 text-sm">
-          Click the link to activate your account and start studying.
-        </p>
-        <Link
-          href="/login"
-          className="inline-block mt-6 text-sm text-indigo-600 font-medium hover:underline"
-        >
-          Back to login
-        </Link>
-      </div>
-    )
-  }
-
+// ── Ambient molecular SVG (top of screen, 7% opacity) ────────────────────────
+function Ambient() {
   return (
-    <>
-      {!practiceData && (
-        <div className="flex items-center gap-2 mb-6">
-          <div className={`flex-1 h-1.5 rounded-full ${step >= 1 ? 'bg-indigo-600' : 'bg-gray-200'}`} />
-          <div className={`flex-1 h-1.5 rounded-full ${step >= 2 ? 'bg-indigo-600' : 'bg-gray-200'}`} />
-        </div>
-      )}
-
-      {fromPractice && practiceData && (
-        <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 mb-4">
-          <p className="text-sm text-green-800 font-medium">
-            ✓ Your practice results will be saved automatically when you create your account.
-          </p>
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Step 1: Account details */}
-      {step === 1 && (
-        <>
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Create your account</h2>
-          <form onSubmit={handleStep1} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Chidi Okeke"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="you@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="At least 8 characters"
-              />
-            </div>
-
-            {/* Confirm which exam/subjects were pre-filled from practice session */}
-            {practiceData && (
-              <div className="bg-indigo-50 rounded-xl px-3 py-2.5 space-y-1">
-                <p className="text-xs font-bold text-indigo-700">From your practice session:</p>
-                <p className="text-xs text-indigo-600">Exam: {practiceData.setup.examType}</p>
-                <p className="text-xs text-indigo-600">Subjects: {practiceData.setup.subjects.join(', ')}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-            >
-              {loading ? 'Creating account…' : practiceData ? 'Create account →' : 'Continue →'}
-            </button>
-          </form>
-        </>
-      )}
-
-      {/* Step 2: Exam setup — only shown when no practice data */}
-      {step === 2 && !practiceData && (
-        <>
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Your exam setup</h2>
-          <form onSubmit={handleSignup} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Target exam</label>
-              <div className="flex gap-2">
-                {['WAEC', 'JAMB', 'BOTH'].map(exam => (
-                  <button
-                    key={exam}
-                    type="button"
-                    onClick={() => setExamType(exam)}
-                    className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-bold transition-colors ${
-                      examType === exam
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    {exam}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Your subjects
-                <span className="ml-1 text-gray-400 font-normal">({selectedSubjects.length} selected)</span>
-              </label>
-              <p className="text-xs text-gray-400 mb-2">Select up to 9 subjects</p>
-              <div className="flex flex-wrap gap-2">
-                {AVAILABLE_SUBJECTS.map(subject => (
-                  <button
-                    key={subject}
-                    type="button"
-                    onClick={() => toggleSubject(subject)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                      selectedSubjects.includes(subject)
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium'
-                        : selectedSubjects.length >= 9
-                        ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    {subject}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-            >
-              {loading ? 'Creating account…' : 'Create account →'}
-            </button>
-          </form>
-        </>
-      )}
-
-      <p className="text-center text-sm text-gray-500 mt-4">
-        Already have an account?{' '}
-        <Link href="/login" className="text-indigo-600 font-medium hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </>
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260, pointerEvents: 'none', opacity: 0.07, zIndex: 0 }}>
+      <svg width="100%" height="260" viewBox="0 0 375 260" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        <circle cx="40"  cy="60"  r="3" fill="#9b7ae0"/>
+        <circle cx="110" cy="35"  r="2" fill="#9b7ae0"/>
+        <circle cx="185" cy="70"  r="3" fill="#9b7ae0"/>
+        <circle cx="260" cy="45"  r="2" fill="#ff8fab"/>
+        <circle cx="320" cy="65"  r="3" fill="#9b7ae0"/>
+        <line x1="40"  y1="60"  x2="110" y2="35"  stroke="#9b7ae0" strokeWidth="1"/>
+        <line x1="110" y1="35"  x2="185" y2="70"  stroke="#9b7ae0" strokeWidth="1"/>
+        <line x1="185" y1="70"  x2="260" y2="45"  stroke="#9b7ae0" strokeWidth="1"/>
+        <line x1="260" y1="45"  x2="320" y2="65"  stroke="#9b7ae0" strokeWidth="1"/>
+        <circle cx="20"  cy="140" r="2" fill="#9b7ae0"/>
+        <circle cx="90"  cy="115" r="3" fill="#ff8fab"/>
+        <circle cx="170" cy="145" r="2" fill="#9b7ae0"/>
+        <circle cx="250" cy="125" r="3" fill="#9b7ae0"/>
+        <line x1="20"  y1="140" x2="90"  y2="115" stroke="#9b7ae0" strokeWidth="1"/>
+        <line x1="90"  y1="115" x2="170" y2="145" stroke="#9b7ae0" strokeWidth="1"/>
+        <line x1="170" y1="145" x2="250" y2="125" stroke="#9b7ae0" strokeWidth="1"/>
+      </svg>
+    </div>
   )
 }
 
-export default function SignupPage() {
+// ── 3D navy press button ──────────────────────────────────────────────────────
+function Cta3D({ onClick, disabled, children }) {
+  const [p, setP] = useState(false)
   return (
-    <div className="min-h-screen bg-base flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-indigo-600">ExamPrep</h1>
-          <p className="text-gray-500 text-sm mt-1">Join thousands of students preparing for success</p>
-        </div>
-        <div className="bg-card rounded-2xl shadow-sm border border-gray-200 p-6">
-          <Suspense fallback={<div className="h-40 flex items-center justify-center"><div className="w-6 h-6 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
-            <SignupForm />
-          </Suspense>
-        </div>
+    <button
+      onClick={onClick} disabled={disabled}
+      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)}
+      onMouseLeave={() => setP(false)}
+      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+      style={{
+        width: '100%', padding: 15, borderRadius: 14,
+        background: C.navy, color: '#fff',
+        fontSize: 15, fontWeight: 700, border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        textAlign: 'center', letterSpacing: '-0.01em',
+        opacity: disabled ? 0.5 : 1,
+        transform: p ? 'translateY(3px)' : '',
+        boxShadow: p
+          ? `0 3px 0 ${C.navyDeep}`
+          : `0 6px 0 ${C.navyDeep}, 0 10px 24px rgba(0,0,0,0.4)`,
+        transition: 'transform .1s, box-shadow .1s',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── Label ─────────────────────────────────────────────────────────────────────
+function Label({ children }) {
+  return (
+    <p style={{
+      fontSize: 9, fontWeight: 800, textTransform: 'uppercase',
+      letterSpacing: '0.09em', color: C.dim, marginBottom: 8,
+    }}>
+      {children}
+    </p>
+  )
+}
+
+// ── Main onboarding form ──────────────────────────────────────────────────────
+function OnboardForm() {
+  const router      = useRouter()
+  const searchParams = useSearchParams()
+
+  const [examType,  setExam]    = useState('WAEC')
+  const [selected,  setSelected] = useState(['Chemistry', 'Physics'])
+  const [loading,   setLoading]  = useState(false)
+  const [error,     setError]    = useState(null)
+
+  // Restore from previous diagnostic session if returning
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('diagnostic_setup')
+      if (raw) {
+        const s = JSON.parse(raw)
+        if (s.examType) setExam(s.examType)
+        if (s.subjects?.length) setSelected(s.subjects)
+      }
+    } catch {}
+  }, [])
+
+  function toggleSubject(name) {
+    setSelected(prev =>
+      prev.includes(name)
+        ? prev.filter(s => s !== name)
+        : prev.length < 9 ? [...prev, name] : prev
+    )
+  }
+
+  function handleStart() {
+    if (!selected.length) { setError('Pick at least one subject to continue'); return }
+    setError(null)
+    // Save setup for diagnostic
+    sessionStorage.setItem('diagnostic_setup', JSON.stringify({
+      examType,
+      subjects: selected,
+      questionCount: 5,
+    }))
+    router.push('/diagnostic/test')
+  }
+
+  // The visible subjects to show depend on exam type
+  const filteredSubjects = examType === 'JAMB'
+    ? SUBJECTS.filter(s => s.tag.includes('JAMB'))
+    : SUBJECTS  // WAEC and BOTH show all
+
+  return (
+    /* Single scroll wrapper — no steps */
+    <div style={{ flex: 1, overflowY: 'auto', position: 'relative', paddingBottom: 32 }}>
+
+      <Ambient />
+
+      {/* Logo + hero copy */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: 10, padding: '48px 24px 24px', position: 'relative', zIndex: 1,
+      }}>
+        {/* 60px logo mark */}
+        <div style={{
+          width: 60, height: 60, borderRadius: 18, background: C.navy,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 22, fontWeight: 800, color: '#fff',
+          boxShadow: `0 8px 0 ${C.navyDeep}, 0 12px 24px rgba(0,0,0,.5)`,
+        }}>E</div>
+
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: C.dim,
+          textTransform: 'uppercase', letterSpacing: '0.12em',
+        }}>Exam Prep</span>
+
+        <h1 style={{
+          fontSize: 28, fontWeight: 800, color: C.text,
+          letterSpacing: '-0.025em', lineHeight: 1.1,
+          textAlign: 'center', marginTop: 8,
+        }}>
+          Just practise.<br />
+          Ace your{' '}
+          <span style={{ color: C.chem }}>exams</span>.
+        </h1>
+
+        <p style={{
+          fontSize: 13, color: C.dim, textAlign: 'center',
+          maxWidth: 280, marginTop: 4, lineHeight: 1.6,
+        }}>
+          WAEC &amp; JAMB practice built around your weaknesses.
+          Start in 2 minutes.
+        </p>
       </div>
+
+      {/* ── Exam + subjects + CTA ── */}
+      <div style={{
+        padding: '0 24px 32px', position: 'relative', zIndex: 1,
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+
+        {/* Exam type chips */}
+        <Label>Which exam are you sitting?</Label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 2 }}>
+          {[
+            { id: 'WAEC', sub: 'West African exams'  },
+            { id: 'JAMB', sub: 'University entrance' },
+            { id: 'BOTH', sub: 'WAEC + JAMB'        },
+          ].map(({ id, sub }) => (
+            <button
+              key={id}
+              onClick={() => setExam(id)}
+              style={{
+                flex: 1, padding: 12, borderRadius: 14, cursor: 'pointer',
+                background: examType === id ? 'rgba(155,122,224,.15)' : C.surface,
+                border: `2px solid ${examType === id ? 'rgba(155,122,224,.4)' : C.border}`,
+                textAlign: 'center', transition: 'all .15s',
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{id}</div>
+              <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{sub}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Subject grid */}
+        <Label style={{ marginTop: 2 }}>
+          Pick your subjects{' '}
+          <span style={{ color: C.faint }}>({selected.length} selected)</span>
+        </Label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {filteredSubjects.map(({ name, tag }) => {
+            const on = selected.includes(name)
+            const maxed = !on && selected.length >= 9
+            return (
+              <button
+                key={name}
+                onClick={() => !maxed && toggleSubject(name)}
+                style={{
+                  padding: '10px 12px', borderRadius: 12,
+                  background: on ? 'rgba(155,122,224,.1)' : C.surface,
+                  border: `2px solid ${on ? 'rgba(155,122,224,.4)' : C.border}`,
+                  cursor: maxed ? 'not-allowed' : 'pointer',
+                  textAlign: 'left', transition: 'all .15s',
+                  opacity: maxed ? 0.4 : 1,
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{name}</div>
+                <div style={{ fontSize: 9, color: C.dim, marginTop: 1 }}>{tag}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        {error && (
+          <p style={{ fontSize: 12, color: '#ef5d4e', textAlign: 'center' }}>{error}</p>
+        )}
+
+        {/* CTA */}
+        <Cta3D onClick={handleStart} disabled={loading}>
+          {loading ? 'Loading…' : 'Take free diagnostic →'}
+        </Cta3D>
+
+        <p style={{ textAlign: 'center', fontSize: 11, color: C.dim }}>
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: C.chem, fontWeight: 700 }}>Sign in</Link>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Page shell ────────────────────────────────────────────────────────────────
+export default function OnboardingPage() {
+  return (
+    <div style={{
+      minHeight: '100dvh',
+      background: 'linear-gradient(170deg, #0e0a1c 0%, #0d0e14 60%)',
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <Suspense fallback={null}>
+        <OnboardForm />
+      </Suspense>
     </div>
   )
 }

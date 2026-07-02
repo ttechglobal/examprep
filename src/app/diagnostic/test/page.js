@@ -1,313 +1,404 @@
 'use client'
-// src/app/diagnostic/test/page.js
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX: TypeError: e is not iterable
-//   - sessionStorage.getItem may return null — JSON.parse(null) = null,
-//     then parsed.subjects.join(',') throws because parsed.subjects is
-//     undefined. Added guard so subjects always falls back to [].
-//   - API response data.questions may be null/undefined — setQuestions
-//     now always receives an array via ?? []
-//   - parsed.questionCount / parsed.examType / parsed.subjects all have
-//     explicit fallbacks so nothing downstream receives undefined
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/diagnostic/test/page.js — v2
+// REDESIGN: matches prototype screen 2 exactly.
+// KEY VISUAL DETAILS FROM PROTOTYPE:
+//   • Dark bg (#0d0e14), NO layout wrapper/shell
+//   • app-bar: h=52px, flex space-between, border-bottom rgba(255,255,255,.07)
+//     LEFT: "← Back" (13px, dim, 700)
+//     CENTER: "Diagnostic · Chemistry" (12px, dim, 700)
+//     RIGHT: "3 / 5" counter (11px, dim)
+//   • diag-header: padding 14px 18px 0, OUTSIDE scroll zone
+//     progress-strip: h=4px, bg rgba(255,255,255,.06), fill gradient chem→phys, margin-bottom 14px
+//   • scroll-zone: flex-1, overflow-y auto, padding 20px 18px 24px, gap 12px
+//   • q-card: bg #fff, border-radius 18px, padding 18px,
+//     border: 2px solid #9b7ae0, box-shadow: 0 8px 0 rgba(0,0,0,.08) 0 14px 28px rgba(11,19,48,.15)
+//   • q-num: 9px, 800, uppercase, letter-spacing .1em, color #9b7ae0, margin-bottom 7px
+//   • q-text: 14px, 700, color #13162a, line-height 1.4
+//   • q-year: 10px, color #9ca1bc, margin-top 5px
+//   • ans-btn: dark glass pill, gap 9px, letter box 22×22px border-radius 6px
+//     hover: chem purple tint
+//     correct: rgba(108,206,142,.15) border rgba(108,206,142,.5) color #6cce8e
+//     wrong: rgba(239,93,78,.12) border rgba(239,93,78,.4) color #ef5d4e
+//   • feedback-pill: inline-flex, padding 6px 12px, border-radius 999px, 11px 700
+//     .right: green bg/border/text  .wrong: red bg/border/text
+//   • After answer: feedback pill + navy CTA appear inline in the scroll zone
+//   • Auto-advance on correct after 1400ms; on wrong, show "Next question →" CTA manually
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ToastStack } from '@/components/ui/Toast'
-import QuestionCard from '@/components/quiz/QuestionCard'
-import { resolveSubjectColors } from '@/lib/subjectTheme'
-import { useIsDark } from '@/lib/useIsDark'
-import {
-  getTotalSeconds,
-  getWarningThresholds,
-  formatTime,
-  getTimerColor,
-} from '@/lib/practiceTimer'
+import { getTotalSeconds, getWarningThresholds, formatTime, getTimerColor } from '@/lib/practiceTimer'
+
+// ── Tokens ────────────────────────────────────────────────────────────────────
+const C = {
+  bg:       '#0d0e14',
+  surface:  '#13141f',
+  border:   'rgba(255,255,255,0.07)',
+  text:     '#eef0fa',
+  dim:      '#7b7f9e',
+  chem:     '#9b7ae0',
+  phys:     '#ff8fab',
+  success:  '#6cce8e',
+  danger:   '#ef5d4e',
+  gold:     '#ffc36b',
+  navy:     '#0b1330',
+  navyDeep: '#05070f',
+}
+
+// ── 3D navy CTA ───────────────────────────────────────────────────────────────
+function Cta3D({ onClick, children }) {
+  const [p, setP] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)}
+      onMouseLeave={() => setP(false)}
+      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+      style={{
+        width: '100%', padding: 15, borderRadius: 14,
+        background: C.navy, color: '#fff',
+        fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer',
+        textAlign: 'center', letterSpacing: '-0.01em',
+        transform: p ? 'translateY(3px)' : '',
+        boxShadow: p
+          ? `0 3px 0 ${C.navyDeep}`
+          : `0 6px 0 ${C.navyDeep}, 0 10px 24px rgba(0,0,0,.4)`,
+        transition: 'transform .1s, box-shadow .1s',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <>
+      <style>{`@keyframes ep-spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{
+        width: 32, height: 32, borderRadius: '50%',
+        border: `3px solid ${C.chem}`, borderTopColor: 'transparent',
+        animation: 'ep-spin .8s linear infinite',
+      }} />
+    </>
+  )
+}
+
+const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 export default function DiagnosticTestPage() {
   const router = useRouter()
-  const isDark = useIsDark()
-  const [setup, setSetup] = useState(null)
-  const [questions, setQuestions] = useState([])
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState({})
-  // `revealed` is derived from `answers` — a question is revealed once
-  // it has an entry in the answers map. No separate revealed state needed.
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [toasts, setToasts] = useState([])
+  const [setup,       setSetup]    = useState(null)
+  const [questions,   setQs]       = useState([])
+  const [qIndex,      setQIndex]   = useState(0)
+  const [answers,     setAnswers]  = useState({})   // { [qId]: { selected, is_correct } }
+  const [loading,     setLoading]  = useState(true)
+  const [error,       setError]    = useState(null)
+  const [toasts,      setToasts]   = useState([])
+  const [secondsLeft, setSecs]     = useState(0)
+  const [totalSecs,   setTotal]    = useState(0)
+  const timerRef      = useRef(null)
+  const firedRef      = useRef(new Set())
 
-  const [secondsLeft, setSecondsLeft] = useState(0)
-  const [totalSeconds, setTotalSeconds] = useState(0)
-  const timerRef = useRef(null)
-  const firedWarnings = useRef(new Set())
-
-  const addToast = useCallback((message, type = 'warning') => {
+  const addToast    = useCallback((msg, type = 'warning') => {
     const id = Date.now()
-    setToasts(prev => [...prev, { id, message, type }])
+    setToasts(p => [...p, { id, message: msg, type }])
   }, [])
+  const dismissToast = useCallback(id => setToasts(p => p.filter(t => t.id !== id)), [])
 
-  const dismissToast = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
-
-  const submitTest = useCallback((currentAnswers, currentQuestions) => {
+  // ── Submit test ─────────────────────────────────────────────────────────────
+  const submitTest = useCallback((ans, qs) => {
     clearInterval(timerRef.current)
+    const setup_ = (() => { try { return JSON.parse(sessionStorage.getItem('diagnostic_setup') ?? '{}') } catch { return {} } })()
     sessionStorage.setItem('diagnostic_results', JSON.stringify({
-      setup: (() => {
-        try { return JSON.parse(sessionStorage.getItem('diagnostic_setup') ?? '{}') } catch { return {} }
-      })(),
-      answers: currentAnswers,
-      questions: (Array.isArray(currentQuestions) ? currentQuestions : []).map(q => ({
-        id: q.id,
-        subtopic_id: q.subtopic_id,
+      setup: setup_,
+      answers: ans,
+      questions: (qs ?? []).map(q => ({
+        id:            q.id,
+        subtopic_id:   q.subtopic_id,
         subtopic_name: q.subtopics?.name ?? q.subtopic_name ?? '',
-        topic_id: q.topic_id,
-        topic_name: q.topics?.name ?? q.topic_name ?? '',
-        subject_id: q.subject_id,
-        subject_name: q.subjects?.name ?? q.subject_name ?? '',
+        topic_id:      q.topic_id,
+        topic_name:    q.topics?.name ?? q.topic_name ?? '',
+        subject_id:    q.subject_id,
+        subject_name:  q.subjects?.name ?? q.subject_name ?? '',
+        correct_answer: q.correct_answer,
       })),
     }))
     router.push('/diagnostic/results')
   }, [router])
 
+  // ── Load questions ──────────────────────────────────────────────────────────
   useEffect(() => {
     const raw = sessionStorage.getItem('diagnostic_setup')
-    if (!raw) { router.push('/diagnostic'); return }
+    const parsed = raw ? (() => { try { return JSON.parse(raw) } catch { return null } })() : null
+    if (!parsed) { setError('No exam setup found. Please go back and try again.'); setLoading(false); return }
+    setSetup(parsed)
 
-    let parsed
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      router.push('/diagnostic')
-      return
-    }
+    const subjects = Array.isArray(parsed.subjects) ? parsed.subjects : []
+    const count    = parsed.questionCount ?? 5
+    const params   = new URLSearchParams({
+      subjects: subjects.join(','),
+      exam:     parsed.examType ?? 'WAEC',
+      count:    String(count),
+      mode:     'diagnostic',
+    })
 
-    // FIX: always normalise subjects to a non-empty array before .join()
-    const subjects = Array.isArray(parsed?.subjects) && parsed.subjects.length
-      ? parsed.subjects
-      : []
-
-    if (!subjects.length) {
-      router.push('/diagnostic')
-      return
-    }
-
-    const examType = parsed.examType ?? 'WAEC'
-    const count    = parsed.questionCount ?? 10
-
-    setSetup({ ...parsed, subjects, examType, questionCount: count })
-
-    const total = getTotalSeconds(count)
-    setTotalSeconds(total)
-    setSecondsLeft(total)
-
-    fetch(`/api/diagnostic/questions?subjects=${subjects.join(',')}&exam=${examType}&count=${count}`)
+    fetch(`/api/practice/questions?${params}`)
       .then(r => r.json())
       .then(data => {
-        if (data.error) { setError(data.error); return }
-        // FIX: guard against null / non-array from API
-        const qs = Array.isArray(data.questions) ? data.questions : []
-        if (!qs.length) { setError('No questions found for this subject. Please try again.'); return }
-        setQuestions(qs)
+        const qs = data.questions ?? []
+        if (!qs.length) { setError(data.error ?? 'No questions available for these subjects.'); setLoading(false); return }
+        setQs(qs)
+        const secs = getTotalSeconds(qs.length)
+        setTotal(secs)
+        setSecs(secs)
         setLoading(false)
       })
-      .catch(() => setError('Failed to load questions. Please try again.'))
-  }, [router])
+      .catch(() => { setError('Network error. Check your connection and try again.'); setLoading(false) })
+  }, [])
 
+  // ── Timer ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (loading || !questions.length || !totalSeconds) return
-
-    const { minuteWarnings, secondWarnings } = getWarningThresholds(totalSeconds / 60)
-
+    if (totalSecs <= 0 || loading || questions.length === 0) return
+    // getWarningThresholds(totalMinutes) → { minuteWarnings, secondWarnings }
+    const { minuteWarnings, secondWarnings } = getWarningThresholds(totalSecs / 60)
     timerRef.current = setInterval(() => {
-      setSecondsLeft(prev => {
-        const next = prev - 1
-
+      setSecs(s => {
+        if (s <= 1) {
+          clearInterval(timerRef.current)
+          submitTest(answers, questions)
+          return 0
+        }
+        const ns = s - 1
         minuteWarnings.forEach(w => {
-          const threshold = w.minutes * 60
-          if (next === threshold && !firedWarnings.current.has(threshold)) {
-            firedWarnings.current.add(threshold)
+          const thr = w.minutes * 60
+          if (ns === thr && !firedRef.current.has(thr)) {
+            firedRef.current.add(thr)
             addToast(w.label, w.minutes <= 1 ? 'urgent' : 'warning')
           }
         })
-
         secondWarnings.forEach(w => {
-          if (next === w.seconds && !firedWarnings.current.has(`s${w.seconds}`)) {
-            firedWarnings.current.add(`s${w.seconds}`)
+          const key = `s${w.seconds}`
+          if (ns === w.seconds && !firedRef.current.has(key)) {
+            firedRef.current.add(key)
             addToast(w.label, 'urgent')
           }
         })
-
-        if (next <= 0) {
-          clearInterval(timerRef.current)
-          addToast('Time is up! Submitting...', 'urgent')
-          setTimeout(() => {
-            setAnswers(a => { setQuestions(q => { submitTest(a, q); return q }); return a })
-          }, 1500)
-          return 0
-        }
-
-        return next
+        return ns
       })
     }, 1000)
-
     return () => clearInterval(timerRef.current)
-  }, [loading, questions.length, totalSeconds, addToast, submitTest])
+  }, [totalSecs, loading, questions.length]) // eslint-disable-line
 
-  const currentQuestion = questions[currentIndex]
-  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0
+  // ── Answer handler ───────────────────────────────────────────────────────────
+  function handleAnswer(letter) {
+    const q = questions[qIndex]
+    if (!q || answers[q.id]) return
 
-  // Controlled answer handler — QuestionCard calls this with (questionId, selectedKey)
-  const handleAnswer = useCallback((questionId, selectedKey) => {
-    const q = questions.find(q => q.id === questionId)
-    if (!q || answers[questionId]) return   // already answered — ignore
+    const is_correct = letter === q.correct_answer
+    const entry = { selected: letter, is_correct }
+    const nextAnswers = { ...answers, [q.id]: entry }
+    setAnswers(nextAnswers)
 
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: {
-        selected: selectedKey,
-        is_correct: selectedKey === q.correct_answer,
-        subtopic_id: q.subtopic_id,
-        topic_id: q.topic_id,
-        subject_id: q.subject_id,
-      },
-    }))
-  }, [questions, answers])
-
-  const handleNext = () => {
-    if (currentIndex + 1 >= questions.length) {
-      submitTest(answers, questions)
-      return
-    }
-    setCurrentIndex(i => i + 1)
+    // Auto-advance after 1400ms
+    setTimeout(() => {
+      const nextIdx = qIndex + 1
+      if (nextIdx >= questions.length) {
+        submitTest(nextAnswers, questions)
+      } else {
+        setQIndex(nextIdx)
+      }
+    }, 1400)
   }
 
-  const handleSkip = () => {
-    if (currentIndex + 1 >= questions.length) {
-      submitTest(answers, questions)
-      return
-    }
-    setCurrentIndex(i => i + 1)
+  function handleNext() {
+    const nextIdx = qIndex + 1
+    if (nextIdx >= questions.length) submitTest(answers, questions)
+    else setQIndex(nextIdx)
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading your questions...</p>
-        </div>
-      </div>
-    )
-  }
+  // ── Loading ─────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ minHeight: '100dvh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+      <Spinner />
+      <p style={{ fontSize: 13, color: C.dim }}>Loading questions…</p>
+    </div>
+  )
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-base flex items-center justify-center px-4">
-        <div className="text-center">
-          <p className="text-red-600 text-sm mb-4">{error}</p>
-          <button onClick={() => router.push('/diagnostic')} className="text-indigo-600 text-sm font-medium hover:underline">
-            ← Start over
-          </button>
-        </div>
-      </div>
-    )
-  }
+  if (error) return (
+    <div style={{ minHeight: '100dvh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center' }}>
+      <p style={{ fontSize: 32 }}>😕</p>
+      <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{error}</p>
+      <button
+        onClick={() => router.push('/')}
+        style={{ padding: '10px 20px', background: C.chem, color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+      >
+        ← Back
+      </button>
+    </div>
+  )
 
-  if (!currentQuestion) return null
-
-  const timerColor = getTimerColor(secondsLeft, totalSeconds)
-  const isLowTime = secondsLeft / totalSeconds <= 0.1
-
-  // Derive revealed and selectedAnswer for the current question from answers map
-  const currentAnswer  = answers[currentQuestion.id]
-  const isRevealed     = !!currentAnswer
-  const selectedAnswer = currentAnswer?.selected ?? null
+  // ── Current question ─────────────────────────────────────────────────────────
+  const q       = questions[qIndex]
+  const ans     = q ? answers[q.id] : null
+  const revealed = !!ans
+  const correct  = q?.correct_answer
+  const opts = q?.options && typeof q.options === 'object' && !Array.isArray(q.options) ? Object.entries(q.options).map(([letter, text]) => ({ letter, text })) : []
+  const subjectLabel = setup?.subjects?.[0] ?? 'Diagnostic'
+  const progress = questions.length > 0 ? ((qIndex + 1) / questions.length) * 100 : 0
+  const timerCol = totalSecs > 0 ? getTimerColor(secondsLeft, totalSecs) : C.dim
 
   return (
-    <div className="min-h-screen bg-base">
+    <div style={{
+      minHeight: '100dvh', background: C.bg,
+      display: 'flex', flexDirection: 'column',
+    }}>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Header */}
-      <div className="bg-card border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-500">
-            {currentIndex + 1} / {questions.length}
-          </span>
-          <div className={`flex items-center gap-1.5 font-mono font-bold text-lg ${timerColor} ${isLowTime ? 'animate-pulse' : ''}`}>
-            <span className="text-base">⏱</span>
-            {formatTime(secondsLeft)}
-          </div>
-          <button onClick={() => submitTest(answers, questions)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">
-            Submit early
-          </button>
-        </div>
-        <div className="max-w-lg mx-auto mt-2">
-          <div className="h-1.5 bg-subtle rounded-full">
-            <div
-              className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      </div>
+      {/* ── App bar ─────────────────────────────────────────────────────────── */}
+      <div style={{
+        height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 18px', borderBottom: `1px solid ${C.border}`,
+        background: 'rgba(13,14,20,.96)', backdropFilter: 'blur(14px)', flexShrink: 0,
+      }}>
+        <button
+          onClick={() => router.push('/')}
+          style={{ fontSize: 13, color: C.dim, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+        >← Back</button>
 
-      {/* Question */}
-      <div className="max-w-lg mx-auto px-4 py-6">
-        {/* Subject / topic tags */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-            {currentQuestion.subjects?.name ?? currentQuestion.subject_name}
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>
+          Diagnostic · {subjectLabel}
+        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: C.dim }}>
+            {qIndex + 1} / {questions.length}
           </span>
-          {(currentQuestion.topics?.name ?? currentQuestion.topic_name) && (
-            <span className="text-xs text-gray-500 bg-subtle px-2.5 py-1 rounded-full">
-              {currentQuestion.topics?.name ?? currentQuestion.topic_name}
+          {totalSecs > 0 && (
+            <span style={{
+              fontSize: 11, fontWeight: 800, color: timerCol,
+              background: 'rgba(255,255,255,.06)', padding: '2px 7px', borderRadius: 6,
+            }}>
+              {formatTime(secondsLeft)}
             </span>
           )}
         </div>
+      </div>
 
-        {/*
-          KEY PROP = currentQuestion.id
-          ──────────────────────────────
-          Forces React to unmount and remount QuestionCard on every question
-          change. Belt-and-suspenders with the controlled-component pattern
-          (selectedAnswer + revealed as props).
-        */}
-        <QuestionCard
-          key={currentQuestion.id}
-          question={currentQuestion}
-          selectedAnswer={selectedAnswer}
-          revealed={isRevealed}
-          onAnswer={handleAnswer}
-          showExplanation={true}
-          color={(() => {
-            const subjName = currentQuestion.subjects?.name ?? currentQuestion.subject_name
-            return subjName ? resolveSubjectColors(subjName, isDark) : undefined
-          })()}
-        />
+      {/* ── Progress strip (OUTSIDE scroll zone, like prototype) ────────────── */}
+      <div style={{ padding: '14px 18px 0', flexShrink: 0 }}>
+        <div style={{ height: 4, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{
+            height: '100%', borderRadius: 2,
+            background: `linear-gradient(90deg, ${C.chem}, ${C.phys})`,
+            width: `${progress}%`, transition: 'width .4s',
+          }} />
+        </div>
+      </div>
 
-        {/* Next / See results button — shown after answering */}
-        {isRevealed && (
-          <div className="mt-5">
-            <button
-              onClick={handleNext}
-              className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 active:scale-[0.99] transition-all"
-            >
-              {currentIndex + 1 >= questions.length ? 'See results →' : 'Next →'}
-            </button>
+      {/* ── Scroll zone ─────────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: '0 18px 24px',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+
+        {/* Question card — white, accent border, hard shadow */}
+        {q && (
+          <div style={{
+            background: '#ffffff', borderRadius: 18, padding: 18,
+            border: `2px solid ${C.chem}`,
+            boxShadow: '0 8px 0 rgba(0,0,0,.08), 0 14px 28px rgba(11,19,48,.15)',
+          }}>
+            <p style={{
+              fontSize: 9, fontWeight: 800, textTransform: 'uppercase',
+              letterSpacing: '0.1em', color: C.chem, marginBottom: 7,
+            }}>
+              Question {qIndex + 1}
+              {q.year ? ` · ${q.exam_type ?? 'WAEC'} ${q.year}` : ''}
+            </p>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#13162a', lineHeight: 1.4 }}>
+              {q.question_text ?? q.question ?? ''}
+            </p>
+            {(q.topic_name || q.difficulty) && (
+              <p style={{ fontSize: 10, color: '#9ca1bc', marginTop: 5, fontWeight: 500 }}>
+                {[q.topic_name, q.difficulty].filter(Boolean).join(' · ')}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Skip — only when not answered */}
-        {!isRevealed && (
-          <div className="mt-4">
-            <button
-              onClick={handleSkip}
-              className="w-full py-3 border border-gray-200 text-gray-500 text-sm font-medium rounded-2xl hover:bg-base transition-colors"
-            >
-              Skip
-            </button>
+        {/* Answer buttons */}
+        {q && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {opts.map(({ letter, text }) => {
+              // letter comes from opts entry directly
+              const isCorrectOpt = letter === correct
+              const isPickedOpt  = ans?.selected === letter
+
+              let bg     = 'rgba(255,255,255,.04)'
+              let border = '1.5px solid rgba(255,255,255,.08)'
+              let color  = 'rgba(255,255,255,.65)'
+
+              if (revealed && isCorrectOpt) {
+                bg     = 'rgba(108,206,142,.15)'
+                border = '1.5px solid rgba(108,206,142,.5)'
+                color  = C.success
+              } else if (revealed && isPickedOpt && !isCorrectOpt) {
+                bg     = 'rgba(239,93,78,.12)'
+                border = '1.5px solid rgba(239,93,78,.4)'
+                color  = C.danger
+              }
+
+              return (
+                <button
+                  key={letter}
+                  onClick={() => handleAnswer(letter)}
+                  disabled={revealed}
+                  style={{
+                    padding: '11px 13px', borderRadius: 12,
+                    background: bg, border, color,
+                    fontSize: 13, fontWeight: 600, textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    cursor: revealed ? 'default' : 'pointer',
+                    transition: 'all .12s',
+                  }}
+                >
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 6,
+                    background: 'rgba(255,255,255,.07)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontWeight: 800, flexShrink: 0,
+                  }}>
+                    {letter}
+                  </span>
+                  {text}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Feedback pill + Next CTA — appear after answering */}
+        {revealed && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 999,
+              fontSize: 11, fontWeight: 700,
+              ...(ans.is_correct
+                ? { background: 'rgba(108,206,142,.15)', color: C.success, border: '1px solid rgba(108,206,142,.3)' }
+                : { background: 'rgba(239,93,78,.1)',    color: C.danger,  border: '1px solid rgba(239,93,78,.3)'  }
+              ),
+            }}>
+              {ans.is_correct
+                ? `✓ Correct!`
+                : `✗ The correct answer is ${correct}`
+              }
+            </div>
+            <Cta3D onClick={handleNext}>
+              {qIndex < questions.length - 1 ? 'Next question →' : 'See my results →'}
+            </Cta3D>
           </div>
         )}
       </div>

@@ -1,269 +1,179 @@
-// src/app/student/practice/session/page.js
-// DARK MODE: all hardcoded bg-white/bg-gray-*/text-gray-*/border-gray-* replaced
-// with CSS token classes (bg-card, bg-base, bg-subtle, text-primary,
-// text-secondary, text-tertiary, border-default).
-// Logic, timer, and state are unchanged.
-
 'use client'
+// src/app/student/practice/session/page.js — v2
+// REDESIGN: matches prototype screen 5 (practice session) exactly.
+//
+// KEY VISUAL DETAILS FROM PROTOTYPE:
+//   practice-bg: radial-gradient(ellipse 90% 70% at 60% 30%, #140e2a 0%, #08090f 100%)
+//   practice-ambient SVG: absolute inset:0 opacity:.07 — tiled molecular pattern
+//   
+//   p-hud: flex space-between, padding 10px 14px,
+//     bg rgba(0,0,0,.2), border-bottom rgba(255,255,255,.06)
+//     LEFT: back btn 30×30 rounded-8 bg rgba(255,255,255,.07)
+//     CENTER: "Chemistry · Alkanes & Alkenes" (subject in accent colour)
+//     RIGHT: stat cards — bg rgba(255,255,255,.06) radius 8px padding 4px 9px
+//       val: 14px 800 white; gold variant: #ffc36b
+//       lbl: 8px 700 uppercase 0.05em rgba(255,255,255,.3)
+//   
+//   p-mission: margin 10px 14px, padding 10px 13px, radius 11px
+//     bg rgba(255,255,255,.05) border rgba(255,255,255,.07)
+//     mission-lbl: 8px 800 uppercase 0.08em rgba(255,255,255,.3) mb 3px
+//     mission-text: 12px 600 rgba(255,255,255,.7)
+//     p-progress: h 2px, bg rgba(255,255,255,.06), fill gradient chem→phys, mt 8px
+//   
+//   p-content: flex:1, overflow-y auto, padding 10px 14px 0 (NO overflow on page itself)
+//     p-q-card: bg #fff, radius 16px, padding 16px
+//       border: 2.5px solid accent, shadow: 0 8px 0 rgba(0,0,0,.08) 0 14px 28px rgba(11,19,48,.15)
+//       p-q-num: 9px 800 uppercase 0.1em accent mb 6px
+//       p-q-text: 13px 700 #13162a line-height 1.4
+//       p-q-meta: 9px #9ca1bc mt 4px
+//     p-answers: flex-col gap 6px mb 10px
+//       p-ans-btn: dark glass, 10px 12px, radius 11px, font 12px 600
+//         p-letter: 20×20 radius 5px bg rgba(255,255,255,.07)
+//         hover: chem purple highlight
+//         correct: rgba(108,206,142,.15) rgba(108,206,142,.5) #6cce8e
+//         wrong: rgba(239,93,78,.12) rgba(239,93,78,.4) #ef5d4e
+//   
+//   p-submit: OUTSIDE scroll area — margin 0 14px 10px, padding 12px, radius 12px
+//     bg navy, shadow 0 5px 0 navy-deep, 13px 700
+//     width calc(100% - 28px) — flex-shrink:0
+//     active: translateY(3px) shadow 0 2px 0 navy-deep
+//
+// LAYOUT STRUCTURE (critical — prototype has flex-col full-height):
+//   div.practice-bg (flex-col, flex:1)
+//     ambient SVG (absolute)
+//     p-hud (flex-shrink:0)
+//     p-mission (flex-shrink:0)
+//     p-content (flex:1, overflow-y:auto) ← scroll here only
+//     p-submit button (flex-shrink:0) ← always visible outside scroll
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import QuestionCard from '@/components/quiz/QuestionCard'
-import { resolveSubjectColors } from '@/lib/subjectTheme'
-import { useIsDark } from '@/lib/useIsDark'
+import { ToastStack } from '@/components/ui/Toast'
+import { getTotalSeconds, getWarningThresholds, formatTime, getTimerColor } from '@/lib/practiceTimer'
+
+const C = {
+  text:     '#eef0fa',
+  dim:      '#7b7f9e',
+  success:  '#6cce8e',
+  danger:   '#ef5d4e',
+  gold:     '#ffc36b',
+  navy:     '#0b1330',
+  navyDeep: '#05070f',
+}
+
+// Per-subject accent colours (all explicit hex — no dynamic Tailwind)
+const ACCENT = {
+  'Physics':             '#ff8fab',
+  'Chemistry':           '#9b7ae0',
+  'Biology':             '#6cce8e',
+  'Mathematics':         '#5cb8ea',
+  'Further Mathematics': '#5cb8ea',
+  'English Language':    '#a78bfa',
+  'Use of English':      '#a78bfa',
+  'Economics':           '#fcd34d',
+  'Government':          '#f87171',
+  'Geography':           '#34d399',
+  'default':             '#9b7ae0',
+}
+const getAccent = name => ACCENT[name] ?? ACCENT.default
+
+// ── Ambient tiled molecular SVG ───────────────────────────────────────────────
+function AmbientPattern({ accent }) {
+  const patId = `pat${accent.replace(/[^a-z0-9]/gi, '')}`
+  const c2 = '#ff8fab' // secondary node colour
+  return (
+    <svg
+      aria-hidden="true"
+      style={{
+        position: 'absolute', inset: 0, width: '100%', height: '100%',
+        opacity: 0.07, pointerEvents: 'none', zIndex: 0,
+      }}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <pattern id={patId} x="0" y="0" width="120" height="90" patternUnits="userSpaceOnUse">
+          <circle cx="20" cy="20" r="3" fill={accent} opacity=".7"/>
+          <circle cx="60" cy="10" r="2" fill={accent} opacity=".5"/>
+          <circle cx="100" cy="25" r="3" fill={c2}     opacity=".5"/>
+          <circle cx="40" cy="55" r="2" fill={accent} opacity=".4"/>
+          <circle cx="80" cy="70" r="3" fill={accent} opacity=".6"/>
+          <line x1="20" y1="20" x2="60"  y2="10" stroke={accent} strokeWidth="1" opacity=".4"/>
+          <line x1="60" y1="10" x2="100" y2="25" stroke={accent} strokeWidth="1" opacity=".4"/>
+          <line x1="40" y1="55" x2="80"  y2="70" stroke={accent} strokeWidth="1" opacity=".3"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${patId})`}/>
+    </svg>
+  )
+}
+
+// ── Stat card in HUD ──────────────────────────────────────────────────────────
+function StatCard({ val, lbl, gold }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 8, padding: '4px 9px', textAlign: 'center' }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: gold ? C.gold : '#fff' }}>{val}</div>
+      <div style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,.3)' }}>{lbl}</div>
+    </div>
+  )
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <>
+      <style>{`@keyframes ep-spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid #9b7ae0', borderTopColor: 'transparent', animation: 'ep-spin .8s linear infinite' }}/>
+    </>
+  )
+}
+
+const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 function totalSeconds(cfg) {
   if (cfg.durationSecs) return cfg.durationSecs
-  const c = cfg.count ?? 20
+  const c = cfg.count ?? 10
   return c <= 10 ? 600 : c <= 20 ? 1200 : c <= 30 ? 1800 : 2400
 }
 
-// ── Confirm submit dialog ─────────────────────────────────────────────────────
-function ConfirmDialog({ answeredCount, total, secondsLeft, onConfirm, onCancel }) {
-  const unanswered = total - answeredCount
-  const mm = Math.floor(secondsLeft / 60).toString().padStart(2, '0')
-  const ss = (secondsLeft % 60).toString().padStart(2, '0')
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center px-4"
-      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
-    >
-      <div className="bg-card rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-        <div className="text-center space-y-2">
-          <p className="text-3xl">{unanswered > 0 ? '⚠️' : '✅'}</p>
-          <p className="text-lg font-black text-primary">Submit your test?</p>
-          {unanswered > 0 ? (
-            <p className="text-sm text-secondary">
-              You have{' '}
-              <span className="font-black text-orange-600">{unanswered}</span>{' '}
-              unanswered question{unanswered !== 1 ? 's' : ''}. These will be marked wrong.
-            </p>
-          ) : (
-            <p className="text-sm text-secondary">All {total} questions answered.</p>
-          )}
-          {secondsLeft > 0 && (
-            <p className="text-xs text-tertiary">Time remaining: {mm}:{ss}</p>
-          )}
-        </div>
-        <div className="space-y-2.5">
-          <button
-            onClick={onConfirm}
-            className="w-full py-3.5 bg-red-600 text-white text-sm font-black rounded-2xl hover:bg-red-500 transition-colors"
-          >
-            Yes, submit now
-          </button>
-          <button
-            onClick={onCancel}
-            className="w-full py-3 border border-default text-secondary text-sm font-medium rounded-2xl hover:bg-subtle transition-colors"
-          >
-            Keep going
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Question grid (end / exam mode) ──────────────────────────────────────────
-function QuestionGrid({ total, current, answeredSet, onJump }) {
-  return (
-    <div className="bg-subtle rounded-2xl p-4">
-      <p className="text-xs font-black text-secondary uppercase tracking-wide mb-3">
-        {answeredSet.size}/{total} answered
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {Array.from({ length: total }, (_, i) => (
-          <button
-            key={i}
-            onClick={() => onJump(i)}
-            className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${
-              i === current
-                ? 'bg-indigo-600 text-white'
-                : answeredSet.has(i)
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-card border border-default text-secondary hover:border-indigo-300'
-            }`}
-          >
-            {i + 1}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Summary screen ────────────────────────────────────────────────────────────
-function SummaryScreen({ questions, answers, onReview, onFinish }) {
-  const correctCount = answers.filter(a => a.isCorrect).length
-  const total        = questions.length
-  const pct          = total > 0 ? Math.round((correctCount / total) * 100) : 0
-  const scoreColor   = pct >= 70 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'
-  const msg = pct >= 80 ? 'Outstanding! 🏆'
-    : pct >= 60 ? 'Good performance 💪'
-    : pct >= 40 ? 'Keep practising 📈'
-    : 'Every session is progress 📚'
-
-  return (
-    <div className="min-h-screen bg-base flex items-center justify-center px-4">
-      <div className="max-w-sm w-full space-y-5 py-8">
-        <div className="bg-card rounded-3xl shadow-sm border border-default p-6 text-center space-y-3">
-          <p className={`text-5xl font-black ${scoreColor}`}>{pct}%</p>
-          <p className="text-base font-black text-primary">{msg}</p>
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-default">
-            <div className="text-center">
-              <p className="text-xl font-black text-green-600">{correctCount}</p>
-              <p className="text-[10px] text-tertiary">Correct</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-black text-red-500">{total - correctCount}</p>
-              <p className="text-[10px] text-tertiary">Wrong</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-black text-primary">{total}</p>
-              <p className="text-[10px] text-tertiary">Total</p>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={onReview}
-          className="w-full py-4 bg-indigo-600 text-white font-black text-sm rounded-2xl hover:bg-indigo-500 transition-colors"
-        >
-          Review all answers →
-        </button>
-        <button
-          onClick={onFinish}
-          className="w-full py-3 border border-default text-secondary text-sm font-bold rounded-2xl hover:bg-subtle transition-colors"
-        >
-          Save & exit
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Review mode ───────────────────────────────────────────────────────────────
-function ReviewMode({ questions, answers, onDone, isDark }) {
-  const [idx, setIdx] = useState(0)
-  const q   = questions[idx]
-  const ans = answers[idx]
-  if (!q) return null
-
-  return (
-    <div className="min-h-screen bg-base">
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-8">
-        {/* Review header bar */}
-        <div className="flex items-center justify-between bg-card rounded-2xl shadow-sm border border-default px-4 py-3">
-          <p className="text-xs font-bold text-secondary">Review mode</p>
-          <span className="text-xs font-black text-primary">{idx + 1}/{questions.length}</span>
-          <button
-            onClick={onDone}
-            className="text-xs font-bold text-indigo-600 hover:opacity-75"
-          >
-            Done →
-          </button>
-        </div>
-
-        {/* Tags */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {q.subject_name && (
-            <span
-              className="text-xs font-bold px-2.5 py-1 rounded-full"
-              style={{ background: resolveSubjectColors(q.subject_name, isDark).bg, color: resolveSubjectColors(q.subject_name, isDark).text }}
-            >
-              {q.subject_name}
-            </span>
-          )}
-          {q.topic_name && (
-            <span className="text-xs text-secondary bg-subtle px-2.5 py-1 rounded-full">
-              {q.topic_name}
-            </span>
-          )}
-        </div>
-
-        {/* Question */}
-        <QuestionCard
-          key={q.id}
-          question={q}
-          selectedAnswer={ans?.selected ?? null}
-          revealed={true}
-          onAnswer={() => {}}
-          showExplanation={true}
-          color={q.subject_name ? resolveSubjectColors(q.subject_name, isDark) : undefined}
-        />
-
-        {/* Navigation */}
-        <div className="flex gap-3">
-          {idx > 0 && (
-            <button
-              onClick={() => setIdx(i => i - 1)}
-              className="flex-1 py-3 bg-subtle border border-default rounded-2xl text-sm font-bold text-secondary hover:text-primary transition-colors"
-            >
-              ← Previous
-            </button>
-          )}
-          {idx < questions.length - 1 ? (
-            <button
-              onClick={() => setIdx(i => i + 1)}
-              className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 transition-colors"
-            >
-              Next →
-            </button>
-          ) : (
-            <button
-              onClick={onDone}
-              className="flex-1 py-3.5 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 transition-colors"
-            >
-              Finish →
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Main session page ─────────────────────────────────────────────────────────
 export default function PracticeSessionPage() {
   const router = useRouter()
-  const isDark = useIsDark()
-
-  const [config,      setConfig]      = useState(null)
-  const [questions,   setQuestions]   = useState([])
-  const [index,       setIndex]       = useState(0)
-  const [answers,     setAnswers]     = useState({})
-  const [loading,     setLoading]     = useState(true)
-  const [error,       setError]       = useState(null)
-  const [secondsLeft, setSecondsLeft] = useState(0)
-  const [totalSecs,   setTotalSecs]   = useState(0)
-  const [phase,       setPhase]       = useState('quiz') // quiz | confirm | summary | review
-
+  const [config,      setConfig]   = useState(null)
+  const [questions,   setQs]       = useState([])
+  const [index,       setIndex]    = useState(0)
+  const [answers,     setAnswers]  = useState({})
+  const [xp,          setXP]       = useState(0)
+  const [loading,     setLoading]  = useState(true)
+  const [error,       setError]    = useState(null)
+  const [secondsLeft, setSecs]     = useState(0)
+  const [totalSecs,   setTotal]    = useState(0)
+  const [toasts,      setToasts]   = useState([])
   const timerRef   = useRef(null)
   const answersRef = useRef({})
+  const firedRef   = useRef(new Set())
 
-  // Hide bottom nav during session
+  const addToast    = useCallback((msg, type = 'warning') => { const id = Date.now(); setToasts(p => [...p, { id, message: msg, type }]) }, [])
+  const dismissToast = useCallback(id => setToasts(p => p.filter(t => t.id !== id)), [])
+
+  // Hide layout bottom nav during practice
   useEffect(() => {
     document.body.dataset.hideNav = 'true'
     return () => { delete document.body.dataset.hideNav }
   }, [])
 
-  const finishSession = useCallback((finalAnswers, finalQuestions) => {
+  const finishSession = useCallback((finalAnswers, finalQs) => {
     clearInterval(timerRef.current)
-    const arr = (finalQuestions ?? questions).map(q => ({
+    const qs = finalQs ?? questions
+    const arr = qs.map(q => ({
       questionId: q.id,
       selected:   finalAnswers[q.id]?.selected  ?? null,
       isCorrect:  finalAnswers[q.id]?.isCorrect ?? false,
     }))
     sessionStorage.setItem('practice_results', JSON.stringify({
-      answers:   arr,
-      questions: (finalQuestions ?? questions).map(q => ({
-        id:            q.id,
-        subject_name:  q.subject_name,
-        subject_id:    q.subject_id,
-        topic_name:    q.topic_name,
-        topic_id:      q.topic_id,
-        subtopic_name: q.subtopic_name,
-        subtopic_id:   q.subtopic_id,
+      answers: arr,
+      questions: qs.map(q => ({
+        id: q.id, subject_name: q.subject_name, subject_id: q.subject_id,
+        topic_name: q.topic_name, topic_id: q.topic_id,
+        subtopic_name: q.subtopic_name, subtopic_id: q.subtopic_id,
         correct_answer: q.correct_answer,
       })),
       config,
@@ -271,301 +181,302 @@ export default function PracticeSessionPage() {
     router.push('/student/practice/results')
   }, [config, router, questions])
 
-  // Load config + questions
+  // Load questions
   useEffect(() => {
     const raw = sessionStorage.getItem('practice_config')
     if (!raw) { setError('No session config found.'); setLoading(false); return }
     let cfg
-    try { cfg = JSON.parse(raw) } catch { setError('Invalid session config.'); setLoading(false); return }
+    try { cfg = JSON.parse(raw) } catch { setError('Invalid config.'); setLoading(false); return }
     setConfig(cfg)
 
     const params = new URLSearchParams({
       subjects: (cfg.subjects ?? []).join(','),
       exam:     cfg.examType ?? 'WAEC',
-      count:    String(cfg.count ?? 20),
+      count:    String(cfg.count ?? 10),
       mode:     cfg.mode ?? 'practice',
     })
-    if (cfg.topic_id) params.set('topic_id', cfg.topic_id)
+    if (cfg.topic_id)    params.set('topic_id', cfg.topic_id)
+    if (cfg.subject_id)  params.set('subject_id', cfg.subject_id)
 
     fetch(`/api/practice/questions?${params}`)
       .then(r => r.json())
       .then(data => {
-        if (!data.questions?.length) {
-          setError(data.error ?? 'No questions available. Try a different subject or topic.')
-          return
-        }
-        setQuestions(data.questions)
-        const secs = totalSeconds(cfg)
-        setTotalSecs(secs)
-        setSecondsLeft(secs)
+        const qs = data.questions ?? []
+        if (!qs.length) { setError(data.error ?? 'No questions available.'); setLoading(false); return }
+        setQs(qs)
+        const s = totalSeconds(cfg)
+        setTotal(s); setSecs(s)
+        setLoading(false)
       })
-      .catch(() => setError('Network error. Check your connection and try again.'))
-      .finally(() => setLoading(false))
+      .catch(() => { setError('Network error. Try again.'); setLoading(false) })
   }, [])
 
   // Timer
   useEffect(() => {
-    if (!totalSecs || phase !== 'quiz') return
+    if (totalSecs <= 0 || loading || questions.length === 0) return
+    const { minuteWarnings, secondWarnings } = getWarningThresholds(totalSecs / 60)
     timerRef.current = setInterval(() => {
-      setSecondsLeft(s => {
-        if (s <= 1) {
-          clearInterval(timerRef.current)
-          // Save answers ref state before transitioning
-          const finalAnswers = answersRef.current
-          setAnswers(finalAnswers)
-          setPhase('summary')
-          return 0
-        }
-        return s - 1
+      setSecs(s => {
+        if (s <= 1) { clearInterval(timerRef.current); finishSession(answersRef.current, questions); return 0 }
+        const ns = s - 1
+        minuteWarnings.forEach(w => {
+          const thr = w.minutes * 60
+          if (ns === thr && !firedRef.current.has(thr)) {
+            firedRef.current.add(thr); addToast(w.label, w.minutes <= 1 ? 'urgent' : 'warning')
+          }
+        })
+        secondWarnings.forEach(w => {
+          const key = `s${w.seconds}`
+          if (ns === w.seconds && !firedRef.current.has(key)) {
+            firedRef.current.add(key); addToast(w.label, 'urgent')
+          }
+        })
+        return ns
       })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [totalSecs, phase])
+  }, [totalSecs, loading, questions.length]) // eslint-disable-line
 
-  const handleAnswer = useCallback((questionId, selectedKey) => {
-    const q = questions.find(q => q.id === questionId)
-    if (!q || answersRef.current[questionId]) return
+  function handleAnswer(letter) {
+    const q = questions[index]
+    if (!q || answersRef.current[q.id]) return
+    const isCorrect = letter === q.correct_answer
+    const entry = { selected: letter, isCorrect }
+    answersRef.current = { ...answersRef.current, [q.id]: entry }
+    setAnswers(prev => ({ ...prev, [q.id]: entry }))
+    if (isCorrect) setXP(x => x + 20)
+    // Auto-advance after 1200ms
+    setTimeout(() => {
+      const next = index + 1
+      if (next >= questions.length) finishSession(answersRef.current, questions)
+      else setIndex(next)
+    }, 1200)
+  }
 
-    const entry = { selected: selectedKey, isCorrect: selectedKey === q.correct_answer }
-    answersRef.current = { ...answersRef.current, [questionId]: entry }
-    setAnswers(prev => ({ ...prev, [questionId]: entry }))
-  }, [questions])
+  function handleSubmitNext() {
+    const next = index + 1
+    if (next >= questions.length) finishSession(answersRef.current, questions)
+    else setIndex(next)
+  }
 
-  const handleConfirmSubmit = useCallback(() => {
-    clearInterval(timerRef.current)
-    setPhase('summary')
-  }, [])
-
-  // ── Loading state ───────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-sm text-secondary">Loading questions…</p>
+    <div style={{ minHeight: '100dvh', background: '#0d0e14', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+      <Spinner />
+      <p style={{ fontSize: 13, color: '#7b7f9e' }}>Loading questions…</p>
     </div>
   )
 
-  // ── Error state ─────────────────────────────────────────────────────────────
   if (error) return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6 text-center">
-      <span className="text-4xl">😕</span>
-      <p className="font-black text-primary">{error}</p>
-      <button
-        onClick={() => router.push('/student/practice')}
-        className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-500 transition-colors"
-      >
-        Back to Practice
-      </button>
+    <div style={{ minHeight: '100dvh', background: '#0d0e14', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center' }}>
+      <p style={{ fontSize: 14, fontWeight: 700, color: '#eef0fa' }}>{error}</p>
+      <button onClick={() => router.push('/student/practice')} style={{ padding: '10px 20px', background: '#0b1330', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer' }}>Back</button>
     </div>
   )
 
-  // ── Derive mode from config ─────────────────────────────────────────────────
-  const revealMode  = config?.revealMode ?? (config?.mode === 'topic' ? 'immediate' : 'end')
-  const isExamMode  = config?.mode === 'exam' || config?.mode === 'mock'
-  const showGrid    = revealMode === 'end'
-
-  const answeredSet = new Set(
-    Object.keys(answers)
-      .map(id => questions.findIndex(q => q.id === id))
-      .filter(i => i >= 0)
-  )
-
-  const answersArr = questions.map(q => ({
-    questionId: q.id,
-    selected:   answers[q.id]?.selected  ?? null,
-    isCorrect:  answers[q.id]?.isCorrect ?? false,
-  }))
-
-  // ── Phase: summary ──────────────────────────────────────────────────────────
-  if (phase === 'summary') return (
-    <SummaryScreen
-      questions={questions}
-      answers={answersArr}
-      onReview={() => setPhase('review')}
-      onFinish={() => finishSession(answers, questions)}
-    />
-  )
-
-  // ── Phase: review ───────────────────────────────────────────────────────────
-  if (phase === 'review') return (
-    <ReviewMode
-      questions={questions}
-      answers={answersArr}
-      onDone={() => finishSession(answers, questions)}
-      isDark={isDark}
-    />
-  )
-
-  // ── Phase: quiz ─────────────────────────────────────────────────────────────
-  const currentQ   = questions[index]
-  const currentAns = currentQ ? answers[currentQ.id] : null
-
-  // In exam/end mode: never reveal during quiz — QuestionCard shows selection
-  // highlight but not green/red correct/wrong colouring until after submit.
-  const isRevealed = revealMode === 'immediate' ? !!currentAns : false
-
-  const progress     = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0
-  const mm           = Math.floor(secondsLeft / 60).toString().padStart(2, '0')
-  const ss           = (secondsLeft % 60).toString().padStart(2, '0')
-  const timerUrgent  = totalSecs > 0 && secondsLeft <= 300 && secondsLeft > 0
+  const q       = questions[index]
+  const ans     = q ? answers[q.id] : null
+  const revealed = !!ans
+  const correct  = q?.correct_answer
+  const opts = q?.options && typeof q.options === 'object' && !Array.isArray(q.options) ? Object.entries(q.options).map(([letter, text]) => ({ letter, text })) : []
+  const subjectName = q?.subject_name ?? config?.subjects?.[0] ?? ''
+  const topicName   = q?.topic_name   ?? config?.topicName ?? ''
+  const accent      = getAccent(subjectName)
+  const progress    = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0
+  const timerCol    = totalSecs > 0 ? getTimerColor(secondsLeft, totalSecs) : null
 
   return (
-    <div className="min-h-screen bg-base">
+    // Full-height flex column — critical for layout
+    <div style={{
+      height: '100dvh', overflow: 'hidden',
+      background: 'radial-gradient(ellipse 90% 70% at 60% 30%, #140e2a 0%, #08090f 100%)',
+      display: 'flex', flexDirection: 'column', position: 'relative',
+    }}>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Confirm dialog (rendered above quiz) */}
-      {phase === 'confirm' && (
-        <ConfirmDialog
-          answeredCount={Object.keys(answers).length}
-          total={questions.length}
-          secondsLeft={secondsLeft}
-          onConfirm={handleConfirmSubmit}
-          onCancel={() => setPhase('quiz')}
-        />
-      )}
+      {/* Tiled ambient pattern — absolute, behind everything */}
+      <AmbientPattern accent={accent} />
 
-      {/* ── Header ───────────────────────────────────────────────────────────── */}
-      <div className="bg-card border-b border-default px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
+      {/* ── HUD ────────────────────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '10px 14px',
+        background: 'rgba(0,0,0,.2)', borderBottom: '1px solid rgba(255,255,255,.06)',
+        position: 'relative', zIndex: 2, flexShrink: 0,
+      }}>
+        {/* Back button */}
+        <button
+          onClick={() => {
+            if (window.confirm('Exit? Progress will be lost.')) {
+              clearInterval(timerRef.current)
+              router.push('/student/practice')
+            }
+          }}
+          style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: 'rgba(255,255,255,.07)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, color: 'rgba(255,255,255,.6)',
+            border: 'none', cursor: 'pointer',
+          }}
+        >←</button>
 
-          {/* Exit button */}
-          <button
-            onClick={() => {
-              if (confirm('Exit? Progress will be lost.')) {
-                clearInterval(timerRef.current)
-                router.push('/student/practice')
-              }
-            }}
-            className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center flex-shrink-0 hover:bg-subtle/80 transition-colors"
-          >
-            <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        {/* Subject · Topic */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.45)' }}>
+          <span style={{ color: accent }}>{subjectName}</span>
+          {topicName ? ` · ${topicName}` : ''}
+        </div>
 
-          {/* Progress bar + counter */}
-          <div className="flex-1 min-w-0">
-            <div className="h-1.5 bg-subtle rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Counter + timer */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs font-black text-secondary tabular-nums">
-              {index + 1}/{questions.length}
-            </span>
-            {totalSecs > 0 && (
-              <span className={`text-sm font-black tabular-nums px-2.5 py-1 rounded-xl transition-colors ${
-                timerUrgent
-                  ? 'bg-red-100 text-red-600 animate-pulse dark:bg-red-900/30 dark:text-red-400'
-                  : 'bg-subtle text-secondary'
-              }`}>
-                {mm}:{ss}
-              </span>
-            )}
-          </div>
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <StatCard val={`${index + 1}/${questions.length}`} lbl="Qns" />
+          <StatCard val={`✦ ${xp}`} lbl="XP" gold />
+          {totalSecs > 0 && (
+            <StatCard val={formatTime(secondsLeft)} lbl="Time" />
+          )}
         </div>
       </div>
 
-      {/* ── Content ──────────────────────────────────────────────────────────── */}
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-24">
+      {/* ── Mission bar ─────────────────────────────────────────────────────── */}
+      <div style={{
+        margin: '10px 14px',
+        padding: '10px 13px', borderRadius: 11,
+        background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.07)',
+        position: 'relative', zIndex: 2, flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: 8, fontWeight: 800, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'rgba(255,255,255,.3)', marginBottom: 3,
+        }}>
+          {topicName ? `${topicName} — ` : ''}Q{index + 1} of {questions.length}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.7)' }}>
+          {index < questions.length - 1
+            ? `${questions.length - index - 1} more question${questions.length - index - 1 !== 1 ? 's' : ''} to go`
+            : 'Last question — give it your best!'}
+        </div>
+        {/* Progress strip */}
+        <div style={{ height: 2, background: 'rgba(255,255,255,.06)', borderRadius: 1, marginTop: 8, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 1,
+            background: `linear-gradient(90deg, ${accent}, #ff8fab)`,
+            width: `${progress}%`, transition: 'width .4s',
+          }} />
+        </div>
+      </div>
 
-        {/* Subject / topic tags — hidden in exam mode */}
-        {!isExamMode && currentQ && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {currentQ.subject_name && (
-              <span
-                className="text-xs font-bold px-2.5 py-1 rounded-full"
-                style={{ background: resolveSubjectColors(currentQ.subject_name, isDark).bg, color: resolveSubjectColors(currentQ.subject_name, isDark).text }}
-              >
-                {currentQ.subject_name}
-              </span>
-            )}
-            {currentQ.topic_name && (
-              <span className="text-xs text-secondary bg-subtle px-2.5 py-1 rounded-full">
-                {currentQ.topic_name}
-              </span>
+      {/* ── Scrollable content (question + answers only) ─────────────────────── */}
+      <div style={{
+        flex: 1, overflowY: 'auto',
+        padding: '10px 14px 0',
+        position: 'relative', zIndex: 2,
+      }}>
+        {/* White question card */}
+        {q && (
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 16,
+            border: `2.5px solid ${accent}`,
+            boxShadow: '0 8px 0 rgba(0,0,0,.08), 0 14px 28px rgba(11,19,48,.15)',
+            marginBottom: 10,
+          }}>
+            <p style={{
+              fontSize: 9, fontWeight: 800, textTransform: 'uppercase',
+              letterSpacing: '0.1em', color: accent, marginBottom: 6,
+            }}>
+              Question {index + 1}{q.year ? ` · WAEC ${q.year}` : ''}
+            </p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#13162a', lineHeight: 1.4 }}>
+              {q.question_text ?? q.question ?? ''}
+            </p>
+            {q.difficulty && (
+              <p style={{ fontSize: 9, color: '#9ca1bc', marginTop: 4 }}>{q.difficulty}</p>
             )}
           </div>
         )}
 
-        {/* Question card */}
-        {currentQ && (
-          <QuestionCard
-            key={currentQ.id}
-            question={currentQ}
-            selectedAnswer={currentAns?.selected ?? null}
-            revealed={isRevealed}
-            onAnswer={handleAnswer}
-            showExplanation={revealMode === 'immediate'}
-            color={currentQ.subject_name ? resolveSubjectColors(currentQ.subject_name, isDark) : undefined}
-          />
-        )}
+        {/* Answer buttons */}
+        {q && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {opts.map(({ letter, text }) => {
+              // letter from entry
+              const isCorrectOpt  = letter === correct
+              const isPickedOpt   = ans?.selected === letter
 
-        {/* End-mode: Next after selection (no reveal) */}
-        {revealMode === 'end' && currentAns && (
-          <button
-            onClick={() => {
-              const next = index + 1
-              if (next >= questions.length) setPhase('confirm')
-              else setIndex(next)
-            }}
-            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors"
-          >
-            {index + 1 >= questions.length ? 'Submit →' : 'Next →'}
-          </button>
-        )}
+              let bg     = 'rgba(255,255,255,.04)'
+              let border = '1.5px solid rgba(255,255,255,.07)'
+              let color  = 'rgba(255,255,255,.6)'
 
-        {/* End-mode: Skip unanswered */}
-        {revealMode === 'end' && !currentAns && (
-          <button
-            onClick={() => {
-              const next = index + 1
-              if (next >= questions.length) setPhase('confirm')
-              else setIndex(next)
-            }}
-            className="w-full py-3 border border-default text-secondary text-sm font-bold rounded-2xl hover:bg-subtle transition-colors"
-          >
-            {index + 1 >= questions.length ? 'Submit →' : 'Skip →'}
-          </button>
-        )}
+              if (revealed && isCorrectOpt) {
+                bg     = 'rgba(108,206,142,.15)'
+                border = '1.5px solid rgba(108,206,142,.5)'
+                color  = C.success
+              } else if (revealed && isPickedOpt && !isCorrectOpt) {
+                bg     = 'rgba(239,93,78,.12)'
+                border = '1.5px solid rgba(239,93,78,.4)'
+                color  = C.danger
+              }
 
-        {/* Immediate mode: Next after reveal */}
-        {revealMode === 'immediate' && isRevealed && (
-          <button
-            onClick={() => {
-              const next = index + 1
-              if (next >= questions.length) setPhase('summary')
-              else setIndex(next)
-            }}
-            className="w-full py-4 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors"
-          >
-            {index + 1 >= questions.length ? 'See results →' : 'Next →'}
-          </button>
-        )}
-
-        {/* Question grid (end / exam mode) */}
-        {showGrid && (
-          <QuestionGrid
-            total={questions.length}
-            current={index}
-            answeredSet={answeredSet}
-            onJump={setIndex}
-          />
-        )}
-
-        {/* Submit early — exam mode */}
-        {isExamMode && Object.keys(answers).length > 0 && (
-          <button
-            onClick={() => setPhase('confirm')}
-            className="w-full py-3 bg-card border border-default rounded-2xl text-sm font-bold text-secondary hover:text-red-600 hover:border-red-200 dark:hover:border-red-800 transition-colors"
-          >
-            Submit test — {Object.keys(answers).length}/{questions.length} answered
-          </button>
+              return (
+                <button
+                  key={letter}
+                  onClick={() => handleAnswer(letter)}
+                  disabled={revealed}
+                  style={{
+                    padding: '10px 12px', borderRadius: 11,
+                    background: bg, border, color,
+                    fontSize: 12, fontWeight: 600, textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    cursor: revealed ? 'default' : 'pointer',
+                    transition: 'all .1s',
+                  }}
+                >
+                  <span style={{
+                    width: 20, height: 20, borderRadius: 5,
+                    background: 'rgba(255,255,255,.07)',
+                    fontSize: 9, fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {letter}
+                  </span>
+                  {text}
+                </button>
+              )
+            })}
+          </div>
         )}
       </div>
+
+      {/* ── Submit / Next button — OUTSIDE scroll, always visible ─────────── */}
+      {revealed && (
+        <SubmitButton onClick={handleSubmitNext} isLast={index >= questions.length - 1} />
+      )}
+    </div>
+  )
+}
+
+// ── Submit button with 3D press effect ───────────────────────────────────────
+function SubmitButton({ onClick, isLast }) {
+  const [p, setP] = useState(false)
+  return (
+    <div style={{ position: 'relative', zIndex: 2, margin: '0 14px 10px', flexShrink: 0 }}>
+      <button
+        onClick={onClick}
+        onMouseDown={() => setP(true)} onMouseUp={() => setP(false)}
+        onMouseLeave={() => setP(false)}
+        onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+        style={{
+          width: '100%', padding: 12, borderRadius: 12,
+          background: C.navy, color: '#fff',
+          fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+          transform: p ? 'translateY(3px)' : '',
+          boxShadow: p
+            ? `0 2px 0 ${C.navyDeep}`
+            : `0 5px 0 ${C.navyDeep}, 0 8px 16px rgba(0,0,0,.4)`,
+          transition: 'transform .1s, box-shadow .1s',
+        }}
+      >
+        {isLast ? 'See my results →' : 'Next Question →'}
+      </button>
     </div>
   )
 }
