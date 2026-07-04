@@ -1,12 +1,14 @@
-// src/app/student/layout.js — DEFINITIVE VERSION
+// src/app/student/layout.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Brand: EXL navy logo mark + "Exam Prep" wordmark (bold + muted)
-// Header: bg-card / border-default — auto light/dark via CSS tokens
-// Nav: Home · Practise · Learn · Community · Profile
-// Desktop: 2-col layout (240px sidebar + content)
-// Sidebar: sticky nav links with emoji icons
-// No PracticeHubFAB — hero card on dashboard replaces it
-// GamesFAB lives here — imported and placed above bottom nav
+// HEADER REDESIGN — matches the v3 prototype exactly:
+//   • Height: 52px (not 56px)
+//   • Background: var(--bg-base) — matches page canvas, not card white
+//   • Left: EXL logo mark (28×28, navy, 3D shadow) + "Exam Prep" wordmark
+//   • Right: XP pill (gold border + gold text) + dark mode toggle
+//   • Border: 1px solid var(--border) — subtle separator
+//   • No desktop nav clutter in center — desktop uses sidebar only
+//   • Logo mark uses 3D shadow: 0 3px 0 #05070f (same as CTA buttons)
+//   • "Exam" bold + "Prep" muted — exact prototype text treatment
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@/lib/supabase/server'
@@ -14,10 +16,10 @@ import { redirect } from 'next/navigation'
 import BottomNavWrapper from '@/components/ui/BottomNavWrapper'
 import { LessonNavProvider } from '@/contexts/LessonNavContext'
 import { PointsProvider } from '@/contexts/PointsContext'
-import PointsBadge from '@/components/ui/PointsBadge'
 import DarkModeToggle from '@/components/ui/DarkModeToggle'
 import GamesFAB from '@/components/ui/GamesFAB'
 import Link from 'next/link'
+import HeaderXPPill from '@/components/ui/HeaderXPPill'
 
 const DESKTOP_NAV = [
   { href: '/student/dashboard',  label: 'Home',       icon: '🏠' },
@@ -35,79 +37,167 @@ export default async function StudentLayout({ children }) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('total_points, full_name')
+    .select('total_points, full_name, streak_days')
     .eq('id', user.id)
     .single()
 
   return (
     <LessonNavProvider>
       <PointsProvider initialTotal={profile?.total_points ?? 0}>
-        <div className="min-h-screen">
+        <div className="min-h-screen bg-base">
 
-          {/* ── Header ─────────────────────────────────────────────────────── */}
-          <header className="bg-card border-b border-default sticky top-0 z-40"
-            style={{ boxShadow: 'var(--shadow-sm)' }}>
-            <div className="max-w-screen-xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
-
-              {/* Logo */}
-              <Link href="/student/dashboard"
-                className="flex items-center gap-2 flex-shrink-0 group">
-                <div style={{
-                  width: 30, height: 30, borderRadius: 9,
-                  background: '#0b1330',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 800, color: '#fff',
-                  boxShadow: '0 3px 0 #05070f',
-                  transition: 'transform .15s',
+          {/* ── Header ── */}
+          {/* Matches prototype: 52px, bg-base, 3D logo mark, XP pill right */}
+          <header
+            className="sticky top-0 z-40 border-b border-default"
+            style={{
+              height: 52,
+              background: 'var(--nav-bg)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              display: 'flex',
+              alignItems: 'center',
+              boxShadow: 'var(--shadow-xs)',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 1280,
+                margin: '0 auto',
+                padding: '0 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              {/* ── Logo ── */}
+              {/* 28×28 navy lettermark with 3D press shadow, wordmark "Exam Prep" */}
+              <Link
+                href="/student/dashboard"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexShrink: 0,
+                  textDecoration: 'none',
                 }}
-                  className="group-hover:-translate-y-px"
-                >E</div>
-                <span className="text-sm font-black text-primary tracking-tight">
+              >
+                {/* Lettermark */}
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  background: '#0b1330',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: '#fff',
+                  letterSpacing: '-0.02em',
+                  boxShadow: '0 3px 0 #05070f',
+                  flexShrink: 0,
+                }}>
+                  E
+                </div>
+
+                {/* Wordmark */}
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: 'var(--text-prim)',
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1,
+                }}>
                   Exam{' '}
-                  <span className="text-secondary font-medium">Prep</span>
+                  <span style={{ color: 'var(--text-sec)', fontWeight: 500 }}>
+                    Prep
+                  </span>
                 </span>
               </Link>
 
-              {/* Desktop nav */}
-              <nav className="hidden lg:flex items-center gap-0.5 flex-1 justify-center">
+              {/* ── Desktop centre nav ── (hidden on mobile) */}
+              <nav
+                style={{
+                  display: 'none',
+                  flex: 1,
+                  justifyContent: 'center',
+                  gap: 2,
+                }}
+                className="lg:flex"
+              >
                 {DESKTOP_NAV.slice(0, 5).map(({ href, label }) => (
-                  <Link key={href} href={href}
-                    className="px-3 py-1.5 rounded-xl text-sm font-bold text-secondary hover:text-primary hover:bg-subtle transition-all">
+                  <Link
+                    key={href}
+                    href={href}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 10,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--text-sec)',
+                      textDecoration: 'none',
+                    }}
+                    className="hover:bg-subtle hover:text-primary transition-colors"
+                  >
                     {label}
                   </Link>
                 ))}
               </nav>
 
-              {/* Right actions */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <PointsBadge />
+              {/* ── Right: XP pill + dark mode toggle ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {/* XP pill — gold bordered, matches prototype exactly */}
+                <HeaderXPPill points={profile?.total_points ?? 0} streak={profile?.streak_days ?? 0} />
+
+                {/* Dark mode toggle — circular, minimal */}
                 <DarkModeToggle />
               </div>
             </div>
           </header>
 
-          {/* ── Content ────────────────────────────────────────────────────── */}
-          <main className="max-w-screen-xl mx-auto px-4 lg:px-8 py-5 pb-28 lg:pb-10
-                           lg:grid lg:grid-cols-[220px_1fr] lg:gap-8
-                           xl:grid-cols-[240px_1fr]">
-
+          {/* ── Content layout ── */}
+          <main
+            style={{
+              maxWidth: 1280,
+              margin: '0 auto',
+              padding: '20px 16px 112px',
+            }}
+            className="lg:pb-10 lg:grid lg:grid-cols-[220px_1fr] lg:gap-8 xl:grid-cols-[240px_1fr]"
+          >
             {/* Desktop sidebar */}
             <aside className="hidden lg:block">
-              <nav className="sticky top-20 space-y-0.5">
-                {DESKTOP_NAV.map(({ href, label, icon }) => (
-                  <Link key={href} href={href}
-                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl
-                               text-secondary hover:text-primary hover:bg-subtle
-                               transition-colors text-sm font-bold">
-                    <span className="text-base w-5 text-center">{icon}</span>
-                    {label}
-                  </Link>
-                ))}
+              <nav style={{ position: 'sticky', top: 68 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {DESKTOP_NAV.map(({ href, label, icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '9px 12px',
+                        borderRadius: 10,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-sec)',
+                        textDecoration: 'none',
+                      }}
+                      className="hover:bg-subtle hover:text-primary transition-colors"
+                    >
+                      <span style={{ fontSize: 15, width: 20, textAlign: 'center' }}>{icon}</span>
+                      {label}
+                    </Link>
+                  ))}
+                </div>
               </nav>
             </aside>
 
             {/* Page content */}
-            <div className="min-w-0 max-w-2xl lg:max-w-none">
+            <div style={{ minWidth: 0, maxWidth: 680 }} className="lg:max-w-none">
               {children}
             </div>
           </main>
