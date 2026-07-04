@@ -30,53 +30,24 @@
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { buildCoachSummary } from '@/lib/studyPlanEngine'
+import { resolveSubjectColors } from '@/lib/subjectTheme'
+import { useIsDark } from '@/lib/useIsDark'
 
-// ── Subject colour map ─────────────────────────────────────────────────────────
-const SUBJECT_STYLES = {
-  'Mathematics':                 { bg: '#eff6ff', text: '#1d4ed8', accent: '#3b82f6', darkBg: '#172554', darkText: '#93c5fd' },
-  'Further Mathematics':         { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9', darkBg: '#0c4a6e', darkText: '#7dd3fc' },
-  'English Language':            { bg: '#faf5ff', text: '#7e22ce', accent: '#a855f7', darkBg: '#3b0764', darkText: '#d8b4fe' },
-  'Use of English':              { bg: '#faf5ff', text: '#7e22ce', accent: '#a855f7', darkBg: '#3b0764', darkText: '#d8b4fe' },
-  'Physics':                     { bg: '#ecfeff', text: '#0e7490', accent: '#06b6d4', darkBg: '#083344', darkText: '#67e8f9' },
-  'Chemistry':                   { bg: '#f0fdf4', text: '#15803d', accent: '#22c55e', darkBg: '#052e16', darkText: '#86efac' },
-  'Biology':                     { bg: '#ecfdf5', text: '#047857', accent: '#10b981', darkBg: '#022c22', darkText: '#6ee7b7' },
-  'Economics':                   { bg: '#fffbeb', text: '#b45309', accent: '#f59e0b', darkBg: '#451a03', darkText: '#fcd34d' },
-  'Government':                  { bg: '#fef2f2', text: '#b91c1c', accent: '#ef4444', darkBg: '#450a0a', darkText: '#fca5a5' },
-  'Literature in English':       { bg: '#fdf2f8', text: '#9d174d', accent: '#ec4899', darkBg: '#500724', darkText: '#f9a8d4' },
-  'Geography':                   { bg: '#f0fdfa', text: '#0f766e', accent: '#14b8a6', darkBg: '#042f2e', darkText: '#5eead4' },
-  'Agricultural Science':        { bg: '#f7fee7', text: '#4d7c0f', accent: '#84cc16', darkBg: '#1a2e05', darkText: '#bef264' },
-  'Commerce':                    { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
-  'History':                     { bg: '#fff7ed', text: '#c2410c', accent: '#f97316', darkBg: '#431407', darkText: '#fdba74' },
-  'Accounting':                  { bg: '#fefce8', text: '#a16207', accent: '#eab308', darkBg: '#1e1700', darkText: '#fde047' },
-  'Computer Science':            { bg: '#f0f9ff', text: '#0369a1', accent: '#0ea5e9', darkBg: '#0c4a6e', darkText: '#7dd3fc' },
-  'Civic Education':             { bg: '#f0fdf4', text: '#166534', accent: '#22c55e', darkBg: '#052e16', darkText: '#86efac' },
-  'default':                     { bg: '#eef2ff', text: '#4338ca', accent: '#6366f1', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
-}
+// NOTE: SUBJECT_STYLES removed — use resolveSubjectColors(name, isDark) from
+// @/lib/subjectTheme — the single canonical source. This fixes the colour drift
+// that occurred when this local map was updated independently.
 
-// STATUS_CONFIG — 'review' added alongside the existing four.
+// STATUS_CONFIG — uses CSS var tokens so colours adapt to light/dark automatically.
+// barColor is used for SVG rings/bars where CSS vars can't be used directly.
 const STATUS_CONFIG = {
-  weak:      { label: 'Needs work', icon: '🎯', lightBg: '#fef2f2', lightText: '#dc2626', darkBg: '#450a0a', darkText: '#f87171', barColor: '#f87171' },
-  improving: { label: 'Improving',  icon: '📈', lightBg: '#fffbeb', lightText: '#d97706', darkBg: '#451a03', darkText: '#fbbf24', barColor: '#fbbf24' },
-  untested:  { label: 'New',        icon: '📖', lightBg: '#eef2ff', lightText: '#4338ca', darkBg: '#1e1b4b', darkText: '#a5b4fc', barColor: '#a5b4fc' },
-  strong:    { label: 'Strong',     icon: '✅', lightBg: '#f0fdf4', lightText: '#16a34a', darkBg: '#052e16', darkText: '#4ade80', barColor: '#4ade80' },
-  review:    { label: 'Review due', icon: '🔁', lightBg: '#f0f9ff', lightText: '#0369a1', darkBg: '#0c4a6e', darkText: '#7dd3fc', barColor: '#7dd3fc' },
+  weak:      { label: 'Needs work', icon: '🎯', bg: 'var(--danger-bg)',  text: 'var(--danger)',  border: 'var(--danger-border)',  barColor: '#f87171' },
+  improving: { label: 'Improving',  icon: '📈', bg: 'var(--warning-bg)', text: 'var(--warning)', border: 'var(--warning-border)', barColor: '#fbbf24' },
+  untested:  { label: 'New',        icon: '📖', bg: 'var(--active-bg)',  text: 'var(--active-text)', border: 'var(--active-border)', barColor: '#818cf8' },
+  strong:    { label: 'Strong',     icon: '✅', bg: 'var(--success-bg)', text: 'var(--success)', border: 'var(--success-border)', barColor: '#4ade80' },
+  review:    { label: 'Review due', icon: '🔁', bg: 'var(--active-bg)',  text: 'var(--active-text)', border: 'var(--active-border)', barColor: '#7dd3fc' },
 }
 
-function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
-function getStatus(key)        { return STATUS_CONFIG[key]   ?? STATUS_CONFIG.untested  }
-
-// ── Dark mode detection hook ───────────────────────────────────────────────────
-function useIsDark() {
-  const [isDark, setIsDark] = useState(false)
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains('dark'))
-    check()
-    const observer = new MutationObserver(check)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
-  return isDark
-}
+function getStatus(key) { return STATUS_CONFIG[key] ?? STATUS_CONFIG.untested }
 
 // ── "Last practiced N days ago" label — for review-status cards ──────────────
 function daysSinceLabel(lastTestedAt) {
@@ -114,18 +85,15 @@ export function MiniRing({ pct, size = 34 }) {
 // ── Single topic card ──────────────────────────────────────────────────────────
 export function StudyPlanCard({ item }) {
   const isDark = useIsDark()
-  const s      = getSubjectStyle(item.subjectName ?? '')
+  const colors = resolveSubjectColors(item.subjectName ?? '', isDark)
   const cfg    = getStatus(item.status)
   const pct    = item.accuracyPct ?? 0
   const isReview = item.status === 'review'
 
-  const subjectStyle = isDark
-    ? { backgroundColor: s.darkBg, color: s.darkText }
-    : { backgroundColor: s.bg,     color: s.text      }
-
-  const statusStyle = isDark
-    ? { backgroundColor: cfg.darkBg, color: cfg.darkText }
-    : { backgroundColor: cfg.lightBg, color: cfg.lightText }
+  // Use canonical subject colours from resolveSubjectColors
+  const subjectStyle = { backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }
+  // Status styles now use CSS var tokens from updated STATUS_CONFIG
+  const statusStyle  = { backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }
 
   return (
     <Link
@@ -150,7 +118,7 @@ export function StudyPlanCard({ item }) {
     >
       {/* Left colour accent bar — subject colour */}
       <div
-        style={{ backgroundColor: s.accent }}
+        style={{ backgroundColor: colors.solid }}
         className="w-1 h-10 rounded-full flex-shrink-0"
       />
 

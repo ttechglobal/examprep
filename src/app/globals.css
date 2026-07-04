@@ -151,6 +151,25 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   LEGACY ALIASES — stale --color-* names still resolve correctly.
+   Do not add new uses of --color-*; use the canonical token names directly.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --color-card:           var(--bg-card);
+  --color-subtle:         var(--bg-subtle);
+  --color-border-default: var(--border);
+  --color-text-secondary: var(--text-sec);
+  --color-text-tertiary:  var(--text-tert);
+}
+.dark {
+  --color-card:           var(--bg-card);
+  --color-subtle:         var(--bg-subtle);
+  --color-border-default: var(--border);
+  --color-text-secondary: var(--text-sec);
+  --color-text-tertiary:  var(--text-tert);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    BASE
    ══════════════════════════════════════════════════════════════════════════ */
 @layer base {
@@ -184,6 +203,7 @@
   .bg-card      { background-color: var(--bg-card);    }
   .bg-subtle    { background-color: var(--bg-subtle);  }
   .bg-inset     { background-color: var(--bg-inset);   }
+  .bg-overlay   { background-color: var(--bg-overlay); }
 
   /* Text */
   .text-primary   { color: var(--text-prim); }
@@ -212,6 +232,17 @@
   .border-warning { border-color:     var(--warning-border); }
   .text-gold      { color: var(--gold); }
 
+  /* Dividers using semantic border token */
+  .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
+
+  /* Additional surface aliases used in components */
+  .bg-base-inv  { background-color: var(--bg-card); }  /* Inverse — card bg on base */
+
+  /* Ensure text-primary / text-secondary / text-tertiary all resolve */
+  .text-primary   { color: var(--text-prim); }
+  .text-secondary { color: var(--text-sec);  }
+  .text-tertiary  { color: var(--text-tert); }
+
   /* Shadows */
   .shadow-xs       { box-shadow: var(--shadow-xs);      }
   .shadow-sm       { box-shadow: var(--shadow-sm);      }
@@ -224,4 +255,43 @@
   .z-viewer { z-index: 100; }
   .z-modal  { z-index: 200; }
   .z-toast  { z-index: 300; }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES FOR LEGACY HARDCODED GRAYS
+   These catch components still using Tailwind gray classes (bg-gray-50,
+   text-gray-900 etc.) that weren't updated to use semantic tokens.
+   Targeting .dark so light mode is unaffected.
+   Long-term fix: migrate each component to semantic tokens.
+   ══════════════════════════════════════════════════════════════════════════ */
+.dark .bg-gray-50,
+.dark .bg-gray-100 { background-color: var(--bg-subtle) !important; }
+.dark .bg-gray-200 { background-color: var(--bg-inset)  !important; }
+.dark .bg-white    { background-color: var(--bg-card)   !important; }
+
+.dark .text-gray-900,
+.dark .text-gray-800 { color: var(--text-prim) !important; }
+.dark .text-gray-700,
+.dark .text-gray-600 { color: var(--text-sec)  !important; }
+.dark .text-gray-500,
+.dark .text-gray-400 { color: var(--text-tert) !important; }
+
+.dark .border-gray-100,
+.dark .border-gray-200 { border-color: var(--border)        !important; }
+.dark .border-gray-300  { border-color: var(--border-strong) !important; }
+
+/* Score ring hardcoded light track */
+.dark .bg-slate-100 { background-color: var(--bg-inset) !important; }
+
+/* Answer options in QuestionCard that use hardcoded hover */
+.dark .hover\:border-indigo-300:hover { border-color: var(--active-border) !important; }
+
+/* Smooth transitions for all token-driven properties */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+/* But not for transforms/animations — keep those instant */
+button, a, [role="button"] {
+  transition-property: background-color, border-color, color, transform, box-shadow, opacity;
 }

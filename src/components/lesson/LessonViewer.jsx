@@ -1,49 +1,46 @@
 'use client'
-// src/components/lesson/LessonViewer.jsx — REDESIGN
-// Matches prototype screen 6:
-//   • Dark header: purple gradient bg, "← Dashboard" | slide counter, subject/topic label, progress bar
-//   • Slide types rendered with prototype cards: hook (purple tint), concept (surface),
-//     formula (blue tint), interaction/end_quiz (dark), summary (surface)
-//   • Slide type pill at top of each card
-//   • Prev ← / Next → bottom nav buttons (navy 3D for Next)
-//   • Inline check questions MUST be answered to progress (onUnlock gate)
-//   • Uses existing --lesson-* CSS variables from parent shell
+// src/components/lesson/LessonViewer.jsx — v2
+// ─────────────────────────────────────────────────────────────────────────────
+// KEY CHANGES from v1:
+//   1. Full light + dark via CSS var tokens — no hardcoded hex fallbacks.
+//   2. Slide type pills use opaque fills (both modes) from design system.
+//   3. Formula block uses a true reference-card style: bg-inset + active border.
+//   4. Interaction/check slides now match QuestionCard answer states.
+//   5. Summary slide uses success-bg + success-border for checkmarks.
+//   6. Header uses nav-bg (blurs correctly in both modes).
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from 'react'
 
-// ─── CSS variable tokens (all via var() — respected by existing lesson shell) ─
-// Fallback values match the dark prototype skin
-const V = (name, fallback) => `var(${name}, ${fallback})`
-
 // ── Slide type pill ────────────────────────────────────────────────────────────
-function SlidePill({ label, bg, color }) {
+function SlidePill({ label, style }) {
   return (
     <span style={{
-      display: 'inline-flex', padding: '3px 9px', borderRadius: 999,
+      display: 'inline-flex', padding: '3px 10px', borderRadius: 999,
       fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em',
-      background: bg, color, marginBottom: 10,
+      marginBottom: 12, border: '1.5px solid', ...style,
     }}>
       {label}
     </span>
   )
 }
 
-// ── Body text ─────────────────────────────────────────────────────────────────
+// ── Body text (uses CSS vars) ─────────────────────────────────────────────────
 function Body({ text, style = {} }) {
   if (!text) return null
-  return <p style={{ fontSize: 14, lineHeight: 1.65, color: V('--lesson-text-muted', '#9499b5'), margin: 0, ...style }}>{text}</p>
+  return (
+    <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-sec)', margin: 0, ...style }}>
+      {text}
+    </p>
+  )
 }
 
 // ── Hook slide ────────────────────────────────────────────────────────────────
 function HookSlide({ slide, accent }) {
   return (
-    <div style={{
-      borderRadius: 18, padding: '20px 18px',
-      background: `linear-gradient(135deg, ${accent}14, rgba(255,143,171,.08))`,
-      border: `1px solid ${accent}28`,
-    }}>
-      <SlidePill label="🪝 Hook" bg={`${accent}18`} color={accent} />
-      <p style={{ fontSize: 17, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 10, lineHeight: 1.3 }}>
+    <div style={{ borderRadius: 18, padding: '18px 18px', background: `${accent}10`, border: `1.5px solid ${accent}28` }}>
+      <SlidePill label="🪝 Hook" style={{ background: `${accent}18`, color: accent, borderColor: `${accent}30` }} />
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 10, lineHeight: 1.3 }}>
         {slide.heading}
       </p>
       <Body text={slide.body} />
@@ -54,14 +51,16 @@ function HookSlide({ slide, accent }) {
 // ── Concept / definition slide ────────────────────────────────────────────────
 function ConceptSlide({ slide, accent }) {
   return (
-    <div style={{ borderRadius: 18, padding: '20px 18px', background: V('--lesson-surface', '#13141f'), border: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}` }}>
-      <SlidePill label="📖 Concept" bg={`${accent}14`} color={accent} />
-      <p style={{ fontSize: 17, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 10, lineHeight: 1.3 }}>{slide.heading}</p>
+    <div style={{ borderRadius: 18, padding: '18px', background: 'var(--bg-card)', border: '1.5px solid var(--border)' }}>
+      <SlidePill label="📖 Concept" style={{ background: `${accent}14`, color: accent, borderColor: `${accent}28` }} />
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 10, lineHeight: 1.3 }}>
+        {slide.heading}
+      </p>
       <Body text={slide.body} />
       {slide.example && (
-        <div style={{ marginTop: 12, background: 'rgba(0,0,0,.2)', borderRadius: 10, padding: '11px 13px' }}>
-          <p style={{ fontSize: 10, color: V('--lesson-text-muted', '#7b7f9e'), marginBottom: 4 }}>Example:</p>
-          <p style={{ fontSize: 13, color: V('--lesson-text', '#eef0fa'), fontWeight: 600 }}>{slide.example}</p>
+        <div style={{ marginTop: 12, background: 'var(--bg-inset)', borderRadius: 10, padding: '11px 13px', border: '1px solid var(--border)' }}>
+          <p style={{ fontSize: 9, color: 'var(--text-tert)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Example:</p>
+          <p style={{ fontSize: 13, color: 'var(--text-prim)', fontWeight: 600 }}>{slide.example}</p>
         </div>
       )}
     </div>
@@ -71,34 +70,42 @@ function ConceptSlide({ slide, accent }) {
 // ── Formula slide ─────────────────────────────────────────────────────────────
 function FormulaSlide({ slide, accent }) {
   return (
-    <div style={{ borderRadius: 18, padding: '20px 18px', background: 'rgba(92,184,234,.08)', border: '1px solid rgba(92,184,234,.2)' }}>
-      <SlidePill label="⚡ Formula" bg="rgba(92,184,234,.12)" color="#5cb8ea" />
-      <p style={{ fontSize: 17, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 10 }}>{slide.heading}</p>
+    <div style={{ borderRadius: 18, padding: '18px', background: 'var(--bg-card)', border: '1.5px solid var(--border)' }}>
+      <SlidePill label="⚡ Formula" style={{ background: 'var(--active-bg)', color: 'var(--active-text)', borderColor: 'var(--active-border)' }} />
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 10 }}>{slide.heading}</p>
       <Body text={slide.body} />
       {slide.formula && (
-        <div style={{ margin: '12px 0', background: 'rgba(0,0,0,.25)', borderRadius: 10, padding: 14, textAlign: 'center', fontSize: 20, fontWeight: 800, color: '#5cb8ea', letterSpacing: '0.04em' }}>
+        <div style={{
+          margin: '14px 0', background: 'var(--bg-inset)',
+          borderRadius: 12, padding: '16px', textAlign: 'center',
+          fontSize: 22, fontWeight: 800, color: 'var(--active-text)',
+          letterSpacing: '0.03em', border: '1.5px solid var(--active-border)',
+        }}>
           {slide.formula}
         </div>
       )}
       {slide.worked_example && (
-        <div style={{ fontSize: 13, color: V('--lesson-text-muted', '#7b7f9e'), lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.6 }}>
           {slide.worked_example}
-        </div>
+        </p>
       )}
     </div>
   )
 }
 
 // ── Summary slide ─────────────────────────────────────────────────────────────
-function SummarySlide({ slide, accent, onPractise }) {
+function SummarySlide({ slide }) {
   return (
-    <div style={{ borderRadius: 18, padding: '20px 18px', background: V('--lesson-surface', '#13141f'), border: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}` }}>
-      <SlidePill label="✅ Summary" bg="rgba(108,206,142,.12)" color="#6cce8e" />
-      <p style={{ fontSize: 17, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 12 }}>{slide.heading ?? "What you've learnt"}</p>
+    <div style={{ borderRadius: 18, padding: '18px', background: 'var(--bg-card)', border: '1.5px solid var(--border)' }}>
+      <SlidePill label="✅ Summary" style={{ background: 'var(--success-bg)', color: 'var(--success)', borderColor: 'var(--success-border)' }} />
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 14, lineHeight: 1.3 }}>
+        {slide.heading ?? "What you've learnt"}
+      </p>
       {(slide.points ?? []).map((pt, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-          <span style={{ color: '#6cce8e', fontSize: 14, marginTop: 2 }}>✓</span>
-          <span style={{ fontSize: 13, color: V('--lesson-text-muted', '#7b7f9e'), lineHeight: 1.55 }}>{pt}</span>
+        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10,
+          background: 'var(--success-bg)', borderRadius: 10, padding: '9px 12px', border: '1px solid var(--success-border)' }}>
+          <span style={{ color: 'var(--success)', fontSize: 14, fontWeight: 800, marginTop: 1, flexShrink: 0 }}>✓</span>
+          <span style={{ fontSize: 13, color: 'var(--text-prim)', lineHeight: 1.55 }}>{pt}</span>
         </div>
       ))}
       {!slide.points && slide.body && <Body text={slide.body} />}
@@ -107,45 +114,50 @@ function SummarySlide({ slide, accent, onPractise }) {
 }
 
 // ── Interaction / quiz slide ───────────────────────────────────────────────────
-function InteractionSlide({ slide, accent, onUnlock }) {
-  const [selected, setSelected]  = useState(null)
-  const [revealed, setRevealed]  = useState(false)
+function InteractionSlide({ slide, onUnlock }) {
+  const [selected, setSelected] = useState(null)
+  const [revealed, setRevealed] = useState(false)
   const LETTERS = ['A', 'B', 'C', 'D']
 
   function pick(letter) {
     if (revealed) return
     setSelected(letter)
     setRevealed(true)
-    if (letter === slide.correct_answer) onUnlock?.()
-    else onUnlock?.() // still unlock after seeing answer — let them progress
+    // Always unlock — let student progress regardless of correctness
+    onUnlock?.()
   }
 
   return (
-    <div style={{ borderRadius: 18, padding: '20px 18px', background: V('--lesson-surface', '#13141f'), border: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}` }}>
-      <SlidePill label="✏️ Check Question" bg="rgba(255,195,107,.1)" color="#ffc36b" />
-      <p style={{ fontSize: 16, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 8, lineHeight: 1.3 }}>{slide.question}</p>
+    <div style={{ borderRadius: 18, padding: '18px', background: 'var(--bg-card)', border: '1.5px solid var(--border)' }}>
+      <SlidePill label="✏️ Check" style={{ background: 'var(--warning-bg)', color: 'var(--warning)', borderColor: 'var(--warning-border)' }} />
+      <p style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6, lineHeight: 1.35 }}>
+        {slide.question}
+      </p>
       {slide.body && <Body text={slide.body} style={{ marginBottom: 12 }} />}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
         {(slide.options ?? []).map((opt, i) => {
           const letter = LETTERS[i]
           const isCorrect  = letter === slide.correct_answer
           const isSelected = selected === letter
-          let bg = 'rgba(255,255,255,.04)', border = '1.5px solid rgba(255,255,255,.08)', color = 'rgba(255,255,255,.65)'
-          if (revealed && isCorrect)                { bg = 'rgba(108,206,142,.15)'; border = '1.5px solid rgba(108,206,142,.5)'; color = '#6cce8e' }
-          if (revealed && isSelected && !isCorrect) { bg = 'rgba(239,93,78,.12)';  border = '1.5px solid rgba(239,93,78,.4)';  color = '#ef5d4e' }
+          let bg     = 'var(--bg-subtle)'
+          let border = '1.5px solid var(--border)'
+          let color  = 'var(--text-prim)'
+          if (revealed && isCorrect)                { bg = 'var(--success-bg)'; border = '1.5px solid var(--success-border)'; color = 'var(--success)' }
+          if (revealed && isSelected && !isCorrect) { bg = 'var(--danger-bg)';  border = '1.5px solid var(--danger-border)';  color = 'var(--danger)' }
           return (
             <button
               key={letter} onClick={() => pick(letter)} disabled={revealed}
-              style={{ padding: '10px 12px', borderRadius: 11, background: bg, border, fontSize: 13, fontWeight: 600, color, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9, cursor: revealed ? 'default' : 'pointer', transition: 'all .12s', }}
-            >
-              <span style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(255,255,255,.07)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{letter}</span>
+              style={{ padding: '10px 12px', borderRadius: 12, background: bg, border, fontSize: 13, fontWeight: 600, color, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9, cursor: revealed ? 'default' : 'pointer', transition: 'all .12s' }}>
+              <span style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--bg-inset)', border: '1px solid var(--border)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {revealed && isCorrect ? '✓' : revealed && isSelected ? '✗' : letter}
+              </span>
               {typeof opt === 'object' ? opt.text ?? '' : opt}
             </button>
           )
         })}
       </div>
       {revealed && (
-        <p style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: selected === slide.correct_answer ? '#6cce8e' : '#ef5d4e' }}>
+        <p style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: selected === slide.correct_answer ? 'var(--success)' : 'var(--danger)' }}>
           {selected === slide.correct_answer ? '✓ Correct!' : `✗ The answer is ${slide.correct_answer}`}
         </p>
       )}
@@ -157,40 +169,56 @@ function InteractionSlide({ slide, accent, onUnlock }) {
 function SlideRenderer({ slide, accent, onUnlock }) {
   if (!slide) return null
   const type = slide.type
-  if (type === 'hook')               return <HookSlide        slide={slide} accent={accent} />
-  if (type === 'definition' || type === 'concept') return <ConceptSlide slide={slide} accent={accent} />
-  if (type === 'formula')            return <FormulaSlide     slide={slide} accent={accent} />
-  if (type === 'summary')            return <SummarySlide     slide={slide} accent={accent} onPractise={() => onUnlock?.()} />
-  if (type === 'interaction' || type === 'end_quiz') return <InteractionSlide slide={slide} accent={accent} onUnlock={onUnlock} />
-  // Default fallback
+  if (type === 'hook')                                return <HookSlide       slide={slide} accent={accent} />
+  if (type === 'definition' || type === 'concept')   return <ConceptSlide    slide={slide} accent={accent} />
+  if (type === 'formula')                            return <FormulaSlide    slide={slide} accent={accent} />
+  if (type === 'summary')                            return <SummarySlide    slide={slide} />
+  if (type === 'interaction' || type === 'end_quiz') return <InteractionSlide slide={slide} onUnlock={onUnlock} />
   return (
-    <div style={{ borderRadius: 18, padding: '20px 18px', background: V('--lesson-surface', '#13141f'), border: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}` }}>
-      {slide.heading && <p style={{ fontSize: 17, fontWeight: 800, color: V('--lesson-text', '#eef0fa'), marginBottom: 10 }}>{slide.heading}</p>}
-      {slide.body && <Body text={slide.body} />}
+    <div style={{ borderRadius: 18, padding: '18px', background: 'var(--bg-card)', border: '1.5px solid var(--border)' }}>
+      {slide.heading && <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 10 }}>{slide.heading}</p>}
+      {slide.body    && <Body text={slide.body} />}
     </div>
+  )
+}
+
+// ── 3D press next button ──────────────────────────────────────────────────────
+function PressNextButton({ onClick, disabled, isLast }) {
+  const [p, setP] = useState(false)
+  return (
+    <button
+      onClick={onClick} disabled={disabled}
+      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)} onMouseLeave={() => setP(false)}
+      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+      style={{
+        flex: 1, padding: 13, borderRadius: 14, fontSize: 13, fontWeight: 700,
+        background: '#0b1330', color: '#fff', border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transform: p && !disabled ? 'translateY(2px)' : '',
+        boxShadow: p && !disabled ? '0 2px 0 #05070f' : '0 5px 0 #05070f',
+        transition: 'transform .1s, box-shadow .1s',
+      }}>
+      {disabled ? 'Answer to continue' : isLast ? 'Finish ✓' : 'Next →'}
+    </button>
   )
 }
 
 // ── MAIN LESSON VIEWER ────────────────────────────────────────────────────────
 export default function LessonViewer({ lesson, subtopic, onComplete, accentColor }) {
-  const accent     = accentColor ?? '#9b7ae0'
-  const slides     = lesson?.slides ?? []
+  const accent      = accentColor ?? '#6366f1'
+  const slides      = lesson?.slides ?? []
   const totalSlides = slides.length
 
-  const [currentIndex,  setCurrent]   = useState(0)
-  const [slideUnlocked, setUnlocked]  = useState(false)
+  const [currentIndex,  setCurrent]  = useState(0)
+  const [slideUnlocked, setUnlocked] = useState(false)
 
-  const currentSlide = slides[currentIndex]
+  const currentSlide  = slides[currentIndex]
   const isInteraction = currentSlide?.type === 'interaction' || currentSlide?.type === 'end_quiz'
-  const isSummary     = currentSlide?.type === 'summary'
   const isLast        = currentIndex === totalSlides - 1
+  const canProgress   = isInteraction ? slideUnlocked : true
 
-  // Non-interaction slides are always unlocked
-  const canProgress = isInteraction ? slideUnlocked : true
-
-  useEffect(() => {
-    setUnlocked(false)
-  }, [currentIndex])
+  useEffect(() => { setUnlocked(false) }, [currentIndex])
 
   function goNext() {
     if (!canProgress) return
@@ -207,35 +235,40 @@ export default function LessonViewer({ lesson, subtopic, onComplete, accentColor
       {/* ── Header ── */}
       <div style={{
         padding: '10px 16px',
-        background: `linear-gradient(160deg, ${accent}28 0%, rgba(14,10,28,1) 100%)`,
-        borderBottom: `1px solid ${accent}28`, flexShrink: 0,
+        background: 'var(--nav-bg)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid var(--border)',
+        flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
           <button
             onClick={() => window.history.back()}
-            style={{ fontSize: 12, fontWeight: 700, color: `${accent}b0`, background: 'none', border: 'none', cursor: 'pointer' }}
-          >
+            style={{ fontSize: 12, fontWeight: 700, color: accent, background: 'none', border: 'none', cursor: 'pointer' }}>
             ← Back
           </button>
-          <span style={{ fontSize: 10, fontWeight: 700, color: `${accent}99` }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)' }}>
             Slide {currentIndex + 1} of {totalSlides}
           </span>
         </div>
-        <div style={{ marginBottom: 6 }}>
+        <div style={{ marginBottom: 7 }}>
           {subtopic?.topics?.name && (
-            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: `${accent}80`, marginBottom: 2 }}>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tert)', marginBottom: 2 }}>
               {subtopic.topics.name}
             </p>
           )}
-          <p style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>{subtopic?.name ?? lesson?.title ?? ''}</p>
+          <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)' }}>
+            {subtopic?.name ?? lesson?.title ?? ''}
+          </p>
         </div>
-        <div style={{ height: 3, background: 'rgba(255,255,255,.06)', borderRadius: 2, overflow: 'hidden' }}>
+        {/* Progress bar */}
+        <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ height: '100%', borderRadius: 2, background: accent, width: `${progressPct}%`, transition: 'width 0.35s' }} />
         </div>
       </div>
 
       {/* ── Slide content ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 16px 120px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '18px 16px 120px', background: 'var(--bg-base)' }}>
         <SlideRenderer
           slide={currentSlide}
           accent={accent}
@@ -247,47 +280,25 @@ export default function LessonViewer({ lesson, subtopic, onComplete, accentColor
       <div style={{
         position: 'sticky', bottom: 0,
         padding: '10px 16px 20px',
-        background: V('--lesson-header', 'rgba(13,14,20,.96)'),
+        background: 'var(--nav-bg)',
         backdropFilter: 'blur(12px)',
-        borderTop: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}`,
-        display: 'flex', gap: 8,
+        WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid var(--border)',
+        display: 'flex', gap: 8, flexShrink: 0,
       }}>
         <button
-          onClick={goPrev}
-          disabled={currentIndex === 0}
+          onClick={goPrev} disabled={currentIndex === 0}
           style={{
-            flex: 1, padding: 12, borderRadius: 12, fontSize: 13, fontWeight: 700,
-            background: V('--lesson-surface', '#1a1b28'), color: V('--lesson-text-muted', '#7b7f9e'),
-            border: `1px solid ${V('--lesson-border', 'rgba(255,255,255,.07)')}`,
-            cursor: currentIndex === 0 ? 'not-allowed' : 'pointer', opacity: currentIndex === 0 ? 0.35 : 1,
-          }}
-        >
+            flex: 1, padding: 13, borderRadius: 14, fontSize: 13, fontWeight: 700,
+            background: 'var(--bg-subtle)', color: 'var(--text-sec)',
+            border: '1.5px solid var(--border)',
+            cursor: currentIndex === 0 ? 'not-allowed' : 'pointer',
+            opacity: currentIndex === 0 ? 0.35 : 1,
+          }}>
           ← Prev
         </button>
         <PressNextButton onClick={goNext} disabled={!canProgress} isLast={isLast} />
       </div>
     </div>
-  )
-}
-
-function PressNextButton({ onClick, disabled, isLast }) {
-  const [p, setP] = useState(false)
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)} onMouseLeave={() => setP(false)}
-      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
-      style={{
-        flex: 1, padding: 12, borderRadius: 12, fontSize: 13, fontWeight: 700,
-        background: '#0b1330', color: '#fff', border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        transform: p && !disabled ? 'translateY(2px)' : '',
-        boxShadow: p && !disabled ? '0 2px 0 #05070f' : '0 4px 0 #05070f',
-        transition: 'transform .1s, box-shadow .1s',
-      }}
-    >
-      {disabled ? 'Answer to continue' : isLast ? 'Finish ✓' : 'Next →'}
-    </button>
   )
 }

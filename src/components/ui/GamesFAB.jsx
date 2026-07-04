@@ -14,8 +14,14 @@ export default function GamesFAB() {
   const pathname = usePathname()
   const [pressed, setPressed] = useState(false)
 
-  // Don't show on the games page itself
-  if (pathname.startsWith('/student/games') || pathname.startsWith('/games')) return null
+  // Don't show on games page, practice session, or practice results
+  // (session is immersive — FAB overlaps nav buttons and breaks focus)
+  if (
+    pathname.startsWith('/student/games') ||
+    pathname.startsWith('/games') ||
+    pathname === '/student/practice/session' ||
+    pathname === '/student/practice/results'
+  ) return null
 
   return (
     <button

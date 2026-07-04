@@ -1,97 +1,287 @@
 'use client'
-// src/app/student/games/page.js
+// src/app/student/games/page.js — v2
 // ─────────────────────────────────────────────────────────────────────────────
-// THE HUB OF HUBS. Lists every world from the registry. Adding a new world
-// (new subject) requires zero changes to this file — it renders generically
-// from gameRegistry.js's WORLDS array.
+// REDESIGN: Full iframe embed of https://exlgames.vercel.app/
 //
-// Reflects the current registry: 7 worlds, including the merged chem_lab
-// (5 games: atom-builder, equation-balancer, acids-bases,
-// organic-functional-groups, ideal-gas) — chemistry_workshop no longer
-// exists as a separate world.
+// The games project is a separate deployment. This page loads it in a
+// seamless full-height iframe so it feels like a native part of the app.
+//
+// DESIGN DECISIONS:
+//   1. Thin native header (app chrome): back button, "Games" title, themed
+//      — keeps the student inside the app shell visually
+//   2. Iframe fills ALL remaining height — no outer scrollbar
+//   3. Loading state: game-themed skeleton with animated dots
+//   4. allow="*" gives the iframe full capability (audio, storage, etc.)
+//   5. Header uses the same nav-bg + border-default tokens as the rest of the app
+//   6. The games project receives no auth tokens — it's self-contained
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { getAllWorlds, getGamesForWorld, getPlayableGamesForWorld } from '@/lib/gameRegistry'
-import { resolveSubjectColors } from '@/lib/subjectTheme'
-import { getElevationShadow, getElevationBorder } from '@/lib/gamePremiumTokens'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 
-function useIsDark() {
-  const [dark, setDark] = useState(false)
+const GAMES_URL = 'https://exlgames.vercel.app/'
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+function GamesLoadingSkeleton() {
+  const [dot, setDot] = useState(0)
   useEffect(() => {
-    const check = () => setDark(document.documentElement.classList.contains('dark'))
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => obs.disconnect()
+    const t = setInterval(() => setDot(d => (d + 1) % 4), 400)
+    return () => clearInterval(t)
   }, [])
-  return dark
-}
 
-function WorldCard({ world, playableCount, isDark }) {
-  const c = resolveSubjectColors(world.subject, isDark)
-  const cardBg = isDark ? '#111827' : '#ffffff'
-  const cardBorderNeutral = isDark ? '#1f2937' : '#ede9e3'
-  const isLocked = playableCount === 0
+  const dots = '.'.repeat(dot)
 
   return (
-    <Link
-      href={isLocked ? '#' : `/student/games/${world.id}`}
-      className="block rounded-3xl overflow-hidden active:scale-[0.98] transition-transform duration-150"
-      style={{
-        background: cardBg,
-        border: getElevationBorder('resting', cardBorderNeutral, isDark),
-        boxShadow: getElevationShadow('resting', c.solid, isDark),
-        opacity: isLocked ? 0.6 : 1,
-        pointerEvents: isLocked ? 'none' : 'auto',
-      }}
-    >
-      <div className="flex items-center gap-4 p-4">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0"
-          style={{ background: c.solid }}
-        >
-          {world.icon}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-base font-black text-primary leading-snug">{world.title}</p>
-          <p className="text-xs text-secondary mt-0.5 leading-snug line-clamp-2">{world.description}</p>
-          <p className="text-[10px] font-bold mt-1.5" style={{ color: c.solid }}>
-            {isLocked ? 'Coming soon' : `${playableCount} game${playableCount !== 1 ? 's' : ''} ready to play`}
-          </p>
-        </div>
-        {!isLocked && (
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" style={{ color: c.solid }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-          </svg>
-        )}
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 24,
+      background: 'var(--bg-base)',
+      padding: 32,
+    }}>
+      {/* Animated game controller */}
+      <div style={{
+        width: 72, height: 72,
+        borderRadius: 20,
+        background: 'linear-gradient(135deg, #0b1330 0%, #1a2060 100%)',
+        boxShadow: '0 8px 0 #05070f, 0 12px 32px rgba(0,0,0,.35)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        animation: 'gamebounce 1.2s ease-in-out infinite',
+      }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="7" width="20" height="13" rx="3"/>
+          <path d="M7 13h2M8 12v2"/>
+          <circle cx="15" cy="11" r="1" fill="white" stroke="none"/>
+          <circle cx="17" cy="13" r="1" fill="white" stroke="none"/>
+          <circle cx="15" cy="15" r="1" fill="white" stroke="none"/>
+          <circle cx="13" cy="13" r="1" fill="white" stroke="none"/>
+          <path d="M6 7V6a1 1 0 011-1h3M18 7V6a1 1 0 00-1-1h-3"/>
+        </svg>
       </div>
-    </Link>
+
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-prim)', letterSpacing: '-0.02em', marginBottom: 6 }}>
+          Loading EXL Games{dots}
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.55 }}>
+          Your study companion — learn through play
+        </p>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ width: 160, height: 4, borderRadius: 999, background: 'var(--bg-inset)', overflow: 'hidden' }}>
+        <div style={{
+          height: '100%',
+          borderRadius: 999,
+          background: 'linear-gradient(90deg, #0b1330, #4f46e5)',
+          animation: 'gamesload 1.8s ease-in-out infinite',
+        }} />
+      </div>
+
+      <style>{`
+        @keyframes gamebounce {
+          0%, 100% { transform: translateY(0); }
+          50%       { transform: translateY(-8px); }
+        }
+        @keyframes gamesload {
+          0%   { width: 0%;    margin-left: 0; }
+          50%  { width: 60%;   margin-left: 20%; }
+          100% { width: 0%;    margin-left: 100%; }
+        }
+      `}</style>
+    </div>
   )
 }
 
-export default function GamesHubPage() {
-  const isDark = useIsDark()
-  const worlds = getAllWorlds()
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function GamesPage() {
+  const router   = useRouter()
+  const iframeRef = useRef(null)
+  const [loaded, setLoaded]  = useState(false)
+  const [error,  setError]   = useState(false)
+
+  // When iframe loads, fade it in
+  function handleLoad() {
+    setLoaded(true)
+    setError(false)
+  }
+
+  function handleError() {
+    setError(true)
+    setLoaded(false)
+  }
 
   return (
-    <div className="space-y-5 pb-28">
-      <div>
-        <h1 className="text-2xl font-black text-primary">Games</h1>
-        <p className="text-xs text-secondary mt-0.5">Pick a world and play your way to mastery</p>
+    <div style={{
+      // Override the student layout padding — games should be edge-to-edge
+      // We use negative margins to escape the layout's padding
+      margin: '-20px -16px',
+      height: 'calc(100dvh - 56px)', // full height minus the app header (56px)
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      background: 'var(--bg-base)',
+    }}>
+
+      {/* ── Games app bar ── */}
+      <div style={{
+        flexShrink: 0,
+        height: 48,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '0 14px',
+        background: 'var(--nav-bg)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        {/* Back to app */}
+        <button
+          onClick={() => router.push('/student/dashboard')}
+          style={{
+            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, fontWeight: 700, color: 'var(--text-sec)',
+            cursor: 'pointer',
+          }}
+        >←</button>
+
+        {/* Game controller icon */}
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: '#0b1330',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+          boxShadow: '0 2px 0 #05070f',
+        }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="7" width="20" height="13" rx="3"/>
+            <path d="M7 13h2M8 12v2"/>
+            <circle cx="15" cy="11" r="1" fill="white" stroke="none"/>
+            <circle cx="17" cy="13" r="1" fill="white" stroke="none"/>
+            <circle cx="15" cy="15" r="1" fill="white" stroke="none"/>
+            <circle cx="13" cy="13" r="1" fill="white" stroke="none"/>
+          </svg>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+            EXL Games
+          </p>
+          <p style={{ fontSize: 10, color: 'var(--text-tert)', lineHeight: 1 }}>
+            Learn through play
+          </p>
+        </div>
+
+        {/* Live indicator */}
+        {loaded && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: '#22c55e',
+              boxShadow: '0 0 6px rgba(34,197,94,.6)',
+              animation: 'livepulse 2s ease-in-out infinite',
+            }} />
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)' }}>Live</span>
+          </div>
+        )}
+
+        {/* Reload button (shown on error) */}
+        {error && (
+          <button
+            onClick={() => {
+              setError(false)
+              setLoaded(false)
+              if (iframeRef.current) iframeRef.current.src = GAMES_URL
+            }}
+            style={{
+              padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+              background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+              color: 'var(--text-sec)', cursor: 'pointer',
+            }}
+          >↺ Reload</button>
+        )}
       </div>
 
-      <div className="space-y-3">
-        {worlds.map(world => (
-          <WorldCard
-            key={world.id}
-            world={world}
-            playableCount={getPlayableGamesForWorld(world.id).length}
-            isDark={isDark}
-          />
-        ))}
+      {/* ── Content area ── */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+
+        {/* Loading skeleton — shown until iframe fires onLoad */}
+        {!loaded && !error && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}>
+            <GamesLoadingSkeleton />
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center',
+            background: 'var(--bg-base)',
+          }}>
+            <span style={{ fontSize: 40 }}>🎮</span>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6 }}>
+                Games couldn't load
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.55 }}>
+                Check your internet connection and try again.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setError(false)
+                setLoaded(false)
+                if (iframeRef.current) { iframeRef.current.src = ''; iframeRef.current.src = GAMES_URL }
+              }}
+              style={{
+                padding: '12px 28px', borderRadius: 14, fontSize: 14, fontWeight: 800,
+                background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer',
+                boxShadow: '0 5px 0 #05070f',
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* The actual iframe — always rendered so it loads in the background */}
+        <iframe
+          ref={iframeRef}
+          src={GAMES_URL}
+          title="EXL Games"
+          onLoad={handleLoad}
+          onError={handleError}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+            // Fade in once loaded
+            opacity: loaded ? 1 : 0,
+            transition: 'opacity 0.4s ease',
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; storage-access; fullscreen"
+          allowFullScreen
+          loading="eager"
+        />
       </div>
+
+      <style>{`
+        @keyframes livepulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   )
 }

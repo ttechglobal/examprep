@@ -93,14 +93,14 @@ function ExplanationModal({ question, selectedKey, onClose, color }) {
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="w-10 h-1.5 rounded-full bg-inset border border-default" />
         </div>
 
         {/* Result banner */}
         <div className={`mx-5 mb-3 mt-2 rounded-[22px] flex-shrink-0 border-2 ${
           isCorrect
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-800'
-            : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800'
+            ? 'bg-success border-success'
+            : 'bg-danger border-danger'
         }`} style={{ boxShadow: isCorrect ? '0 3px 0 rgba(34,197,94,0.18)' : '0 3px 0 rgba(239,68,68,0.18)' }}>
           <div className="flex items-center gap-3 px-4 py-3.5">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-black text-white ${
@@ -136,7 +136,7 @@ function ExplanationModal({ question, selectedKey, onClose, color }) {
               Only shown when student got it wrong AND we have a specific reason.
               Falls back to misconception if no per-option explanation. */}
           {!isCorrect && (thisWrongReason || misconception) && (
-            <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-[20px]">
+            <div className="px-4 py-3 bg-warning border-2 border-warning rounded-[20px]">
               <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1.5" style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif" }}>
                 Why {selectedKey} is wrong
               </p>
@@ -188,7 +188,7 @@ function ExplanationModal({ question, selectedKey, onClose, color }) {
               <img
                 src={question.explanation_image_url}
                 alt="Solution diagram"
-                className="w-full object-contain max-h-64 bg-white dark:bg-gray-900 p-3"
+                className="w-full object-contain max-h-64 bg-card p-3"
               />
             </div>
           )}
@@ -207,14 +207,14 @@ function ExplanationModal({ question, selectedKey, onClose, color }) {
                     key={key}
                     className={`flex gap-3 px-4 py-3 rounded-[18px] border-2 ${
                       key === selectedKey
-                        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800'
+                        ? 'bg-danger border-danger'
                         : 'bg-base border-default'
                     }`}
                   >
                     <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5 ${
                       key === selectedKey
                         ? 'bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-300'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                        : 'bg-inset border border-default text-tertiary'
                     }`}>
                       {key}
                     </span>
@@ -311,7 +311,7 @@ export default function QuestionCard({
           <img
             src={question.image_url}
             alt={question.image_description ?? 'Question diagram'}
-            className="w-full object-contain max-h-64 bg-white dark:bg-gray-900 p-3"
+            className="w-full object-contain max-h-64 bg-card p-3"
           />
         </div>
       )}
@@ -344,9 +344,9 @@ export default function QuestionCard({
           }
 
           const dotStyle =
-            isRight  ? 'border-green-500 bg-green-500 text-white' :
-            isWrong  ? 'border-red-400 bg-red-400 text-white' :
-            'border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+            isRight  ? 'border-success bg-success text-white' :
+            isWrong  ? 'border-danger bg-danger text-white' :
+            'border-default text-tertiary'
           const dotExtraStyle = isSelected && !revealed ? { borderColor: accent, color: accentText } : {}
 
           const dotContent =
