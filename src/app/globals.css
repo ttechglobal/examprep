@@ -1,95 +1,226 @@
-/* src/app/globals.css — REPLACE ENTIRE FILE */
+/* src/app/globals.css — DEFINITIVE REPLACEMENT
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EXL EXAM PREP — Design System v3
+ * Full light + dark. Every screen adapts. No exceptions.
+ *
+ * BRAND:   Navy #0b1330 anchors CTAs in both modes. Non-negotiable.
+ * LIGHT:   Warm white canvas (#f7f8fc). Cards pure white. Accents rich.
+ * DARK:    Navy-tinted canvas (#0d1117). Cards #161d2e. Same identity.
+ *
+ * RULES (never break these):
+ *   1. Structural colours → CSS token classes (bg-card, text-primary, etc.)
+ *   2. Subject/brand accents → inline style + resolveSubjectColors(name, isDark)
+ *   3. Never dynamic Tailwind classes for colours (Tailwind v4 limitation)
+ *   4. --shadow-* are light-mode only; dark mode uses border emphasis instead
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 @import "tailwindcss";
 
 @theme {
   --font-jakarta: var(--font-jakarta);
 }
 
-
-/* Base colour utilities — bg, text, border across all subject palette shades */
+/* Structural Tailwind classes used dynamically across the app */
 @source inline("{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
 @source inline("dark:{bg,text,border}-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{50,100,200,300,400,500,600,700,800,900,950}");
-
-/* Opacity-modified backgrounds — dark mode card/badge backgrounds */
 @source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{950}/40");
 @source inline("bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{900}/40");
 @source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{950}/40");
 @source inline("dark:bg-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{900}/40");
-
-/* Gradient classes — practice mode cards, hero sections, CTA buttons */
 @source inline("from-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
 @source inline("to-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
 @source inline("via-{blue,sky,purple,cyan,green,emerald,amber,red,pink,teal,lime,indigo,violet,orange,rose}-{400,500,600}");
-
-/* White/black opacity overlays — icon containers on subject cards (bg-white/20, bg-white/30) */
 @source inline("bg-white/{10,20,30,40,50}");
 @source inline("bg-black/{10,20,30,40,50}");
 
-/* ── Light mode CSS variables ─────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT MODE  ─  :root
+   Warm white canvas. Clean. Easy to read. Accents pop.
+   ══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --bg-base:   #f9fafb;
-  --bg-card:   #ffffff;
-  --bg-subtle: #f3f4f6;
-  --text-prim: #111827;
-  --text-sec:  #6b7280;
-  --text-tert: #9ca3af;
-  --border:    #e5e7eb;
+  /* Canvas */
+  --bg-base:           #f7f8fc;  /* page bg — navy-tinted off-white                */
+  --bg-card:           #ffffff;  /* cards, panels, drawers                          */
+  --bg-subtle:         #eef0f8;  /* hover, chip bg, inset areas                     */
+  --bg-inset:          #e4e7f4;  /* inset within cards                              */
+  --bg-overlay:        rgba(0,0,0,0.45); /* modal backdrop                          */
 
-  /* Active/highlight state — strong enough to see in light mode */
-  --active-bg:      #e0e7ff;   /* indigo-100 */
-  --active-text:    #4338ca;   /* indigo-700 */
-  --active-border:  #a5b4fc;   /* indigo-300 */
+  /* Text */
+  --text-prim:         #0a0d1a;  /* headings, body — navy-tinted near-black         */
+  --text-sec:          #4a5070;  /* supporting text, labels, meta                   */
+  --text-tert:         #8890aa;  /* placeholders, disabled, hints                   */
+
+  /* Borders */
+  --border:            #dde0f0;  /* default — navy-tinted light grey                */
+  --border-strong:     #bcc0d8;  /* stronger separators                             */
+
+  /* Brand CTA — NEVER changes between modes */
+  --cta-bg:            #0b1330;
+  --cta-shadow:        #05070f;
+  --cta-text:          #ffffff;
+
+  /* Active / selected states */
+  --active-bg:         #e6e8f8;
+  --active-text:       #3730a3;  /* indigo-800                                      */
+  --active-border:     #a5b4fc;  /* indigo-300                                      */
+
+  /* Status — question feedback, mastery indicators */
+  --success:           #059669;  /* emerald-600                                     */
+  --success-bg:        #ecfdf5;
+  --success-border:    #a7f3d0;
+  --danger:            #dc2626;  /* red-600                                         */
+  --danger-bg:         #fef2f2;
+  --danger-border:     #fecaca;
+  --warning:           #d97706;  /* amber-600                                       */
+  --warning-bg:        #fffbeb;
+  --warning-border:    #fde68a;
+  --gold:              #d97706;  /* amber — XP, streaks — readable on white         */
+  --gold-bright:       #f59e0b;  /* icons, ring fills                               */
+
+  /* Navigation */
+  --nav-bg:            rgba(255,255,255,0.96);
+  --nav-border:        #dde0f0;
+
+  /* Shadows — card elevation in light mode */
+  --shadow-xs:         0 1px 2px rgba(10,13,26,0.06);
+  --shadow-sm:         0 1px 4px rgba(10,13,26,0.07), 0 1px 2px rgba(10,13,26,0.05);
+  --shadow-card:       0 2px 8px rgba(10,13,26,0.07), 0 1px 3px rgba(10,13,26,0.05);
+  --shadow-card-lg:    0 8px 24px rgba(10,13,26,0.10), 0 2px 6px rgba(10,13,26,0.06);
+  --shadow-modal:      0 20px 60px rgba(10,13,26,0.20), 0 4px 12px rgba(10,13,26,0.10);
+  --shadow-cta:        0 6px 0 #05070f, 0 10px 24px rgba(10,13,26,0.18);
+  --shadow-cta-press:  0 2px 0 #05070f;
 }
 
-/* ── Dark mode CSS variables ──────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE  ─  .dark
+   Navy-tinted canvas. Not grey — branded dark.
+   ══════════════════════════════════════════════════════════════════════════ */
 .dark {
-  --bg-base:   #030712;
-  --bg-card:   #111827;
-  --bg-subtle: #1f2937;
-  --text-prim: #f9fafb;
-  --text-sec:  #9ca3af;
-  --text-tert: #6b7280;
-  --border:    #374151;
+  /* Canvas */
+  --bg-base:           #0d1117;  /* near-black, navy tint                           */
+  --bg-card:           #161d2e;  /* navy-dark card surface                          */
+  --bg-subtle:         #1e2640;  /* hover, chip bg, inset areas                     */
+  --bg-inset:          #111827;  /* deep inset inside cards                         */
+  --bg-overlay:        rgba(0,0,0,0.65);
 
-  /* Active/highlight state — visible in dark mode */
-  --active-bg:      rgba(99, 102, 241, 0.2);  /* indigo-500/20 */
-  --active-text:    #a5b4fc;                   /* indigo-300 */
-  --active-border:  rgba(99, 102, 241, 0.4);
+  /* Text */
+  --text-prim:         #e8ecf8;  /* near-white with cool-blue undertone             */
+  --text-sec:          #7a85a8;  /* supporting — blue-grey                          */
+  --text-tert:         #454f6b;  /* placeholders, disabled                          */
+
+  /* Borders */
+  --border:            rgba(255,255,255,0.08);
+  --border-strong:     rgba(255,255,255,0.16);
+
+  /* Brand CTA — same navy, always */
+  --cta-bg:            #0b1330;
+  --cta-shadow:        #05070f;
+  --cta-text:          #ffffff;
+
+  /* Active */
+  --active-bg:         rgba(99,102,241,0.18);
+  --active-text:       #a5b4fc;
+  --active-border:     rgba(99,102,241,0.4);
+
+  /* Status — lifted for dark bg legibility */
+  --success:           #34d399;  /* emerald-400                                     */
+  --success-bg:        rgba(52,211,153,0.10);
+  --success-border:    rgba(52,211,153,0.25);
+  --danger:            #f87171;  /* red-400                                         */
+  --danger-bg:         rgba(248,113,113,0.10);
+  --danger-border:     rgba(248,113,113,0.25);
+  --warning:           #fbbf24;  /* amber-400                                       */
+  --warning-bg:        rgba(251,191,36,0.10);
+  --warning-border:    rgba(251,191,36,0.25);
+  --gold:              #ffc36b;
+  --gold-bright:       #ffc36b;
+
+  /* Navigation */
+  --nav-bg:            rgba(13,17,23,0.96);
+  --nav-border:        rgba(255,255,255,0.08);
+
+  /* Shadows — borders do the work in dark mode */
+  --shadow-xs:         none;
+  --shadow-sm:         none;
+  --shadow-card:       none;
+  --shadow-card-lg:    none;
+  --shadow-modal:      0 20px 60px rgba(0,0,0,0.6);
+  --shadow-cta:        0 6px 0 #05070f, 0 10px 20px rgba(0,0,0,0.50);
+  --shadow-cta-press:  0 2px 0 #05070f;
 }
 
-/* ── Base styles ──────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════════════ */
 @layer base {
-  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
   html, body {
     background-color: var(--bg-base);
     color: var(--text-prim);
     font-family: var(--font-jakarta), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   input, select, textarea {
     background-color: var(--bg-card);
     color: var(--text-prim);
+    border-color: var(--border);
   }
   input::placeholder, textarea::placeholder { color: var(--text-tert); }
 }
 
-/* ── Semantic utilities — use CSS vars, work automatically in light/dark ──── */
+/* ══════════════════════════════════════════════════════════════════════════
+   SEMANTIC UTILITIES
+   These are the only classes components should use for structural colour.
+   They auto-adapt to light/dark via CSS variables — zero dark: prefixes needed.
+   ══════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
-  .bg-base    { background-color: var(--bg-base);   }
-  .bg-card    { background-color: var(--bg-card);   }
-  .bg-subtle  { background-color: var(--bg-subtle); }
+  /* Surfaces */
+  .bg-base      { background-color: var(--bg-base);    }
+  .bg-card      { background-color: var(--bg-card);    }
+  .bg-subtle    { background-color: var(--bg-subtle);  }
+  .bg-inset     { background-color: var(--bg-inset);   }
 
+  /* Text */
   .text-primary   { color: var(--text-prim); }
   .text-secondary { color: var(--text-sec);  }
   .text-tertiary  { color: var(--text-tert); }
 
-  .border-default { border-color: var(--border); }
+  /* Borders */
+  .border-default { border-color: var(--border);        }
+  .border-strong  { border-color: var(--border-strong); }
   .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
 
-  /* Active/selected state — works in both modes automatically */
-  .bg-active      { background-color: var(--active-bg);     }
-  .text-active    { color:            var(--active-text);   }
-  .border-active  { border-color:     var(--active-border); }
+  /* Active / selected */
+  .bg-active     { background-color: var(--active-bg);     }
+  .text-active   { color:            var(--active-text);   }
+  .border-active { border-color:     var(--active-border); }
 
+  /* Status */
+  .text-success   { color: var(--success); }
+  .bg-success     { background-color: var(--success-bg);     }
+  .border-success { border-color:     var(--success-border); }
+  .text-danger    { color: var(--danger); }
+  .bg-danger      { background-color: var(--danger-bg);      }
+  .border-danger  { border-color:     var(--danger-border);  }
+  .text-warning   { color: var(--warning); }
+  .bg-warning     { background-color: var(--warning-bg);     }
+  .border-warning { border-color:     var(--warning-border); }
+  .text-gold      { color: var(--gold); }
+
+  /* Shadows */
+  .shadow-xs       { box-shadow: var(--shadow-xs);      }
+  .shadow-sm       { box-shadow: var(--shadow-sm);      }
+  .shadow-card     { box-shadow: var(--shadow-card);    }
+  .shadow-card-lg  { box-shadow: var(--shadow-card-lg); }
+  .shadow-modal    { box-shadow: var(--shadow-modal);   }
+  .shadow-cta      { box-shadow: var(--shadow-cta);     }
+
+  /* z-layers */
   .z-viewer { z-index: 100; }
   .z-modal  { z-index: 200; }
   .z-toast  { z-index: 300; }
