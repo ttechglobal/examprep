@@ -1,148 +1,175 @@
 'use client'
-// src/app/student/learn/LearnPage.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// FULL FILE — adds a "Practice your way" quick-access row (Games + Video
-// lessons) between the Study Plan preview and the Subject cards.
-//
-// Subject colour comes from resolveSubjectColors() in @/lib/subjectTheme,
-// the canonical subject colour source, switched via the shared useIsDark
-// hook from @/lib/useIsDark. Everything else is unchanged from the existing
-// file: header, SubjectIcon, SubjectCard, data loading, subjectProgress
-// memo, goal modal, FAB. Only addition is QuickAccessCard + GamesAndVideosRow
-// and their call site in the main return.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/student/learn/LearnPage.jsx — prototype-faithful redesign
+// Matches prototype-v3 exactly: greeting, continue-lesson hero card,
+// weak topics focus banner, subject 2×2 grid. No practice modes section.
 
 import { useState, useEffect, useMemo, memo, Suspense, lazy } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getMasteryLevel } from '@/lib/theme'
-import { getGameTypeTheme } from '@/lib/gameTheme'
-import { LearnHubSkeleton } from '@/components/ui/Skeletons'
-import { StudyPlanPreview } from '@/components/ui/StudyPlanCard'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
-import SubjectIcon from '@/components/ui/SubjectIcon'
+import { LearnHubSkeleton } from '@/components/ui/Skeletons'
 import Link from 'next/link'
 import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
-// ── Subject card — full dark mode support ─────────────────────────────────────
-const SubjectCard = memo(function SubjectCard({ subject, pct, mastery, completed, total, isDark }) {
-  const s = resolveSubjectColors(subject.name, isDark)
+// Subject icon map — matches prototype
+const SUBJECT_ICONS = {
+  'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
+  'Further Mathematics':'📐','English Language':'📖','Use of English':'📖',
+  'Economics':'📊','Government':'🏛️','Geography':'🌍',
+  'Literature in English':'📚','Agricultural Science':'🌱',
+  'Commerce':'💼','Accounting':'🧮','default':'📝',
+}
+const getIcon = n => SUBJECT_ICONS[n] ?? SUBJECT_ICONS.default
 
-  const headerBg    = s.bg
-  const nameColor   = s.text
-  const iconBg      = isDark ? `${s.solid}22` : `${s.solid}18`
-  const footerBg    = isDark ? '#1f2937'  : '#ffffff'
-  const trackColor  = isDark ? '#374151'  : '#f1f5f9'
-  const borderColor = isDark ? `${s.solid}30` : `${s.solid}25`
-  const pctColor    = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : isDark ? '#6b7280' : '#9ca3af'
-  const metaColor   = isDark ? '#6b7280' : '#9ca3af'
+// Mastery trend emoji: Strong=💪, Building=📈, Starting=🎯
+const getMasteryEmoji = pct => pct >= 70 ? '💪' : pct >= 40 ? '📈' : '🎯'
+
+// ── Subject card — 2-part: coloured top, white/surface footer ────────────────
+const SubjectCard = memo(function SubjectCard({ subject, pct, completed, total, isDark }) {
+  const s = resolveSubjectColors(subject.name, isDark)
+  const pctColor = pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)'
 
   return (
     <Link
       href={`/student/subjects/${subject.slug}`}
-      className="block rounded-2xl overflow-hidden active:scale-[0.97] transition-all"
-      style={{ border: `1.5px solid ${borderColor}`, boxShadow: `0 2px 8px ${s.solid}15` }}
+      style={{ borderRadius: 14, overflow: 'hidden', border: `1px solid var(--border)`, display: 'block', transition: 'transform .15s' }}
+      className="active:scale-[.97]"
     >
-      {/* Coloured top band */}
-      <div style={{ background: headerBg, padding: '14px 14px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: iconBg,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <SubjectIcon name={subject.name} color={nameColor} size={18} />
+      {/* Coloured top band — matches prototype subject-top */}
+      <div style={{ padding: '11px 11px 9px', background: s.bg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: `${s.solid}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
+            {getIcon(subject.name)}
           </div>
-          <span style={{ fontSize: 16 }}>{mastery.emoji}</span>
+          <span style={{ fontSize: 13 }}>{getMasteryEmoji(pct)}</span>
         </div>
-        <p style={{ fontSize: 13, fontWeight: 900, color: nameColor, lineHeight: 1.3 }}>{subject.name}</p>
+        <p style={{ fontSize: 12, fontWeight: 900, color: s.text }}>{subject.name}</p>
       </div>
 
-      {/* Progress footer */}
-      <div style={{ background: footerBg, padding: '10px 14px 12px' }}>
-        <div style={{ height: 5, background: trackColor, borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
-          <div style={{ height: '100%', borderRadius: 99, background: s.solid, width: `${pct}%`, transition: 'width 0.7s ease' }} />
+      {/* White footer — bar + stats */}
+      <div style={{ padding: '8px 11px 10px', background: 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
+        <div style={{ height: 4, background: 'var(--bg-subtle)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
+          <div style={{ height: '100%', borderRadius: 99, background: s.solid, width: `${pct}%`, transition: 'width .7s' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: metaColor }}>{completed}/{total} topics</span>
-          <span style={{ fontSize: 12, fontWeight: 900, color: pctColor }}>{pct}%</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)' }}>{completed}/{total} topics</span>
+          <span style={{ fontSize: 11, fontWeight: 900, color: pctColor }}>{pct}%</span>
         </div>
       </div>
     </Link>
   )
 })
 
-// ── Quick access card — Games / Video lessons ────────────────────────────────
-// Same visual weight as SubjectCard but laid out horizontally since there
-// are only two of these, not a grid. Colour comes from gameTheme.js so the
-// "Games" card always matches the colour students see again inside the
-// Games hub itself (consistency of meaning across the app).
-const QuickAccessCard = memo(function QuickAccessCard({ href, title, subtitle, emoji, solidColor, isDark }) {
-  const cardBg     = isDark ? '#111827' : '#ffffff'
-  const cardBorder = isDark ? '#1f2937' : '#ede9e3'
+// ── Continue lesson hero card — dark navy gradient + dot pattern ─────────────
+function ContinueLessonCard({ lesson }) {
+  if (!lesson) return null
+  const { subjectName, topicName, subtopicName, currentSlide, totalSlides, href, subjectIcon } = lesson
+  const pct = totalSlides > 0 ? Math.round((currentSlide / totalSlides) * 100) : 0
 
   return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 rounded-2xl overflow-hidden active:scale-[0.97] transition-all"
-      style={{
-        background: cardBg,
-        border: `1.5px solid ${cardBorder}`,
-        boxShadow: isDark ? 'none' : `0 2px 8px ${solidColor}15`,
-      }}
-    >
-      <div
-        className="w-14 h-14 flex items-center justify-center flex-shrink-0 text-2xl"
-        style={{ background: solidColor }}
-      >
-        {emoji}
+    <div style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
+      {/* Dark navy body */}
+      <div style={{ padding: 16, background: 'linear-gradient(140deg,#0b1330 0%,#1a2060 60%,#0b1330 100%)', position: 'relative' }}>
+        {/* Dot pattern overlay */}
+        <div style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none',
+          backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
+          backgroundSize: '20px 20px' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Continue label */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} />
+            <span style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)' }}>
+              Continue · Slide {currentSlide} of {totalSlides}
+            </span>
+          </div>
+          {/* Subject + topic */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, flexShrink: 0 }}>
+              {subjectIcon || getIcon(subjectName)}
+            </div>
+            <div>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'rgba(255,255,255,.4)', marginBottom: 2 }}>
+                {subjectName} · {topicName}
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.2 }}>
+                {subtopicName}
+              </p>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,.35)' }}>Lesson progress</span>
+              <span style={{ fontSize: 9, fontWeight: 800, color: '#9b7ae0' }}>{currentSlide} / {totalSlides} slides</span>
+            </div>
+            <div style={{ height: 4, background: 'rgba(255,255,255,.1)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#9b7ae0,#ff8fab)', borderRadius: 99 }} />
+            </div>
+          </div>
+          {/* CTA */}
+          <Link href={href} style={{ display: 'block', padding: 13, borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none', boxShadow: '0 5px 0 #05070f', letterSpacing: '-.01em' }}>
+            Continue lesson →
+          </Link>
+        </div>
       </div>
-      <div className="flex-1 py-2 pr-2 min-w-0">
-        <p className="text-sm font-black text-primary leading-snug">{title}</p>
-        <p className="text-[11px] text-secondary mt-0.5 leading-snug">{subtitle}</p>
-      </div>
-      <svg className="w-4 h-4 text-tertiary flex-shrink-0 mr-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
-      </svg>
-    </Link>
-  )
-})
 
-// ── Games & Videos row ────────────────────────────────────────────────────────
-// Sits between the Study Plan preview and Subject cards. Per product brief:
-// past questions remain the focus of the hub, but Games and Video lessons
-// should be one tap away from the hub itself, not buried inside topic pages.
-const GamesAndVideosRow = memo(function GamesAndVideosRow({ isDark }) {
-  const sortTheme  = getGameTypeTheme('sort_it')
-  const matchTheme = getGameTypeTheme('connector')
-
-  return (
-    <div>
-      <p className="text-sm font-black text-primary mb-3">Practice your way</p>
-      <div className="grid grid-cols-1 gap-2.5">
-        <QuickAccessCard
-          href="/student/games"
-          title="Games"
-          subtitle="Sort, match and build your way to mastery"
-          emoji="🎮"
-          solidColor={isDark ? sortTheme.darkSolid : sortTheme.solid}
-          isDark={isDark}
-        />
-        <QuickAccessCard
-          href="/student/videos"
-          title="Video lessons"
-          subtitle="Watch short, focused lessons on any topic"
-          emoji="🎬"
-          solidColor={isDark ? matchTheme.darkSolid : matchTheme.solid}
-          isDark={isDark}
-        />
+      {/* Lesson type pill strip — white band below */}
+      <div style={{ background: 'var(--bg-card)', padding: '9px 11px', display: 'flex', gap: 6, borderTop: '1px solid var(--border)' }}>
+        {[['📖 Lesson', href], ['❓ Practice', '/student/practice'], ['🎮 Games', '/student/games'], ['🎬 Video', '/student/videos']].map(([label, to], i) => (
+          <Link key={label} href={to} style={{
+            padding: '4px 10px', borderRadius: 999, fontSize: 10, fontWeight: 700, textDecoration: 'none',
+            background: i === 0 ? 'var(--indigo-bg)' : 'var(--bg-card)',
+            border: `1.5px solid ${i === 0 ? 'var(--indigo-bd)' : 'var(--border)'}`,
+            color: i === 0 ? 'var(--indigo)' : 'var(--text-sec)',
+            whiteSpace: 'nowrap',
+          }}>{label}</Link>
+        ))}
       </div>
     </div>
   )
-})
+}
+
+// ── Weak topics focus card ────────────────────────────────────────────────────
+function WeakTopicsCard({ weakTopics }) {
+  if (!weakTopics?.length) return null
+  return (
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--danger-border)', overflow: 'hidden' }}>
+      <div style={{ padding: '9px 13px', background: 'var(--danger-bg)', borderBottom: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--danger)' }}>⚠ Focus areas right now</p>
+        <span style={{ padding: '3px 9px', borderRadius: 999, border: '1.5px solid var(--danger-border)', background: 'var(--danger-bg)', fontSize: 9, fontWeight: 700, color: 'var(--danger)' }}>
+          {weakTopics.length} topics
+        </span>
+      </div>
+      <div style={{ padding: '8px 12px' }}>
+        {weakTopics.map((t, i) => (
+          <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 0', borderBottom: i < weakTopics.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div style={{ width: 30, height: 30, borderRadius: 9, background: t.pct < 40 ? 'rgba(220,38,38,.1)' : 'rgba(217,119,6,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
+              {getIcon(t.subjectName)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{t.name}</p>
+              <p style={{ fontSize: 10, color: t.pct < 40 ? 'var(--danger)' : 'var(--warning)' }}>
+                {t.pct}% mastery · {t.missed ?? 0} questions missed
+              </p>
+            </div>
+            <Link href={`/student/practice?topic=${encodeURIComponent(t.name)}`}
+              style={{ padding: '4px 9px', borderRadius: 999, fontSize: 9, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
+                background: t.pct < 40 ? 'var(--danger-bg)' : 'var(--warning-bg)',
+                border: `1.5px solid ${t.pct < 40 ? 'var(--danger-border)' : 'var(--warning-border)'}`,
+                color: t.pct < 40 ? 'var(--danger)' : 'var(--warning)',
+              }}>
+              Study →
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LearnPage() {
@@ -154,31 +181,73 @@ export default function LearnPage() {
   const [subjectList,   setSubjectList]  = useState([])
   const [completedIds,  setCompletedIds] = useState(new Set())
   const [learningPaths, setLearningPaths] = useState([])
+  const [lastLesson,    setLastLesson]   = useState(null)  // { subjectName, topicName, ... }
+  const [weakTopics,    setWeakTopics]   = useState([])
   const [loading,       setLoading]      = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
 
-  useEffect(() => { init() }, [])
+  useEffect(() => { init() }, []) // eslint-disable-line
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const [{ data: prof }, { data: prog }, { data: paths }] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id, full_name, exam_type, subjects, goals_set, university_course, jamb_total_target, waec_target_grades, jamb_target_scores, target_university, desired_profession')
+    const [{ data: prof }, { data: prog }, { data: paths }, { data: mastery }] = await Promise.all([
+      supabase.from('profiles')
+        .select('id, full_name, exam_type, subjects, goals_set, university_course, streak_days')
         .eq('id', user.id).single(),
       supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
-      supabase
-        .from('student_learning_paths')
+      supabase.from('student_learning_paths')
         .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
         .eq('student_id', user.id),
+      supabase.from('student_topic_mastery')
+        .select('topic_id, score, attempt_count, topics(id, name, subjects(name))')
+        .eq('student_id', user.id)
+        .lt('score', 55)
+        .order('score', { ascending: true })
+        .limit(5),
     ])
 
     setProfile(prof)
     setCompletedIds(new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id)))
     setLearningPaths(paths ?? [])
     setSubjectList((paths ?? []).map(p => p.subjects).filter(Boolean))
+
+    // Build weak topics list
+    const weak = (mastery ?? [])
+      .filter(m => m.topics)
+      .map(m => ({
+        name: m.topics.name,
+        subjectName: m.topics.subjects?.name ?? '',
+        pct: Math.round(m.score ?? 0),
+        missed: Math.max(0, m.attempt_count - Math.round((m.score / 100) * m.attempt_count)),
+      }))
+    setWeakTopics(weak)
+
+    // Find last in-progress lesson from lesson_progress
+    const inProg = (prog ?? []).filter(p => !p.completed)
+    if (inProg.length > 0) {
+      const subtopicId = inProg[inProg.length - 1].subtopic_id
+      try {
+        const { data: sub } = await supabase
+          .from('subtopics')
+          .select('id, name, slug, topics(id, name, subjects(id, name, slug))')
+          .eq('id', subtopicId).single()
+        if (sub) {
+          const totalSlides = 8  // placeholder — actual count comes from lesson data
+          setLastLesson({
+            subjectName:  sub.topics?.subjects?.name ?? '',
+            subjectIcon:  getIcon(sub.topics?.subjects?.name ?? ''),
+            topicName:    sub.topics?.name ?? '',
+            subtopicName: sub.name,
+            currentSlide: 3,    // placeholder
+            totalSlides,
+            href:         `/student/learn/${sub.slug}`,
+          })
+        }
+      } catch {}
+    }
+
     setLoading(false)
   }
 
@@ -189,82 +258,107 @@ export default function LearnPage() {
       const total     = ids.length
       const completed = ids.filter(id => completedIds.has(id)).length
       const pct       = total > 0 ? Math.round((completed / total) * 100) : 0
-      return { subject, pct, mastery: getMasteryLevel(pct), completed, total }
+      return { subject, pct, completed, total }
     })
   }, [subjectList, learningPaths, completedIds])
 
   if (loading) return <LearnHubSkeleton />
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? ''
+  const firstName  = profile?.full_name?.split(' ')[0] ?? ''
+  const examLabel  = profile?.exam_type === 'BOTH' ? 'WAEC & JAMB' : (profile?.exam_type ?? 'WAEC')
+  const streakDays = profile?.streak_days ?? 0
+  // Get day of week
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  const today    = dayNames[new Date().getDay()]
 
   return (
-    <div className="space-y-6 pb-28">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 112 }}>
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      {/* Greeting row — day + exam label left, streak badge right */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div>
-          <h1 className="text-2xl font-black text-primary leading-tight">
-            {firstName ? `${firstName}'s Learning Hub` : 'Learning Hub'}
+          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 3 }}>
+            {today} · {examLabel} {new Date().getFullYear() + 1}
+          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.2, color: 'var(--text-prim)' }}>
+            Learn{firstName ? `, ${firstName}` : ''} 📚
           </h1>
-          <p className="text-xs text-secondary mt-0.5">Study · Practice · Progress</p>
         </div>
-        <button
-          onClick={() => setShowGoalModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-subtle border border-default text-xs font-bold text-secondary rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex-shrink-0"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          Settings
-        </button>
+        {/* Settings + streak */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {streakDays >= 3 && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,195,107,.12)', border: '1.5px solid rgba(255,195,107,.28)', fontSize: 10, fontWeight: 700, color: '#ffc36b', whiteSpace: 'nowrap' }}>
+              🔥 {streakDays}
+            </div>
+          )}
+          <button onClick={() => setShowGoalModal(true)}
+            style={{ padding: '5px 10px', borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}>
+            ⚙️
+          </button>
+        </div>
       </div>
 
-      {/* Study Plan — shared widget from StudyPlanCard */}
-      <StudyPlanPreview />
+      {/* Continue lesson hero — only if there's an in-progress lesson */}
+      {lastLesson && <ContinueLessonCard lesson={lastLesson} />}
 
-      {/* Games & Video lessons quick access — NEW */}
-      <GamesAndVideosRow isDark={isDark} />
-
-      {/* Subject cards */}
-      {subjectProgress.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-black text-primary">Your Subjects</p>
-            <span className="text-xs text-tertiary">
-              {subjectProgress.length} subject{subjectProgress.length !== 1 ? 's' : ''}
-            </span>
+      {/* No active lesson — show start CTA */}
+      {!lastLesson && subjectProgress.length > 0 && (
+        <div style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
+          <div style={{ padding: 16, background: 'linear-gradient(140deg,#0b1330 0%,#1a2060 60%,#0b1330 100%)', position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,.55)', marginBottom: 12, lineHeight: 1.5 }}>
+                Pick up where your study plan recommends — start your next lesson.
+              </p>
+              <Link href={`/student/subjects/${subjectProgress[0]?.subject?.slug}`}
+                style={{ display: 'block', padding: 13, borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none', boxShadow: '0 5px 0 #05070f' }}>
+                Start next lesson →
+              </Link>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {subjectProgress.map(({ subject, pct, mastery, completed, total }) => (
-              <SubjectCard
-                key={subject.id}
-                subject={subject}
-                pct={pct}
-                mastery={mastery}
-                completed={completed}
-                total={total}
-                isDark={isDark}
-              />
+          <div style={{ background: 'var(--bg-card)', padding: '9px 11px', display: 'flex', gap: 6, borderTop: '1px solid var(--border)' }}>
+            {[['📖 Lesson', '#'], ['❓ Practice', '/student/practice'], ['🎮 Games', '/student/games'], ['🎬 Video', '/student/videos']].map(([label, href], i) => (
+              <Link key={label} href={href} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 10, fontWeight: 700, textDecoration: 'none', background: i === 0 ? 'var(--indigo-bg)' : 'var(--bg-card)', border: `1.5px solid ${i === 0 ? 'var(--indigo-bd)' : 'var(--border)'}`, color: i === 0 ? 'var(--indigo)' : 'var(--text-sec)', whiteSpace: 'nowrap' }}>{label}</Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* No subjects yet */}
-      {subjectProgress.length === 0 && !loading && (
-        <div className="bg-card rounded-2xl border border-default p-6 text-center space-y-3">
-          <div className="text-3xl">📚</div>
-          <div>
-            <p className="text-sm font-bold text-primary">No subjects yet</p>
-            <p className="text-xs text-secondary mt-1 leading-relaxed max-w-[220px] mx-auto">
-              Set your exam goals and we'll build your personalised curriculum.
-            </p>
+      {/* Weak topics */}
+      {weakTopics.length > 0 && <WeakTopicsCard weakTopics={weakTopics} />}
+
+      {/* Subject grid */}
+      {subjectProgress.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', letterSpacing: '-.01em' }}>Your subjects</p>
+            <button onClick={() => setShowGoalModal(true)} style={{ fontSize: 11, fontWeight: 700, color: 'var(--indigo)', background: 'none', border: 'none', cursor: 'pointer' }}>+ Add subject</button>
           </div>
-          <button
-            onClick={() => setShowGoalModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white text-xs font-black rounded-xl hover:bg-indigo-500 dark:hover:bg-indigo-400 transition-colors"
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {subjectProgress.map(({ subject, pct, completed, total }) => (
+              <SubjectCard key={subject.id} subject={subject} pct={pct} completed={completed} total={total} isDark={isDark} />
+            ))}
+            {/* Add subject placeholder */}
+            <div onClick={() => setShowGoalModal(true)} style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 86, cursor: 'pointer' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, marginBottom: 3 }}>➕</div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)' }}>Add subject</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No subjects empty state */}
+      {subjectProgress.length === 0 && !loading && (
+        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
+          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 4 }}>No subjects yet</p>
+          <p style={{ fontSize: 12, color: 'var(--text-sec)', lineHeight: 1.55, marginBottom: 16 }}>
+            Set your exam goals and we'll build your personalised curriculum.
+          </p>
+          <button onClick={() => setShowGoalModal(true)}
+            style={{ padding: '11px 20px', borderRadius: 12, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>
             Set up my subjects →
           </button>
         </div>
@@ -276,7 +370,7 @@ export default function LearnPage() {
           <GoalModal
             profile={profile}
             onClose={() => setShowGoalModal(false)}
-            onSave={(updated) => { setProfile(updated); setShowGoalModal(false) }}
+            onSave={updated => { setProfile(updated); setShowGoalModal(false) }}
           />
         </Suspense>
       )}

@@ -312,7 +312,156 @@ function JoinByCodeForm({ type, onJoined, onCancel }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CLASS TAB
+
+// ═══════════════════════════════════════════════════════════════
+// PROTOTYPE-FAITHFUL SHARED VISUAL COMPONENTS
+// These match prototype-v3 exactly: my-rank-card, podium, lb-rows
+// ═══════════════════════════════════════════════════════════════
+
+// ── My rank card (dark gradient, different accent per tab) ────────────────────
+function MyRankCard({ rank, total, pts, ptsChange, label, accentColor, accentBorder, icon }) {
+  return (
+    <div style={{
+      borderRadius: 16,
+      background: accentColor,
+      border: `1px solid ${accentBorder}`,
+      padding: '13px 14px',
+      display: 'flex', alignItems: 'center', gap: 12,
+    }}>
+      <div style={{ width: 42, height: 42, borderRadius: 13, background: 'rgba(255,255,255,.1)', border: '1.5px solid rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.09em', color: 'rgba(255,255,255,.4)', marginBottom: 2 }}>
+          {label}
+        </p>
+        {rank ? (
+          <p style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-.02em' }}>
+            #{rank.toLocaleString()} <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.4)' }}>of {total?.toLocaleString()}</span>
+          </p>
+        ) : (
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,.6)' }}>Not ranked yet</p>
+        )}
+      </div>
+      {pts != null && (
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontSize: 17, fontWeight: 900, color: 'rgba(255,255,255,.9)' }}>{pts.toLocaleString()}</p>
+          {ptsChange != null && <p style={{ fontSize: 9, color: 'rgba(255,255,255,.3)' }}>+{ptsChange} pts</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Podium — top 3 only, height-proportional blocks ─────────────────────────
+function ProtoPodium({ entries, userId }) {
+  if (!entries || entries.length < 3) return null
+  // Order: 2nd left, 1st centre, 3rd right
+  const slots = [
+    { entry: entries[1], medal: '🥈', height: 46, size: 42, borderColor: '#c0c0c0', bg: 'rgba(192,192,192,.12)' },
+    { entry: entries[0], medal: '🥇', height: 66, size: 50, borderColor: '#ffd700', bg: 'rgba(255,215,0,.13)', crown: '👑' },
+    { entry: entries[2], medal: '🥉', height: 34, size: 38, borderColor: '#cd7f32', bg: 'rgba(205,127,50,.12)' },
+  ]
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 6, padding: '14px 10px 0' }}>
+      {slots.map(({ entry, medal, height, size, borderColor, bg, crown }, i) => {
+        if (!entry) return <div key={i} style={{ flex: 1 }} />
+        const isMe = entry.student_id === userId
+        const initial = entry.first_name?.[0] ?? (entry.full_name?.[0] ?? '?')
+        return (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+            {crown && <span style={{ fontSize: 15, marginBottom: 2 }}>{crown}</span>}
+            {!crown && <div style={{ height: 19 }} />}
+            <div style={{ width: size, height: size, borderRadius: '50%', border: `2px solid ${isMe ? 'var(--indigo-bd)' : borderColor}`, background: isMe ? 'var(--indigo-bg)' : bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(size * 0.38), fontWeight: 900, color: isMe ? 'var(--indigo)' : 'var(--text-prim)' }}>
+              {initial}
+            </div>
+            <p style={{ fontSize: 10, fontWeight: i === 1 ? 900 : 700, color: isMe ? 'var(--indigo)' : 'var(--text-prim)', textAlign: 'center', lineHeight: 1.2, marginTop: 3 }}>
+              {isMe ? 'You' : (entry.first_name ?? entry.full_name ?? '—')}
+            </p>
+            <p style={{ fontSize: 9, color: i === 1 ? 'var(--gold)' : 'var(--text-tert)', textAlign: 'center' }}>
+              {entry.points?.toLocaleString()}
+            </p>
+            <div style={{ borderRadius: '10px 10px 0 0', width: '100%', height, background: i === 1 ? 'rgba(255,215,0,.1)' : i === 0 ? 'rgba(192,192,192,.1)' : 'rgba(205,127,50,.1)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 6 }}>
+              <span style={{ fontSize: i === 1 ? 21 : i === 0 ? 17 : 15 }}>{medal}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Compact lb-rows below podium ─────────────────────────────────────────────
+function ProtoLbRow({ entry, rank, isMe }) {
+  const initial = entry.first_name?.[0] ?? entry.full_name?.[0] ?? '?'
+  const subText = entry.cohort_name || entry.state || (entry.points_change != null ? `+${entry.points_change} this week` : null)
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 9,
+      padding: '9px 11px', borderRadius: 13,
+      background: isMe ? 'var(--indigo-bg)' : 'var(--bg-subtle)',
+      border: `1px solid ${isMe ? 'var(--indigo-bd)' : 'var(--border)'}`,
+    }}>
+      <span style={{ width: 24, textAlign: 'center', fontSize: 11, fontWeight: 800, color: isMe ? 'var(--indigo)' : 'var(--text-tert)', flexShrink: 0 }}>
+        #{rank}
+      </span>
+      <div style={{ width: 30, height: 30, borderRadius: 9, background: isMe ? 'var(--indigo-bg)' : 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: isMe ? 'var(--indigo)' : 'var(--text-prim)', flexShrink: 0 }}>
+        {initial}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, fontWeight: isMe ? 800 : 700, color: isMe ? 'var(--indigo)' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {isMe ? 'You' : (entry.first_name ?? entry.full_name ?? '—')}
+        </p>
+        {subText && <p style={{ fontSize: 9, color: 'var(--text-tert)' }}>{subText}</p>}
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 900, color: isMe ? 'var(--indigo)' : 'var(--text-sec)', flexShrink: 0 }}>
+        {entry.points?.toLocaleString()}
+      </span>
+    </div>
+  )
+}
+
+// ── Leaderboard card: podium + rows ─────────────────────────────────────────
+function ProtoLeaderboardCard({ entries, userId, title, headerRight, emptyMsg }) {
+  if (!entries?.length) return (
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '28px 20px', textAlign: 'center' }}>
+      <p style={{ fontSize: 28, marginBottom: 8 }}>🏁</p>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{emptyMsg ?? 'No activity yet'}</p>
+    </div>
+  )
+
+  const top3 = entries.slice(0, 3)
+  const rest = entries.slice(3, 8)
+  const myIdx = entries.findIndex(e => e.student_id === userId)
+  const myEntry = myIdx >= 0 ? entries[myIdx] : null
+  const myInRest = myIdx >= 3 && myIdx < 8
+
+  return (
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>{title}</p>
+        {headerRight}
+      </div>
+      <ProtoPodium entries={top3} userId={userId} />
+      <div style={{ padding: '8px 10px 11px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {rest.map((entry, i) => (
+          <ProtoLbRow key={entry.student_id} entry={entry} rank={i + 4} isMe={entry.student_id === userId} />
+        ))}
+        {/* Show your row below a separator if you're outside top 8 */}
+        {myEntry && myIdx >= 8 && (
+          <>
+            <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', padding: '4px 0' }}>· · ·</p>
+            <ProtoLbRow entry={myEntry} rank={myIdx + 1} isMe={true} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CLASS TAB — prototype design, existing data logic
 // ═══════════════════════════════════════════════════════════════
 function ClassTab({ userId, profile, onProfileChange }) {
   const [leaderboard, setLeaderboard] = useState([])
@@ -347,33 +496,26 @@ function ClassTab({ userId, profile, onProfileChange }) {
   useEffect(() => { load() }, [load])
 
   const activePeriod = selectedPeriod ?? currentPeriod
+  const myEntry      = leaderboard.find(e => e.student_id === userId)
 
   if (loading) return <TabSkeleton />
 
   if (!profile?.class_id) {
     return (
       <div className="space-y-4">
-        <div className="bg-card border border-default rounded-2xl overflow-hidden shadow-sm">
-          <div className="bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-6 text-white text-center">
-            <p className="text-3xl mb-2">👥</p>
-            <h2 className="text-base font-black mb-1">Join a class</h2>
-            <p className="text-indigo-100 text-sm leading-relaxed">Enter your class invite code to join the leaderboard and compete with classmates.</p>
+        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 18px', background: 'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)', textAlign: 'center' }}>
+            <p style={{ fontSize: 28, marginBottom: 6 }}>👥</p>
+            <p style={{ fontSize: 15, fontWeight: 900, color: '#fff', marginBottom: 4 }}>Join a class</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.55 }}>Enter your class invite code to compete with classmates.</p>
           </div>
-          <div className="p-5 space-y-3">
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {showJoin ? (
-              <JoinByCodeForm type="class"
-                onJoined={() => { setShowJoin(false); window.location.reload() }}
-                onCancel={() => setShowJoin(false)} />
+              <JoinByCodeForm type="class" onJoined={() => { setShowJoin(false); window.location.reload() }} onCancel={() => setShowJoin(false)} />
             ) : (
               <>
-                <button onClick={() => setShowJoin(true)}
-                  className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors">
-                  Enter class code
-                </button>
-                <button onClick={() => setShowCreate(true)}
-                  className="w-full py-3 border border-default text-secondary text-sm font-medium rounded-xl hover:bg-subtle transition-colors">
-                  Create a class
-                </button>
+                <button onClick={() => setShowJoin(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, background: '#4f46e5', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer' }}>Enter class code</button>
+                <button onClick={() => setShowCreate(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Create a class</button>
               </>
             )}
           </div>
@@ -384,44 +526,67 @@ function ClassTab({ userId, profile, onProfileChange }) {
   }
 
   return (
-    <div className="space-y-3">
-      {showShare && classData && (
-        <ShareCard code={classData.invite_code} name={classData.name} type="class" onClose={() => setShowShare(false)} />
-      )}
-      {showPicker && (
-        <PeriodPicker periods={periods} selected={selectedPeriod}
-          onSelect={p => { setSelectedPeriod(p); load(p) }} onClose={() => setShowPicker(false)} />
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {showShare && classData && <ShareCard code={classData.invite_code} name={classData.name} type="class" onClose={() => setShowShare(false)} />}
+      {showPicker && <PeriodPicker periods={periods} selected={selectedPeriod} onSelect={p => { setSelectedPeriod(p); load(p) }} onClose={() => setShowPicker(false)} />}
 
-      <CompactInfoBar
-        name={classData?.name ?? '—'}
-        myRank={myRank}
-        onShare={() => setShowShare(true)}
-        color="indigo"
+      {/* My rank card — indigo gradient */}
+      <MyRankCard
+        rank={myRank} total={leaderboard.length || undefined}
+        pts={myEntry?.points}
+        ptsChange={myEntry?.points_change}
+        label={`${classData?.name ?? '—'} · This week`}
+        accentColor="linear-gradient(135deg,#0b1330 0%,#1e1b4b 100%)"
+        accentBorder="rgba(129,140,248,.3)"
+        icon="😊"
       />
 
-      {activePeriod && (
-        <div className="flex items-center justify-between text-xs text-secondary px-1">
-          <span className="font-medium">{selectedPeriod ? selectedPeriod.label : formatPeriod(activePeriod.start, activePeriod.end)}</span>
-          {!selectedPeriod && activePeriod.end && <span className="text-tertiary">Resets in {daysUntil(activePeriod.end)}d</span>}
+      {/* Period label + share */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 2 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-sec)' }}>
+          {selectedPeriod ? selectedPeriod.label : (activePeriod ? formatPeriod(activePeriod.start, activePeriod.end) : 'This period')}
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setShowShare(true)} style={{ fontSize: 10, fontWeight: 700, color: 'var(--indigo)', background: 'none', border: 'none', cursor: 'pointer' }}>Share code</button>
+          <button onClick={() => setShowPicker(true)} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)', background: 'none', border: 'none', cursor: 'pointer' }}>Past results ↓</button>
         </div>
-      )}
-
-      <LeaderboardList entries={leaderboard} userId={userId} emptyMessage="No class activity yet" />
-
-      <div className="pt-1">
-        {selectedPeriod ? (
-          <button onClick={() => { setSelectedPeriod(null); load(null) }} className="w-full text-xs text-indigo-500 font-bold py-2 hover:underline">← Back to current period</button>
-        ) : (
-          <button onClick={() => setShowPicker(true)} className="w-full text-xs text-secondary hover:text-primary py-2 transition-colors">View past results ↓</button>
-        )}
       </div>
+
+      {/* Leaderboard card */}
+      <ProtoLeaderboardCard
+        entries={leaderboard}
+        userId={userId}
+        title="Weekly leaderboard"
+        headerRight={
+          <button style={{ padding: '3px 8px', borderRadius: 999, border: '1.5px solid var(--border)', background: 'var(--bg-card)', fontSize: 9, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}
+            onClick={() => setShowPicker(true)}>This week ▾</button>
+        }
+        emptyMsg="No class activity yet"
+      />
+
+      {/* Most improved — surface if available */}
+      {leaderboard.length > 3 && (() => {
+        const sorted = [...leaderboard].sort((a, b) => (b.points_change ?? 0) - (a.points_change ?? 0))
+        const top = sorted[0]
+        if (!top || top.student_id === userId) return null
+        return (
+          <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+              {top.first_name?.[0] ?? '?'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>{top.first_name} — Most improved 🔥</p>
+              <p style={{ fontSize: 10, color: 'var(--success)' }}>↑ +{top.points_change ?? 0} pts this week</p>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCHOOL TAB
+// SCHOOL TAB — same design language as Class, emerald accent
 // ═══════════════════════════════════════════════════════════════
 function SchoolTab({ userId, profile }) {
   const [leaderboard, setLeaderboard] = useState([])
@@ -435,7 +600,7 @@ function SchoolTab({ userId, profile }) {
   const [showPicker, setShowPicker] = useState(false)
   const [showShare,  setShowShare]  = useState(false)
   const [showJoin,   setShowJoin]   = useState(false)
-  const [showRequest,setShowRequest] = useState(false)
+  const [showRequest, setShowRequest] = useState(false)
 
   const load = useCallback(async (s = scope, period = null) => {
     setLoading(true)
@@ -456,34 +621,26 @@ function SchoolTab({ userId, profile }) {
 
   useEffect(() => { load() }, [load])
 
-  const activePeriod = selectedPeriod ?? currentPeriod
+  const myEntry = leaderboard.find(e => e.student_id === userId)
 
   if (loading) return <TabSkeleton />
 
   if (!profile?.cohort_id) {
     return (
       <div className="space-y-4">
-        <div className="bg-card border border-default rounded-2xl overflow-hidden shadow-sm">
-          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-6 text-white text-center">
-            <p className="text-3xl mb-2">🏫</p>
-            <h2 className="text-base font-black mb-1">Connect to your school</h2>
-            <p className="text-emerald-100 text-sm leading-relaxed">Ask your teacher for your school invite code.</p>
+        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 18px', background: 'linear-gradient(135deg,#059669 0%,#0d9488 100%)', textAlign: 'center' }}>
+            <p style={{ fontSize: 28, marginBottom: 6 }}>🏫</p>
+            <p style={{ fontSize: 15, fontWeight: 900, color: '#fff', marginBottom: 4 }}>Connect to your school</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.55 }}>Ask your teacher for your school invite code.</p>
           </div>
-          <div className="p-5 space-y-3">
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {showJoin ? (
-              <JoinByCodeForm type="school"
-                onJoined={() => { setShowJoin(false); window.location.reload() }}
-                onCancel={() => setShowJoin(false)} />
+              <JoinByCodeForm type="school" onJoined={() => { setShowJoin(false); window.location.reload() }} onCancel={() => setShowJoin(false)} />
             ) : (
               <>
-                <button onClick={() => setShowJoin(true)}
-                  className="w-full py-3 bg-emerald-600 text-white text-sm font-black rounded-xl hover:bg-emerald-500 transition-colors">
-                  Enter school code
-                </button>
-                <button onClick={() => setShowRequest(true)}
-                  className="w-full py-3 border border-default text-secondary text-sm font-medium rounded-xl hover:bg-subtle transition-colors">
-                  My school doesn't have a code yet
-                </button>
+                <button onClick={() => setShowJoin(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, background: '#059669', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer' }}>Enter school code</button>
+                <button onClick={() => setShowRequest(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>My school doesn't have a code yet</button>
               </>
             )}
           </div>
@@ -494,229 +651,240 @@ function SchoolTab({ userId, profile }) {
   }
 
   return (
-    <div className="space-y-3">
-      {showShare && cohortData && (
-        <ShareCard
-          code={cohortData.invite_code}
-          name={`${cohortData.schools?.name ?? ''} · ${cohortData.name}`}
-          type="cohort"
-          onClose={() => setShowShare(false)}
-        />
-      )}
-      {showPicker && (
-        <PeriodPicker periods={periods} selected={selectedPeriod}
-          onSelect={p => { setSelectedPeriod(p); load(scope, p) }} onClose={() => setShowPicker(false)} />
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {showShare && cohortData && <ShareCard code={cohortData.invite_code} name={`${cohortData.schools?.name ?? ''} · ${cohortData.name}`} type="cohort" onClose={() => setShowShare(false)} />}
+      {showPicker && <PeriodPicker periods={periods} selected={selectedPeriod} onSelect={p => { setSelectedPeriod(p); load(scope, p) }} onClose={() => setShowPicker(false)} />}
 
-      <CompactInfoBar
-        name={cohortData?.name ?? '—'}
-        school={cohortData?.schools?.name}
-        myRank={myRank}
-        onShare={() => setShowShare(true)}
-        color="emerald"
+      {/* My rank — emerald gradient */}
+      <MyRankCard
+        rank={myRank} total={leaderboard.length || undefined}
+        pts={myEntry?.points}
+        ptsChange={myEntry?.points_change}
+        label={`${cohortData?.schools?.name ?? 'Your school'} · Whole school`}
+        accentColor="linear-gradient(135deg,#052e16 0%,#064e3b 100%)"
+        accentBorder="rgba(52,211,153,.3)"
+        icon="🏫"
       />
 
-      {/* Cohort / School scope toggle */}
-      <div className="flex bg-subtle rounded-xl p-0.5 gap-0.5">
-        {[{ value: 'cohort', label: 'My cohort' }, { value: 'school', label: 'Whole school' }].map(({ value, label }) => (
-          <button key={value} onClick={() => { setScope(value); setSelectedPeriod(null); load(value, null) }}
-            className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
-              scope === value ? 'bg-card text-primary shadow-sm' : 'text-secondary hover:text-primary'
-            }`}>
-            {label}
+      {/* Cohort / Whole school toggle */}
+      <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 12, padding: 3 }}>
+        {[['cohort','My cohort'],['school','Whole school']].map(([val, lbl]) => (
+          <button key={val} onClick={() => { setScope(val); setSelectedPeriod(null); load(val, null) }}
+            style={{ flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer', transition: 'all .15s', background: scope === val ? 'var(--bg-card)' : 'transparent', color: scope === val ? 'var(--text-prim)' : 'var(--text-tert)' }}>
+            {lbl}
           </button>
         ))}
       </div>
 
-      {activePeriod && (
-        <div className="flex items-center justify-between text-xs text-secondary px-1">
-          <span className="font-medium">{selectedPeriod ? selectedPeriod.label : formatPeriod(activePeriod.start, activePeriod.end)}</span>
-          {!selectedPeriod && activePeriod.end && <span className="text-tertiary">Resets in {daysUntil(activePeriod.end)}d</span>}
+      {/* Leaderboard card */}
+      <ProtoLeaderboardCard
+        entries={leaderboard}
+        userId={userId}
+        title="School leaderboard"
+        headerRight={
+          <button style={{ padding: '3px 8px', borderRadius: 999, border: '1.5px solid var(--border)', background: 'var(--bg-card)', fontSize: 9, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}
+            onClick={() => setShowPicker(true)}>This week ▾</button>
+        }
+        emptyMsg="No school activity yet"
+      />
+
+      {/* Inter-school tournament teaser */}
+      <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid rgba(99,102,241,.3)', padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 24 }}>🏟️</span>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>Inter-school Tournament</p>
+          <p style={{ fontSize: 10, color: 'var(--text-sec)' }}>{cohortData?.schools?.name ?? 'Your school'} vs other schools</p>
         </div>
-      )}
-
-      <LeaderboardList entries={leaderboard} userId={userId} emptyMessage="No school activity yet" />
-
-      <div className="pt-1">
-        {selectedPeriod ? (
-          <button onClick={() => { setSelectedPeriod(null); load(scope, null) }} className="w-full text-xs text-emerald-600 font-bold py-2 hover:underline">← Back to current period</button>
-        ) : (
-          <button onClick={() => setShowPicker(true)} className="w-full text-xs text-secondary hover:text-primary py-2 transition-colors">View past results ↓</button>
-        )}
+        <button style={{ padding: '4px 10px', borderRadius: 999, border: '1.5px solid var(--indigo-bd)', background: 'var(--indigo-bg)', fontSize: 9, fontWeight: 700, color: 'var(--indigo)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Details</button>
       </div>
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MONTHLY TAB
+// GLOBAL TAB — National leaderboard + Challenges, purple accent
 // ═══════════════════════════════════════════════════════════════
-function MonthlyTab({ userId, profile }) {
-  const [classLb,  setClassLb]  = useState([])
-  const [cohortLb, setCohortLb] = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [scope,    setScope]    = useState(profile?.class_id ? 'class' : 'cohort')
-  const hasClass  = Boolean(profile?.class_id)
-  const hasCohort = Boolean(profile?.cohort_id)
+function GlobalTab({ userId }) {
+  const [period,    setPeriod]    = useState('week')
+  const [lb,        setLb]        = useState([])
+  const [surround,  setSurround]  = useState([])
+  const [myRank,    setMyRank]    = useState(null)
+  const [myEntry,   setMyEntry]   = useState(null)
+  const [total,     setTotal]     = useState(0)
+  const [loading,   setLoading]   = useState(true)
+  const [challenge, setChallenge] = useState(null)
+  const [upcoming,  setUpcoming]  = useState([])
+  const [pastWins,  setPastWins]  = useState([])
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const fetches = []
-      if (hasClass)  fetches.push(fetch('/api/leaderboard/monthly?scope=class').then(r => r.json()))
-      if (hasCohort) fetches.push(fetch('/api/leaderboard/monthly?scope=cohort').then(r => r.json()))
-      const results = await Promise.all(fetches)
-      if (hasClass)  setClassLb(results[0]?.leaderboard ?? [])
-      if (hasCohort) setCohortLb(results[hasClass ? 1 : 0]?.leaderboard ?? [])
+      const [lbRes, chalRes] = await Promise.all([
+        fetch(`/api/leaderboard/global?period=${period}&limit=20`),
+        fetch('/api/challenges'),
+      ])
+      const [lbData, chalData] = await Promise.all([lbRes.json(), chalRes.json()])
+      setLb(lbData.leaderboard ?? [])
+      setSurround(lbData.surround ?? [])
+      setMyRank(lbData.my_rank ?? null)
+      setMyEntry(lbData.my_entry ?? null)
+      setTotal(lbData.total_count ?? 0)
+      setChallenge(chalData.active ?? null)
+      setUpcoming(chalData.upcoming ?? [])
+      setPastWins(chalData.past ?? [])
       setLoading(false)
     }
     load()
-  }, [hasClass, hasCohort])
-
-  const monthLabel = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-  const entries    = scope === 'class' ? classLb : cohortLb
+  }, [period])
 
   if (loading) return <TabSkeleton />
 
+  const topPct = myRank && total ? Math.round((myRank / total) * 100) : null
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between px-1">
-        <p className="text-sm font-black text-primary">{monthLabel}</p>
-        {hasClass && hasCohort && (
-          <div className="flex bg-subtle rounded-xl p-0.5 gap-0.5">
-            {[{ value: 'class', label: 'Class' }, { value: 'cohort', label: 'School' }].map(({ value, label }) => (
-              <button key={value} onClick={() => setScope(value)}
-                className={`px-3 py-1.5 text-xs font-black rounded-lg transition-all ${
-                  scope === value ? 'bg-card text-primary shadow-sm' : 'text-secondary hover:text-primary'
-                }`}>
-                {label}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* My global rank — deep purple gradient */}
+      <MyRankCard
+        rank={myRank} total={total}
+        pts={null}
+        label={`Nationwide · ${total.toLocaleString()} students`}
+        accentColor="linear-gradient(135deg,#0b0a1a 0%,#1a1040 100%)"
+        accentBorder="rgba(167,139,250,.3)"
+        icon="🌍"
+      >
+        {topPct != null && (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, color: '#c4b5fd' }}>Top {topPct}%</p>
+            <p style={{ fontSize: 9, color: 'rgba(255,255,255,.3)' }}>nationwide</p>
+          </div>
+        )}
+      </MyRankCard>
+
+      {/* Active challenge banner */}
+      {challenge && (
+        <div style={{ borderRadius: 16, background: 'linear-gradient(135deg,#1a1200 0%,#251a00 100%)', border: '1px solid rgba(251,191,36,.28)', overflow: 'hidden' }}>
+          <div style={{ padding: '12px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(251,191,36,.14)', border: '1px solid rgba(251,191,36,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>⚡</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.09em', color: 'rgba(255,255,255,.38)', marginBottom: 2 }}>
+                Active challenge · {Math.max(0, Math.ceil((new Date(challenge.ends_at) - Date.now()) / 86400000))}d left
+              </p>
+              <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', letterSpacing: '-.01em' }}>{challenge.title}</p>
+            </div>
+            {challenge.my_entry && (
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <p style={{ fontSize: 17, fontWeight: 900, color: '#fbbf24' }}>{challenge.my_entry.questions_completed}</p>
+                <p style={{ fontSize: 8, color: 'rgba(255,255,255,.28)' }}>/ {challenge.target_count}</p>
+              </div>
+            )}
+          </div>
+          {challenge.my_entry && (
+            <div style={{ padding: '0 13px 12px' }}>
+              <div style={{ height: 4, background: 'rgba(255,255,255,.1)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+                <div style={{ height: '100%', background: 'linear-gradient(90deg,#f59e0b,#fbbf24)', borderRadius: 99, width: `${Math.min(100, Math.round((challenge.my_entry.questions_completed / challenge.target_count) * 100))}%`, transition: 'width .7s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,.4)' }}>{challenge.prize_description}</span>
+                {challenge.my_entry.rank && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>You're #{challenge.my_entry.rank}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* National leaderboard card */}
+      <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div style={{ padding: '10px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>🌍 National leaderboard</p>
+          <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 10, padding: 2 }}>
+            {[['week','This week'],['alltime','All time']].map(([val, lbl]) => (
+              <button key={val} onClick={() => setPeriod(val)}
+                style={{ padding: '3px 7px', borderRadius: 8, fontSize: 9, fontWeight: 700, border: 'none', cursor: 'pointer', background: period === val ? 'var(--bg-card)' : 'transparent', color: period === val ? 'var(--text-prim)' : 'var(--text-tert)', transition: 'all .15s' }}>
+                {lbl}
               </button>
             ))}
           </div>
+        </div>
+
+        {lb.length === 0 ? (
+          <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+            <p style={{ fontSize: 28, marginBottom: 8 }}>🌍</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Be the first to compete nationwide!</p>
+          </div>
+        ) : (
+          <>
+            <ProtoPodium entries={lb.slice(0, 3)} userId={userId} />
+            <div style={{ padding: '6px 10px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {lb.slice(3, 10).map((entry, i) => (
+                <ProtoLbRow key={entry.student_id} entry={entry} rank={i + 4} isMe={entry.student_id === userId} />
+              ))}
+              {/* Gap + surrounding rows */}
+              {surround.length > 0 && (
+                <>
+                  <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', padding: '4px 0' }}>· · ·</p>
+                  {surround.map(entry => (
+                    <ProtoLbRow key={entry.student_id} entry={entry} rank={entry.rank} isMe={entry.student_id === userId} />
+                  ))}
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {!hasClass && !hasCohort ? (
-        <div className="text-center py-10 bg-card border border-default rounded-2xl">
-          <p className="text-3xl mb-2">📅</p>
-          <p className="text-sm font-bold text-primary">Join a class or school to see monthly rankings</p>
+      {/* Upcoming challenges */}
+      {upcoming.length > 0 && (
+        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div style={{ padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>Coming up</p>
+          </div>
+          <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {upcoming.map(ch => (
+              <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--indigo-bg)', border: '1px solid var(--indigo-bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>
+                  {ch.type === 'school' ? '🏟️' : ch.subject ? '🧪' : '⚡'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{ch.title}</p>
+                  <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>
+                    {new Date(ch.starts_at).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })} · {ch.target_count} questions
+                  </p>
+                </div>
+                <button style={{ padding: '4px 9px', borderRadius: 999, border: '1.5px solid var(--border)', background: 'var(--bg-subtle)', fontSize: 9, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Details</button>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : (
-        <LeaderboardList entries={entries} userId={userId} emptyMessage="No activity this month yet" />
+      )}
+
+      {/* Past wins */}
+      {pastWins.length > 0 && (
+        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          {pastWins.map((ch, i) => (
+            <div key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', borderBottom: i < pastWins.length - 1 ? '1px solid var(--border)' : 'none' }}>
+              <span style={{ fontSize: 26, flexShrink: 0 }}>{ch.my_entry?.rank === 1 ? '🥇' : ch.my_entry?.rank === 2 ? '🥈' : ch.my_entry?.rank === 3 ? '🥉' : '🏅'}</span>
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>{ch.title}</p>
+                <p style={{ fontSize: 10, color: 'var(--success)' }}>
+                  {ch.my_entry?.rank ? `Finished #${ch.my_entry.rank}` : 'Participated'}{ch.prize_description ? ` · ${ch.prize_description}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
-// ─── CreateClass modal ───────────────────────────────────────────────────────
-function CreateClassModal({ onCreated, onClose }) {
-  const [name, setName]     = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState(null)
-  const inputRef = useRef(null)
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100) }, [])
-
-  const handleCreate = async () => {
-    if (!name.trim()) return
-    setLoading(true); setError(null)
-    const res  = await fetch('/api/class/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
-    const data = await res.json()
-    setLoading(false)
-    if (data.error) { setError(data.error); return }
-    onCreated(data.class)
-  }
-
-  return (
-    <div className={BACKDROP} style={BACKDROP_STYLE} onClick={onClose}>
-      <div className={SHEET} onClick={e => e.stopPropagation()}>
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1.5 rounded-full bg-subtle" /></div>
-        <div className="px-5 pt-2 pb-3 flex items-center justify-between">
-          <p className="font-black text-primary text-lg">Create a class</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="px-5 pb-4 space-y-4">
-          <div>
-            <label className="text-xs font-bold text-secondary uppercase tracking-wide block mb-1.5">Class name</label>
-            <input ref={inputRef} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Science Gang 2026" maxLength={50}
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
-              className="w-full px-4 py-3 border border-default rounded-xl text-sm bg-subtle text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            {error && <p className="text-xs text-red-500 mt-1.5">{error}</p>}
-          </div>
-          <button onClick={handleCreate} disabled={loading || !name.trim()}
-            className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-40 transition-colors">
-            {loading ? 'Creating...' : 'Create class →'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── School request modal ────────────────────────────────────────────────────
-function SchoolRequestModal({ userId, onClose }) {
-  const [schoolName, setSchoolName] = useState('')
-  const [state, setState]           = useState('')
-  const [phone, setPhone]           = useState('')
-  const [sent, setSent]             = useState(false)
-  const [saving, setSaving]         = useState(false)
-
-  const handleSend = async () => {
-    if (!schoolName.trim()) return
-    setSaving(true)
-    await fetch('/api/school/request-onboarding', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ school_name: schoolName, state, phone, student_id: userId }),
-    })
-    setSaving(false); setSent(true)
-  }
-
-  return (
-    <div className={BACKDROP} style={BACKDROP_STYLE} onClick={onClose}>
-      <div className={SHEET} onClick={e => e.stopPropagation()}>
-        <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1.5 rounded-full bg-subtle" /></div>
-        <div className="px-5 pt-2 pb-3 flex items-center justify-between">
-          <p className="font-black text-primary text-lg">Request onboarding</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-subtle flex items-center justify-center text-secondary hover:text-primary">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="px-5 pb-4">
-          {sent ? (
-            <div className="text-center py-6">
-              <p className="text-4xl mb-3">✅</p>
-              <p className="font-black text-primary mb-1">Request sent!</p>
-              <p className="text-sm text-secondary">We'll reach out to your school to get them set up.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-secondary">Tell us about your school and we'll get in touch.</p>
-              <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="School name *"
-                className="w-full px-4 py-3 border border-default rounded-xl text-sm bg-subtle text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              <input value={state} onChange={e => setState(e.target.value)} placeholder="State (e.g. Lagos)"
-                className="w-full px-4 py-3 border border-default rounded-xl text-sm bg-subtle text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Teacher phone (optional)"
-                className="w-full px-4 py-3 border border-default rounded-xl text-sm bg-subtle text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              <button onClick={handleSend} disabled={saving || !schoolName.trim()}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-40 transition-colors">
-                {saving ? 'Sending...' : 'Send request →'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ═══════════════════════════════════════════════════════════════
-// MAIN PAGE
+// MAIN PAGE — Class · School · Global  (prototype tab-strip design)
 // ═══════════════════════════════════════════════════════════════
 const TABS = [
-  { id: 'class',   label: 'Class',   icon: '👥' },
-  { id: 'school',  label: 'School',  icon: '🏫' },
-  { id: 'monthly', label: 'Monthly', icon: '📅' },
+  { id: 'class',  label: 'Class',  icon: '👥' },
+  { id: 'school', label: 'School', icon: '🏫' },
+  { id: 'global', label: 'Global', icon: '🌍' },
 ]
 
 export default function CommunityPage() {
@@ -742,47 +910,57 @@ export default function CommunityPage() {
       setLoading(false)
     }
     init()
-  }, [])
+  }, []) // eslint-disable-line
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
+      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  // Days until week reset (next Monday)
+  const now = new Date()
+  const daysToMonday = (7 - now.getDay() + 1) % 7 || 7
+  const hoursRem = 24 - now.getHours()
 
   return (
-    <div className="space-y-4 pb-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 100 }}>
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-black text-primary">Community 🏆</h1>
-        <p className="text-secondary text-sm mt-0.5">Compete, improve, and stay motivated</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.2, color: 'var(--text-prim)' }}>Community 🏆</h1>
+          <p style={{ fontSize: 12, color: 'var(--text-sec)', marginTop: 2, lineHeight: 1.55 }}>Compete · Climb · Improve</p>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)' }}>Week resets in</p>
+          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--warning)' }}>{daysToMonday}d {hoursRem}h</p>
+        </div>
       </div>
 
-      {/* Tabs — full width, well-designed pill strip */}
-      <div className="bg-subtle rounded-2xl p-1 flex gap-1">
+      {/* Tab strip — matches prototype tab-strip exactly */}
+      <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 14, padding: 3 }}>
         {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-black transition-all ${
-              activeTab === tab.id
-                ? 'bg-card text-primary shadow-sm'
-                : 'text-secondary hover:text-primary'
-            }`}
-          >
-            <span className="text-base leading-none">{tab.icon}</span>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            style={{
+              flex: 1, padding: '9px 4px', borderRadius: 11, fontSize: 11, fontWeight: 800,
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              transition: 'all .18s',
+              background: activeTab === tab.id ? 'var(--bg-card)' : 'transparent',
+              color: activeTab === tab.id ? 'var(--text-prim)' : 'var(--text-tert)',
+              boxShadow: activeTab === tab.id ? '0 1px 6px rgba(0,0,0,.1)' : 'none',
+            }}>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>{tab.icon}</span>
             <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Tab content — leaderboard has maximum space */}
-      {activeTab === 'class'   && <ClassTab   userId={user?.id} profile={profile} onProfileChange={setProfile} />}
-      {activeTab === 'school'  && <SchoolTab  userId={user?.id} profile={profile} />}
-      {activeTab === 'monthly' && <MonthlyTab userId={user?.id} profile={profile} />}
+      {/* Tab content */}
+      {activeTab === 'class'  && <ClassTab  userId={user?.id} profile={profile} onProfileChange={setProfile} />}
+      {activeTab === 'school' && <SchoolTab userId={user?.id} profile={profile} />}
+      {activeTab === 'global' && <GlobalTab userId={user?.id} />}
     </div>
   )
 }
