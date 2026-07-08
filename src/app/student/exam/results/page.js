@@ -1,267 +1,284 @@
 'use client'
-// src/app/student/exam/results/page.js
-//
-// Exam Mode results — detailed score report:
-//   1. Overall score + grade (A1–F9 for WAEC, /400 for JAMB)
-//   2. Score breakdown by topic (sorted worst → best)
-//   3. Difficulty breakdown (easy/medium/hard)
-//   4. Each question reviewed: your answer vs correct answer
-//   5. CTA: Practice weak topics | Try another exam
+// src/app/student/practice/results/page.js — v3
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixes in v3:
+//   1. CRASH FIX — buildSummary now handles BOTH storage shapes:
+//      • New shape (session v5):  { results: [{...q, userAnswer, isCorrect}], config, xp }
+//      • Legacy shape (pre-v5):  { answers: [{questionId, isCorrect}], questions: [...] }
+//   2. Full light + dark via CSS var tokens — no hardcoded colours.
+//   3. ScoreRing SVG uses dynamic CSS var colours.
+//   4. TopicRow progress bar and labels use CSS vars.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { usePoints } from '@/contexts/PointsContext'
 import Link from 'next/link'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
 
-// WAEC grade thresholds
-function waecGrade(pct) {
-  if (pct >= 90) return { grade: 'A1', color: '#059669', label: 'Distinction' }
-  if (pct >= 80) return { grade: 'B2', color: '#059669', label: 'Very Good' }
-  if (pct >= 75) return { grade: 'B3', color: '#16a34a', label: 'Good' }
-  if (pct >= 70) return { grade: 'C4', color: '#16a34a', label: 'Credit' }
-  if (pct >= 65) return { grade: 'C5', color: '#d97706', label: 'Credit' }
-  if (pct >= 60) return { grade: 'C6', color: '#d97706', label: 'Credit' }
-  if (pct >= 55) return { grade: 'D7', color: '#ea580c', label: 'Pass' }
-  if (pct >= 50) return { grade: 'E8', color: '#dc2626', label: 'Pass' }
-  return { grade: 'F9', color: '#dc2626', label: 'Fail' }
+function getScoreMessage(pct) {
+  if (pct >= 90) return "Outstanding — you're exam-ready on these topics! 🏆"
+  if (pct >= 75) return "Strong performance. Keep sharpening these areas. 💪"
+  if (pct >= 60) return "Good effort! A few more sessions will close the gaps. 📈"
+  if (pct >= 40) return "You're building. Your study plan has been updated. 🔧"
+  return "Every session teaches you something. Keep going. 📚"
 }
 
-function ScoreRing({ pct, color }) {
-  const r = 44, circ = 2 * Math.PI * r
+function ScoreRing({ pct }) {
+  const r = 46; const circ = 2 * Math.PI * r
   const [dash, setDash] = useState(0)
-  useEffect(() => { const t = setTimeout(() => setDash((pct / 100) * circ), 100); return () => clearTimeout(t) }, [pct, circ])
+  useEffect(() => {
+    const t = setTimeout(() => setDash((pct / 100) * circ), 80)
+    return () => clearTimeout(t)
+  }, [pct, circ])
+
+  const ringColor = pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'
+
   return (
-    <svg width="120" height="120" viewBox="0 0 120 120" className="mx-auto">
-      <circle cx="60" cy="60" r={r} fill="none" stroke="var(--bg-inset)" strokeWidth="10" />
-      <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
+    <svg width="128" height="128" viewBox="0 0 128 128" className="mx-auto">
+      <circle cx="64" cy="64" r={r} fill="none" stroke="var(--bg-inset)" strokeWidth="10" />
+      <circle cx="64" cy="64" r={r} fill="none" stroke={ringColor} strokeWidth="10"
         strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-        transform="rotate(-90 60 60)"
-        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)', filter: `drop-shadow(0 0 8px ${color}60)` }} />
-      <text x="60" y="55" textAnchor="middle" style={{ fontSize: 24, fontWeight: 900, fill: 'var(--text-prim)', fontFamily: 'inherit' }}>{pct}%</text>
-      <text x="60" y="72" textAnchor="middle" style={{ fontSize: 10, fill: 'var(--text-tert)', fontFamily: 'inherit' }}>score</text>
+        transform="rotate(-90 64 64)"
+        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)', filter: `drop-shadow(0 0 8px ${ringColor}60)` }} />
+      <text x="64" y="59" textAnchor="middle"
+        style={{ fontSize: 26, fontWeight: 900, fill: 'var(--text-prim)', fontFamily: 'inherit' }}>
+        {pct}%
+      </text>
+      <text x="64" y="76" textAnchor="middle"
+        style={{ fontSize: 11, fill: 'var(--text-tert)', fontFamily: 'inherit' }}>
+        score
+      </text>
     </svg>
   )
 }
 
-export default function ExamResultsPage() {
-  const router = useRouter()
+function TopicRow({ topic }) {
   const isDark = useIsDark()
-  const [data,    setData]    = useState(null)
-  const [tab,     setTab]     = useState('summary')
-  const [saving,  setSaving]  = useState(false)
+  const colors = resolveSubjectColors(topic.subjectName || 'default', isDark)
+  const pct    = topic.total > 0 ? Math.round((topic.correct / topic.total) * 100) : 0
+  const barColor = pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'
+  const pctColor = barColor
+
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-default last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+            style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
+            {topic.subjectName || 'General'}
+          </span>
+          {pct < 60 && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-danger border-danger text-danger">
+              Needs work
+            </span>
+          )}
+        </div>
+        <p className="text-sm font-bold text-primary truncate">{topic.name}</p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="w-16 h-2 bg-inset rounded-full overflow-hidden">
+          <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 999, transition: 'width 0.7s ease' }} />
+        </div>
+        <span className="text-sm font-black w-10 text-right tabular-nums" style={{ color: pctColor }}>
+          {pct}%
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── buildSummary — handles BOTH storage shapes safely ─────────────────────────
+function buildSummary(parsed) {
+  // Normalise to a common format regardless of which session page wrote the data
+  let questions = []
+  let answerMap = {} // questionId → { isCorrect }
+
+  if (parsed.results && Array.isArray(parsed.results)) {
+    // New shape from session v5: results is an array of question objects with
+    // userAnswer and isCorrect mixed in
+    questions = parsed.results
+    for (const r of parsed.results) {
+      answerMap[r.id] = { isCorrect: r.isCorrect ?? false }
+    }
+  } else if (parsed.questions && Array.isArray(parsed.questions)) {
+    // Legacy shape: separate questions + answers arrays
+    questions = parsed.questions
+    for (const a of (parsed.answers ?? [])) {
+      answerMap[a.questionId] = { isCorrect: a.isCorrect ?? false }
+    }
+  }
+
+  // Guard — if still empty something is badly wrong, return zero-state
+  if (!questions.length) {
+    return { topics: [], totalCorrect: 0, totalAnswered: 0, overallPct: 0, weakTopics: [] }
+  }
+
+  const byTopic = {}
+  questions.forEach(q => {
+    const key = q.topic_name || q.subtopic_name || 'General'
+    if (!byTopic[key]) {
+      byTopic[key] = {
+        name: key,
+        subjectName: q.subject_name ?? '',
+        subtopicId: q.subtopic_id,
+        topicId: q.topic_id,
+        total: 0,
+        correct: 0,
+      }
+    }
+    byTopic[key].total++
+    if (answerMap[q.id]?.isCorrect) byTopic[key].correct++
+  })
+
+  const topics       = Object.values(byTopic).sort((a, b) => (a.correct / a.total) - (b.correct / b.total))
+  const totalCorrect = questions.filter(q => answerMap[q.id]?.isCorrect).length
+  const totalAnswered = questions.length
+  const overallPct   = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0
+  const weakTopics   = topics.filter(t => t.total > 0 && Math.round((t.correct / t.total) * 100) < 60)
+
+  return { topics, totalCorrect, totalAnswered, overallPct, weakTopics }
+}
+
+export default function PracticeResultsPage() {
+  const router = useRouter()
+  const { awardPoints } = usePoints()
+
+  const [summary,    setSummary]    = useState(null)
+  const [saveStatus, setSaveStatus] = useState('idle')
+  const [xpEarned,   setXpEarned]   = useState(null)
+  const savedRef = useRef(false)
 
   useEffect(() => {
-    const raw = sessionStorage.getItem('exam_results')
-    if (!raw) { router.push('/student/exam'); return }
-    try { setData(JSON.parse(raw)) } catch { router.push('/student/exam') }
-  }, [router])
+    const raw = sessionStorage.getItem('practice_results')
+    if (!raw) { router.push('/student/practice'); return }
+    let parsed
+    try { parsed = JSON.parse(raw) } catch { router.push('/student/practice'); return }
 
-  // Save results to DB
-  useEffect(() => {
-    if (!data || saving) return
-    setSaving(true)
-    const resultsForSave = data.results.map(r => ({
-      questionId: r.id,
-      selected:   r.userAnswer,
-      isCorrect:  r.isCorrect,
-    }))
+    const built = buildSummary(parsed)
+    setSummary(built)
+
+    if (savedRef.current) return
+    savedRef.current = true
+    setSaveStatus('saving')
+
     fetch('/api/student/practice/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers: resultsForSave, questions: data.results }),
-    }).catch(() => {})
-  }, [data]) // eslint-disable-line
+      body: JSON.stringify(parsed),
+    })
+      .then(r => {
+        setSaveStatus(r.ok ? 'done' : 'error')
+        if (r.ok) {
+          awardPoints('practice_complete', null, {
+            correct: built.totalCorrect,
+            total:   built.totalAnswered,
+          }).then(data => {
+            if (data?.awarded && data?.points_awarded) {
+              setXpEarned(data.points_awarded)
+            } else {
+              // Estimate for display even if award call fails
+              const base = 5; const earned = Math.min(50, base + built.totalCorrect * 2)
+              setXpEarned(earned)
+            }
+          }).catch(() => {})
+        }
+      })
+      .catch(() => setSaveStatus('error'))
+  }, [router, awardPoints])
 
-  if (!data) return (
-    <div className="min-h-dvh bg-base flex items-center justify-center">
-      <div className="w-8 h-8 border-4 rounded-full animate-spin" style={{ borderColor: 'var(--active-border)', borderTopColor: 'var(--active-text)' }} />
+  if (!summary) return (
+    <div className="flex items-center justify-center min-h-screen bg-base">
+      <div className="w-8 h-8 border-4 rounded-full animate-spin"
+        style={{ borderColor: 'var(--active-border)', borderTopColor: 'var(--active-text)' }} />
     </div>
   )
 
-  const results   = data.results ?? []
-  const examType  = data.config?.examType ?? 'WAEC'
-  const subjects  = data.config?.subjects ?? []
-  const total     = results.length
-  const correct   = results.filter(r => r.isCorrect).length
-  const pct       = total > 0 ? Math.round((correct / total) * 100) : 0
-  const grade     = waecGrade(pct)
-
-  // By-topic breakdown
-  const byTopic = {}
-  for (const r of results) {
-    const key = r.topic_name || r.subject_name || 'General'
-    if (!byTopic[key]) byTopic[key] = { name: key, subject: r.subject_name, total: 0, correct: 0 }
-    byTopic[key].total++
-    if (r.isCorrect) byTopic[key].correct++
-  }
-  const topicBreakdown = Object.values(byTopic)
-    .map(t => ({ ...t, pct: Math.round((t.correct / t.total) * 100) }))
-    .sort((a, b) => a.pct - b.pct) // worst first
-
-  // By-difficulty
-  const byDiff = { easy: { total: 0, correct: 0 }, medium: { total: 0, correct: 0 }, hard: { total: 0, correct: 0 } }
-  for (const r of results) {
-    const d = r.difficulty ?? 'medium'
-    if (byDiff[d]) { byDiff[d].total++; if (r.isCorrect) byDiff[d].correct++ }
-  }
-
-  const weakTopics = topicBreakdown.filter(t => t.pct < 60)
+  const scoreBg     = summary.overallPct >= 75 ? 'var(--success-bg)'  : summary.overallPct >= 50 ? 'var(--warning-bg)'  : 'var(--danger-bg)'
+  const scoreBorder = summary.overallPct >= 75 ? 'var(--success-border)' : summary.overallPct >= 50 ? 'var(--warning-border)' : 'var(--danger-border)'
 
   return (
-    <div className="min-h-dvh bg-base pb-20">
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '24px 14px' }}>
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <Link href="/student/exam" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-sec)', textDecoration: 'none' }}>← New exam</Link>
-          <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--warning)', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', padding: '3px 9px', borderRadius: 999 }}>Exam Mode</span>
-        </div>
+    <div className="min-h-screen bg-base pb-16">
+      <div className="max-w-md mx-auto px-4 pt-8 space-y-5">
 
         {/* Score card */}
-        <div style={{ borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ padding: '24px 20px 20px', textAlign: 'center', background: pct >= 60 ? 'var(--success-bg)' : 'var(--danger-bg)', borderBottom: `1px solid ${pct >= 60 ? 'var(--success-border)' : 'var(--danger-border)'}` }}>
-            <ScoreRing pct={pct} color={grade.color} />
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '6px 14px', borderRadius: 999, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 18, fontWeight: 900, color: grade.color }}>{grade.grade}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-sec)' }}>{grade.label}</span>
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-sec)', marginTop: 8, lineHeight: 1.55 }}>
-              {examType} · {subjects.join(', ')}
+        <div className="bg-card rounded-3xl border border-default overflow-hidden shadow-card-lg">
+          <div className="px-6 pt-8 pb-6 text-center"
+            style={{ background: scoreBg, borderBottom: `1px solid ${scoreBorder}` }}>
+            <ScoreRing pct={summary.overallPct} />
+            <p className="mt-4 text-sm text-secondary leading-relaxed max-w-xs mx-auto font-medium">
+              {getScoreMessage(summary.overallPct)}
             </p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--border)' }}>
+          <div className="grid grid-cols-3 divide-x divide-default border-t border-default">
             {[
-              { val: correct, lbl: 'Correct' },
-              { val: total - correct, lbl: 'Missed' },
-              { val: total, lbl: 'Total' },
+              { val: summary.totalCorrect,                          lbl: 'Correct' },
+              { val: summary.totalAnswered - summary.totalCorrect,  lbl: 'Missed' },
+              { val: summary.totalAnswered,                         lbl: 'Total' },
             ].map(({ val, lbl }) => (
-              <div key={lbl} style={{ padding: '12px 8px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-prim)' }}>{val}</p>
-                <p style={{ fontSize: 9, color: 'var(--text-tert)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>{lbl}</p>
+              <div key={lbl} className="px-4 py-3 text-center">
+                <p className="text-xl font-black text-primary">{val}</p>
+                <p className="text-[10px] text-tertiary font-semibold">{lbl}</p>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 12, padding: 3, marginBottom: 12 }}>
-          {['summary', 'by topic', 'review'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{ flex: 1, padding: '8px 4px', borderRadius: 9, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer', transition: 'all .15s', background: tab === t ? 'var(--bg-card)' : 'transparent', color: tab === t ? 'var(--text-prim)' : 'var(--text-tert)', boxShadow: tab === t ? 'var(--shadow-xs)' : 'none', textTransform: 'capitalize' }}>
-              {t}
-            </button>
-          ))}
-        </div>
-
-        {/* Summary tab */}
-        {tab === 'summary' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* Difficulty breakdown */}
-            <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div style={{ padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>By difficulty</p>
-              </div>
-              {Object.entries(byDiff).filter(([, v]) => v.total > 0).map(([d, v]) => {
-                const p = Math.round((v.correct / v.total) * 100)
-                const col = p >= 70 ? 'var(--success)' : p >= 50 ? 'var(--warning)' : 'var(--danger)'
-                return (
-                  <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderBottom: '1px solid var(--border)' }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', textTransform: 'capitalize', width: 56 }}>{d}</p>
-                    <div style={{ flex: 1, height: 5, borderRadius: 99, background: 'var(--bg-inset)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 99, background: col, width: `${p}%`, transition: 'width .7s' }} />
-                    </div>
-                    <p style={{ fontSize: 11, fontWeight: 900, color: col, width: 40, textAlign: 'right' }}>{v.correct}/{v.total}</p>
-                  </div>
-                )
-              })}
+          {xpEarned !== null && (
+            <div className="flex items-center justify-center gap-2 px-4 py-2.5 border-t border-default"
+              style={{ background: 'rgba(255,195,107,0.08)' }}>
+              <span style={{ fontSize: 14 }}>✦</span>
+              <p className="text-sm font-black" style={{ color: 'var(--gold)' }}>+{xpEarned} XP earned</p>
+              <span className="text-[10px] text-tertiary font-medium ml-1">
+                ({summary.totalCorrect} correct × 2 + 5 base)
+              </span>
             </div>
-
-            {/* Weak topics */}
-            {weakTopics.length > 0 && (
-              <div style={{ borderRadius: 16, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', overflow: 'hidden' }}>
-                <div style={{ padding: '9px 13px', borderBottom: '1px solid var(--danger-border)' }}>
-                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--danger)' }}>🎯 Focus here next</p>
-                </div>
-                {weakTopics.map((t, i) => {
-                  const colors = resolveSubjectColors(t.subject || '', isDark)
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderBottom: '1px solid var(--danger-border)' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: colors.bg, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>📖</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</p>
-                        <p style={{ fontSize: 10, color: 'var(--danger)' }}>{t.correct}/{t.total} correct · {t.pct}%</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* By topic tab */}
-        {tab === 'by topic' && (
-          <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-            {topicBreakdown.map((t, i) => {
-              const col = t.pct >= 70 ? 'var(--success)' : t.pct >= 50 ? 'var(--warning)' : 'var(--danger)'
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', borderBottom: i < topicBreakdown.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</p>
-                    <div style={{ height: 3, borderRadius: 99, background: 'var(--bg-inset)', overflow: 'hidden', marginTop: 5 }}>
-                      <div style={{ height: '100%', borderRadius: 99, background: col, width: `${t.pct}%`, transition: 'width .7s' }} />
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 12, fontWeight: 900, color: col, flexShrink: 0 }}>{t.pct}%</p>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Review tab — each question */}
-        {tab === 'review' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {results.map((r, i) => {
-              const opts = typeof r.options === 'object' ? r.options : {}
-              try { Object.assign(opts, JSON.parse(r.options ?? '{}')) } catch {}
-              const correctText = opts[r.correct_answer] ?? ''
-              const myText      = r.userAnswer ? (opts[r.userAnswer] ?? '') : 'Not answered'
-              return (
-                <div key={i} style={{ borderRadius: 14, background: 'var(--bg-card)', border: `1px solid ${r.isCorrect ? 'var(--success-border)' : 'var(--danger-border)'}`, overflow: 'hidden' }}>
-                  <div style={{ padding: '10px 12px', background: r.isCorrect ? 'var(--success-bg)' : 'var(--danger-bg)', borderBottom: `1px solid ${r.isCorrect ? 'var(--success-border)' : 'var(--danger-border)'}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 20, height: 20, borderRadius: 6, background: r.isCorrect ? 'var(--success)' : 'var(--danger)', color: '#fff', fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{r.isCorrect ? '✓' : '✗'}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: r.isCorrect ? 'var(--success)' : 'var(--danger)' }}>Q{i + 1} · {r.topic_name || r.subject_name}</span>
-                  </div>
-                  <div style={{ padding: '10px 12px' }}>
-                    <p style={{ fontSize: 12, color: 'var(--text-prim)', lineHeight: 1.5, marginBottom: 8 }}>{r.question_text ?? r.question ?? ''}</p>
-                    {!r.isCorrect && r.userAnswer && (
-                      <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 3 }}>✗ Your answer: <strong>{r.userAnswer}</strong> — {String(myText).slice(0, 60)}</p>
-                    )}
-                    <p style={{ fontSize: 11, color: 'var(--success)' }}>✓ Correct: <strong>{r.correct_answer}</strong> — {String(correctText).slice(0, 60)}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* CTAs */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-          {weakTopics.length > 0 && (
-            <button onClick={() => {
-              const t = weakTopics[0]
-              sessionStorage.setItem('practice_config', JSON.stringify({ subjects: [t.subject || data.config?.subjects?.[0]], count: 20, topicName: t.name }))
-              router.push('/student/practice/session')
-            }} style={{ padding: 14, borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #05070f' }}>
-              Practise {weakTopics[0]?.name} →
-            </button>
           )}
-          <Link href="/student/exam" style={{ display: 'block', padding: 13, borderRadius: 14, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', fontSize: 13, fontWeight: 700, textAlign: 'center', textDecoration: 'none' }}>
-            Try another exam
+        </div>
+
+        {/* Weak topics */}
+        {summary.weakTopics.length > 0 && (
+          <div className="bg-card rounded-2xl border overflow-hidden shadow-card"
+            style={{ borderColor: 'var(--danger-border)' }}>
+            <div className="px-4 pt-4 pb-3 flex items-center gap-2 border-b"
+              style={{ background: 'var(--danger-bg)', borderColor: 'var(--danger-border)' }}>
+              <span className="text-base">🎯</span>
+              <div>
+                <p className="text-sm font-black text-danger">Focus here next</p>
+                <p className="text-xs text-secondary">Added to your study plan</p>
+              </div>
+            </div>
+            <div className="px-4">
+              {summary.weakTopics.map((t, i) => <TopicRow key={i} topic={t} />)}
+            </div>
+          </div>
+        )}
+
+        {/* All topics */}
+        {summary.topics.length > summary.weakTopics.length && (
+          <div className="bg-card rounded-2xl border border-default overflow-hidden shadow-card">
+            <div className="px-4 pt-4 pb-2 border-b border-default">
+              <p className="text-sm font-black text-primary">All topics</p>
+            </div>
+            <div className="px-4">
+              {summary.topics.map((t, i) => <TopicRow key={i} topic={t} />)}
+            </div>
+          </div>
+        )}
+
+        {saveStatus === 'saving' && (
+          <p className="text-center text-xs text-tertiary">Saving results…</p>
+        )}
+
+        <div className="space-y-3 pb-8">
+          <Link href="/student/study-plan"
+            className="flex items-center justify-center gap-2 w-full py-4 text-white font-black text-sm rounded-2xl active:scale-[0.98] transition-all"
+            style={{ background: '#0b1330', boxShadow: '0 5px 0 #05070f' }}>
+            View study plan →
+          </Link>
+          <Link href="/student/practice"
+            className="flex items-center justify-center gap-2 w-full py-3.5 bg-card border border-default text-secondary font-bold text-sm rounded-2xl hover:bg-subtle active:scale-[0.98] transition-all">
+            Practice again
           </Link>
         </div>
-
       </div>
     </div>
   )

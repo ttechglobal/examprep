@@ -188,22 +188,22 @@ export default function ExamSessionPage() {
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* HUD */}
-      <div style={{ flexShrink: 0, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: 'var(--nav-bg)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', align: 'center', gap: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning)', padding: '3px 8px', borderRadius: 999 }}>
-            EXAM
-          </div>
-          <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>{subjectName}</span>
-        </div>
-        <button onClick={() => setShowMap(m => !m)} style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', background: 'var(--bg-subtle)', border: '1px solid var(--border)', padding: '4px 9px', borderRadius: 8, cursor: 'pointer' }}>
-          {answered}/{questions.length} answered
+      {/* Minimal immersive exam bar — no logo, focused */}
+      <div style={{ flexShrink: 0, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
+        {/* Exit */}
+        <button onClick={() => { if (window.confirm('Exit exam? All progress will be lost.')) { clearInterval(timerRef.current); router.push('/student/exam') } }}
+          style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-tert)', cursor: 'pointer' }}>
+          ✕
         </button>
-        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-          <div style={{ background: urgentTime ? 'var(--danger-bg)' : 'var(--bg-subtle)', border: `1px solid ${urgentTime ? 'var(--danger-border)' : 'var(--border)'}`, borderRadius: 7, padding: '3px 8px', textAlign: 'center' }}>
-            <p style={{ fontSize: 12, fontWeight: 800, color: timerCol }}>{formatTime(secsLeft)}</p>
-            <p style={{ fontSize: 7, color: 'var(--text-tert)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Time</p>
-          </div>
+        {/* Q map toggle — compact */}
+        <button onClick={() => setShowMap(m => !m)}
+          style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', background: showMap ? 'var(--active-bg)' : 'var(--bg-subtle)', border: showMap ? '1px solid var(--active-border)' : '1px solid var(--border)', padding: '5px 11px', borderRadius: 8, cursor: 'pointer' }}>
+          {answered}/{questions.length} ✓
+        </button>
+        {/* Timer */}
+        <div style={{ background: urgentTime ? 'var(--danger-bg)' : 'var(--bg-subtle)', border: `1px solid ${urgentTime ? 'var(--danger-border)' : 'var(--border)'}`, borderRadius: 7, padding: '3px 9px', textAlign: 'center' }}>
+          <p style={{ fontSize: 12, fontWeight: 800, color: timerCol }}>{formatTime(secsLeft)}</p>
+          <p style={{ fontSize: 7, color: 'var(--text-tert)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Time</p>
         </div>
       </div>
 

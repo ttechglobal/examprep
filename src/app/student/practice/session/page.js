@@ -356,7 +356,8 @@ export default function PracticeSessionPage() {
     const entry = { selected: letter, isCorrect }
     answersRef.current = { ...answersRef.current, [q.id]: entry }
     setAnswers(prev => ({ ...prev, [q.id]: entry }))
-    if (isCorrect) { setXP(x => x + 20); setXPTrig(t => t + 1) }
+    // XP is calculated and awarded at the results page (awardPoints) — not shown mid-session
+    // to keep the student focused on answering, not farming XP ticks
   }
 
   function goNext() {
@@ -403,6 +404,7 @@ export default function PracticeSessionPage() {
   const progress    = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0
   const timerCol    = totalSecs > 0 ? getTimerColor(secsLeft, totalSecs) : undefined
   const isLast      = index >= questions.length - 1
+  const correctCount = Object.values(answers).filter(a => a.isCorrect).length
 
   return (
     <div style={{
@@ -414,17 +416,15 @@ export default function PracticeSessionPage() {
     }}>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ── HUD — 52px fixed ── */}
+      {/* ── Minimal immersive context bar — no logo, no XP during session ── */}
       <div style={{
         flexShrink: 0,
-        height: 52,
+        height: 48,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 14px',
-        background: 'var(--nav-bg)',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
+        padding: '0 12px',
+        background: 'var(--bg-base)',
         borderBottom: '1px solid var(--border)',
       }}>
         <button
@@ -438,24 +438,20 @@ export default function PracticeSessionPage() {
             width: 32, height: 32, borderRadius: 10, flexShrink: 0,
             background: 'var(--bg-subtle)', border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, color: 'var(--text-tert)', cursor: 'pointer',
           }}
-        >←</button>
-
+        >✕</button>
         <div style={{ textAlign: 'center', flex: 1, margin: '0 10px', overflow: 'hidden' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: accent }}>{subjectName}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>{subjectName}</span>
           {topicName && (
-            <span style={{ fontSize: 12, color: 'var(--text-sec)' }}> · {topicName}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tert)' }}> · {topicName}</span>
           )}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, position: 'relative', flexShrink: 0 }}>
-          <XPFloat trigger={xpTrigger} />
-          <StatPill val={`${index + 1}/${questions.length}`} lbl="Qns" />
-          <StatPill val={`✦ ${xp}`} lbl="XP" highlight="var(--gold)" />
-          {totalSecs > 0 && (
-            <StatPill val={formatTime(secsLeft)} lbl="Time" highlight={timerCol} />
-          )}
+        <div style={{ flexShrink: 0, minWidth: 44, textAlign: 'right' }}>
+          {totalSecs > 0
+            ? <StatPill val={formatTime(secsLeft)} lbl="Time" highlight={timerCol} />
+            : <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)' }}>{index+1}/{questions.length}</span>
+          }
         </div>
       </div>
 
@@ -472,8 +468,8 @@ export default function PracticeSessionPage() {
           <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: accent }}>
             ⚡ {topicName ? `${topicName} · ` : ''}Q{index + 1} of {questions.length}
           </span>
-          <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-tert)' }}>
-            {Math.round(progress)}%
+          <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--success)' }}>
+            ✓ {correctCount} correct
           </span>
         </div>
         <div style={{ height: 4, borderRadius: 999, background: 'var(--bg-inset)', overflow: 'hidden' }}>

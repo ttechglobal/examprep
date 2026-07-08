@@ -1,154 +1,146 @@
 'use client'
-// src/components/admin/AdminSidebar.jsx
+// src/components/admin/AdminSidebar.jsx — v3 EXL Studio style
+// Dark sidebar (#0d0e14), white content area, pill nav items, live badge
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 const NAV = [
-  {
-    section: null,
-    items: [
-      { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
-    ],
-  },
-  {
-    section: 'Content',
-    items: [
-      { href: '/admin/curriculum',       label: 'Curriculum',   icon: '🗂' },
-      { href: '/admin/subjects-manager', label: 'Subjects',     icon: '📚' },
-      { href: '/admin/video-lessons',    label: 'Videos',       icon: '🎬' },
-    ],
-  },
-  {
-    section: 'Questions',
-    items: [
-      { href: '/admin/past-questions',  label: 'Past Questions', icon: '📝' },
-      { href: '/admin/questions',       label: 'Question Bank',  icon: '❓' },
-      { href: '/admin/core-topics',     label: 'Core Topics',    icon: '⭐' },
-    ],
-  },
-  {
-    section: 'Users',
-    items: [
-      { href: '/admin/users',           label: 'Students',       icon: '👥' },
-      { href: '/admin/reviewers',       label: 'Reviewers',      icon: '🔍' },
-      { href: '/admin/schools',         label: 'Schools',        icon: '🏫' },
-    ],
-  },
-  {
-    section: 'Analytics',
-    items: [
-      { href: '/admin/analytics',       label: 'Platform Stats', icon: '📈' },
-    ],
-  },
+  { section: 'MENU', items: [
+    { href: '/admin/dashboard',       label: 'Dashboard',      icon: '◼', dot: true  },
+    { href: '/admin/curriculum',      label: 'Content',        icon: '📚'            },
+    { href: '/admin/past-questions',  label: 'Past Questions', icon: '↑'             },
+    { href: '/admin/users',           label: 'Students',       icon: '◎'             },
+    { href: '/admin/schools',         label: 'Schools',        icon: '🏫'            },
+  ]},
+  { section: 'TOOLS', items: [
+    { href: '/admin/analytics',       label: 'Analytics',      icon: '📈'            },
+    { href: '/admin/video-lessons',   label: 'Videos',         icon: '🎬'            },
+    { href: '/admin/core-topics',     label: 'Core Topics',    icon: '⭐'            },
+    { href: '/admin/questions',       label: 'Question Bank',  icon: '🗃'            },
+  ]},
 ]
 
-function NavItem({ href, label, icon, active }) {
+function NavItem({ href, label, icon, dot, active }) {
   return (
-    <Link
-      href={href}
-      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-        active
-          ? 'bg-indigo-50 text-indigo-700 font-bold'
-          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-      }`}
+    <Link href={href} style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '9px 12px', borderRadius: 10,
+      textDecoration: 'none',
+      background: active ? 'rgba(255,255,255,.12)' : 'transparent',
+      transition: 'background .15s',
+    }}
+    className={!active ? 'hover:bg-white/5' : ''}
     >
-      <span className="text-base leading-none w-5 text-center">{icon}</span>
-      <span>{label}</span>
-      {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />}
+      <span style={{ fontSize: 14, width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+      <span style={{ fontSize: 13, fontWeight: active ? 800 : 600, color: active ? '#fff' : 'rgba(255,255,255,.5)', flex: 1 }}>
+        {label}
+      </span>
+      {dot && active && (
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', flexShrink: 0 }} />
+      )}
     </Link>
   )
 }
 
-function SidebarContent({ pathname }) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-4 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-black">EP</span>
-          </div>
-          <div>
-            <p className="font-black text-gray-900 text-sm leading-tight">ExamPrep</p>
-            <p className="text-[10px] text-gray-400 font-medium">Admin Panel</p>
-          </div>
-        </div>
-      </div>
+export default function AdminSidebar({ userName }) {
+  const pathname    = usePathname()
+  const router      = useRouter()
+  const supabase    = createClient()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {NAV.map((group, gi) => (
-          <div key={gi}>
-            {group.section && (
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 px-3 mb-1.5">
-                {group.section}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {group.items.map(item => (
-                <NavItem
-                  key={item.href}
-                  {...item}
-                  active={
-                    item.href === '/admin/dashboard'
-                      ? pathname === '/admin/dashboard' || pathname === '/admin'
-                      : pathname === item.href || pathname.startsWith(item.href + '/')
-                  }
-                />
-              ))}
+  async function signOut() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  function SidebarContent() {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#0d0e14' }}>
+
+        {/* Logo */}
+        <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#fff' }}>EP</div>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 900, color: '#fff', lineHeight: 1 }}>ExamPrep</p>
+              <p style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginTop: 1 }}>ADMIN</p>
             </div>
           </div>
-        ))}
-      </nav>
+          {/* Live badge */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', marginTop: 8 }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#34d399' }} />
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#34d399', letterSpacing: '.06em' }}>LIVE</span>
+          </div>
+        </div>
 
-      {/* Footer */}
-      <div className="px-3 py-4 border-t border-gray-100 space-y-1">
-        <Link
-          href="/student/dashboard"
-          className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-        >
-          <span className="text-base leading-none w-5 text-center">👤</span>
-          <span>Student view</span>
-        </Link>
+        {/* Nav */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {NAV.map((group, gi) => (
+            <div key={gi}>
+              <p style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em', color: 'rgba(255,255,255,.2)', padding: '0 12px', marginBottom: 4 }}>
+                {group.section}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {group.items.map(item => (
+                  <NavItem
+                    key={item.href}
+                    {...item}
+                    active={pathname === item.href || (item.href !== '/admin/dashboard' && pathname.startsWith(item.href))}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,.07)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+              {(userName ?? 'A').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName ?? 'Admin'}</p>
+            </div>
+          </div>
+          <button onClick={signOut}
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 9, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.08)', color: 'rgba(255,255,255,.45)', fontSize: 11, fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}>
+            ← Exit Studio
+          </button>
+        </div>
       </div>
-    </div>
-  )
-}
-
-export default function AdminSidebar({ userName }) {
-  const pathname = usePathname()
+    )
+  }
 
   return (
     <>
-      {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-60 bg-white border-r border-gray-200 z-40">
-        <SidebarContent pathname={pathname} />
+      {/* Desktop */}
+      <aside className="hidden lg:flex" style={{ position: 'fixed', left: 0, top: 0, height: '100vh', width: 200, flexDirection: 'column', zIndex: 40, background: '#0d0e14' }}>
+        <SidebarContent />
       </aside>
 
-      {/* ── Mobile drawer ─────────────────────────────────────────────────── */}
-      <input type="checkbox" id="admin-drawer" className="peer hidden" />
-
-      {/* Backdrop */}
-      <label
-        htmlFor="admin-drawer"
-        className="peer-checked:fixed peer-checked:inset-0 peer-checked:bg-black/40 peer-checked:z-40 hidden peer-checked:block lg:hidden"
-      />
-
-      {/* Drawer panel */}
-      <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 z-50
-                        -translate-x-full peer-checked:translate-x-0
-                        transition-transform duration-200 ease-in-out
-                        lg:hidden flex flex-col">
-        <div className="absolute top-4 right-4">
-          <label htmlFor="admin-drawer" className="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100">
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      {/* Mobile */}
+      <div className="lg:hidden">
+        {mobileOpen && (
+          <>
+            <div onClick={() => setMobileOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 50 }} />
+            <aside style={{ position: 'fixed', left: 0, top: 0, height: '100vh', width: 220, zIndex: 60, background: '#0d0e14' }}>
+              <SidebarContent />
+            </aside>
+          </>
+        )}
+        <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#0d0e14', borderBottom: '1px solid rgba(255,255,255,.07)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setMobileOpen(true)} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.6)' }}>
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
-          </label>
+          </button>
+          <span style={{ fontWeight: 900, color: '#a78bfa', fontSize: 14 }}>ExamPrep Admin</span>
         </div>
-        <SidebarContent pathname={pathname} />
-      </aside>
+      </div>
     </>
   )
 }

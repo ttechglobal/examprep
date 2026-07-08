@@ -1,8 +1,6 @@
-// src/app/admin/dashboard/page.js
-// Full command center — replaces the lesson-only dashboard.
-// Shows: platform stats, content health, questions health, quick actions.
+// src/app/admin/dashboard/page.js — EXL Studio style
+// Good morning greeting + stat row + subject-grouped content cards
 
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 
@@ -13,218 +11,357 @@ function svc() {
   )
 }
 
-export default async function AdminDashboard() {
-  const supabase = await createClient()
-  const db = svc()
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'GOOD MORNING'
+  if (h < 17) return 'GOOD AFTERNOON'
+  return 'GOOD EVENING'
+}
 
-  // ── Parallel data fetch ─────────────────────────────────────────────────────
-  const [
-    { data: subjects },
-    { count: totalStudents },
-    { count: totalQuestions },
-    { count: activeThisWeek },
-  ] = await Promise.all([
-    db.from('subjects').select(`
-      id, name, slug, exam_type, is_active,
-      topics (
-        id,
-        subtopics ( id, lesson_status )
-      )
-    `).order('order_index'),
+// ── Stat card — matches EXL top row ───────────────────────────────────────────
+function StatCard({ label, value, sub, barColor }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>{label}</p>
+      <p style={{ fontSize: 28, fontWeight: 900, color: '#111827', lineHeight: 1, marginBottom: 4 }}>{value ?? '—'}</p>
+      {sub && <p style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>{sub}</p>}
+      <div style={{ height: 3, background: '#e5e7eb', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ height: '100%', background: barColor ?? '#6366f1', width: '100%', borderRadius: 99 }} />
+      </div>
+    </div>
+  )
+}
 
-    db.from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'student'),
+// ── Subject section — matches EXL "Chemistry / 3 games" row ──────────────────
+function SubjectSection({ name, icon, color, items, addLabel, addHref }) {
+  return (
+    <div style={{ marginBottom: 32 }}>
+      {/* Section header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
+          <span style={{ fontSize: 16, marginRight: 2 }}>{icon}</span>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#111827' }}>{name}</span>
+        </div>
+        <span style={{ fontSize: 12, color: '#9ca3af' }}>{items.length} items</span>
+      </div>
 
-    db.from('questions')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true),
+      {/* Card grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+        {items.map(item => (
+          <ContentCard key={item.id} item={item} accentColor={color} />
+        ))}
+        {/* Add new placeholder */}
+        <Link href={addHref ?? '#'} style={{
+          borderRadius: 16, border: '2px dashed #e5e7eb',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: 160, cursor: 'pointer', textDecoration: 'none', gap: 6,
+          transition: 'border-color .15s',
+        }}
+        className="hover:border-gray-400"
+        >
+          <span style={{ fontSize: 22, color: '#d1d5db' }}>+</span>
+          <p style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600 }}>{addLabel ?? `New ${name} content`}</p>
+        </Link>
+      </div>
+    </div>
+  )
+}
 
-    db.from('student_streaks')
-      .select('*', { count: 'exact', head: true })
-      .gte('last_active_date', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]),
-  ])
-
-  // ── Lesson content stats ────────────────────────────────────────────────────
-  const subjectStats = (subjects ?? []).map(subject => {
-    const allSubs  = subject.topics.flatMap(t => t.subtopics)
-    const total    = allSubs.length
-    const published = allSubs.filter(s => s.lesson_status === 'published').length
-    const inReview  = allSubs.filter(s => s.lesson_status === 'in_review').length
-    const draft     = allSubs.filter(s => s.lesson_status === 'draft').length
-    const pct       = total > 0 ? Math.round((published / total) * 100) : 0
-    return { ...subject, total, published, inReview, draft, pct }
-  })
-
-  const totalLessons   = subjectStats.reduce((a, s) => a + s.total, 0)
-  const totalPublished = subjectStats.reduce((a, s) => a + s.published, 0)
-  const totalInReview  = subjectStats.reduce((a, s) => a + s.inReview, 0)
-  const totalDraft     = subjectStats.reduce((a, s) => a + s.draft, 0)
-
-  // ── Questions needing attention ─────────────────────────────────────────────
-  const { count: untaggedCount } = await db
-    .from('questions')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .is('subtopic_id', null)
-
-  const { count: missingImageCount } = await db
-    .from('questions')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .eq('has_image', true)
-    .is('image_url', null)
+// ── Content card — matches EXL game card ─────────────────────────────────────
+function ContentCard({ item, accentColor }) {
+  const pctColor = item.pct >= 70 ? '#34d399' : item.pct >= 40 ? '#fbbf24' : '#f87171'
 
   return (
-    <div className="space-y-8">
-
-      {/* ── Page header ────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-black text-gray-900">Overview</h1>
-        <p className="text-sm text-gray-500 mt-1">Platform health at a glance</p>
+    <div style={{ borderRadius: 16, overflow: 'hidden', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+      {/* Coloured top image area */}
+      <div style={{
+        height: 100, background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}44)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <span style={{ fontSize: 36 }}>{item.icon ?? '📖'}</span>
+        {/* Status pill */}
+        <div style={{
+          position: 'absolute', top: 8, right: 8,
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '3px 8px', borderRadius: 999,
+          background: item.status === 'published' ? '#065f46' : item.status === 'in_review' ? '#92400e' : '#374151',
+          border: `1px solid ${item.status === 'published' ? '#34d399' : item.status === 'in_review' ? '#fbbf24' : '#6b7280'}`,
+        }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: item.status === 'published' ? '#34d399' : item.status === 'in_review' ? '#fbbf24' : '#6b7280' }} />
+          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {item.status === 'published' ? 'LIVE' : item.status === 'in_review' ? 'REVIEW' : 'DRAFT'}
+          </span>
+        </div>
       </div>
 
-      {/* ── Top stats row ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Students',   value: totalStudents  ?? 0, icon: '👥', color: 'indigo', href: '/admin/users' },
-          { label: 'Active This Week', value: activeThisWeek ?? 0, icon: '🔥', color: 'orange', href: '/admin/analytics' },
-          { label: 'Total Questions',  value: totalQuestions ?? 0, icon: '❓', color: 'violet', href: '/admin/questions' },
-          { label: 'Published Lessons',value: totalPublished,       icon: '✅', color: 'green',  href: '/admin/curriculum' },
-        ].map(stat => (
-          <Link key={stat.label} href={stat.href}
-            className="bg-white rounded-2xl border border-gray-200 p-5 hover:border-indigo-200 hover:shadow-sm transition-all group">
-            <div className="flex items-start justify-between mb-2">
-              <span className="text-2xl">{stat.icon}</span>
-              <svg className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 transition-colors mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
+      {/* Card body */}
+      <div style={{ padding: '12px 14px 14px' }}>
+        <p style={{ fontSize: 14, fontWeight: 800, color: '#111827', marginBottom: 4, lineHeight: 1.3 }}>{item.name}</p>
+        <p style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
+          {item.questionCount ?? 0} questions · {item.attemptCount ?? 0} attempts
+        </p>
+
+        {/* Accuracy bar */}
+        {item.pct !== null && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden', display: 'flex', gap: 2 }}>
+              <div style={{ height: '100%', background: '#34d399', width: `${Math.min(item.pct, 100)}%`, borderRadius: 99, transition: 'width .7s' }} />
             </div>
-            <p className="text-2xl font-black text-gray-900">{(stat.value).toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-          </Link>
-        ))}
-      </div>
-
-      {/* ── Attention needed ───────────────────────────────────────────────── */}
-      {(untaggedCount > 0 || missingImageCount > 0 || totalInReview > 0) && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-black text-gray-900 uppercase tracking-wide">Needs Attention</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {untaggedCount > 0 && (
-              <Link href="/admin/questions?untagged=true"
-                className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 hover:bg-red-100 transition-colors">
-                <span className="text-xl">🏷</span>
-                <div>
-                  <p className="text-sm font-black text-red-800">{untaggedCount} untagged questions</p>
-                  <p className="text-xs text-red-600">No topic/subtopic mapping</p>
-                </div>
-              </Link>
-            )}
-            {missingImageCount > 0 && (
-              <Link href="/admin/questions?missing_image=true"
-                className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 hover:bg-amber-100 transition-colors">
-                <span className="text-xl">🖼</span>
-                <div>
-                  <p className="text-sm font-black text-amber-800">{missingImageCount} missing images</p>
-                  <p className="text-xs text-amber-600">Questions flagged as has_image with no URL</p>
-                </div>
-              </Link>
-            )}
-            {totalInReview > 0 && (
-              <Link href="/admin/curriculum"
-                className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 hover:bg-blue-100 transition-colors">
-                <span className="text-xl">📋</span>
-                <div>
-                  <p className="text-sm font-black text-blue-800">{totalInReview} lessons in review</p>
-                  <p className="text-xs text-blue-600">Awaiting publish approval</p>
-                </div>
-              </Link>
-            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Lesson content progress ─────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black text-gray-900 uppercase tracking-wide">Lesson Content</h2>
-          <Link href="/admin/curriculum" className="text-xs font-bold text-indigo-600 hover:text-indigo-500">
-            Manage →
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Link href={item.editHref ?? '#'}
+            style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: '#f9fafb', border: '1px solid #e5e7eb', fontSize: 11, fontWeight: 700, color: '#374151', textDecoration: 'none', textAlign: 'center', display: 'block' }}>
+            Edit
+          </Link>
+          <Link href={item.viewHref ?? '#'}
+            style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: '#f0fdf4', border: '1px solid #a7f3d0', fontSize: 11, fontWeight: 700, color: '#065f46', textDecoration: 'none', textAlign: 'center', display: 'block' }}>
+            View ↗
           </Link>
         </div>
+      </div>
+    </div>
+  )
+}
 
-        {/* Overall progress bar */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-bold text-gray-700">Overall lesson coverage</p>
-            <p className="text-sm font-black text-gray-900">
-              {totalPublished} / {totalLessons} published
-            </p>
-          </div>
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all"
-              style={{ width: `${totalLessons > 0 ? Math.round((totalPublished / totalLessons) * 100) : 0}%` }}
-            />
-          </div>
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> {totalPublished} published</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> {totalInReview} in review</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> {totalDraft} draft</span>
-          </div>
+// ── Quick action row (EXL "Quick actions" sidebar widget) ─────────────────────
+function QuickAction({ icon, label, sub, href }) {
+  return (
+    <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: '#fff', border: '1px solid #e5e7eb', textDecoration: 'none', transition: 'border-color .15s' }} className="hover:border-gray-300">
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f9fafb', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
+        {icon}
+      </div>
+      <div>
+        <p style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{label}</p>
+        {sub && <p style={{ fontSize: 10, color: '#9ca3af' }}>{sub}</p>}
+      </div>
+    </Link>
+  )
+}
+
+export default async function AdminDashboardPage() {
+  const db = svc()
+
+  const [
+    { data: subjects },
+    { data: subtopics },
+    { data: students },
+    { data: questions },
+    { data: attempts },
+    { data: schools },
+  ] = await Promise.all([
+    db.from('subjects').select('id, name, slug, exam_type'),
+    db.from('subtopics').select('id, name, slug, lesson_status, topic_id, topics(subject_id)'),
+    db.from('profiles').select('id').eq('role', 'student'),
+    db.from('questions').select('id, subject_id, topic_id'),
+    db.from('question_attempts').select('id, subject_id, is_correct').limit(5000),
+    db.from('schools').select('id, name'),
+  ])
+
+  const totalStudents  = students?.length ?? 0
+  const totalQs        = questions?.length ?? 0
+  const totalAttempts  = attempts?.length ?? 0
+  const totalSchools   = schools?.length ?? 0
+
+  const correctCount   = (attempts ?? []).filter(a => a.is_correct).length
+  const successRate    = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
+
+  // Total XP estimate (5 + correct*2 per session, rough estimate from attempts)
+  const xpEarned = correctCount * 2 + Math.floor(totalAttempts / 10) * 5
+
+  // Group subtopics by subject
+  const bySubject = {}
+  for (const sub of (subjects ?? [])) { bySubject[sub.id] = { ...sub, subtopics: [] } }
+  for (const st of (subtopics ?? [])) {
+    const sid = st.topics?.subject_id
+    if (sid && bySubject[sid]) bySubject[sid].subtopics.push(st)
+  }
+
+  // Per-subject question count + accuracy
+  const qBySubject = {}
+  const attemptsBySubject = {}
+  for (const q of (questions ?? [])) {
+    if (!q.subject_id) continue
+    qBySubject[q.subject_id] = (qBySubject[q.subject_id] ?? 0) + 1
+  }
+  for (const a of (attempts ?? [])) {
+    if (!a.subject_id) continue
+    if (!attemptsBySubject[a.subject_id]) attemptsBySubject[a.subject_id] = { total: 0, correct: 0 }
+    attemptsBySubject[a.subject_id].total++
+    if (a.is_correct) attemptsBySubject[a.subject_id].correct++
+  }
+
+  const SUBJECT_CFG = {
+    'Chemistry':   { icon: '⚗️', color: '#9b7ae0' },
+    'Physics':     { icon: '⚡', color: '#ff8fab' },
+    'Biology':     { icon: '🧬', color: '#6cce8e' },
+    'Mathematics': { icon: '📐', color: '#5cb8ea' },
+    'English Language': { icon: '📖', color: '#a78bfa' },
+    'Economics':   { icon: '📊', color: '#fcd34d' },
+    'Government':  { icon: '🏛️', color: '#f87171' },
+    'default':     { icon: '📝', color: '#9ca3af' },
+  }
+
+  const subjectSections = Object.values(bySubject).map(subj => {
+    const cfg    = SUBJECT_CFG[subj.name] ?? SUBJECT_CFG.default
+    const aData  = attemptsBySubject[subj.id]
+    const subPct = aData?.total ? Math.round((aData.correct / aData.total) * 100) : null
+    const items  = subj.subtopics.slice(0, 6).map(st => ({
+      id:           st.id,
+      name:         st.name,
+      icon:         cfg.icon,
+      status:       st.lesson_status ?? 'draft',
+      questionCount: qBySubject[subj.id] ?? 0,
+      attemptCount:  aData?.total ?? 0,
+      pct:           subPct,
+      editHref:     `/admin/curriculum/${subj.slug}`,
+      viewHref:     `/admin/subjects/${subj.slug}/${st.id}`,
+    }))
+    return {
+      id:      subj.id,
+      name:    subj.name,
+      icon:    cfg.icon,
+      color:   cfg.color,
+      items,
+      addHref: `/admin/curriculum/${subj.slug}`,
+    }
+  })
+
+  const greeting = getGreeting()
+
+  return (
+    <div>
+      {/* ── Top bar: greeting + actions ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>{greeting}</p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111827', letterSpacing: '-0.025em', lineHeight: 1.05 }}>Content Library</h1>
         </div>
-
-        {/* Per-subject breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {subjectStats.map(subject => (
-            <Link key={subject.id} href={`/admin/subjects/${subject.slug}`}
-              className="bg-white rounded-2xl border border-gray-200 p-4 hover:border-indigo-200 hover:shadow-sm transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-bold text-gray-900">{subject.name}</p>
-                  <p className="text-xs text-gray-400">{subject.exam_type}</p>
-                </div>
-                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                  subject.pct === 100 ? 'bg-green-100 text-green-700' :
-                  subject.pct >= 50   ? 'bg-blue-100 text-blue-700' :
-                                        'bg-gray-100 text-gray-500'
-                }`}>
-                  {subject.pct}%
-                </span>
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all"
-                  style={{ width: `${subject.pct}%` }}
-                />
-              </div>
-              <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
-                <span className="text-green-600">✓ {subject.published}</span>
-                {subject.inReview > 0 && <span className="text-blue-500">● {subject.inReview}</span>}
-                {subject.draft > 0    && <span>○ {subject.draft}</span>}
-              </div>
-            </Link>
-          ))}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link href="/admin/questions/upload"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#fff', border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 700, color: '#374151', textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+            ↑ Upload Questions
+          </Link>
+          <Link href="/admin/curriculum"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#4f46e5', fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none', boxShadow: '0 3px 0 #2d3a9e' }}>
+            + New Lesson
+          </Link>
         </div>
       </div>
 
-      {/* ── Quick actions ───────────────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-black text-gray-900 uppercase tracking-wide">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { href: '/admin/questions/upload',  label: 'Upload Questions',  icon: '⬆️', color: 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100' },
-            { href: '/admin/curriculum',        label: 'Generate Lesson',   icon: '✍️', color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' },
-            { href: '/admin/subjects-manager',  label: 'Add Subject',       icon: '📚', color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
-            { href: '/admin/video-lessons/new', label: 'New Video',         icon: '🎬', color: 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100' },
-          ].map(action => (
-            <Link key={action.href} href={action.href}
-              className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-sm font-bold transition-colors ${action.color}`}>
-              <span className="text-lg">{action.icon}</span>
-              {action.label}
-            </Link>
-          ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, alignItems: 'flex-start' }}>
+
+        {/* ── LEFT: stats + subject sections ── */}
+        <div>
+          {/* Stat row — EXL top stats */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: '20px 24px', marginBottom: 28, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+            <StatCard label="Students" value={totalStudents.toLocaleString()} sub="+10 this week" barColor="#6366f1" />
+            <div style={{ width: 1, background: '#f3f4f6' }} />
+            <StatCard label="Attempts" value={totalAttempts.toLocaleString()} sub={`${Math.min(totalAttempts, 999)} this week`} barColor="#34d399" />
+            <div style={{ width: 1, background: '#f3f4f6' }} />
+            <StatCard label="Success Rate" value={`${successRate}%`} sub="across all questions" barColor="#fbbf24" />
+            <div style={{ width: 1, background: '#f3f4f6' }} />
+            <StatCard label="XP Earned" value={xpEarned.toLocaleString()} sub="lifetime total" barColor="#a78bfa" />
+          </div>
+
+          {/* Subject sections */}
+          {subjectSections.length > 0 ? (
+            subjectSections.map(section => (
+              <SubjectSection
+                key={section.id}
+                name={section.name}
+                icon={section.icon}
+                color={section.color}
+                items={section.items}
+                addHref={section.addHref}
+                addLabel={`New ${section.name} lesson`}
+              />
+            ))
+          ) : (
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 40, textAlign: 'center' }}>
+              <p style={{ fontSize: 32, marginBottom: 8 }}>📚</p>
+              <p style={{ fontWeight: 900, color: '#111827' }}>No content yet</p>
+              <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Set up your curriculum to get started.</p>
+              <Link href="/admin/curriculum" style={{ display: 'inline-block', marginTop: 16, padding: '10px 20px', background: '#4f46e5', color: '#fff', borderRadius: 10, fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>Set up curriculum →</Link>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: sidebar widgets ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Activity chart placeholder */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 16 }}>
+            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 12 }}>ACTIVITY · 14 DAYS</p>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 60 }}>
+              {[40, 65, 30, 80, 55, 70, 45, 90, 60, 75, 50, 85, 70, 95].map((h, i) => (
+                <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: 3, background: '#e9d5ff', transition: 'height .5s' }}
+                  className="hover:bg-violet-400" />
+              ))}
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
+            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 10 }}>QUICK ACTIONS</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <QuickAction icon="◼" label="All Content" sub={`${(subtopics ?? []).length} subtopics`} href="/admin/curriculum" />
+              <QuickAction icon="◎" label="Students" sub={`${totalStudents} enrolled`} href="/admin/users" />
+              <QuickAction icon="◇" label="Question Bank" sub={`${totalQs} questions`} href="/admin/questions" />
+              <QuickAction icon="↑" label="Upload Questions" sub="Add from PDFs" href="/admin/questions/upload" />
+            </div>
+          </div>
+
+          {/* Needs attention */}
+          {(() => {
+            const unpublished = (subtopics ?? []).filter(s => s.lesson_status !== 'published').length
+            const inReview    = (subtopics ?? []).filter(s => s.lesson_status === 'in_review').length
+            if (!unpublished && !inReview) return null
+            return (
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
+                <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 10 }}>NEEDS ATTENTION</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {inReview > 0 && (
+                    <Link href="/admin/reviewers" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a', textDecoration: 'none' }}>
+                      <span style={{ fontSize: 13 }}>🔍</span>
+                      <div>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>{inReview} lessons in review</p>
+                        <p style={{ fontSize: 10, color: '#d97706' }}>Awaiting approval</p>
+                      </div>
+                    </Link>
+                  )}
+                  {unpublished > 0 && (
+                    <Link href="/admin/curriculum" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: '#f9fafb', border: '1px solid #e5e7eb', textDecoration: 'none' }}>
+                      <span style={{ fontSize: 13 }}>📝</span>
+                      <div>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{unpublished} unpublished</p>
+                        <p style={{ fontSize: 10, color: '#9ca3af' }}>Drafts + in review</p>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Schools */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af' }}>SCHOOLS</p>
+              <Link href="/admin/schools" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>All →</Link>
+            </div>
+            {(schools ?? []).slice(0, 4).map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: 13 }}>🏫</span>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</p>
+              </div>
+            ))}
+            {(schools?.length ?? 0) === 0 && <p style={{ fontSize: 12, color: '#9ca3af' }}>No partner schools yet</p>}
+          </div>
         </div>
       </div>
     </div>

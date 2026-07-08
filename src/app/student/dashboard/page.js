@@ -123,9 +123,20 @@ const PracticeHeroCard = memo(function PracticeHeroCard({ sub, planItem, isDark 
 
   function handlePractise(e) {
     e.stopPropagation()
-    const params = new URLSearchParams({ mode: 'topic', subject_id: sub.subject_id })
-    if (planItem?.topicId) params.set('topic_id', planItem.topicId)
-    router.push(`/student/practice?${params}`)
+    // Go directly to session with the recommended topic pre-filled.
+    // The topic comes from mastery-based next-topic API (core topics first).
+    const config = {
+      subjects:   [subjectName],
+      subject_id: sub.subject_id,
+      examType:   'WAEC',
+      count:      10,
+      mode:       'topic',
+      topicName:  planItem?.topicName ?? null,
+      topic_id:   planItem?.topicId   ?? null,
+      isCore:     planItem?.isCore    ?? false,
+    }
+    sessionStorage.setItem('practice_config', JSON.stringify(config))
+    router.push('/student/practice/session')
   }
 
   const pressDown = () => {
@@ -582,24 +593,14 @@ export default function DashboardPage() {
     })
     setSubjects(enriched)
 
-    // Load study plan for next core topic per subject
+    // Load mastery-based next topic per subject (fast — reads student_topic_mastery)
     if (enriched.length > 0) {
       try {
-        const res  = await fetch('/api/student/study-plan')
+        const res  = await fetch('/api/student/next-topic')
         const data = await res.json()
-        const by   = {}
-        for (const item of (data.items ?? [])) {
-          const sid = item.subjectId
-          if (!sid || by[sid] || item.status === 'mastered') continue
-          by[sid] = {
-            topicName: item.topicName ?? null,
-            topicId:   item.topicId   ?? null,
-            isCore:    item.isCore    ?? false,
-          }
-        }
-        setPlanItems(by)
+        setPlanItems(data.topics ?? {})
       } catch {
-        // non-critical
+        // non-critical — dashboard still works without topic recommendation
       }
     }
 

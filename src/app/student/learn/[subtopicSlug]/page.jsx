@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { parseLesson } from '@/lib/lessonParser'
 import LessonViewer from '@/components/lesson/LessonViewer'
 
 export default async function LearnSubtopicPage({ params }) {
@@ -37,6 +38,19 @@ export default async function LearnSubtopicPage({ params }) {
     )
   }
 
+  // ── Parse lesson_content → lesson object ────────────────────────────────────
+  // lesson_content is stored as a JSON string in the DB.
+  // LessonViewer needs the parsed { title, slides } object — not the raw string.
+  let lesson = null
+  if (subtopic.lesson_content) {
+    const raw = typeof subtopic.lesson_content === 'string'
+      ? subtopic.lesson_content
+      : JSON.stringify(subtopic.lesson_content)
+    const { valid, lesson: parsed } = parseLesson(raw)
+    if (valid) lesson = parsed
+    // If parsing fails, lesson stays null — LessonViewer will show error state
+  }
+
   const { data: { user } } = await supabase.auth.getUser()
 
   let existingProgress = null
@@ -50,11 +64,23 @@ export default async function LearnSubtopicPage({ params }) {
     existingProgress = data
   }
 
+  // Resolve accent colour from subject
+  const subjectName = subtopic.topics?.subjects?.name ?? ''
+  const ACCENT_MAP = {
+    'Chemistry': '#9b7ae0', 'Physics': '#ff8fab', 'Biology': '#6cce8e',
+    'Mathematics': '#5cb8ea', 'Further Mathematics': '#5cb8ea',
+    'English Language': '#a78bfa', 'Use of English': '#a78bfa',
+    'Economics': '#fcd34d', 'Government': '#f87171', 'Geography': '#34d399',
+  }
+  const accentColor = ACCENT_MAP[subjectName] ?? '#6366f1'
+
   return (
     <LessonViewer
+      lesson={lesson}             // ← parsed { title, slides } — was missing before
       subtopic={subtopic}
       userId={user?.id ?? null}
       existingProgress={existingProgress}
+      accentColor={accentColor}
     />
   )
 }
