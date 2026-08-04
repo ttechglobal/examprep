@@ -6,8 +6,8 @@
 // read the pending diagnostic data out of sessionStorage, POST it to the save API,
 // then redirect to the dashboard.
 
-import { useEffect } from 'react'
-import { useRouter, useSearchParams, Suspense } from 'next/navigation'
+import { useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 function SaveBridge() {
   const router       = useRouter()

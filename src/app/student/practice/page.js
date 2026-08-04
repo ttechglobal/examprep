@@ -59,10 +59,15 @@ const LABEL = {
 }
 
 // ── Practice Setup Modal ──────────────────────────────────────────────────────
+
+// ── Practice Setup Modal — two-step flow ──────────────────────────────────────
+// Step 1: Subject + Practice type
+// Step 2: Topic / Questions / Answer mode
 export function PracticeSetupModal({
   initialSubject, subjects, nextTopics, subjectMastery,
   profile, onClose, onStart, onMockExam,
 }) {
+  const [step,       setStep]       = useState(1)
   const [subject,    setSubject]    = useState(initialSubject ?? subjects?.[0])
   const [type,       setType]       = useState('topic')
   const [count,      setCount]      = useState(10)
@@ -83,7 +88,7 @@ export function PracticeSetupModal({
   }, [subject?.id]) // eslint-disable-line
 
   useEffect(() => {
-    if (type !== 'topic' || !subject?.id) return
+    if (step !== 2 || type !== 'topic' || !subject?.id) return
     setLoadingTopics(true)
     const sb = createClient()
     sb.from('topics').select('id, name, is_core').eq('subject_id', subject.id).order('order_index')
@@ -92,12 +97,16 @@ export function PracticeSetupModal({
         setLoadingTopics(false)
         if (!topicId && recTopic) { setTopicId(recTopic.topicId); setTopicName(recTopic.topicName) }
       })
-  }, [type, subject?.id]) // eslint-disable-line
+  }, [step, type, subject?.id]) // eslint-disable-line
 
   function handleBackdrop(e) { if (e.target === e.currentTarget) onClose() }
 
-  function handleStart() {
+  function handleNext() {
     if (type === 'mock') { onMockExam?.(); return }
+    setStep(2)
+  }
+
+  function handleStart() {
     if (type === 'timed' && !duration) return
     const topic = type === 'topic'
       ? { topicId, topicName, isCore: allTopics.find(t => t.id === topicId)?.is_core ?? false }
@@ -108,12 +117,21 @@ export function PracticeSetupModal({
   const isMock  = type === 'mock'
   const isTimed = type === 'timed'
   const isTopic = type === 'topic'
+  const isStep2Ready = isTimed ? !!duration : !isTopic || !!topicId
   const DURATIONS = [
     { secs:300,  label:'5 min',  qs:5  },
     { secs:600,  label:'10 min', qs:10 },
     { secs:1200, label:'20 min', qs:20 },
     { secs:1800, label:'30 min', qs:30 },
   ]
+
+  const STEP_LABEL = {
+    topic: 'Topic drill',
+    weak:  'Weak topics',
+    mixed: 'Mixed',
+    timed: 'Timed',
+    mock:  'Mock exam',
+  }
 
   return (
     <div onClick={handleBackdrop} style={{
@@ -127,171 +145,209 @@ export function PracticeSetupModal({
         display:'flex',flexDirection:'column',boxShadow:'0 -12px 48px rgba(0,0,0,.3)',
         width:'100%', maxWidth: 520,
       }}>
+        {/* Drag handle */}
         <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0',flexShrink:0}}>
           <div style={{width:36,height:4,borderRadius:2,background:'var(--border)'}} />
         </div>
+
+        {/* Header */}
         <div style={{padding:'10px 20px 14px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
-            <div>
-              <p style={{fontSize:19,fontWeight:900,color:'var(--text-prim)',letterSpacing:'-0.02em'}}>Set up practice</p>
-              {mastery && (
-                <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
-                  <div style={{flex:1,height:4,background:'var(--bg-subtle)',borderRadius:99,overflow:'hidden',maxWidth:120}}>
-                    <div style={{width:`${mastery.pct}%`,height:'100%',background:accent,borderRadius:99}} />
-                  </div>
-                  <span style={{fontSize:11,fontWeight:700,color:accent}}>{mastery.pct}% mastered</span>
-                  <span style={{fontSize:11,color:'var(--text-tert)'}}>{mastery.completed}/{mastery.total} topics</span>
-                </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              {step === 2 && (
+                <button onClick={() => setStep(1)} style={{width:28,height:28,borderRadius:8,fontSize:14,cursor:'pointer',background:'var(--bg-subtle)',border:'1px solid var(--border)',color:'var(--text-sec)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>←</button>
               )}
+              <div>
+                <p style={{fontSize:19,fontWeight:900,color:'var(--text-prim)',letterSpacing:'-0.02em'}}>
+                  {step === 1 ? 'Start practice' : 'Customise session'}
+                </p>
+                {step === 1 && mastery && (
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+                    <div style={{flex:1,height:3,background:'var(--bg-subtle)',borderRadius:99,overflow:'hidden',maxWidth:100}}>
+                      <div style={{width:`${mastery.pct}%`,height:'100%',background:accent,borderRadius:99}} />
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:accent}}>{mastery.pct}% mastered</span>
+                  </div>
+                )}
+                {step === 2 && (
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+                    <span style={{fontSize:11,fontWeight:700,color:accent}}>{getIcon(subject?.name ?? '')} {subject?.name}</span>
+                    <span style={{fontSize:11,color:'var(--text-tert)'}}>·</span>
+                    <span style={{fontSize:11,color:'var(--text-tert)'}}>{STEP_LABEL[type]}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <button onClick={onClose} style={{width:30,height:30,borderRadius:9,fontSize:13,cursor:'pointer',flexShrink:0,background:'var(--bg-subtle)',border:'1px solid var(--border)',color:'var(--text-tert)',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              {/* Step dots */}
+              <div style={{display:'flex',gap:4}}>
+                {[1,2].map(s => (
+                  <div key={s} style={{width: s === step ? 14 : 5,height:5,borderRadius:3,background: s === step ? accent : 'var(--border)',transition:'all .2s'}} />
+                ))}
+              </div>
+              <button onClick={onClose} style={{width:30,height:30,borderRadius:9,fontSize:13,cursor:'pointer',background:'var(--bg-subtle)',border:'1px solid var(--border)',color:'var(--text-tert)',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+            </div>
           </div>
         </div>
 
-        <div style={{flex:1,overflowY:'auto',padding:'18px 20px',display:'flex',flexDirection:'column',gap:22}}>
+        {/* Body */}
+        <div style={{flex:1,overflowY:'auto',padding:'18px 20px',display:'flex',flexDirection:'column',gap:20}}>
 
-          {/* Subject */}
-          <div>
-            <span style={LABEL}>Subject</span>
-            <div style={{display:'flex',gap:7,overflowX:'auto',paddingBottom:4}}>
-              {(subjects ?? []).map(sub => {
-                const a = getAccent(sub.name); const on = subject?.id === sub.id
-                return (
-                  <button key={sub.id} onClick={() => setSubject(sub)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 13px',borderRadius:999,flexShrink:0,cursor:'pointer',background:on?`${a}18`:'var(--bg-subtle)',border:`2px solid ${on?a:'var(--border)'}`,transition:'all .12s'}}>
-                    <span style={{fontSize:13}}>{getIcon(sub.name)}</span>
-                    <span style={{fontSize:12,fontWeight:800,color:on?a:'var(--text-sec)',whiteSpace:'nowrap'}}>{sub.name}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Practice type */}
-          <div>
-            <span style={LABEL}>Practice type</span>
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
-              {[
-                {key:'topic', icon:'🎯', label:'Topic drill',   desc:'Focus on one specific topic'},
-                {key:'weak',  icon:'📈', label:'Weak topics',   desc:'Your lowest mastery areas first'},
-                {key:'mixed', icon:'🔀', label:'Mixed',         desc:'Random across all topics'},
-                {key:'timed', icon:'⏱️', label:'Timed',         desc:'Race the clock — build exam stamina'},
-                {key:'mock',  icon:'📝', label:'Mock exam',     desc:'Full WAEC or JAMB simulation', badge:'WAEC · JAMB'},
-              ].map(pt => {
-                const on = type === pt.key
-                return (
-                  <button key={pt.key} onClick={() => setType(pt.key)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,transition:'all .12s'}}>
-                    <span style={{fontSize:20,flexShrink:0}}>{pt.icon}</span>
-                    <div style={{flex:1}}>
-                      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2}}>
-                        <span style={{fontSize:13,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{pt.label}</span>
-                        {pt.badge && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(255,195,107,.15)',color:'#ffc36b'}}>{pt.badge}</span>}
-                      </div>
-                      <span style={{fontSize:11,color:'var(--text-tert)'}}>{pt.desc}</span>
-                    </div>
-                    {on && <span style={{fontSize:13,color:'var(--active-text)',flexShrink:0}}>✓</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Topic picker */}
-          {isTopic && (
-            <div>
-              <span style={LABEL}>Choose topic</span>
-              {loadingTopics ? (
-                <div style={{height:36,display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{width:18,height:18,borderRadius:'50%',border:`2px solid ${accent}`,borderTopColor:'transparent',animation:'spin .7s linear infinite'}} />
-                  <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-                  <span style={{fontSize:12,color:'var(--text-tert)'}}>Loading topics…</span>
-                </div>
-              ) : (
-                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                  {allTopics.map(t => {
-                    const on = topicId === t.id; const isRec = recTopic?.topicId === t.id
+          {/* ── STEP 1: Subject + Practice type ── */}
+          {step === 1 && (
+            <>
+              {/* Subject */}
+              <div>
+                <span style={LABEL}>Subject</span>
+                <div style={{display:'flex',gap:7,overflowX:'auto',paddingBottom:4}}>
+                  {(subjects ?? []).map(sub => {
+                    const a = getAccent(sub.name); const on = subject?.id === sub.id
                     return (
-                      <button key={t.id} onClick={() => { setTopicId(t.id); setTopicName(t.name) }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderRadius:12,cursor:'pointer',textAlign:'left',background:on?`${accent}15`:'var(--bg-subtle)',border:`2px solid ${on?accent:'var(--border)'}`,transition:'all .12s'}}>
-                        <div style={{width:6,height:6,borderRadius:'50%',background:on?accent:'var(--border)',flexShrink:0}} />
-                        <span style={{fontSize:13,fontWeight:on?800:600,color:on?'var(--text-prim)':'var(--text-sec)',flex:1}}>{t.name}</span>
-                        <div style={{display:'flex',gap:5,flexShrink:0}}>
-                          {t.is_core && <span style={{fontSize:9,fontWeight:700,color:'#ffc36b'}}>🔥 Core</span>}
-                          {isRec && !on && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(155,122,224,.15)',color:'#9b7ae0'}}>Recommended</span>}
-                        </div>
+                      <button key={sub.id} onClick={() => setSubject(sub)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 13px',borderRadius:999,flexShrink:0,cursor:'pointer',background:on?`${a}18`:'var(--bg-subtle)',border:`2px solid ${on?a:'var(--border)'}`,transition:'all .12s'}}>
+                        <span style={{fontSize:13}}>{getIcon(sub.name)}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:on?a:'var(--text-sec)',whiteSpace:'nowrap'}}>{sub.name}</span>
                       </button>
                     )
                   })}
                 </div>
+              </div>
+
+              {/* Practice type */}
+              <div>
+                <span style={LABEL}>What kind of practice?</span>
+                <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                  {[
+                    {key:'topic', icon:'🎯', label:'Topic drill',   desc:'Focus on one specific topic'},
+                    {key:'weak',  icon:'📈', label:'Weak topics',   desc:'Your lowest mastery areas first'},
+                    {key:'mixed', icon:'🔀', label:'Mixed',         desc:'Random across all topics'},
+                    {key:'timed', icon:'⏱️', label:'Timed session', desc:'Race the clock — build exam stamina'},
+                    {key:'mock',  icon:'📝', label:'Mock exam',     desc:'Full WAEC or JAMB simulation', badge:'WAEC · JAMB'},
+                  ].map(pt => {
+                    const on = type === pt.key
+                    return (
+                      <button key={pt.key} onClick={() => setType(pt.key)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,transition:'all .12s'}}>
+                        <span style={{fontSize:20,flexShrink:0}}>{pt.icon}</span>
+                        <div style={{flex:1}}>
+                          <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2}}>
+                            <span style={{fontSize:13,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{pt.label}</span>
+                            {pt.badge && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(255,195,107,.15)',color:'#ffc36b'}}>{pt.badge}</span>}
+                          </div>
+                          <span style={{fontSize:11,color:'var(--text-tert)'}}>{pt.desc}</span>
+                        </div>
+                        {on && <span style={{width:20,height:20,borderRadius:'50%',background:'var(--active-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'var(--active-text)',flexShrink:0,fontWeight:900}}>✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── STEP 2: Options (topic / count / answer mode / duration) ── */}
+          {step === 2 && (
+            <>
+              {/* Topic picker */}
+              {isTopic && (
+                <div>
+                  <span style={LABEL}>Choose topic</span>
+                  {loadingTopics ? (
+                    <div style={{height:36,display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{width:18,height:18,borderRadius:'50%',border:`2px solid ${accent}`,borderTopColor:'transparent',animation:'spin .7s linear infinite'}} />
+                      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                      <span style={{fontSize:12,color:'var(--text-tert)'}}>Loading topics…</span>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      {allTopics.map(t => {
+                        const on = topicId === t.id; const isRec = recTopic?.topicId === t.id
+                        return (
+                          <button key={t.id} onClick={() => { setTopicId(t.id); setTopicName(t.name) }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderRadius:12,cursor:'pointer',textAlign:'left',background:on?`${accent}15`:'var(--bg-subtle)',border:`2px solid ${on?accent:'var(--border)'}`,transition:'all .12s'}}>
+                            <div style={{width:6,height:6,borderRadius:'50%',background:on?accent:'var(--border)',flexShrink:0}} />
+                            <span style={{fontSize:13,fontWeight:on?800:600,color:on?'var(--text-prim)':'var(--text-sec)',flex:1}}>{t.name}</span>
+                            <div style={{display:'flex',gap:5,flexShrink:0}}>
+                              {t.is_core && <span style={{fontSize:9,fontWeight:700,color:'#ffc36b'}}>🔥 Core</span>}
+                              {isRec && !on && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(155,122,224,.15)',color:'#9b7ae0'}}>Recommended</span>}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Duration picker */}
-          {isTimed && (
-            <div>
-              <span style={LABEL}>Duration</span>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {DURATIONS.map(d => {
-                  const on = duration === d.secs
-                  return (
-                    <button key={d.secs} onClick={() => { setDuration(d.secs); setCount(d.qs) }} style={{padding:'13px 10px',borderRadius:13,cursor:'pointer',textAlign:'center',background:on?'#0b1330':'var(--bg-subtle)',border:`2px solid ${on?'#0b1330':'var(--border)'}`,transition:'all .12s'}}>
-                      <p style={{fontSize:17,fontWeight:900,color:on?'#fff':'var(--text-prim)',marginBottom:2}}>{d.label}</p>
-                      <p style={{fontSize:10,color:on?'rgba(255,255,255,.55)':'var(--text-tert)'}}>~{d.qs} questions</p>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+              {/* Duration picker (timed) */}
+              {isTimed && (
+                <div>
+                  <span style={LABEL}>Duration</span>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    {DURATIONS.map(d => {
+                      const on = duration === d.secs
+                      return (
+                        <button key={d.secs} onClick={() => { setDuration(d.secs); setCount(d.qs) }} style={{padding:'13px 10px',borderRadius:13,cursor:'pointer',textAlign:'center',background:on?'#0b1330':'var(--bg-subtle)',border:`2px solid ${on?'#0b1330':'var(--border)'}`,transition:'all .12s'}}>
+                          <p style={{fontSize:17,fontWeight:900,color:on?'#fff':'var(--text-prim)',marginBottom:2}}>{d.label}</p>
+                          <p style={{fontSize:10,color:on?'rgba(255,255,255,.55)':'var(--text-tert)'}}>~{d.qs} questions</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
-          {/* Question count */}
-          {!isMock && !isTimed && (
-            <div>
-              <span style={LABEL}>Questions</span>
-              <div style={{display:'flex',gap:8}}>
-                {[5,10,20,30].map(n => (
-                  <button key={n} onClick={() => setCount(n)} style={{flex:1,padding:'10px 0',borderRadius:11,fontSize:14,fontWeight:800,cursor:'pointer',transition:'all .12s',background:count===n?'#0b1330':'var(--bg-subtle)',color:count===n?'#fff':'var(--text-sec)',border:`2px solid ${count===n?'#0b1330':'var(--border)'}`}}>
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+              {/* Question count */}
+              {!isTimed && (
+                <div>
+                  <span style={LABEL}>How many questions?</span>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+                    {[5,10,20,30].map(n => (
+                      <button key={n} onClick={() => setCount(n)} style={{padding:'12px 0',borderRadius:11,fontSize:15,fontWeight:800,cursor:'pointer',transition:'all .12s',background:count===n?'#0b1330':'var(--bg-subtle)',color:count===n?'#fff':'var(--text-sec)',border:`2px solid ${count===n?'#0b1330':'var(--border)'}`}}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{fontSize:10,color:'var(--text-tert)',marginTop:5}}>~{Math.round(count*1.4)} minutes</p>
+                </div>
+              )}
 
-          {/* Answer mode */}
-          {!isMock && !isTimed && (
-            <div>
-              <span style={LABEL}>Answer mode</span>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {[
-                  {key:'practice',icon:'🏆',label:'Practice mode',desc:'Answers shown at the end'},
-                  {key:'study',   icon:'📖',label:'Study mode',   desc:'Answer shown right away'},
-                ].map(am => {
-                  const on = answerMode === am.key
-                  return (
-                    <button key={am.key} onClick={() => setAnswerMode(am.key)} style={{padding:'12px 11px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,display:'flex',flexDirection:'column',gap:5,transition:'all .12s'}}>
-                      <span style={{fontSize:18}}>{am.icon}</span>
-                      <span style={{fontSize:12,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{am.label}</span>
-                      <span style={{fontSize:10,color:'var(--text-tert)',lineHeight:1.4}}>{am.desc}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+              {/* Answer mode */}
+              {!isTimed && (
+                <div>
+                  <span style={LABEL}>Answer mode</span>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    {[
+                      {key:'practice',icon:'🏆',label:'Practice mode',desc:'Answers shown at the end'},
+                      {key:'study',   icon:'📖',label:'Study mode',   desc:'Answer shown right away'},
+                    ].map(am => {
+                      const on = answerMode === am.key
+                      return (
+                        <button key={am.key} onClick={() => setAnswerMode(am.key)} style={{padding:'12px 11px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,display:'flex',flexDirection:'column',gap:5,transition:'all .12s'}}>
+                          <span style={{fontSize:18}}>{am.icon}</span>
+                          <span style={{fontSize:12,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{am.label}</span>
+                          <span style={{fontSize:10,color:'var(--text-tert)',lineHeight:1.4}}>{am.desc}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div style={{height:4}} />
         </div>
 
+        {/* Footer CTA */}
         <div style={{flexShrink:0,padding:'12px 20px',paddingBottom:'max(20px, env(safe-area-inset-bottom))',borderTop:'1px solid var(--border)',background:'var(--bg-card)'}}>
-          {isMock ? (
-            <PressBtn onClick={handleStart}>Set up mock exam →</PressBtn>
-          ) : isTimed ? (
-            <PressBtn onClick={handleStart} disabled={!duration}>
-              {duration ? `Start ${count}-question timed session →` : 'Choose a duration first'}
+          {step === 1 ? (
+            <PressBtn onClick={handleNext} bg={isMock ? '#0b1330' : accent} shadow={isMock ? '0 6px 0 #05070f' : `0 6px 0 ${accent}88`}>
+              {isMock ? 'Set up mock exam →' : 'Continue →'}
             </PressBtn>
           ) : (
-            <PressBtn onClick={handleStart} disabled={isTopic && !topicId} bg={accent} shadow={`0 6px 0 ${accent}88`}>
-              Start {count} questions →
+            <PressBtn onClick={handleStart} disabled={!isStep2Ready} bg={accent} shadow={`0 6px 0 ${accent}88`}>
+              {isTimed
+                ? (duration ? `Start ${count}-question timed session →` : 'Choose a duration first')
+                : `Start ${count} questions →`
+              }
             </PressBtn>
           )}
         </div>
@@ -299,7 +355,6 @@ export function PracticeSetupModal({
     </div>
   )
 }
-
 // ── Progress snapshot ─────────────────────────────────────────────────────────
 function ProgressSnapshot({ subjects, overallPct, weekTotal }) {
   if (!subjects?.length) return null

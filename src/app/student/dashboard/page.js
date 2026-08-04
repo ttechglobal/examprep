@@ -134,7 +134,7 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
   const isCore      = planItem?.isCore    ?? false
 
   // Light mode hero uses a flat deep-navy card (prototype uses --navy for light)
-  const bg = isDark ? cfg.cardBg : 'var(--navy)'
+  const bg = isDark ? cfg.cardBg : '#0b1330'
 
   return (
     <div style={{
@@ -583,14 +583,7 @@ export default function DashboardPage() {
               )}
             />
 
-            {/* ── 5. Quick modes ── */}
-            <QuickModes
-              router={router}
-              onTimed={() => openPractice(firstSub, 'timed')}
-              onWeak={() => openPractice(firstSub, 'weak')}
-            />
-
-            {/* ── 6. Target strip ── */}
+            {/* ── 5. Target strip ── */}
             <div>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your target</p>

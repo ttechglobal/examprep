@@ -158,16 +158,17 @@ export default function ExamSessionPage() {
   }
 
   if (loading) return (
-    <div className="min-h-dvh bg-base flex flex-col items-center justify-center gap-3">
-      <div className="w-8 h-8 rounded-full border-4 animate-spin" style={{ borderColor: 'var(--active-border)', borderTopColor: 'var(--active-text)' }} />
-      <p className="text-secondary text-sm">Loading exam paper…</p>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '4px solid var(--active-border)', borderTopColor: 'var(--active-text)', animation: 'spin .7s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <p style={{ fontSize: 13, color: 'var(--text-sec)' }}>Loading exam paper…</p>
     </div>
   )
 
   if (error) return (
-    <div className="min-h-dvh bg-base flex flex-col items-center justify-center gap-4 p-6 text-center">
+    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, textAlign: 'center' }}>
       <p style={{ fontSize: 32 }}>😕</p>
-      <p className="text-primary font-bold text-sm">{error}</p>
+      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-prim)' }}>{error}</p>
       <button onClick={() => router.push('/student/exam')} style={{ padding: '10px 20px', borderRadius: 12, background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700 }}>← Back to Exam Mode</button>
     </div>
   )
@@ -188,22 +189,32 @@ export default function ExamSessionPage() {
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Minimal immersive exam bar — no logo, focused */}
-      <div style={{ flexShrink: 0, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
+      {/* HUD bar — matches practice session exactly */}
+      <div style={{ flexShrink: 0, height: 52, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
         {/* Exit */}
         <button onClick={() => { if (window.confirm('Exit exam? All progress will be lost.')) { clearInterval(timerRef.current); router.push('/student/exam') } }}
-          style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-tert)', cursor: 'pointer' }}>
+          style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-tert)', cursor: 'pointer', flexShrink: 0 }}>
           ✕
         </button>
-        {/* Q map toggle — compact */}
-        <button onClick={() => setShowMap(m => !m)}
-          style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', background: showMap ? 'var(--active-bg)' : 'var(--bg-subtle)', border: showMap ? '1px solid var(--active-border)' : '1px solid var(--border)', padding: '5px 11px', borderRadius: 8, cursor: 'pointer' }}>
-          {answered}/{questions.length} ✓
-        </button>
+
+        {/* Progress area — centre */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ height: 5, borderRadius: 999, background: 'var(--bg-inset)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 999, background: accent, width: `${((index + 1) / questions.length) * 100}%`, transition: 'width .3s' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button onClick={() => setShowMap(m => !m)}
+              style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              Q{index + 1} / {questions.length}
+            </button>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)' }}>{answered} answered</span>
+          </div>
+        </div>
+
         {/* Timer */}
-        <div style={{ background: urgentTime ? 'var(--danger-bg)' : 'var(--bg-subtle)', border: `1px solid ${urgentTime ? 'var(--danger-border)' : 'var(--border)'}`, borderRadius: 7, padding: '3px 9px', textAlign: 'center' }}>
-          <p style={{ fontSize: 12, fontWeight: 800, color: timerCol }}>{formatTime(secsLeft)}</p>
-          <p style={{ fontSize: 7, color: 'var(--text-tert)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Time</p>
+        <div style={{ background: urgentTime ? 'var(--danger-bg)' : 'var(--bg-subtle)', border: `1px solid ${urgentTime ? 'var(--danger-border)' : 'var(--border)'}`, borderRadius: 9, padding: '4px 10px', textAlign: 'center', flexShrink: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 900, color: timerCol, lineHeight: 1 }}>{formatTime(secsLeft)}</p>
+          <p style={{ fontSize: 7, color: 'var(--text-tert)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 1 }}>time left</p>
         </div>
       </div>
 
@@ -214,45 +225,47 @@ export default function ExamSessionPage() {
         </div>
       )}
 
-      {/* Progress bar */}
-      <div style={{ flexShrink: 0, margin: '8px 12px 0', height: 4, borderRadius: 999, background: 'var(--bg-inset)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 999, background: accent, width: `${((index + 1) / questions.length) * 100}%`, transition: 'width .3s' }} />
-      </div>
-
       {/* Scroll zone */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 6px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
 
-        {/* Question card */}
+        {/* Question card — always white bg like practice session */}
         {q && (
-          <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: `1px solid var(--border)`, borderLeft: `4px solid ${accent}`, padding: '13px 15px 11px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 7 }}>
-              <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: accent }}>Q{index + 1} of {questions.length}</span>
-              {q.year && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 7px', borderRadius: 5, background: `${accent}18`, color: accent }}>WAEC {q.year}</span>}
+          <div style={{ borderRadius: 18, background: '#ffffff', border: `1.5px solid ${accent}30`, borderLeft: `4px solid ${accent}`, padding: '14px 16px 12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,.06)' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: accent }}>Question {index + 1} of {questions.length}</span>
+              {q.year && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: `${accent}18`, color: accent }}>{config?.examType ?? 'WAEC'} {q.year}</span>}
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: 'rgba(0,0,0,.05)', color: '#444' }}>Exam mode</span>
             </div>
-            <MathText text={q.question_text ?? q.question ?? ''} className="text-primary" style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.55 }} as="p" />
+            <MathText text={q.question_text ?? q.question ?? ''} style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.6, color: '#0a0d1a' }} as="p" />
           </div>
         )}
 
-        {/* Answer options — selectable but no verdict shown */}
+        {/* Answer options — same style as practice session */}
         {q && optEntries.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
             {optEntries.map(([letter, text]) => {
               const isSelected = myAnswer === letter
               return (
                 <button key={letter} onClick={() => selectAnswer(letter)}
                   style={{
-                    padding: '11px 13px', borderRadius: 14, width: '100%',
+                    padding: '12px 14px', borderRadius: 16, width: '100%',
                     background: isSelected ? 'var(--active-bg)' : 'var(--bg-card)',
                     border: `${isSelected ? '2px' : '1.5px'} solid ${isSelected ? 'var(--active-border)' : 'var(--border)'}`,
-                    color: isSelected ? 'var(--active-text)' : 'var(--text-prim)',
-                    display: 'flex', alignItems: 'flex-start', gap: 10,
-                    textAlign: 'left', fontSize: 13, fontWeight: isSelected ? 700 : 600,
-                    cursor: 'pointer', transition: 'all .12s',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    textAlign: 'left', cursor: 'pointer', transition: 'all .12s',
+                    boxShadow: isSelected ? 'none' : '0 1px 3px rgba(0,0,0,.05)',
                   }}>
-                  <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, fontSize: 10, fontWeight: 800, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isSelected ? 'var(--active-text)' : 'var(--bg-subtle)', color: isSelected ? '#fff' : 'var(--text-tert)' }}>
+                  <span style={{
+                    width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                    fontSize: 11, fontWeight: 800, marginTop: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isSelected ? 'var(--active-text)' : 'var(--bg-subtle)',
+                    color: isSelected ? '#fff' : 'var(--text-tert)',
+                    border: isSelected ? 'none' : '1px solid var(--border)',
+                  }}>
                     {letter}
                   </span>
-                  <MathText text={String(text ?? '')} as="span" style={{ lineHeight: 1.5 }} />
+                  <MathText text={String(text ?? '')} as="span" style={{ fontSize: 13, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--active-text)' : 'var(--text-prim)', lineHeight: 1.55 }} />
                 </button>
               )
             })}
@@ -260,22 +273,22 @@ export default function ExamSessionPage() {
         )}
       </div>
 
-      {/* Pinned bottom bar */}
-      <div style={{ flexShrink: 0, background: 'var(--nav-bg)', backdropFilter: 'blur(14px)', borderTop: '1px solid var(--border)', padding: '10px 12px', paddingBottom: 'max(14px, env(safe-area-inset-bottom))', display: 'flex', gap: 8 }}>
+      {/* Pinned bottom bar — matches practice session style */}
+      <div style={{ flexShrink: 0, background: 'var(--nav-bg)', backdropFilter: 'blur(14px)', borderTop: '1px solid var(--border)', padding: '10px 12px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', display: 'flex', gap: 8 }}>
         <button onClick={() => setIndex(i => Math.max(0, i - 1))} disabled={index === 0}
-          style={{ flex: 1, height: 46, borderRadius: 14, fontSize: 13, fontWeight: 700, background: 'var(--bg-subtle)', border: '1.5px solid var(--border)', color: 'var(--text-sec)', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.35 : 1 }}>
-          ← Prev
+          style={{ width: 46, height: 48, borderRadius: 14, fontSize: 16, fontWeight: 700, background: 'var(--bg-subtle)', border: '1.5px solid var(--border)', color: 'var(--text-sec)', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, flexShrink: 0 }}>
+          ←
         </button>
 
         {isLast ? (
           <button onClick={handleSubmit} disabled={submitting}
-            style={{ flex: 2, height: 46, borderRadius: 14, fontSize: 14, fontWeight: 800, background: '#059669', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 0 #047857' }}>
+            style={{ flex: 1, height: 48, borderRadius: 16, fontSize: 15, fontWeight: 800, background: '#059669', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #047857', letterSpacing: '-0.01em' }}>
             {submitting ? 'Submitting…' : 'Submit Paper ✓'}
           </button>
         ) : (
           <button onClick={() => setIndex(i => Math.min(questions.length - 1, i + 1))}
-            style={{ flex: 2, height: 46, borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>
-            Next →
+            style={{ flex: 1, height: 48, borderRadius: 16, fontSize: 15, fontWeight: 800, background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #05070f, 0 8px 20px rgba(0,0,0,.18)', letterSpacing: '-0.01em' }}>
+            Next question →
           </button>
         )}
       </div>

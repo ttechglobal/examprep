@@ -1,13 +1,9 @@
 'use client'
-// src/app/student/learn/LearnPage.jsx — v4
-// ─────────────────────────────────────────────────────────────────────────────
-// Visual redesign to match the prototype exactly:
-//   • Header: eyebrow + hero title + streak pill + settings cog
-//   • "Focus these first" — weak topics strip with danger badge
-//   • EXL Learning World card (dark navy, violet CTA)
-//   • Subject sections — collapsible, topic rows sorted weakest first
-//   • All token variables, no Tailwind dynamic classes
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/student/learn/LearnPage.jsx — v5
+// Redesign:
+//   • EXL card at top (before focus areas)
+//   • Focus areas below EXL card, with "Practice →" CTA
+//   • Subject sections default to COLLAPSED, user taps to expand
 
 import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
 import { useRouter } from 'next/navigation'
@@ -39,7 +35,6 @@ function EXLWorldCard({ studentSubjects }) {
   return (
     <>
       <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(155,122,224,.25)' }}>
-        {/* Dark header */}
         <div style={{ background: 'linear-gradient(150deg,#0b1330 0%,#1a1060 55%,#0b0d20 100%)', padding: '18px 16px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, opacity: .04, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
@@ -126,7 +121,7 @@ function TopicRow({ topic, accent }) {
 
 // ── Subject section ───────────────────────────────────────────────────────────
 function SubjectSection({ subjectData, isDark }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false) // collapsed by default
   const colors     = resolveSubjectColors(subjectData.name, isDark)
   const pct        = subjectData.pct ?? 0
   const weakTopics = subjectData.topics?.filter(t => t.pct < 40) ?? []
@@ -145,7 +140,14 @@ function SubjectSection({ subjectData, isDark }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)' }}>{subjectData.name}</span>
-            <span style={{ fontSize: 12, fontWeight: 900, color: colors.solid }}>{pct}%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {weakTopics.length > 0 && !expanded && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' }}>
+                  {weakTopics.length} weak
+                </span>
+              )}
+              <span style={{ fontSize: 12, fontWeight: 900, color: colors.solid }}>{pct}%</span>
+            </div>
           </div>
           <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
             <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: colors.solid, borderRadius: 99 }} />
@@ -155,10 +157,10 @@ function SubjectSection({ subjectData, isDark }) {
             {remaining > 0 && <span style={{ fontSize: 9, color: 'var(--text-tert)' }}>{remaining} left</span>}
           </div>
         </div>
-        <span style={{ fontSize: 14, color: 'var(--text-tert)', transition: 'transform .2s', transform: expanded ? 'rotate(90deg)' : 'none', flexShrink: 0 }}>›</span>
+        <span style={{ fontSize: 16, color: 'var(--text-tert)', transition: 'transform .2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0, lineHeight: 1 }}>›</span>
       </button>
 
-      {/* Topics */}
+      {/* Topics — only shown when expanded */}
       {expanded && subjectData.topics?.length > 0 && (
         <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)' }}>
           {weakTopics.length > 0 && (
@@ -294,7 +296,10 @@ export default function LearnPage() {
 
       {subjectData.length > 0 ? (
         <>
-          {/* ── "Focus these first" weak-topics strip ── */}
+          {/* ── 1. EXL Learning World card (at the top) ── */}
+          <EXLWorldCard studentSubjects={allSubjectNames} />
+
+          {/* ── 2. "Focus these first" weak-topics strip ── */}
           {allWeakTopics.length > 0 && (
             <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
               <div style={{ padding: '9px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -309,8 +314,8 @@ export default function LearnPage() {
                       <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 1 }}>{t.name}</p>
                       <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>{t.subjectName} · {t.pct}% mastery</p>
                     </div>
-                    <Link href="/student/practice" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                      Study →
+                    <Link href="/student/practice" style={{ fontSize: 10, fontWeight: 800, color: '#9b7ae0', textDecoration: 'none', whiteSpace: 'nowrap', padding: '5px 11px', borderRadius: 8, background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.2)' }}>
+                      Practice →
                     </Link>
                   </div>
                 ))}
@@ -318,14 +323,16 @@ export default function LearnPage() {
             </div>
           )}
 
-          {/* ── EXL Learning World card ── */}
-          <EXLWorldCard studentSubjects={allSubjectNames} />
-
-          {/* ── Per-subject sections ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {subjectData.map(sub => (
-              <SubjectSection key={sub.name} subjectData={sub} isDark={isDark} />
-            ))}
+          {/* ── 3. Per-subject sections (collapsed by default) ── */}
+          <div>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
+              All subjects
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {subjectData.map(sub => (
+                <SubjectSection key={sub.name} subjectData={sub} isDark={isDark} />
+              ))}
+            </div>
           </div>
         </>
       ) : (
