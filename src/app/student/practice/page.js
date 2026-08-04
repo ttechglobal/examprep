@@ -1,43 +1,39 @@
 'use client'
-// src/app/student/practice/page.js — v2
+// src/app/student/practice/page.js — v5
 // ─────────────────────────────────────────────────────────────────────────────
-// CHANGES vs v1:
-//   1. Topic loads from /api/student/next-topic (mastery-based, fast)
-//      instead of /api/student/study-plan (slow, deprecated for this use)
-//   2. "Practise Now" opens a bottom-sheet modal — user confirms/adjusts before
-//      going to session. Subject + topic are pre-filled, all editable.
-//   3. Mock Exam button correctly routes to /student/exam/session (not practice/session)
-//   4. Other mode buttons (Timed, Weak Topics) route to practice/session correctly
-//   5. Study plan references removed — everything reads from topic mastery
+// Layout:
+//   1. Big hero "Start Practice" card — the main CTA
+//   2. Progress snapshot — overall mastery ring + subject bars (inline summary)
+//   3. Mock exam entry
+//
+// Tapping the hero card or "Start Practice" button opens PracticeSetupModal.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
-// ── Subject config ─────────────────────────────────────────────────────────────
 const ACCENT = {
-  'Chemistry': '#9b7ae0', 'Physics': '#ff8fab', 'Biology': '#6cce8e',
-  'Mathematics': '#5cb8ea', 'Further Mathematics': '#5cb8ea',
-  'English Language': '#a78bfa', 'Use of English': '#a78bfa',
-  'Economics': '#fcd34d', 'Government': '#f87171', 'Geography': '#34d399',
-  'Literature in English': '#f9a8d4', 'Agricultural Science': '#86efac',
-  'Commerce': '#818cf8', 'Accounting': '#fde68a', 'default': '#9b7ae0',
+  'Chemistry':'#9b7ae0','Physics':'#ff8fab','Biology':'#6cce8e',
+  'Mathematics':'#5cb8ea','Further Mathematics':'#5cb8ea',
+  'English Language':'#a78bfa','Use of English':'#a78bfa',
+  'Economics':'#fcd34d','Government':'#f87171','Geography':'#34d399',
+  'Literature in English':'#f9a8d4','Agricultural Science':'#86efac',
+  'Commerce':'#818cf8','Accounting':'#fde68a','default':'#9b7ae0',
 }
 const ICON = {
-  'Chemistry': '⚗️', 'Physics': '⚡', 'Biology': '🧬',
-  'Mathematics': '📐', 'Further Mathematics': '📐',
-  'English Language': '📖', 'Use of English': '📖',
-  'Economics': '📊', 'Government': '🏛️', 'Geography': '🌍',
-  'Literature in English': '📚', 'Agricultural Science': '🌱',
-  'Commerce': '💼', 'Accounting': '🧮', 'default': '📝',
+  'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
+  'Further Mathematics':'📐','English Language':'📖','Use of English':'📖',
+  'Economics':'📊','Government':'🏛️','Geography':'🌍',
+  'Literature in English':'📚','Agricultural Science':'🌱',
+  'Commerce':'💼','Accounting':'🧮','default':'📝',
 }
 const getAccent = n => ACCENT[n] ?? ACCENT.default
 const getIcon   = n => ICON[n]   ?? ICON.default
 
 // ── 3D press button ───────────────────────────────────────────────────────────
-function PressBtn({ onClick, disabled, children, style = {} }) {
+function PressBtn({ onClick, disabled, children, bg = '#0b1330', shadow = '0 6px 0 #05070f' }) {
   const [p, setP] = useState(false)
   return (
     <button onClick={onClick} disabled={disabled}
@@ -45,186 +41,334 @@ function PressBtn({ onClick, disabled, children, style = {} }) {
       onMouseLeave={() => setP(false)} onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
       style={{
         width: '100%', padding: '15px 0', borderRadius: 14,
-        background: '#0b1330', color: '#fff', fontSize: 15, fontWeight: 800,
+        background: bg, color: '#fff', fontSize: 15, fontWeight: 800,
         border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1, letterSpacing: '-0.01em',
         transform: p && !disabled ? 'translateY(3px)' : 'none',
-        boxShadow: p && !disabled ? '0 3px 0 #05070f' : '0 6px 0 #05070f, 0 10px 24px rgba(0,0,0,.15)',
+        boxShadow: p && !disabled ? shadow.replace('6px', '2px') : shadow,
         transition: 'transform .1s, box-shadow .1s',
-        ...style,
       }}>
       {children}
     </button>
   )
 }
 
-// ── Practice config modal (bottom sheet) ──────────────────────────────────────
-function PracticeModal({ subject, topic, profile, subjects, onClose, onStart }) {
-  const [selSubject, setSelSubject] = useState(subject)
-  const [count,      setCount]      = useState(10)
-  const [mode,       setMode]       = useState('topic')
-  const accent = getAccent(selSubject?.name ?? '')
+const LABEL = {
+  fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
+  letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 9, display: 'block',
+}
 
-  // Close on backdrop click
-  function handleBackdrop(e) {
-    if (e.target === e.currentTarget) onClose()
-  }
+// ── Practice Setup Modal ──────────────────────────────────────────────────────
+export function PracticeSetupModal({
+  initialSubject, subjects, nextTopics, subjectMastery,
+  profile, onClose, onStart, onMockExam,
+}) {
+  const [subject,    setSubject]    = useState(initialSubject ?? subjects?.[0])
+  const [type,       setType]       = useState('topic')
+  const [count,      setCount]      = useState(10)
+  const [answerMode, setAnswerMode] = useState('practice')
+  const [duration,   setDuration]   = useState(null)
+  const [topicId,    setTopicId]    = useState(null)
+  const [topicName,  setTopicName]  = useState(null)
+  const [allTopics,  setAllTopics]  = useState([])
+  const [loadingTopics, setLoadingTopics] = useState(false)
+
+  const accent    = getAccent(subject?.name ?? '')
+  const recTopic  = nextTopics?.[subject?.id] ?? null
+  const mastery   = subjectMastery?.[subject?.id]
+
+  useEffect(() => {
+    setTopicId(recTopic?.topicId ?? null)
+    setTopicName(recTopic?.topicName ?? null)
+  }, [subject?.id]) // eslint-disable-line
+
+  useEffect(() => {
+    if (type !== 'topic' || !subject?.id) return
+    setLoadingTopics(true)
+    const sb = createClient()
+    sb.from('topics').select('id, name, is_core').eq('subject_id', subject.id).order('order_index')
+      .then(({ data }) => {
+        setAllTopics(data ?? [])
+        setLoadingTopics(false)
+        if (!topicId && recTopic) { setTopicId(recTopic.topicId); setTopicName(recTopic.topicName) }
+      })
+  }, [type, subject?.id]) // eslint-disable-line
+
+  function handleBackdrop(e) { if (e.target === e.currentTarget) onClose() }
 
   function handleStart() {
-    onStart({
-      subject:  selSubject,
-      count,
-      mode,
-      topic: selSubject?.id === subject?.id ? topic : null,
-    })
+    if (type === 'mock') { onMockExam?.(); return }
+    if (type === 'timed' && !duration) return
+    const topic = type === 'topic'
+      ? { topicId, topicName, isCore: allTopics.find(t => t.id === topicId)?.is_core ?? false }
+      : recTopic
+    onStart({ subject, type, count, answerMode, topic, duration })
   }
 
-  const modes = [
-    { key: 'topic',  label: 'Topic drill',   icon: '🎯', desc: 'Focus on one topic' },
-    { key: 'mixed',  label: 'Mixed',          icon: '🔀', desc: 'Across all topics' },
-    { key: 'weak',   label: 'Weak topics',    icon: '📈', desc: 'Your lowest scores' },
-    { key: 'timed',  label: 'Timed',          icon: '⏱️', desc: `${Math.round(count * 1.5)} min` },
+  const isMock  = type === 'mock'
+  const isTimed = type === 'timed'
+  const isTopic = type === 'topic'
+  const DURATIONS = [
+    { secs:300,  label:'5 min',  qs:5  },
+    { secs:600,  label:'10 min', qs:10 },
+    { secs:1200, label:'20 min', qs:20 },
+    { secs:1800, label:'30 min', qs:30 },
   ]
 
   return (
-    <div
-      onClick={handleBackdrop}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)',
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          borderRadius: '28px 28px 0 0',
-          borderTop: '1px solid var(--border)',
-          maxHeight: '88vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 -8px 32px rgba(0,0,0,.2)',
-        }}
-      >
-        {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px', flexShrink: 0 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-strong, var(--border))' }} />
+    <div onClick={handleBackdrop} style={{
+      position:'fixed',inset:0,zIndex:200,
+      background:'rgba(0,0,0,.65)',backdropFilter:'blur(6px)',
+      display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',
+    }}>
+      <div style={{
+        background:'var(--bg-card)',borderRadius:'26px 26px 0 0',
+        borderTop:'1px solid var(--border)',maxHeight:'92vh',
+        display:'flex',flexDirection:'column',boxShadow:'0 -12px 48px rgba(0,0,0,.3)',
+        width:'100%', maxWidth: 520,
+      }}>
+        <div style={{display:'flex',justifyContent:'center',padding:'12px 0 0',flexShrink:0}}>
+          <div style={{width:36,height:4,borderRadius:2,background:'var(--border)'}} />
         </div>
-
-        {/* Header */}
-        <div style={{ padding: '4px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{padding:'10px 20px 14px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
             <div>
-              <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.02em' }}>
-                Start Practising
-              </p>
-              {topic && selSubject?.id === subject?.id && (
-                <p style={{ fontSize: 12, color: 'var(--text-sec)', marginTop: 2 }}>
-                  <span style={{ color: accent, fontWeight: 700 }}>{topic.topicName}</span>
-                  {topic.isCore && <span style={{ marginLeft: 6, fontSize: 10, color: '#ffc36b' }}>🔥 Core topic</span>}
-                </p>
+              <p style={{fontSize:19,fontWeight:900,color:'var(--text-prim)',letterSpacing:'-0.02em'}}>Set up practice</p>
+              {mastery && (
+                <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
+                  <div style={{flex:1,height:4,background:'var(--bg-subtle)',borderRadius:99,overflow:'hidden',maxWidth:120}}>
+                    <div style={{width:`${mastery.pct}%`,height:'100%',background:accent,borderRadius:99}} />
+                  </div>
+                  <span style={{fontSize:11,fontWeight:700,color:accent}}>{mastery.pct}% mastered</span>
+                  <span style={{fontSize:11,color:'var(--text-tert)'}}>{mastery.completed}/{mastery.total} topics</span>
+                </div>
               )}
             </div>
-            <button onClick={onClose}
-              style={{
-                width: 30, height: 30, borderRadius: 9,
-                background: 'var(--bg-subtle)', border: '1px solid var(--border)',
-                color: 'var(--text-tert)', fontSize: 13, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>✕</button>
+            <button onClick={onClose} style={{width:30,height:30,borderRadius:9,fontSize:13,cursor:'pointer',flexShrink:0,background:'var(--bg-subtle)',border:'1px solid var(--border)',color:'var(--text-tert)',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
           </div>
         </div>
 
-        {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{flex:1,overflowY:'auto',padding:'18px 20px',display:'flex',flexDirection:'column',gap:22}}>
 
-          {/* Subject selector */}
+          {/* Subject */}
           <div>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
-              Subject
-            </p>
-            <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4 }}>
-              {subjects.map(sub => {
-                const a  = getAccent(sub.name)
-                const on = selSubject?.id === sub.id
+            <span style={LABEL}>Subject</span>
+            <div style={{display:'flex',gap:7,overflowX:'auto',paddingBottom:4}}>
+              {(subjects ?? []).map(sub => {
+                const a = getAccent(sub.name); const on = subject?.id === sub.id
                 return (
-                  <button key={sub.id} onClick={() => setSelSubject(sub)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '8px 13px', borderRadius: 999, flexShrink: 0,
-                      background: on ? `${a}18` : 'var(--bg-subtle)',
-                      border: `2px solid ${on ? a : 'var(--border)'}`,
-                      cursor: 'pointer', transition: 'all .13s',
-                    }}>
-                    <span style={{ fontSize: 13 }}>{getIcon(sub.name)}</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: on ? a : 'var(--text-sec)', whiteSpace: 'nowrap' }}>
-                      {sub.name}
-                    </span>
+                  <button key={sub.id} onClick={() => setSubject(sub)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 13px',borderRadius:999,flexShrink:0,cursor:'pointer',background:on?`${a}18`:'var(--bg-subtle)',border:`2px solid ${on?a:'var(--border)'}`,transition:'all .12s'}}>
+                    <span style={{fontSize:13}}>{getIcon(sub.name)}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:on?a:'var(--text-sec)',whiteSpace:'nowrap'}}>{sub.name}</span>
                   </button>
                 )
               })}
             </div>
           </div>
 
-          {/* Mode */}
+          {/* Practice type */}
           <div>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
-              Mode
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {modes.map(m => (
-                <button key={m.key} onClick={() => setMode(m.key)}
-                  style={{
-                    padding: '12px 10px', borderRadius: 14, cursor: 'pointer',
-                    textAlign: 'left', transition: 'all .13s',
-                    background: mode === m.key ? 'var(--active-bg, rgba(75,86,210,.1))' : 'var(--bg-subtle)',
-                    border: `2px solid ${mode === m.key ? 'var(--active-border, #4b56d2)' : 'var(--border)'}`,
-                    display: 'flex', flexDirection: 'column', gap: 4,
-                  }}>
-                  <span style={{ fontSize: 18 }}>{m.icon}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: mode === m.key ? 'var(--active-text, #4b56d2)' : 'var(--text-prim)' }}>
-                    {m.label}
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--text-tert)' }}>{m.desc}</span>
-                </button>
-              ))}
+            <span style={LABEL}>Practice type</span>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {[
+                {key:'topic', icon:'🎯', label:'Topic drill',   desc:'Focus on one specific topic'},
+                {key:'weak',  icon:'📈', label:'Weak topics',   desc:'Your lowest mastery areas first'},
+                {key:'mixed', icon:'🔀', label:'Mixed',         desc:'Random across all topics'},
+                {key:'timed', icon:'⏱️', label:'Timed',         desc:'Race the clock — build exam stamina'},
+                {key:'mock',  icon:'📝', label:'Mock exam',     desc:'Full WAEC or JAMB simulation', badge:'WAEC · JAMB'},
+              ].map(pt => {
+                const on = type === pt.key
+                return (
+                  <button key={pt.key} onClick={() => setType(pt.key)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,transition:'all .12s'}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{pt.icon}</span>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:2}}>
+                        <span style={{fontSize:13,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{pt.label}</span>
+                        {pt.badge && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(255,195,107,.15)',color:'#ffc36b'}}>{pt.badge}</span>}
+                      </div>
+                      <span style={{fontSize:11,color:'var(--text-tert)'}}>{pt.desc}</span>
+                    </div>
+                    {on && <span style={{fontSize:13,color:'var(--active-text)',flexShrink:0}}>✓</span>}
+                  </button>
+                )
+              })}
             </div>
           </div>
+
+          {/* Topic picker */}
+          {isTopic && (
+            <div>
+              <span style={LABEL}>Choose topic</span>
+              {loadingTopics ? (
+                <div style={{height:36,display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:18,height:18,borderRadius:'50%',border:`2px solid ${accent}`,borderTopColor:'transparent',animation:'spin .7s linear infinite'}} />
+                  <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                  <span style={{fontSize:12,color:'var(--text-tert)'}}>Loading topics…</span>
+                </div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {allTopics.map(t => {
+                    const on = topicId === t.id; const isRec = recTopic?.topicId === t.id
+                    return (
+                      <button key={t.id} onClick={() => { setTopicId(t.id); setTopicName(t.name) }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 13px',borderRadius:12,cursor:'pointer',textAlign:'left',background:on?`${accent}15`:'var(--bg-subtle)',border:`2px solid ${on?accent:'var(--border)'}`,transition:'all .12s'}}>
+                        <div style={{width:6,height:6,borderRadius:'50%',background:on?accent:'var(--border)',flexShrink:0}} />
+                        <span style={{fontSize:13,fontWeight:on?800:600,color:on?'var(--text-prim)':'var(--text-sec)',flex:1}}>{t.name}</span>
+                        <div style={{display:'flex',gap:5,flexShrink:0}}>
+                          {t.is_core && <span style={{fontSize:9,fontWeight:700,color:'#ffc36b'}}>🔥 Core</span>}
+                          {isRec && !on && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(155,122,224,.15)',color:'#9b7ae0'}}>Recommended</span>}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Duration picker */}
+          {isTimed && (
+            <div>
+              <span style={LABEL}>Duration</span>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {DURATIONS.map(d => {
+                  const on = duration === d.secs
+                  return (
+                    <button key={d.secs} onClick={() => { setDuration(d.secs); setCount(d.qs) }} style={{padding:'13px 10px',borderRadius:13,cursor:'pointer',textAlign:'center',background:on?'#0b1330':'var(--bg-subtle)',border:`2px solid ${on?'#0b1330':'var(--border)'}`,transition:'all .12s'}}>
+                      <p style={{fontSize:17,fontWeight:900,color:on?'#fff':'var(--text-prim)',marginBottom:2}}>{d.label}</p>
+                      <p style={{fontSize:10,color:on?'rgba(255,255,255,.55)':'var(--text-tert)'}}>~{d.qs} questions</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Question count */}
-          <div>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
-              Questions
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[5, 10, 20, 30].map(n => (
-                <button key={n} onClick={() => setCount(n)}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 11,
-                    fontSize: 14, fontWeight: 800, cursor: 'pointer',
-                    transition: 'all .12s',
-                    background: count === n ? '#0b1330' : 'var(--bg-subtle)',
-                    color: count === n ? '#fff' : 'var(--text-sec)',
-                    border: `2px solid ${count === n ? '#0b1330' : 'var(--border)'}`,
-                  }}>
-                  {n}
-                </button>
-              ))}
+          {!isMock && !isTimed && (
+            <div>
+              <span style={LABEL}>Questions</span>
+              <div style={{display:'flex',gap:8}}>
+                {[5,10,20,30].map(n => (
+                  <button key={n} onClick={() => setCount(n)} style={{flex:1,padding:'10px 0',borderRadius:11,fontSize:14,fontWeight:800,cursor:'pointer',transition:'all .12s',background:count===n?'#0b1330':'var(--bg-subtle)',color:count===n?'#fff':'var(--text-sec)',border:`2px solid ${count===n?'#0b1330':'var(--border)'}`}}>
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Answer mode */}
+          {!isMock && !isTimed && (
+            <div>
+              <span style={LABEL}>Answer mode</span>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {[
+                  {key:'practice',icon:'🏆',label:'Practice mode',desc:'Answers shown at the end'},
+                  {key:'study',   icon:'📖',label:'Study mode',   desc:'Answer shown right away'},
+                ].map(am => {
+                  const on = answerMode === am.key
+                  return (
+                    <button key={am.key} onClick={() => setAnswerMode(am.key)} style={{padding:'12px 11px',borderRadius:14,cursor:'pointer',textAlign:'left',background:on?'var(--active-bg)':'var(--bg-subtle)',border:`2px solid ${on?'var(--active-border)':'var(--border)'}`,display:'flex',flexDirection:'column',gap:5,transition:'all .12s'}}>
+                      <span style={{fontSize:18}}>{am.icon}</span>
+                      <span style={{fontSize:12,fontWeight:800,color:on?'var(--active-text)':'var(--text-prim)'}}>{am.label}</span>
+                      <span style={{fontSize:10,color:'var(--text-tert)',lineHeight:1.4}}>{am.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <div style={{height:4}} />
         </div>
 
-        {/* Pinned start button */}
-        <div style={{
-          flexShrink: 0, padding: '12px 20px',
-          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--bg-card)',
-        }}>
-          <PressBtn onClick={handleStart}>
-            Start {count} Questions →
-          </PressBtn>
+        <div style={{flexShrink:0,padding:'12px 20px',paddingBottom:'max(20px, env(safe-area-inset-bottom))',borderTop:'1px solid var(--border)',background:'var(--bg-card)'}}>
+          {isMock ? (
+            <PressBtn onClick={handleStart}>Set up mock exam →</PressBtn>
+          ) : isTimed ? (
+            <PressBtn onClick={handleStart} disabled={!duration}>
+              {duration ? `Start ${count}-question timed session →` : 'Choose a duration first'}
+            </PressBtn>
+          ) : (
+            <PressBtn onClick={handleStart} disabled={isTopic && !topicId} bg={accent} shadow={`0 6px 0 ${accent}88`}>
+              Start {count} questions →
+            </PressBtn>
+          )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Progress snapshot ─────────────────────────────────────────────────────────
+function ProgressSnapshot({ subjects, overallPct, weekTotal }) {
+  if (!subjects?.length) return null
+
+  const ring = 2 * Math.PI * 22 // r=22
+  const dash = ring * (overallPct / 100)
+  const overallColor = overallPct >= 70 ? '#6cce8e' : overallPct >= 40 ? '#fcd34d' : '#ff8fab'
+
+  return (
+    <div style={{ borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>Your progress</span>
+        <Link href="/student/progress" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>See full details →</Link>
+      </div>
+
+      <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+        {/* Ring */}
+        <div style={{ flexShrink: 0 }}>
+          <svg width="56" height="56" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="22" fill="none" stroke="var(--bg-subtle)" strokeWidth="5" />
+            <circle cx="28" cy="28" r="22" fill="none" stroke={overallColor} strokeWidth="5"
+              strokeDasharray={`${dash} ${ring}`} strokeLinecap="round"
+              transform="rotate(-90 28 28)" style={{ transition: 'stroke-dasharray .8s ease' }} />
+            <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="900" fill={overallColor}>{overallPct}%</text>
+          </svg>
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 2 }}>Overall mastery</p>
+          <p style={{ fontSize: 12, color: 'var(--text-sec)' }}>
+            {overallPct >= 70 ? 'Strong — keep going!' : overallPct >= 40 ? 'Building up steadily' : 'Just getting started'}
+          </p>
+          {weekTotal > 0 && (
+            <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 3 }}>+{weekTotal} questions this week</p>
+          )}
+        </div>
+      </div>
+
+      {/* Subject bars */}
+      <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {subjects.slice(0, 4).map(sub => {
+          const a   = getAccent(sub.name)
+          const pct = sub.pct ?? 0
+          const tier = pct >= 70 ? 'Strong' : pct >= 40 ? 'Building' : 'Needs work'
+          const tierColor = pct >= 70 ? '#6cce8e' : pct >= 40 ? '#fcd34d' : '#ff8fab'
+          return (
+            <div key={sub.name}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13 }}>{getIcon(sub.name)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{sub.name}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: tierColor }}>{tier}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: tierColor }}>{pct}%</span>
+                </div>
+              </div>
+              <div style={{ height: 5, background: 'var(--bg-subtle)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: a, borderRadius: 99, transition: 'width .7s' }} />
+              </div>
+              <p style={{ fontSize: 9, color: 'var(--text-tert)', marginTop: 2 }}>{sub.completed}/{sub.total} topics</p>
+            </div>
+          )
+        })}
+        {subjects.length > 4 && (
+          <Link href="/student/progress" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', textDecoration: 'none', textAlign: 'center', paddingTop: 2 }}>
+            +{subjects.length - 4} more subjects →
+          </Link>
+        )}
       </div>
     </div>
   )
@@ -235,41 +379,49 @@ export default function PracticePage() {
   const router   = useRouter()
   const supabase = createClient()
 
-  const [subjects,     setSubjects]    = useState([])
-  const [profile,      setProfile]     = useState(null)
-  const [activeSubject,setActive]      = useState(null)
-  const [nextTopics,   setNextTopics]  = useState({})  // subjectId → topic info
-  const [topicLoading, setTopicLoading]= useState(false)
-  const [loading,      setLoading]     = useState(true)
-  const [showModal,    setShowModal]   = useState(false)
+  const [subjects,       setSubjects]      = useState([])
+  const [profile,        setProfile]       = useState(null)
+  const [nextTopics,     setNextTopics]    = useState({})
+  const [subjectMastery, setSubjectMastery] = useState({})
+  const [weekTotal,      setWeekTotal]     = useState(0)
+  const [loading,        setLoading]       = useState(true)
+  const [modal,          setModal]         = useState(null)
 
-  // ── Load subjects + mastery-based topic ────────────────────────────────────
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const [{ data: prof }, { data: paths }, masteryRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
+      const [{ data: prof }, { data: paths }, { data: prog }, topicRes, { data: attempts }] = await Promise.all([
+        supabase.from('profiles').select('id, exam_type').eq('id', user.id).single(),
         supabase.from('student_learning_paths')
-          .select('subject_id, subjects(id, name)')
+          .select('subject_id, ordered_subtopic_ids, subjects(id, name)')
           .eq('student_id', user.id),
+        supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
         fetch('/api/student/next-topic'),
+        supabase.from('question_attempts').select('id')
+          .eq('student_id', user.id)
+          .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
       ])
 
       setProfile(prof)
+      setWeekTotal((attempts ?? []).length)
 
-      const enriched = (paths ?? []).map(p => ({
-        id:   p.subject_id,
-        name: p.subjects?.name ?? '',
-        subjectObj: p.subjects,
-      }))
-
+      const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
+      const enriched = (paths ?? []).map(p => ({ id: p.subject_id, name: p.subjects?.name ?? '' }))
       setSubjects(enriched)
-      if (enriched.length > 0) setActive(enriched[0])
 
-      if (masteryRes.ok) {
-        const data = await masteryRes.json()
+      const masteryMap = {}
+      for (const path of paths ?? []) {
+        const ids  = path.ordered_subtopic_ids ?? []
+        const done = ids.filter(id => completedIds.has(id)).length
+        const pct  = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
+        masteryMap[path.subject_id] = { pct, completed: done, total: ids.length, name: path.subjects?.name ?? '' }
+      }
+      setSubjectMastery(masteryMap)
+
+      if (topicRes.ok) {
+        const data = await topicRes.json()
         setNextTopics(data.topics ?? {})
       }
 
@@ -278,289 +430,163 @@ export default function PracticePage() {
     load()
   }, []) // eslint-disable-line
 
-  // ── Start session (practice) ───────────────────────────────────────────────
-  function startSession({ subject, count, mode, topic }) {
-    const sub = subject ?? activeSubject
-    if (!sub) return
-    const nextTopic = topic ?? nextTopics[sub.id] ?? null
+  function startSession({ subject, type, count, answerMode, topic, duration }) {
     const config = {
-      subjects:   [sub.name],
-      subject_id: sub.id,
-      examType:   profile?.exam_type ?? 'WAEC',
-      count,
-      mode,
-      topicName:  nextTopic?.topicName ?? null,
-      topic_id:   nextTopic?.topicId   ?? null,
-      isCore:     nextTopic?.isCore    ?? false,
+      subjects: [subject.name], subject_id: subject.id,
+      examType: profile?.exam_type ?? 'WAEC', count, mode: type, answerMode,
+      topicName: topic?.topicName ?? null, topic_id: topic?.topicId ?? null,
+      isCore: topic?.isCore ?? false, durationSecs: duration ?? null,
     }
     sessionStorage.setItem('practice_config', JSON.stringify(config))
-    setShowModal(false)
+    setModal(null)
     router.push('/student/practice/session')
-  }
-
-  // ── Start mock exam ────────────────────────────────────────────────────────
-  // Mock exam goes to /student/exam (setup page) not practice/session
-  function goToMockExam() {
-    router.push('/student/exam')
   }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 80 }}>
-      <div style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid var(--active-border, #4b56d2)', borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
+      <div style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid #9b7ae0', borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
+  const masteryList    = Object.values(subjectMastery)
+  const overallPct     = masteryList.length
+    ? Math.round(masteryList.reduce((s, m) => s + m.pct, 0) / masteryList.length)
+    : 0
+  const subjectForSnap = masteryList.map(m => ({ ...m }))
+
+  // No subjects yet
   if (subjects.length === 0) return (
-    <div style={{ padding: '0 0 32px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em', marginBottom: 4 }}>
-        Practise
-      </h1>
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: '32px 24px', textAlign: 'center', marginTop: 16 }}>
+    <div style={{ paddingBottom: 32 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em', marginBottom: 16 }}>Practise</h1>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: '32px 24px', textAlign: 'center' }}>
         <p style={{ fontSize: 32, marginBottom: 12 }}>📚</p>
         <p style={{ fontWeight: 900, color: 'var(--text-prim)', marginBottom: 6 }}>No subjects yet</p>
         <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.5, marginBottom: 20 }}>
-          Add subjects in your profile to start practising.
+          Add subjects in your profile to get started.
         </p>
-        <Link href="/student/profile" style={{ display: 'block', padding: '13px 0', background: '#0b1330', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 800, textDecoration: 'none', textAlign: 'center' }}>
+        <Link href="/student/profile" style={{ display: 'block', padding: '13px 0', background: '#0b1330', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 800, textDecoration: 'none', textAlign: 'center', boxShadow: '0 5px 0 #05070f' }}>
           Set up my subjects →
         </Link>
       </div>
     </div>
   )
 
-  const accent    = getAccent(activeSubject?.name ?? '')
-  const topic     = nextTopics[activeSubject?.id] ?? null
+  // Pick the most relevant subject for the hero card (first with a next topic)
+  const heroSubject = subjects.find(s => nextTopics[s.id]) ?? subjects[0]
+  const heroTopic   = nextTopics[heroSubject?.id] ?? null
+  const heroAccent  = getAccent(heroSubject?.name ?? '')
 
   return (
     <div style={{ paddingBottom: 96 }}>
 
-      {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>
-          Practise
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-sec)', marginTop: 3 }}>
-          Pick a subject and start immediately
-        </p>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Practise</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-sec)', marginTop: 3 }}>A little practice every day adds up</p>
       </div>
 
-      {/* Subject pills */}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 16 }}>
-        {subjects.map(sub => {
-          const a  = getAccent(sub.name)
-          const on = activeSubject?.id === sub.id
-          return (
-            <button key={sub.id} onClick={() => setActive(sub)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 14px', borderRadius: 30, flexShrink: 0,
-                background: on ? `${a}18` : 'var(--bg-card)',
-                border: `2px solid ${on ? a : 'var(--border)'}`,
-                cursor: 'pointer', transition: 'all .15s',
-                boxShadow: on ? `0 0 0 3px ${a}22` : 'none',
-              }}>
-              <span style={{ fontSize: 14 }}>{getIcon(sub.name)}</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: on ? a : 'var(--text-sec)', whiteSpace: 'nowrap' }}>
-                {sub.name}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Hero practice card */}
-      {activeSubject && (
+      {/* ── Hero practice card — the main CTA ── */}
+      <div style={{
+        borderRadius: 24, overflow: 'hidden',
+        border: `1px solid ${heroAccent}30`,
+        boxShadow: `0 12px 40px ${heroAccent}18`,
+        marginBottom: 14,
+      }}>
+        {/* Dark navy top */}
         <div style={{
-          borderRadius: 22, overflow: 'hidden',
-          border: `1px solid ${accent}30`,
-          boxShadow: `0 8px 32px ${accent}15`,
-          marginBottom: 14,
+          background: 'linear-gradient(150deg, #0b1330 0%, #12104a 55%, #0b1330 100%)',
+          padding: '22px 20px 20px', position: 'relative', overflow: 'hidden',
         }}>
-          <div style={{
-            background: 'linear-gradient(170deg, #141420 0%, #0d0e14 100%)',
-            padding: '22px 20px 20px', position: 'relative',
-          }}>
-            {/* Accent glow */}
-            <div style={{
-              position: 'absolute', top: -20, right: -20,
-              width: 120, height: 120, borderRadius: '50%',
-              background: `radial-gradient(circle, ${accent}18 0%, transparent 70%)`,
-              pointerEvents: 'none',
-            }} />
+          {/* Subtle dot pattern */}
+          <div style={{ position: 'absolute', inset: 0, opacity: .04, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
+          {/* Accent glow */}
+          <div style={{ position: 'absolute', top: -30, right: -30, width: 140, height: 140, borderRadius: '50%', background: `radial-gradient(circle, ${heroAccent}20 0%, transparent 70%)`, pointerEvents: 'none' }} />
 
-            {/* Subject + mastery header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, position: 'relative', zIndex: 1 }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 13,
-                background: `${accent}18`, border: `1px solid ${accent}28`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-              }}>
-                {getIcon(activeSubject.name)}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* Subject icon + label */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 13, background: `${heroAccent}20`, border: `1px solid ${heroAccent}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                {getIcon(heroSubject?.name ?? '')}
               </div>
               <div>
-                <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', color: accent, marginBottom: 1 }}>
-                  {profile?.exam_type ?? 'WAEC'}
+                <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'rgba(255,255,255,.38)', marginBottom: 2 }}>
+                  {profile?.exam_type ?? 'WAEC'} · {heroSubject?.name}
                 </p>
-                <p style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
-                  {activeSubject.name}
+                <p style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>
+                  {heroTopic?.topicName ?? 'Mixed practice'}
+                  {heroTopic?.isCore && <span style={{ marginLeft: 8, fontSize: 9, color: '#ffc36b' }}>🔥 Core</span>}
                 </p>
               </div>
             </div>
 
-            {/* Next topic card */}
-            <div style={{
-              background: 'rgba(255,255,255,.05)', border: `1px solid ${accent}22`,
-              borderRadius: 12, padding: '11px 13px', marginBottom: 16,
-              position: 'relative', zIndex: 1, minHeight: 52,
-            }}>
-              {topic ? (
-                <>
-                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,.35)', marginBottom: 3 }}>
-                    {topic.isCore ? '🔥 Core topic · High exam frequency' : '📖 Next topic'}
-                  </p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{topic.topicName}</p>
-                  {topic.score > 0 && (
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>
-                      Current mastery: {topic.score}%
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,.35)', marginBottom: 3 }}>
-                    Mixed practice
-                  </p>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.6)' }}>Questions across all topics</p>
-                </>
-              )}
-            </div>
+            {/* Motivational line */}
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,.45)', lineHeight: 1.6, marginBottom: 16 }}>
+              A few questions a day is all it takes. Keep your streak going.
+            </p>
 
-            {/* Practise Now → opens modal */}
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <PressBtn onClick={() => setShowModal(true)}>
-                Practise Now →
-              </PressBtn>
-            </div>
+            {/* CTA button */}
+            <button
+              onClick={() => setModal(heroSubject)}
+              style={{
+                width: '100%', padding: '15px 0', borderRadius: 14,
+                background: '#fff', color: '#0b1330',
+                fontSize: 15, fontWeight: 900, border: 'none', cursor: 'pointer',
+                letterSpacing: '-0.01em', transition: 'transform .1s',
+              }}
+              onMouseDown={e => e.currentTarget.style.transform = 'translateY(3px)'}
+              onMouseUp={e => e.currentTarget.style.transform = ''}
+              onTouchStart={e => e.currentTarget.style.transform = 'translateY(3px)'}
+              onTouchEnd={e => e.currentTarget.style.transform = ''}
+            >
+              Start practice →
+            </button>
           </div>
         </div>
-      )}
 
-      {/* ── Other practice modes ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-
-        {/* Timed practice */}
-        <button
-          onClick={() => {
-            if (!activeSubject) return
-            const nextTopic = nextTopics[activeSubject?.id] ?? null
-            sessionStorage.setItem('practice_config', JSON.stringify({
-              subjects:   [activeSubject.name],
-              subject_id: activeSubject.id,
-              examType:   profile?.exam_type ?? 'WAEC',
-              count:      20,
-              mode:       'timed',
-              durationSecs: 1200, // 20 min
-              topicName:  nextTopic?.topicName ?? null,
-              topic_id:   nextTopic?.topicId   ?? null,
-            }))
-            router.push('/student/practice/session')
-          }}
-          style={{
-            padding: '16px 14px', borderRadius: 18, cursor: 'pointer', textAlign: 'left',
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            transition: 'border-color .15s',
-          }}
-        >
-          <p style={{ fontSize: 22, marginBottom: 6 }}>⏱️</p>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Timed</p>
-          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>20 questions · 20 min</p>
-        </button>
-
-        {/* Mock Exam — correctly goes to /student/exam setup */}
-        <button
-          onClick={goToMockExam}
-          style={{
-            padding: '16px 14px', borderRadius: 18, cursor: 'pointer', textAlign: 'left',
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            transition: 'border-color .15s',
-          }}
-        >
-          <p style={{ fontSize: 22, marginBottom: 6 }}>📝</p>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Mock Exam</p>
-          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>Full simulation · WAEC/JAMB</p>
-        </button>
-
-        {/* Weak topics */}
-        <button
-          onClick={() => {
-            if (!activeSubject) return
-            sessionStorage.setItem('practice_config', JSON.stringify({
-              subjects:   [activeSubject.name],
-              subject_id: activeSubject.id,
-              examType:   profile?.exam_type ?? 'WAEC',
-              count:      15,
-              mode:       'weak',
-            }))
-            router.push('/student/practice/session')
-          }}
-          style={{
-            padding: '16px 14px', borderRadius: 18, cursor: 'pointer', textAlign: 'left',
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            transition: 'border-color .15s',
-          }}
-        >
-          <p style={{ fontSize: 22, marginBottom: 6 }}>📈</p>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Weak Topics</p>
-          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>Your lowest mastery areas</p>
-        </button>
-
-        {/* Random / mixed */}
-        <button
-          onClick={() => {
-            if (!activeSubject) return
-            sessionStorage.setItem('practice_config', JSON.stringify({
-              subjects:   [activeSubject.name],
-              subject_id: activeSubject.id,
-              examType:   profile?.exam_type ?? 'WAEC',
-              count:      10,
-              mode:       'mixed',
-            }))
-            router.push('/student/practice/session')
-          }}
-          style={{
-            padding: '16px 14px', borderRadius: 18, cursor: 'pointer', textAlign: 'left',
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            transition: 'border-color .15s',
-          }}
-        >
-          <p style={{ fontSize: 22, marginBottom: 6 }}>🔀</p>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Mixed</p>
-          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>Random across all topics</p>
-        </button>
+        {/* Subject switcher strip */}
+        {subjects.length > 1 && (
+          <div style={{ background: 'var(--bg-card)', padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 7, overflowX: 'auto' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)', whiteSpace: 'nowrap', alignSelf: 'center', marginRight: 2 }}>Switch:</span>
+            {subjects.map(sub => {
+              const a  = getAccent(sub.name)
+              const on = heroSubject?.id === sub.id
+              return (
+                <button key={sub.id} onClick={() => setModal(sub)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 999, flexShrink: 0, cursor: 'pointer', background: on ? `${a}18` : 'var(--bg-subtle)', border: `1.5px solid ${on ? a : 'var(--border)'}`, transition: 'all .12s' }}>
+                  <span style={{ fontSize: 12 }}>{getIcon(sub.name)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: on ? a : 'var(--text-sec)', whiteSpace: 'nowrap' }}>{sub.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Subject mastery inline */}
-      <Link href="/student/progress" style={{ textDecoration: 'none', display: 'block' }}>
-        <div style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: 18, padding: '14px 16px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>View full progress</span>
-          <span style={{ fontSize: 13, color: 'var(--text-tert)' }}>›</span>
-        </div>
-      </Link>
+      {/* ── Progress snapshot ── */}
+      <ProgressSnapshot subjects={subjectForSnap} overallPct={overallPct} weekTotal={weekTotal} />
 
-      {/* Practice config modal */}
-      {showModal && activeSubject && (
-        <PracticeModal
-          subject={activeSubject}
-          topic={topic}
-          profile={profile}
+      {/* ── Mock exam ── */}
+      <button onClick={() => router.push('/student/exam')}
+        style={{ width: '100%', padding: '16px 18px', borderRadius: 18, cursor: 'pointer', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', marginTop: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 13, background: 'rgba(255,195,107,.12)', border: '1px solid rgba(255,195,107,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📝</div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 2 }}>Mock exam</p>
+          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>Full WAEC or JAMB simulation</p>
+        </div>
+        <span style={{ fontSize: 16, color: 'var(--text-tert)' }}>›</span>
+      </button>
+
+      {/* Modal */}
+      {modal && (
+        <PracticeSetupModal
+          initialSubject={modal}
           subjects={subjects}
-          onClose={() => setShowModal(false)}
+          nextTopics={nextTopics}
+          subjectMastery={subjectMastery}
+          profile={profile}
+          onClose={() => setModal(null)}
           onStart={startSession}
+          onMockExam={() => { setModal(null); router.push('/student/exam') }}
         />
       )}
     </div>

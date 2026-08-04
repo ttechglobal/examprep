@@ -39,7 +39,7 @@ export async function GET(request) {
 
   const db = svc()
 
-  // 1. Get enrolled subjects (optionally filtered)
+  // Fetch paths, all topics for those subjects, and mastery — all in parallel
   let pathQuery = db
     .from('student_learning_paths')
     .select('subject_id, subjects(id, name, slug)')
@@ -55,21 +55,18 @@ export async function GET(request) {
     if (p.subjects) subjectMap[p.subject_id] = p.subjects
   }
 
-  // 2. Get all topics for enrolled subjects, with core flag
-  const { data: allTopics } = await db
-    .from('topics')
-    .select('id, name, subject_id, is_core')
-    .in('subject_id', subjectIds)
-    .order('is_core', { ascending: false }) // core topics first in result set
+  // Run topics + mastery in parallel
+  const [{ data: allTopics }, { data: masteryRows }] = await Promise.all([
+    db.from('topics')
+      .select('id, name, subject_id, is_core')
+      .in('subject_id', subjectIds)
+      .order('is_core', { ascending: false }),
+    db.from('student_topic_mastery')
+      .select('topic_id, score, attempt_count')
+      .eq('student_id', user.id),
+  ])
 
   if (!allTopics?.length) return NextResponse.json({ topics: {} })
-
-  // 3. Get existing mastery scores for this student
-  const { data: masteryRows } = await db
-    .from('student_topic_mastery')
-    .select('topic_id, score, attempt_count')
-    .eq('student_id', user.id)
-    .in('topic_id', allTopics.map(t => t.id))
 
   const masteryMap = {}
   for (const row of masteryRows ?? []) {

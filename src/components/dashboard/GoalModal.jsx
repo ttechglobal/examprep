@@ -1,44 +1,45 @@
 'use client'
-// src/components/dashboard/GoalModal.jsx
-//
-// TAILWIND v4 COLOUR FIX + UI IMPROVEMENT:
-// - SubjectBtn: replaced ${c.bg} ${c.text} dynamic classNames → inline style
-// - getSubjectColor import removed, replaced with SUBJECT_STYLES map
-// - UI improvements: better visual hierarchy, cleaner step indicators,
-//   improved subject grid with checkmarks, more readable grade/score pickers
+// src/components/dashboard/GoalModal.jsx — v4
+// Full restyle matching the prototype design language:
+//   • Navy #0b1330 primary action buttons (not indigo-600)
+//   • Violet #9b7ae0 accents
+//   • All inline styles — no dynamic Tailwind classes
+//   • Subject grid: dark mode compatible bg/text
+//   • StepDots: violet active, subtle inactive
+//   • Inputs: var(--bg-subtle) bg, var(--border) border
+//   • Exam toggle: 3D press button style for active state
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-// ── Subject colour map ────────────────────────────────────────────────────────
+// ── Subject colour map (dark-mode safe inline styles) ─────────────────────────
 const SUBJECT_STYLES = {
-  'Mathematics':                 { bg: '#eff6ff', text: '#1d4ed8' },
-  'Further Mathematics':         { bg: '#f0f9ff', text: '#0369a1' },
-  'English Language':            { bg: '#faf5ff', text: '#7e22ce' },
-  'Use of English':              { bg: '#faf5ff', text: '#7e22ce' },
-  'Physics':                     { bg: '#ecfeff', text: '#0e7490' },
-  'Chemistry':                   { bg: '#f0fdf4', text: '#15803d' },
-  'Biology':                     { bg: '#ecfdf5', text: '#047857' },
-  'Economics':                   { bg: '#fffbeb', text: '#b45309' },
-  'Government':                  { bg: '#fef2f2', text: '#b91c1c' },
-  'Literature in English':       { bg: '#fdf2f8', text: '#9d174d' },
-  'Geography':                   { bg: '#f0fdfa', text: '#0f766e' },
-  'Agricultural Science':        { bg: '#f7fee7', text: '#4d7c0f' },
-  'Commerce':                    { bg: '#eef2ff', text: '#4338ca' },
-  'History':                     { bg: '#fff7ed', text: '#c2410c' },
-  'Accounting':                  { bg: '#fefce8', text: '#a16207' },
-  'Computer Science':            { bg: '#f0f9ff', text: '#0369a1' },
-  'Civic Education':             { bg: '#f0fdf4', text: '#166534' },
-  'Christian Religious Studies': { bg: '#fdf4ff', text: '#86198f' },
-  'Islamic Religious Studies':   { bg: '#fff7ed', text: '#9a3412' },
-  'Yoruba':                      { bg: '#fef9c3', text: '#713f12' },
-  'Igbo':                        { bg: '#fef9c3', text: '#713f12' },
-  'Hausa':                       { bg: '#fef9c3', text: '#713f12' },
-  'default':                     { bg: '#eef2ff', text: '#4338ca' },
+  'Mathematics':                 { bg: 'rgba(92,184,234,.15)',  text: '#5cb8ea',  border: 'rgba(92,184,234,.3)'  },
+  'Further Mathematics':         { bg: 'rgba(92,184,234,.15)',  text: '#5cb8ea',  border: 'rgba(92,184,234,.3)'  },
+  'English Language':            { bg: 'rgba(167,139,250,.15)', text: '#a78bfa',  border: 'rgba(167,139,250,.3)' },
+  'Use of English':              { bg: 'rgba(167,139,250,.15)', text: '#a78bfa',  border: 'rgba(167,139,250,.3)' },
+  'Physics':                     { bg: 'rgba(255,143,171,.15)', text: '#ff8fab',  border: 'rgba(255,143,171,.3)' },
+  'Chemistry':                   { bg: 'rgba(155,122,224,.15)', text: '#9b7ae0',  border: 'rgba(155,122,224,.3)' },
+  'Biology':                     { bg: 'rgba(108,206,142,.15)', text: '#6cce8e',  border: 'rgba(108,206,142,.3)' },
+  'Economics':                   { bg: 'rgba(252,211,77,.15)',  text: '#fcd34d',  border: 'rgba(252,211,77,.3)'  },
+  'Government':                  { bg: 'rgba(248,113,113,.15)', text: '#f87171',  border: 'rgba(248,113,113,.3)' },
+  'Literature in English':       { bg: 'rgba(249,168,212,.15)', text: '#f9a8d4',  border: 'rgba(249,168,212,.3)' },
+  'Geography':                   { bg: 'rgba(52,211,153,.15)',  text: '#34d399',  border: 'rgba(52,211,153,.3)'  },
+  'Agricultural Science':        { bg: 'rgba(134,239,172,.15)', text: '#86efac',  border: 'rgba(134,239,172,.3)' },
+  'Commerce':                    { bg: 'rgba(129,140,248,.15)', text: '#818cf8',  border: 'rgba(129,140,248,.3)' },
+  'History':                     { bg: 'rgba(253,186,116,.15)', text: '#fdba74',  border: 'rgba(253,186,116,.3)' },
+  'Accounting':                  { bg: 'rgba(253,224,138,.15)', text: '#fde68a',  border: 'rgba(253,224,138,.3)' },
+  'Computer Science':            { bg: 'rgba(103,232,249,.15)', text: '#67e8f9',  border: 'rgba(103,232,249,.3)' },
+  'Civic Education':             { bg: 'rgba(108,206,142,.15)', text: '#6cce8e',  border: 'rgba(108,206,142,.3)' },
+  'Christian Religious Studies': { bg: 'rgba(216,180,254,.15)', text: '#d8b4fe',  border: 'rgba(216,180,254,.3)' },
+  'Islamic Religious Studies':   { bg: 'rgba(253,186,116,.15)', text: '#fdba74',  border: 'rgba(253,186,116,.3)' },
+  'Yoruba':                      { bg: 'rgba(252,211,77,.15)',  text: '#fcd34d',  border: 'rgba(252,211,77,.3)'  },
+  'Igbo':                        { bg: 'rgba(252,211,77,.15)',  text: '#fcd34d',  border: 'rgba(252,211,77,.3)'  },
+  'Hausa':                       { bg: 'rgba(252,211,77,.15)',  text: '#fcd34d',  border: 'rgba(252,211,77,.3)'  },
+  'default':                     { bg: 'rgba(155,122,224,.15)', text: '#9b7ae0',  border: 'rgba(155,122,224,.3)' },
 }
-function getSubjectStyle(name) { return SUBJECT_STYLES[name] ?? SUBJECT_STYLES.default }
+const getS = n => SUBJECT_STYLES[n] ?? SUBJECT_STYLES.default
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 const USE_OF_ENGLISH = 'Use of English'
 
 const JAMB_ELECTIVES = [
@@ -65,66 +66,123 @@ function seedJambSubjects(profile) {
   if (!valid.includes(USE_OF_ENGLISH)) valid.unshift(USE_OF_ENGLISH)
   return valid.slice(0, 4)
 }
-
 function seedWaecSubjects(profile) {
   if (!profile?.subjects?.length) return []
   return profile.subjects.filter(s => WAEC_SUBJECTS.includes(s))
 }
 
-// ── Subject toggle button — inline styles, never transparent ─────────────────
+// ── Subject button ────────────────────────────────────────────────────────────
 function SubjectBtn({ name, selected, onClick, disabled, locked }) {
-  const s = getSubjectStyle(name)
+  const s = getS(name)
   return (
     <button
       onClick={onClick}
       disabled={(disabled && !selected) || locked}
-      style={selected ? { backgroundColor: s.bg, color: s.text, borderColor: 'transparent' } : undefined}
-      className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border-2 transition-all text-left w-full
-        ${selected
-          ? 'shadow-sm'
-          : locked
-          ? 'border-default bg-subtle text-tertiary cursor-not-allowed opacity-60'
-          : disabled
-          ? 'border-default bg-card text-tertiary cursor-not-allowed opacity-40'
-          : 'border-default bg-card text-secondary hover:border-indigo-300 dark:hover:border-indigo-700'
-        }`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px',
+        borderRadius: 12, fontSize: 11, fontWeight: 700, border: '1.5px solid',
+        cursor: (disabled && !selected) || locked ? 'not-allowed' : 'pointer',
+        textAlign: 'left', width: '100%', transition: 'all .12s',
+        background: selected ? s.bg : 'var(--bg-card)',
+        borderColor: selected ? s.border : 'var(--border)',
+        color: selected ? s.text : 'var(--text-sec)',
+        opacity: !selected && disabled && !locked ? 0.4 : 1,
+      }}
     >
-      {/* Checkmark or number indicator */}
-      <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-        selected ? 'bg-current' : 'border-2 border-current opacity-30'
-      }`}
-        style={selected ? { backgroundColor: s.text } : undefined}
-      >
+      {/* Check circle */}
+      <div style={{
+        width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: selected ? s.text : 'transparent',
+        border: selected ? 'none' : `1.5px solid ${s.text}40`,
+        transition: 'all .12s',
+      }}>
         {selected && (
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
           </svg>
         )}
       </div>
-      <span className="flex-1 leading-snug">{name}</span>
-      {locked && <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded-full">Required</span>}
+      <span style={{ flex: 1, lineHeight: 1.3 }}>{name}</span>
+      {locked && (
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#9b7ae0', background: 'rgba(155,122,224,.15)', padding: '2px 6px', borderRadius: 999 }}>
+          Required
+        </span>
+      )}
     </button>
   )
 }
 
-// ── Step indicator ─────────────────────────────────────────────────────────────
+// ── Step dots ─────────────────────────────────────────────────────────────────
 function StepDots({ total, current }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
       {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className={`rounded-full transition-all duration-300 ${
-          i === current
-            ? 'w-5 h-1.5 bg-indigo-600'
-            : i < current
-            ? 'w-1.5 h-1.5 bg-indigo-300 dark:bg-indigo-700'
-            : 'w-1.5 h-1.5 bg-subtle'
-        }`} />
+        <div key={i} style={{
+          borderRadius: 99, transition: 'all .25s',
+          width: i === current ? 18 : 6, height: 5,
+          background: i === current ? '#9b7ae0' : i < current ? 'rgba(155,122,224,.4)' : 'var(--bg-inset)',
+        }} />
       ))}
     </div>
   )
 }
 
-// ── Main modal ─────────────────────────────────────────────────────────────────
+// ── 3D press CTA ──────────────────────────────────────────────────────────────
+function CtaButton({ onClick, disabled, children, variant = 'primary' }) {
+  const [p, setP] = useState(false)
+  const bg     = variant === 'primary' ? '#0b1330' : 'var(--bg-subtle)'
+  const shadow = variant === 'primary' ? '0 5px 0 #05070f' : '0 3px 0 var(--bg-inset)'
+  const col    = variant === 'primary' ? '#fff' : 'var(--text-sec)'
+  return (
+    <button
+      onClick={onClick} disabled={disabled}
+      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)} onMouseLeave={() => setP(false)}
+      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+      style={{
+        width: '100%', padding: '14px 0', borderRadius: 14,
+        fontSize: 14, fontWeight: 800, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+        background: bg, color: col, opacity: disabled ? 0.4 : 1,
+        boxShadow: p && !disabled ? (variant === 'primary' ? '0 2px 0 #05070f' : 'none') : shadow,
+        transform: p && !disabled ? 'translateY(3px)' : '',
+        transition: 'transform .1s, box-shadow .1s',
+        letterSpacing: '-0.01em',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+function SectionLabel({ children }) {
+  return (
+    <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
+      {children}
+    </p>
+  )
+}
+
+// ── Text input ────────────────────────────────────────────────────────────────
+function Field({ label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', marginBottom: 5 }}>{label}</p>
+      <input
+        value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 11, fontSize: 13,
+          border: '1.5px solid var(--border)', background: 'var(--bg-subtle)',
+          color: 'var(--text-prim)', outline: 'none',
+        }}
+        onFocus={e => e.target.style.borderColor = 'rgba(155,122,224,.5)'}
+        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+      />
+    </div>
+  )
+}
+
+// ── Main modal ────────────────────────────────────────────────────────────────
 export default function GoalModal({ profile, onClose, onSave }) {
   const supabase = createClient()
   const [saving, setSaving] = useState(false)
@@ -141,9 +199,8 @@ export default function GoalModal({ profile, onClose, onSave }) {
 
   const [jambSubjects, setJambSubjects] = useState(() => seedJambSubjects(profile))
   const [waecSubjects, setWaecSubjects] = useState(() => seedWaecSubjects(profile))
-
   const [universityCourse, setUniCourse]   = useState(profile?.university_course ?? '')
-  const [targetUniversity,  setTargetUni]  = useState(profile?.target_university ?? '')
+  const [targetUniversity, setTargetUni]   = useState(profile?.target_university ?? '')
   const [desiredProfession, setProfession] = useState(profile?.desired_profession ?? '')
   const [waecGrades, setWaecGrades]        = useState(profile?.waec_target_grades ?? {})
   const [jambScores, setJambScores]        = useState(() => {
@@ -156,7 +213,6 @@ export default function GoalModal({ profile, onClose, onSave }) {
   const jambAutoTotal = jambSubjects.reduce((sum, s) => sum + (Number(jambScores[s]) || 0), 0)
   const jambSlots     = 3 - (jambSubjects.filter(s => s !== USE_OF_ENGLISH).length)
 
-  // Build page sequence
   const pages = ['Goals']
   if (examType === 'JAMB' || examType === 'BOTH') pages.push('JAMB Subjects')
   if (examType === 'WAEC' || examType === 'BOTH') pages.push('WAEC Subjects')
@@ -169,15 +225,6 @@ export default function GoalModal({ profile, onClose, onSave }) {
   function nextPage() { setPage(p => Math.min(p + 1, totalPages - 1)) }
   function prevPage() { setPage(p => Math.max(p - 1, 0)) }
 
-  function toggleExam(exam) {
-    setSelectedExams(prev => {
-      const next = new Set(prev)
-      if (next.has(exam)) { if (next.size > 1) next.delete(exam) } else { next.add(exam) }
-      return next
-    })
-    setPage(0)
-  }
-
   function toggleJamb(s) {
     if (s === USE_OF_ENGLISH) return
     setJambSubjects(prev => {
@@ -187,14 +234,11 @@ export default function GoalModal({ profile, onClose, onSave }) {
     })
     setJambScores(prev => ({ ...prev, [s]: prev[s] ?? 70 }))
   }
-
   function toggleWaec(s) {
     setWaecSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
   }
-
   function setJambScore(s, raw) {
-    const val = Math.min(100, Math.max(0, Number(raw) || 0))
-    setJambScores(prev => ({ ...prev, [s]: val }))
+    setJambScores(prev => ({ ...prev, [s]: Math.min(100, Math.max(0, Number(raw) || 0)) }))
   }
 
   const allSubjects = [...new Set([
@@ -206,15 +250,14 @@ export default function GoalModal({ profile, onClose, onSave }) {
     setSaving(true); setError(null)
     const { data: { user } } = await supabase.auth.getUser()
     const updates = {
-      exam_type:          examType,
-      subjects:           allSubjects,
-      university_course:  universityCourse.trim() || null,
-      target_university:  targetUniversity.trim()  || null,
-      desired_profession: desiredProfession.trim()  || null,
+      exam_type: examType, subjects: allSubjects,
+      university_course: universityCourse.trim() || null,
+      target_university: targetUniversity.trim()  || null,
+      desired_profession: desiredProfession.trim() || null,
       waec_target_grades: waecGrades,
       jamb_target_scores: jambScores,
       jamb_total_target:  jambAutoTotal > 0 ? jambAutoTotal : null,
-      goals_set:          true,
+      goals_set: true,
     }
     const { error: err } = await supabase.from('profiles').update(updates).eq('id', user.id)
     setSaving(false)
@@ -222,216 +265,225 @@ export default function GoalModal({ profile, onClose, onSave }) {
     onSave?.({ ...profile, ...updates })
   }
 
+  const PAGE_TITLES = {
+    'Goals':         'Set your goals',
+    'JAMB Subjects': 'JAMB subjects',
+    'WAEC Subjects': 'WAEC subjects',
+    'Targets':       'Target scores',
+  }
+
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      }}
     >
+      {/* Sheet — max-width 512px, centred, bottom-sheet on mobile */}
       <div
-        className="bg-card w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col"
-        style={{ maxHeight: '90dvh' }}
         onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 512,
+          background: 'var(--bg-card)',
+          borderRadius: '26px 26px 0 0',
+          borderTop: '1px solid var(--border)',
+          maxHeight: '92dvh',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 -24px 64px rgba(0,0,0,.35)',
+        }}
       >
+        {/* Drag handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 0', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--bg-inset)' }} />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-default flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <div style={{ padding: '10px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {page > 0 && (
-              <button onClick={prevPage} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary transition-colors">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
-                </svg>
-              </button>
+              <button
+                onClick={prevPage}
+                style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--text-sec)', fontSize: 14 }}
+              >←</button>
             )}
             <div>
-              <h2 className="text-base font-black text-primary">
-                {currentPageLabel === 'Goals'          ? 'Set your goals'
-                : currentPageLabel === 'JAMB Subjects' ? 'JAMB subjects'
-                : currentPageLabel === 'WAEC Subjects' ? 'WAEC subjects'
-                :                                        'Target scores'}
+              <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {PAGE_TITLES[currentPageLabel]}
               </h2>
               <StepDots total={totalPages} current={page} />
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-subtle flex items-center justify-center text-secondary hover:text-primary transition-colors flex-shrink-0">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
+          <button
+            onClick={onClose}
+            style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, fontSize: 13, color: 'var(--text-tert)' }}
+          >✕</button>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
           {/* ── Goals page ── */}
           {currentPageLabel === 'Goals' && (
-            <div className="space-y-5">
+            <>
               {/* Exam selector */}
-              <div className="space-y-2">
-                <p className="text-xs font-black text-secondary uppercase tracking-wide">Which exam are you sitting?</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {['WAEC', 'JAMB', 'Both'].map(label => {
-                    const val = label === 'Both' ? 'BOTH' : label
+              <div>
+                <SectionLabel>Which exam are you sitting?</SectionLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  {[
+                    { label: 'WAEC', val: 'WAEC' },
+                    { label: 'JAMB', val: 'JAMB' },
+                    { label: 'Both', val: 'BOTH' },
+                  ].map(({ label, val }) => {
                     const active = examType === val
                     return (
-                      <button key={label} onClick={() => {
-                        if (label === 'Both') { setSelectedExams(new Set(['WAEC', 'JAMB'])) }
-                        else { setSelectedExams(new Set([val])) }
-                        setPage(0)
-                      }}
-                        className={`py-2.5 rounded-xl text-sm font-black border-2 transition-all ${
-                          active
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none'
-                            : 'border-default bg-card text-secondary hover:border-indigo-300'
-                        }`}>
-                        {label}
-                      </button>
+                      <button
+                        key={label}
+                        onClick={() => {
+                          if (val === 'BOTH') setSelectedExams(new Set(['WAEC', 'JAMB']))
+                          else setSelectedExams(new Set([val]))
+                          setPage(0)
+                        }}
+                        style={{
+                          padding: '11px 0', borderRadius: 12, fontSize: 13, fontWeight: 800,
+                          border: active ? 'none' : '1.5px solid var(--border)',
+                          background: active ? '#0b1330' : 'var(--bg-card)',
+                          color: active ? '#fff' : 'var(--text-sec)',
+                          cursor: 'pointer',
+                          boxShadow: active ? '0 4px 0 #05070f' : 'none',
+                          transition: 'all .12s',
+                        }}
+                      >{label}</button>
                     )
                   })}
                 </div>
                 {examType === 'BOTH' && (
-                  <p className="text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-3 py-2 rounded-xl">
-                    You'll select subjects for JAMB and WAEC separately on the next steps.
+                  <p style={{ marginTop: 8, fontSize: 11, color: '#9b7ae0', background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.2)', padding: '8px 12px', borderRadius: 10 }}>
+                    You'll select subjects for JAMB and WAEC separately in the next steps.
                   </p>
                 )}
               </div>
 
-              {/* Aspiration fields */}
-              <div className="space-y-3">
-                <p className="text-xs font-black text-secondary uppercase tracking-wide">Your aspirations</p>
-                <div className="space-y-3">
-                  {[
-                    { label: '🎓 University course', val: universityCourse, set: setUniCourse, placeholder: 'e.g. Medicine, Engineering, Law…' },
-                    { label: '🏛️ Target university', val: targetUniversity, set: setTargetUni, placeholder: 'e.g. University of Lagos, OAU…' },
-                    { label: '💼 Desired profession', val: desiredProfession, set: setProfession, placeholder: 'e.g. Doctor, Engineer, Lawyer…' },
-                  ].map(({ label, val, set, placeholder }) => (
-                    <div key={label}>
-                      <p className="text-xs font-bold text-secondary mb-1">{label}</p>
-                      <input value={val} onChange={e => set(e.target.value)} placeholder={placeholder}
-                        className="w-full text-sm border border-default rounded-xl px-3 py-2.5 bg-subtle text-primary placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors" />
-                    </div>
-                  ))}
+              {/* Aspirations */}
+              <div>
+                <SectionLabel>Your aspirations</SectionLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <Field label="🎓 University course" value={universityCourse} onChange={setUniCourse} placeholder="e.g. Medicine, Engineering, Law…" />
+                  <Field label="🏛️ Target university"  value={targetUniversity}  onChange={setTargetUni}  placeholder="e.g. University of Lagos, OAU…" />
+                  <Field label="💼 Desired profession" value={desiredProfession} onChange={setProfession} placeholder="e.g. Doctor, Engineer, Lawyer…" />
                 </div>
               </div>
 
-              <button onClick={nextPage}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors">
-                Next: Subjects →
-              </button>
-            </div>
+              <CtaButton onClick={nextPage}>Next: Subjects →</CtaButton>
+            </>
           )}
 
           {/* ── JAMB Subjects page ── */}
           {currentPageLabel === 'JAMB Subjects' && (
-            <div className="space-y-4">
-              {/* Use of English — locked, always required */}
-              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border-2 border-indigo-200 dark:border-indigo-800">
-                <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-                  </svg>
+            <>
+              {/* Use of English locked row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 14, background: 'rgba(167,139,250,.1)', border: '1.5px solid rgba(167,139,250,.3)' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#a78bfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-black text-indigo-700 dark:text-indigo-300">{USE_OF_ENGLISH}</p>
-                  <p className="text-xs text-indigo-500">Always required for JAMB</p>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: '#a78bfa' }}>{USE_OF_ENGLISH}</p>
+                  <p style={{ fontSize: 10, color: 'rgba(167,139,250,.7)' }}>Always required for JAMB</p>
                 </div>
-                <span className="text-xs text-indigo-600 dark:text-indigo-400 font-black">1/4</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#a78bfa' }}>1/4</span>
               </div>
 
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-secondary leading-relaxed">
-                  {jambSlots > 0
-                    ? `Choose ${jambSlots} more subject${jambSlots !== 1 ? 's' : ''}`
-                    : 'All 4 subjects selected'}
+              {/* Progress counter */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p style={{ fontSize: 12, color: 'var(--text-sec)' }}>
+                  {jambSlots > 0 ? `Choose ${jambSlots} more subject${jambSlots !== 1 ? 's' : ''}` : 'All 4 subjects selected ✓'}
                 </p>
-                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                  jambSubjects.length === 4
-                    ? 'bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400'
-                    : 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
-                }`}>
+                <span style={{
+                  fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
+                  background: jambSubjects.length === 4 ? 'rgba(74,222,128,.15)' : 'rgba(251,191,36,.15)',
+                  color: jambSubjects.length === 4 ? '#4ade80' : '#fbbf24',
+                  border: `1px solid ${jambSubjects.length === 4 ? 'rgba(74,222,128,.3)' : 'rgba(251,191,36,.3)'}`,
+                }}>
                   {jambSubjects.length}/4
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 {JAMB_ELECTIVES.map(s => (
-                  <SubjectBtn
-                    key={s} name={s}
-                    selected={jambSubjects.includes(s)}
-                    disabled={jambSubjects.length >= 4}
-                    onClick={() => toggleJamb(s)}
-                  />
+                  <SubjectBtn key={s} name={s} selected={jambSubjects.includes(s)} disabled={jambSubjects.length >= 4} onClick={() => toggleJamb(s)} />
                 ))}
               </div>
 
-              <button onClick={nextPage} disabled={jambSubjects.length < 4}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors disabled:opacity-40">
+              <CtaButton onClick={nextPage} disabled={jambSubjects.length < 4}>
                 {examType === 'BOTH' ? 'Next: WAEC Subjects →' : 'Next: Target Scores →'}
-              </button>
-            </div>
+              </CtaButton>
+            </>
           )}
 
           {/* ── WAEC Subjects page ── */}
           {currentPageLabel === 'WAEC Subjects' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-secondary">Select all your WAEC subjects</p>
-                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                  waecSubjects.length >= 7
-                    ? 'bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400'
-                    : 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
-                }`}>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p style={{ fontSize: 12, color: 'var(--text-sec)' }}>Select all your WAEC subjects</p>
+                <span style={{
+                  fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
+                  background: waecSubjects.length >= 7 ? 'rgba(74,222,128,.15)' : 'rgba(251,191,36,.15)',
+                  color: waecSubjects.length >= 7 ? '#4ade80' : '#fbbf24',
+                  border: `1px solid ${waecSubjects.length >= 7 ? 'rgba(74,222,128,.3)' : 'rgba(251,191,36,.3)'}`,
+                }}>
                   {waecSubjects.length} selected
                 </span>
               </div>
 
               {waecSubjects.length < 7 && (
-                <p className="text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-3 py-2 rounded-xl">
+                <p style={{ fontSize: 11, color: '#9b7ae0', background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.2)', padding: '8px 12px', borderRadius: 10 }}>
                   Most students sit 8–9 subjects for WAEC
                 </p>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 {WAEC_SUBJECTS.map(s => (
                   <SubjectBtn key={s} name={s} selected={waecSubjects.includes(s)} onClick={() => toggleWaec(s)} />
                 ))}
               </div>
 
-              <button onClick={nextPage} disabled={waecSubjects.length === 0}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors disabled:opacity-40">
+              <CtaButton onClick={nextPage} disabled={waecSubjects.length === 0}>
                 Next: Target Scores →
-              </button>
-            </div>
+              </CtaButton>
+            </>
           )}
 
           {/* ── Targets page ── */}
           {currentPageLabel === 'Targets' && (
-            <div className="space-y-6">
-
+            <>
               {/* WAEC grades */}
               {(examType === 'WAEC' || examType === 'BOTH') && waecSubjects.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-white bg-emerald-600 px-2.5 py-1 rounded-full">WAEC</span>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fff', background: '#22c55e', padding: '3px 8px', borderRadius: 999 }}>WAEC</span>
                     <div>
-                      <p className="text-sm font-bold text-primary">Target grade per subject</p>
-                      <p className="text-xs text-tertiary">A1 is the highest</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Target grade per subject</p>
+                      <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>A1 is the highest grade</p>
                     </div>
                   </div>
-                  <div className="space-y-3">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {waecSubjects.map(s => {
                       const chosen = waecGrades[s] ?? 'A1'
-                      const subStyle = getSubjectStyle(s)
+                      const sc = getS(s)
                       return (
-                        <div key={s} className="bg-subtle rounded-2xl p-3 space-y-2">
-                          <p className="text-xs font-bold text-primary">{s}</p>
-                          <div className="flex gap-1.5 flex-wrap">
+                        <div key={s} style={{ background: 'var(--bg-subtle)', borderRadius: 14, padding: '11px 12px' }}>
+                          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 8 }}>{s}</p>
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                             {WAEC_GRADES.map(g => (
                               <button key={g} onClick={() => setWaecGrades(prev => ({ ...prev, [s]: g }))}
-                                style={chosen === g ? { backgroundColor: subStyle.bg, color: subStyle.text, borderColor: 'transparent' } : undefined}
-                                className={`px-3 py-1.5 text-xs font-black rounded-lg border-2 transition-all ${
-                                  chosen === g ? 'shadow-sm' : 'border-default text-secondary hover:border-indigo-300 bg-card'
-                                }`}>
+                                style={{
+                                  padding: '5px 10px', fontSize: 11, fontWeight: 800, borderRadius: 8, cursor: 'pointer',
+                                  border: '1.5px solid', transition: 'all .12s',
+                                  background: chosen === g ? sc.bg : 'var(--bg-card)',
+                                  borderColor: chosen === g ? sc.border : 'var(--border)',
+                                  color: chosen === g ? sc.text : 'var(--text-sec)',
+                                }}>
                                 {g}
                               </button>
                             ))}
@@ -445,40 +497,38 @@ export default function GoalModal({ profile, onClose, onSave }) {
 
               {/* JAMB scores */}
               {(examType === 'JAMB' || examType === 'BOTH') && jambSubjects.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-white bg-indigo-600 px-2.5 py-1 rounded-full">JAMB</span>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fff', background: '#9b7ae0', padding: '3px 8px', borderRadius: 999 }}>JAMB</span>
                       <div>
-                        <p className="text-sm font-bold text-primary">Target score per subject</p>
-                        <p className="text-xs text-tertiary">Each subject is out of 100</p>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Target score per subject</p>
+                        <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>Each subject is out of 100</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{jambAutoTotal}</p>
-                      <p className="text-[10px] text-tertiary">/ 400 total</p>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: 20, fontWeight: 900, color: '#9b7ae0', lineHeight: 1 }}>{jambAutoTotal}</p>
+                      <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>/ 400 total</p>
                     </div>
                   </div>
-
-                  <div className="space-y-2">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {jambSubjects.map(s => {
                       const val = jambScores[s] ?? 70
-                      const pct = val
-                      const barColor = pct >= 70 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444'
+                      const barColor = val >= 70 ? '#4ade80' : val >= 50 ? '#fbbf24' : '#f87171'
                       return (
-                        <div key={s} className="bg-subtle rounded-2xl p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold text-primary">{s}</p>
-                            <span className="text-sm font-black text-primary tabular-nums">{val}<span className="text-xs font-normal text-tertiary">/100</span></span>
+                        <div key={s} style={{ background: 'var(--bg-subtle)', borderRadius: 14, padding: '11px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)' }}>{s}</p>
+                            <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)' }}>
+                              {val}<span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tert)' }}>/100</span>
+                            </span>
                           </div>
-                          {/* Visual bar */}
-                          <div className="h-1.5 bg-card rounded-full overflow-hidden">
-                            <div style={{ width: `${val}%`, backgroundColor: barColor }}
-                              className="h-full rounded-full transition-all duration-300" />
+                          <div style={{ height: 4, background: 'var(--bg-card)', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
+                            <div style={{ width: `${val}%`, height: '100%', background: barColor, borderRadius: 999, transition: 'width .3s' }} />
                           </div>
                           <input type="range" min="0" max="100" step="5" value={val}
                             onChange={e => setJambScore(s, e.target.value)}
-                            className="w-full h-1 accent-indigo-600 cursor-pointer" />
+                            style={{ width: '100%', accentColor: '#9b7ae0', cursor: 'pointer' }} />
                         </div>
                       )
                     })}
@@ -487,16 +537,17 @@ export default function GoalModal({ profile, onClose, onSave }) {
               )}
 
               {error && (
-                <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-4 py-3 rounded-xl">{error}</p>
+                <p style={{ fontSize: 12, color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', padding: '10px 14px', borderRadius: 11 }}>{error}</p>
               )}
 
-              <button onClick={handleSave} disabled={saving}
-                className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+              <CtaButton onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : 'Save goals ✓'}
-              </button>
-            </div>
+              </CtaButton>
+            </>
           )}
         </div>
+
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     </div>
   )

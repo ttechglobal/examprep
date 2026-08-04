@@ -4,8 +4,9 @@ import LearnPage from './LearnPage'
 export default function LearnRoute() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center py-24">
-        <div className="w-9 h-9 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '96px 0' }}>
+        <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#9b7ae0', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     }>
       <LearnPage />

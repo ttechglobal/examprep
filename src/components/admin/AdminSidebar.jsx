@@ -5,7 +5,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+// Admin auth is password-based — no Supabase client needed for logout
 
 const NAV = [
   { section: 'MENU', items: [
@@ -48,12 +48,11 @@ function NavItem({ href, label, icon, dot, active }) {
 export default function AdminSidebar({ userName }) {
   const pathname    = usePathname()
   const router      = useRouter()
-  const supabase    = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   async function signOut() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await fetch('/api/admin/auth', { method: 'DELETE' })
+    router.push('/admin-login')
   }
 
   function SidebarContent() {

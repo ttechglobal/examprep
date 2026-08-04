@@ -200,7 +200,7 @@ export default function DiagnosticResultsPage() {
         {isSignedIn
           ? <Cta3D href="/student/dashboard">View my practice plan →</Cta3D>
           : <div className="flex flex-col gap-3">
-              <Cta3D href="/signup?from=diagnostic">Save results &amp; create account →</Cta3D>
+              <Cta3D href="/register?from=diagnostic">Save results &amp; create account →</Cta3D>
               <Link href="/student/dashboard" className="text-center text-secondary text-xs font-semibold">
                 Continue without saving
               </Link>

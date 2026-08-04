@@ -303,16 +303,14 @@ export default function ProgressPage() {
   const overallColor = overallPct >= 70 ? 'var(--success)' : overallPct >= 50 ? 'var(--warning)' : 'var(--danger)'
 
   return (
-    <div className="min-h-dvh bg-base">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 border-b border-default"
-        style={{ height: 52, background: 'var(--nav-bg)', backdropFilter: 'blur(14px)', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div className="w-8" />
-        <span className="text-sm font-black text-primary">My Progress</span>
-        <div className="w-8" />
+    <div>
+      {/* Page title */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Progress</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-sec)', marginTop: 3 }}>Your mastery across all subjects and topics</p>
       </div>
 
-      <div className="px-4 py-5 space-y-4" style={{ paddingBottom: 100 }}>
+      <div className="space-y-4" style={{ paddingBottom: 100 }}>
 
         {/* Top row: ring + weekly chart */}
         <div className="flex gap-3">
@@ -359,12 +357,6 @@ export default function ProgressPage() {
           </div>
         </div>
 
-        {/* Back to home */}
-        <Link href="/student/dashboard"
-          className="block w-full py-4 rounded-2xl text-sm font-black text-white text-center"
-          style={{ background: '#0b1330', boxShadow: '0 5px 0 #05070f' }}>
-          ← Back to home
-        </Link>
       </div>
     </div>
   )

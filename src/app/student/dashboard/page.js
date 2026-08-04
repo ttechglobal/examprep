@@ -1,38 +1,36 @@
 'use client'
-// src/app/student/dashboard/page.js  — v4
+// src/app/student/dashboard/page.js — v6
 // ─────────────────────────────────────────────────────────────────────────────
-// FIXES vs v2:
-//   1. Font: uses the app font (Plus Jakarta Sans via font-family:inherit / var(--font-jakarta))
-//      Space Grotesk is NOT installed — removed every reference to it.
-//   2. Hero card layout:
-//      - Subject name removed from the big heading — the BIG text is now the TOPIC name
-//      - Subject only appears once, in the small tag pill at the top
-//      - Icon pushed down; topic name pushed toward bottom of card
-//      - Spacer between tag pill and icon/topic block creates visual breathing room
-//      - "Practise Now" button sits at the very bottom of the card
-//   3. Hero card light mode: the card dark gradient now adapts —
-//      light mode shows a rich navy/indigo card so it still pops on a white bg
-//      (not transparent/washed). Uses isDark to pick bg.
-//   4. Targets collapsed: shows ALL target lines (Course, University, WAEC, JAMB)
-//      stacked vertically — not just the headline. Exactly like the prototype.
-//   5. Subject Mastery light mode: progress bar track uses a visible grey (#e5e7eb)
-//      in light mode and the fill uses the accent colour — always visible.
+// Full redesign matching the Focus prototype exactly.
 //
-// COLOUR RULES (Tailwind v4):
-//   - Structural: bg-card, bg-base, bg-subtle, text-primary, text-secondary,
-//     text-tertiary, border-default → Tailwind token classes (always safe)
-//   - All hex values → inline style only (never dynamic Tailwind classes)
+// LAYOUT (top to bottom, matching prototype):
+//   1. Greeting — eyebrow (day + time of day) + big hero line with first name
+//   2. "Next best move" hero card — ambient SVG + violet pill tag + subject
+//      name large + topic line + freq/time badges + 3D navy CTA
+//   3. Carousel dots — centred, one per subject, active = coloured pill
+//   4. "Your subjects" — icon + name + 3px progress bar + coloured %
+//   5. "Needs attention" — red-dot items, weakest topics first
+//   6. "Your target" — icon box + goal + countdown days number
+//
+// DESIGN DECISIONS:
+//   • Greeting is personal and time-aware — student sees themselves here
+//   • Hero card is the single strongest action — one tap = practise
+//   • Subjects are compact and scannable — not cards, just rows
+//   • Needs attention is motivational, not alarming — "here's where to go next"
+//   • Target strip is always anchored at the bottom — reminds why they're here
+//   • Zero Tailwind dynamic classes, zero --indigo vars
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef, memo, Suspense, lazy } from 'react'
+import { useState, useEffect, useRef, useCallback, memo, Suspense, lazy } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { DashboardSkeleton } from '@/components/ui/Skeletons'
+import { PracticeSetupModal } from '@/app/student/practice/page'
 import Link from 'next/link'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
-// ─── dark-mode hook ───────────────────────────────────────────────────────────
+// ── Dark mode hook ────────────────────────────────────────────────────────────
 function useIsDark() {
   const [dark, setDark] = useState(false)
   useEffect(() => {
@@ -45,221 +43,171 @@ function useIsDark() {
   return dark
 }
 
-// ─── subject config ───────────────────────────────────────────────────────────
-// All values explicit hex — never Tailwind dynamic classes
+// ── Subject config ────────────────────────────────────────────────────────────
 const SUBJECT_CFG = {
-  'Physics':               { accent: '#ff8fab', darkCardBg: 'linear-gradient(170deg,#1f0a14 0%,#0e0820 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#1a0f24 0%,#0f0a1e 55%,#090912 100%)', n1: '#ff8fab', n2: '#9b7ae0', icon: '⚡'  },
-  'Chemistry':             { accent: '#9b7ae0', darkCardBg: 'linear-gradient(170deg,#140e28 0%,#0e0a1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#140e28 0%,#0e0a1c 55%,#090912 100%)', n1: '#9b7ae0', n2: '#ff8fab', icon: '⚗️' },
-  'Biology':               { accent: '#6cce8e', darkCardBg: 'linear-gradient(170deg,#081a10 0%,#061210 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#061814 0%,#071210 55%,#090912 100%)', n1: '#6cce8e', n2: '#5cb8ea', icon: '🧬' },
-  'Mathematics':           { accent: '#5cb8ea', darkCardBg: 'linear-gradient(170deg,#091426 0%,#070d1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#091426 0%,#07101e 55%,#090912 100%)', n1: '#5cb8ea', n2: '#9b7ae0', icon: '📐' },
-  'Further Mathematics':   { accent: '#5cb8ea', darkCardBg: 'linear-gradient(170deg,#091426 0%,#070d1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#091426 0%,#07101e 55%,#090912 100%)', n1: '#5cb8ea', n2: '#9b7ae0', icon: '📐' },
-  'English Language':      { accent: '#a78bfa', darkCardBg: 'linear-gradient(170deg,#130e28 0%,#0e0a1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#130e28 0%,#0e0a1c 55%,#090912 100%)', n1: '#a78bfa', n2: '#ff8fab', icon: '📖' },
-  'Use of English':        { accent: '#a78bfa', darkCardBg: 'linear-gradient(170deg,#130e28 0%,#0e0a1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#130e28 0%,#0e0a1c 55%,#090912 100%)', n1: '#a78bfa', n2: '#ff8fab', icon: '📖' },
-  'Economics':             { accent: '#fcd34d', darkCardBg: 'linear-gradient(170deg,#1a1200 0%,#0e0d04 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#1a1200 0%,#100e04 55%,#090912 100%)', n1: '#fcd34d', n2: '#6cce8e', icon: '📊' },
-  'Government':            { accent: '#f87171', darkCardBg: 'linear-gradient(170deg,#1a0808 0%,#0e0808 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#1a0808 0%,#0e0808 55%,#090912 100%)', n1: '#f87171', n2: '#fcd34d', icon: '🏛️'},
-  'Geography':             { accent: '#34d399', darkCardBg: 'linear-gradient(170deg,#061a10 0%,#061210 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#061a10 0%,#071210 55%,#090912 100%)', n1: '#34d399', n2: '#5cb8ea', icon: '🌍' },
-  'Literature in English': { accent: '#f9a8d4', darkCardBg: 'linear-gradient(170deg,#1a0814 0%,#0e0812 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#1a0814 0%,#0e0812 55%,#090912 100%)', n1: '#f9a8d4', n2: '#a78bfa', icon: '📚' },
-  'Agricultural Science':  { accent: '#86efac', darkCardBg: 'linear-gradient(170deg,#071408 0%,#061208 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#071408 0%,#061208 55%,#090912 100%)', n1: '#86efac', n2: '#fcd34d', icon: '🌱' },
-  'Commerce':              { accent: '#818cf8', darkCardBg: 'linear-gradient(170deg,#0e0e28 0%,#0c0c1e 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#0e0e28 0%,#0c0c1e 55%,#090912 100%)', n1: '#818cf8', n2: '#5cb8ea', icon: '💼' },
-  'Accounting':            { accent: '#fde68a', darkCardBg: 'linear-gradient(170deg,#1a1400 0%,#0e0d00 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#1a1400 0%,#100e00 55%,#090912 100%)', n1: '#fde68a', n2: '#6cce8e', icon: '🧮' },
-  'Computer Science':      { accent: '#67e8f9', darkCardBg: 'linear-gradient(170deg,#061418 0%,#060e14 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#061418 0%,#060e14 55%,#090912 100%)', n1: '#67e8f9', n2: '#818cf8', icon: '💻' },
-  'default':               { accent: '#9b7ae0', darkCardBg: 'linear-gradient(170deg,#140e28 0%,#0e0a1c 55%,#09090d 100%)', lightCardBg: 'linear-gradient(170deg,#140e28 0%,#0e0a1c 55%,#090912 100%)', n1: '#9b7ae0', n2: '#ff8fab', icon: '📝' },
+  'Physics':               { accent: '#ff8fab', cardBg: 'linear-gradient(160deg,#1f0a14 0%,#100820 55%,#0c0d12 100%)', n1: '#ff8fab', n2: '#9b7ae0', icon: '⚡'  },
+  'Chemistry':             { accent: '#9b7ae0', cardBg: 'linear-gradient(160deg,#16102c 0%,#0d0a1c 55%,#0c0d12 100%)', n1: '#9b7ae0', n2: '#ff8fab', icon: '⚗️' },
+  'Biology':               { accent: '#6cce8e', cardBg: 'linear-gradient(160deg,#081a10 0%,#061210 55%,#0c0d12 100%)', n1: '#6cce8e', n2: '#5cb8ea', icon: '🧬' },
+  'Mathematics':           { accent: '#5cb8ea', cardBg: 'linear-gradient(160deg,#091426 0%,#070d1c 55%,#0c0d12 100%)', n1: '#5cb8ea', n2: '#9b7ae0', icon: '📐' },
+  'Further Mathematics':   { accent: '#5cb8ea', cardBg: 'linear-gradient(160deg,#091426 0%,#070d1c 55%,#0c0d12 100%)', n1: '#5cb8ea', n2: '#9b7ae0', icon: '📐' },
+  'English Language':      { accent: '#a78bfa', cardBg: 'linear-gradient(160deg,#130e28 0%,#0e0a1c 55%,#0c0d12 100%)', n1: '#a78bfa', n2: '#ff8fab', icon: '📖' },
+  'Use of English':        { accent: '#a78bfa', cardBg: 'linear-gradient(160deg,#130e28 0%,#0e0a1c 55%,#0c0d12 100%)', n1: '#a78bfa', n2: '#ff8fab', icon: '📖' },
+  'Economics':             { accent: '#fcd34d', cardBg: 'linear-gradient(160deg,#1a1200 0%,#0e0d04 55%,#0c0d12 100%)', n1: '#fcd34d', n2: '#6cce8e', icon: '📊' },
+  'Government':            { accent: '#f87171', cardBg: 'linear-gradient(160deg,#1a0808 0%,#0e0808 55%,#0c0d12 100%)', n1: '#f87171', n2: '#fcd34d', icon: '🏛️' },
+  'Geography':             { accent: '#34d399', cardBg: 'linear-gradient(160deg,#061a10 0%,#061210 55%,#0c0d12 100%)', n1: '#34d399', n2: '#5cb8ea', icon: '🌍' },
+  'Literature in English': { accent: '#f9a8d4', cardBg: 'linear-gradient(160deg,#1a0814 0%,#0e0812 55%,#0c0d12 100%)', n1: '#f9a8d4', n2: '#a78bfa', icon: '📚' },
+  'Agricultural Science':  { accent: '#86efac', cardBg: 'linear-gradient(160deg,#071408 0%,#061208 55%,#0c0d12 100%)', n1: '#86efac', n2: '#fcd34d', icon: '🌱' },
+  'Commerce':              { accent: '#818cf8', cardBg: 'linear-gradient(160deg,#0e0e28 0%,#0c0c1e 55%,#0c0d12 100%)', n1: '#818cf8', n2: '#5cb8ea', icon: '💼' },
+  'Accounting':            { accent: '#fde68a', cardBg: 'linear-gradient(160deg,#1a1400 0%,#0e0d00 55%,#0c0d12 100%)', n1: '#fde68a', n2: '#6cce8e', icon: '🧮' },
+  'Computer Science':      { accent: '#67e8f9', cardBg: 'linear-gradient(160deg,#061418 0%,#060e14 55%,#0c0d12 100%)', n1: '#67e8f9', n2: '#818cf8', icon: '💻' },
+  'default':               { accent: '#9b7ae0', cardBg: 'linear-gradient(160deg,#16102c 0%,#0d0a1c 55%,#0c0d12 100%)', n1: '#9b7ae0', n2: '#ff8fab', icon: '📝' },
 }
-const getCfg = (name) => SUBJECT_CFG[name] ?? SUBJECT_CFG.default
+const getCfg = name => SUBJECT_CFG[name] ?? SUBJECT_CFG.default
 
-// ─── greeting ────────────────────────────────────────────────────────────────
+// ── Greeting ──────────────────────────────────────────────────────────────────
 function getGreeting(firstName) {
-  const hour = new Date().getHours()
-  const name = firstName ? `, ${firstName}` : ''
-  if (hour < 12) return { pre: 'Good morning',   main: `Ready to practise${name}? ☀️` }
-  if (hour < 17) return { pre: 'Good afternoon', main: `Let's keep the momentum${name} ⚡` }
-  return               { pre: 'Good evening',    main: `Keep pushing${name} 🌙` }
+  const h    = new Date().getHours()
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  const day  = days[new Date().getDay()]
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
+  const eyebrow = `${day} ${part}`
+
+  const name = firstName ? `,\n${firstName}` : ''
+  if (h < 12) return { eyebrow, hero: `Good morning${name} ⚡` }
+  if (h < 17) return { eyebrow, hero: `Keep at it${name} 📖` }
+  return            { eyebrow, hero: `One more topic${name} 🌙` }
 }
 
-// ─── Ambient SVG pattern ──────────────────────────────────────────────────────
-function AmbientPattern({ cfg }) {
+// ── Ambient SVG — constellation nodes, matches prototype exactly ──────────────
+function AmbientNodes({ n1, n2 }) {
   return (
-    <svg
-      aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.1, pointerEvents: 'none' }}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <circle cx="38"  cy="44"  r="3" fill={cfg.n1} />
-      <circle cx="98"  cy="26"  r="2" fill={cfg.n1} />
-      <circle cx="163" cy="54"  r="3" fill={cfg.n1} />
-      <circle cx="228" cy="33"  r="2" fill={cfg.n2} />
-      <circle cx="303" cy="49"  r="3" fill={cfg.n1} />
-      <circle cx="352" cy="21"  r="2" fill={cfg.n2} />
-      <line x1="38"  y1="44"  x2="98"  y2="26"  stroke={cfg.n1} strokeWidth="1" />
-      <line x1="98"  y1="26"  x2="163" y2="54"  stroke={cfg.n1} strokeWidth="1" />
-      <line x1="163" y1="54"  x2="228" y2="33"  stroke={cfg.n1} strokeWidth="1" />
-      <line x1="228" y1="33"  x2="303" y2="49"  stroke={cfg.n1} strokeWidth="1" />
-      <line x1="303" y1="49"  x2="352" y2="21"  stroke={cfg.n1} strokeWidth="1" />
-      <circle cx="19"  cy="114" r="2" fill={cfg.n1} />
-      <circle cx="84"  cy="94"  r="3" fill={cfg.n2} />
-      <circle cx="173" cy="119" r="2" fill={cfg.n1} />
-      <circle cx="258" cy="101" r="3" fill={cfg.n1} />
-      <circle cx="328" cy="117" r="2" fill={cfg.n2} />
-      <line x1="19"  y1="114" x2="84"  y2="94"  stroke={cfg.n1} strokeWidth="1" />
-      <line x1="84"  y1="94"  x2="173" y2="119" stroke={cfg.n1} strokeWidth="1" />
-      <line x1="173" y1="119" x2="258" y2="101" stroke={cfg.n1} strokeWidth="1" />
-      <line x1="258" y1="101" x2="328" y2="117" stroke={cfg.n1} strokeWidth="1" />
+    <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.07 }} xmlns="http://www.w3.org/2000/svg">
+      <circle cx="30"  cy="30"  r="2.5" fill={n1}/>
+      <circle cx="90"  cy="18"  r="1.5" fill={n1}/>
+      <circle cx="155" cy="38"  r="2"   fill={n1}/>
+      <circle cx="220" cy="20"  r="1.5" fill={n2}/>
+      <circle cx="310" cy="35"  r="2"   fill={n1}/>
+      <circle cx="345" cy="14"  r="1.5" fill={n2}/>
+      <line x1="30"  y1="30"  x2="90"  y2="18"  stroke={n1} strokeWidth="0.8"/>
+      <line x1="90"  y1="18"  x2="155" y2="38"  stroke={n1} strokeWidth="0.8"/>
+      <line x1="155" y1="38"  x2="220" y2="20"  stroke={n1} strokeWidth="0.8"/>
+      <line x1="220" y1="20"  x2="310" y2="35"  stroke={n1} strokeWidth="0.8"/>
+      <line x1="310" y1="35"  x2="345" y2="14"  stroke={n1} strokeWidth="0.8"/>
+      <circle cx="20"  cy="120" r="2"   fill={n1}/>
+      <circle cx="80"  cy="100" r="2.5" fill={n2}/>
+      <circle cx="160" cy="128" r="1.5" fill={n1}/>
+      <circle cx="260" cy="108" r="2"   fill={n1}/>
+      <line x1="20"  y1="120" x2="80"  y2="100" stroke={n1} strokeWidth="0.8"/>
+      <line x1="80"  y1="100" x2="160" y2="128" stroke={n1} strokeWidth="0.8"/>
+      <line x1="160" y1="128" x2="260" y2="108" stroke={n1} strokeWidth="0.8"/>
     </svg>
   )
 }
 
-// ─── HERO PRACTICE CARD ───────────────────────────────────────────────────────
-// FIX: big text = topic name, subject only in tag pill
-// FIX: subject icon + topic pushed toward bottom, spacer in middle
-// FIX: card bg works in light mode (dark gradient always, readable always)
-// FIX: "Practise Now" anchored at bottom
-const PracticeHeroCard = memo(function PracticeHeroCard({ sub, planItem, isDark }) {
-  const router      = useRouter()
+// ── 3D press button ───────────────────────────────────────────────────────────
+function PressBtn({ onClick, children, style = {} }) {
+  const [p, setP] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseDown={() => setP(true)} onMouseUp={() => setP(false)} onMouseLeave={() => setP(false)}
+      onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
+      style={{
+        background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer',
+        fontWeight: 800, fontSize: 15, borderRadius: 14, letterSpacing: '-0.01em',
+        transform: p ? 'translateY(3px)' : '',
+        boxShadow: p ? '0 2px 0 #05070f' : '0 6px 0 #05070f, 0 10px 24px rgba(0,0,0,.4)',
+        transition: 'transform .1s, box-shadow .1s',
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── Hero card — "Next best move" ──────────────────────────────────────────────
+const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark }) {
   const cfg         = getCfg(sub?.subjects?.name ?? '')
   const subjectName = sub?.subjects?.name ?? 'Subject'
   const topicName   = planItem?.topicName ?? null
-  const isCore      = planItem?.isCore ?? false
-  const btnRef      = useRef(null)
+  const isCore      = planItem?.isCore    ?? false
 
-  function handlePractise(e) {
-    e.stopPropagation()
-    // Go directly to session with the recommended topic pre-filled.
-    // The topic comes from mastery-based next-topic API (core topics first).
-    const config = {
-      subjects:   [subjectName],
-      subject_id: sub.subject_id,
-      examType:   'WAEC',
-      count:      10,
-      mode:       'topic',
-      topicName:  planItem?.topicName ?? null,
-      topic_id:   planItem?.topicId   ?? null,
-      isCore:     planItem?.isCore    ?? false,
-    }
-    sessionStorage.setItem('practice_config', JSON.stringify(config))
-    router.push('/student/practice/session')
-  }
-
-  const pressDown = () => {
-    if (!btnRef.current) return
-    btnRef.current.style.transform = 'translateY(4px)'
-    btnRef.current.style.boxShadow = '0 2px 0 #05070f'
-  }
-  const pressUp = () => {
-    if (!btnRef.current) return
-    btnRef.current.style.transform = ''
-    btnRef.current.style.boxShadow = '0 6px 0 #05070f, 0 10px 24px rgba(0,0,0,.45)'
-  }
-
-  // Card bg is always a dark gradient — makes the accent colours pop in both modes
-  const cardBg = isDark ? cfg.darkCardBg : cfg.lightCardBg
+  // Light mode hero uses a flat deep-navy card (prototype uses --navy for light)
+  const bg = isDark ? cfg.cardBg : 'var(--navy)'
 
   return (
     <div style={{
-      borderRadius: 26,
+      borderRadius: 20,
       overflow: 'hidden',
-      border: `1px solid ${cfg.accent}35`,
+      border: isDark ? `1px solid ${cfg.accent}30` : 'none',
       boxShadow: isDark
-        ? '0 24px 56px rgba(0,0,0,.55)'
-        : `0 16px 48px ${cfg.accent}25, 0 4px 12px rgba(0,0,0,.12)`,
+        ? `0 24px 56px rgba(0,0,0,.6), inset 0 1px 0 ${cfg.accent}18`
+        : '0 20px 48px rgba(11,19,48,.35)',
     }}>
-      <div style={{
-        background: cardBg,
-        padding: '22px 20px 20px',
-        position: 'relative',
-        overflow: 'hidden',
-        // Fixed card height so button sits at bottom consistently
-        minHeight: 340,
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        <AmbientPattern cfg={cfg} />
+      <div style={{ background: bg, padding: '20px 20px 20px', position: 'relative', overflow: 'hidden', minHeight: 248, display: 'flex', flexDirection: 'column' }}>
+        <AmbientNodes n1={isDark ? cfg.n1 : 'rgba(139,108,232,.9)'} n2={isDark ? cfg.n2 : 'rgba(255,143,171,.8)'} />
 
-        {/* Spacer — pushes icon + topic toward bottom */}
-        <div style={{ flex: 1, minHeight: 48 }} />
-
-        {/* ③ Icon + topic block — floated toward bottom */}
-        <div style={{ position: 'relative', zIndex: 1, marginBottom: 16 }}>
-          {/* Icon */}
-          <div style={{
-            width: 64, height: 64, borderRadius: 18, marginBottom: 14,
-            background: `${cfg.accent}1a`, border: `1px solid ${cfg.accent}30`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 28, boxShadow: `0 8px 24px rgba(0,0,0,.3)`,
-          }}>
-            {cfg.icon}
-          </div>
-
-          {/* Topic name — BIG text (the thing to practise) */}
-          <div style={{
-            fontSize: topicName ? 24 : 20,
-            fontWeight: 800,
-            color: '#fff',
-            letterSpacing: '-0.02em',
-            lineHeight: 1.15,
-            marginBottom: topicName ? 4 : 0,
-          }}>
-            {topicName ?? subjectName}
-          </div>
-
-          {/* Sub-label — "Topic" label only if we have a topic */}
-          {topicName && (
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', fontWeight: 600, marginBottom: 0 }}>
-              {subjectName}
-            </div>
-          )}
+        {/* "Next best move" pill tag — prototype: violet-dim bg + violet border + violet text */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '3px 10px 3px 7px', borderRadius: 999,
+          background: isDark ? `${cfg.accent}18` : 'rgba(139,108,232,.18)',
+          border: `1px solid ${isDark ? `${cfg.accent}30` : 'rgba(139,108,232,.35)'}`,
+          fontSize: 9, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase',
+          color: isDark ? cfg.accent : '#C0A6FF',
+          alignSelf: 'flex-start', marginBottom: 14, position: 'relative', zIndex: 1,
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+          Next best move
         </div>
 
-        {/* ④ Core badge */}
-        {isCore && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '5px 11px', borderRadius: 8,
-            background: 'rgba(255,195,107,.09)', border: '1px solid rgba(255,195,107,.22)',
-            fontSize: 11, fontWeight: 700, color: '#ffc36b',
-            marginBottom: 16, position: 'relative', zIndex: 1, alignSelf: 'flex-start',
-          }}>
-            🔥 High exam frequency · Core topic
-          </div>
-        )}
-        {!isCore && <div style={{ height: 12, position: 'relative', zIndex: 1 }} />}
+        {/* Flex spacer — pushes content to lower half of card */}
+        <div style={{ flex: 1, minHeight: 8 }} />
 
-        {/* ⑤ CTA — anchored at bottom */}
-        <button
-          ref={btnRef}
-          onClick={handlePractise}
-          onMouseDown={pressDown}
-          onMouseUp={pressUp}
-          onMouseLeave={pressUp}
-          onTouchStart={pressDown}
-          onTouchEnd={pressUp}
-          style={{
-            width: '100%', padding: '16px 0', borderRadius: 15,
-            background: '#0b1330', color: '#fff',
-            fontSize: 15, fontWeight: 800, letterSpacing: '-0.01em',
-            border: 'none', cursor: 'pointer', textAlign: 'center',
-            boxShadow: '0 6px 0 #05070f, 0 10px 24px rgba(0,0,0,.45)',
-            transition: 'transform 0.1s, box-shadow 0.1s',
-            position: 'relative', zIndex: 1,
-          }}
-        >
-          Practise Now →
-        </button>
+        {/* Subject name — large, white, Space-Grotesk-style */}
+        <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 3, position: 'relative', zIndex: 1 }}>
+          {subjectName}
+        </p>
+
+        {/* Topic line */}
+        <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.45)', marginBottom: 6, position: 'relative', zIndex: 1 }}>
+          Topic: <strong style={{ color: isDark ? `${cfg.accent}cc` : 'rgba(139,108,232,.85)', fontWeight: 600 }}>
+            {topicName ?? 'Mixed practice'}
+          </strong>
+        </p>
+
+        {/* Badges row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
+          {isCore && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(245,185,66,.1)', color: '#F5B942', fontSize: 10, fontWeight: 700 }}>
+              🔥 High frequency
+            </span>
+          )}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.5)', fontSize: 10, fontWeight: 700 }}>
+            10 questions · ~14 min
+          </span>
+        </div>
+
+        {/* CTA */}
+        <PressBtn onClick={() => onStartPractice(sub)} style={{ width: '100%', padding: '14px 0', borderRadius: 14, position: 'relative', zIndex: 1 }}>
+          Practise now →
+        </PressBtn>
       </div>
     </div>
   )
 })
 
-// ─── carousel ─────────────────────────────────────────────────────────────────
-function SubjectCarousel({ subjects, planItems, isDark }) {
-  const [idx, setIdx] = useState(0)
-  const startX = useRef(null)
+// ── Carousel with dots ────────────────────────────────────────────────────────
+function SubjectCarousel({ subjects, planItems, onStartPractice, isDark }) {
+  const [idx, setIdx]   = useState(0)
+  const startX          = useRef(null)
 
-  const sub     = subjects[idx]
-  const cfg     = getCfg(sub?.subjects?.name ?? '')
+  const sub      = subjects[idx]
   const planItem = planItems?.[sub?.subject_id] ?? null
 
-  const onTouchStart = (e) => { startX.current = e.touches[0].clientX }
-  const onTouchEnd   = (e) => {
+  const onTouchStart = e => { startX.current = e.touches[0].clientX }
+  const onTouchEnd   = e => {
     if (startX.current === null) return
     const dx = e.changedTouches[0].clientX - startX.current
     if (dx < -40 && idx < subjects.length - 1) setIdx(i => i + 1)
@@ -270,25 +218,18 @@ function SubjectCarousel({ subjects, planItems, isDark }) {
   return (
     <div>
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ userSelect: 'none' }}>
-        <PracticeHeroCard sub={sub} planItem={planItem} isDark={isDark} />
+        <HeroCard sub={sub} planItem={planItem} onStartPractice={onStartPractice} isDark={isDark} />
       </div>
 
       {subjects.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 7, marginTop: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 12 }}>
           {subjects.map((s, i) => {
-            const dotCfg = getCfg(s?.subjects?.name ?? '')
+            const c = getCfg(s?.subjects?.name ?? '')
+            const active = i === idx
             return (
-              <button
-                key={i}
-                onClick={() => setIdx(i)}
+              <button key={i} onClick={() => setIdx(i)}
                 aria-label={`Switch to ${s?.subjects?.name}`}
-                style={{
-                  width: i === idx ? 22 : 7, height: 7,
-                  borderRadius: i === idx ? 4 : '50%',
-                  background: i === idx ? dotCfg.accent : 'rgba(128,128,128,.25)',
-                  border: 'none', cursor: 'pointer', padding: 0,
-                  transition: 'all 0.2s',
-                }}
+                style={{ width: active ? 18 : 5, height: 5, borderRadius: active ? 3 : '50%', background: active ? c.accent : 'rgba(128,128,128,.22)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.22s' }}
               />
             )
           })}
@@ -298,259 +239,227 @@ function SubjectCarousel({ subjects, planItems, isDark }) {
   )
 }
 
-// ─── TARGETS WIDGET ───────────────────────────────────────────────────────────
-// FIX: collapsed state shows ALL target lines stacked (Course, Uni, WAEC, JAMB)
-// — matches the prototype exactly. No single-line "headline".
-function TargetsWidget({ profile, onEdit, isDark }) {
-  const [open, setOpen] = useState(false)
+// ── "Your subjects" list ──────────────────────────────────────────────────────
+// Prototype: icon box + name + 3px bar track + coloured % number
+function SubjectRow({ sub, isLast }) {
+  const name = sub.subjects?.name ?? ''
+  const cfg  = getCfg(name)
+  const pct  = sub.pct ?? 0
+  const pctColor = pct >= 70 ? '#4CC987' : pct >= 40 ? '#F5B942' : '#E85050'
 
-  const course     = profile?.university_course?.trim()  ?? ''
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '12px 0',
+      borderBottom: isLast ? 'none' : '1px solid var(--border)',
+    }}>
+      {/* Subject icon */}
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 16,
+        background: `${cfg.accent}14`,
+        border: `1px solid ${cfg.accent}22`,
+      }}>
+        {cfg.icon}
+      </div>
+
+      {/* Name + bar */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 5 }}>{name}</p>
+        <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--bg-inset)' }}>
+          <div style={{ height: '100%', borderRadius: 2, background: cfg.accent, width: `${Math.max(pct, 2)}%`, transition: 'width 0.7s ease' }} />
+        </div>
+      </div>
+
+      {/* % */}
+      <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, marginLeft: 8, color: pctColor }}>
+        {pct}%
+      </span>
+    </div>
+  )
+}
+
+function SubjectsList({ subjects, onSeeAll }) {
+  return (
+    <div>
+      {/* Section header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your subjects</p>
+        <button onClick={onSeeAll} style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          All →
+        </button>
+      </div>
+      {subjects.map((sub, i) => (
+        <SubjectRow key={sub.subject_id} sub={sub} isLast={i === subjects.length - 1} />
+      ))}
+    </div>
+  )
+}
+
+// ── "Needs attention" ─────────────────────────────────────────────────────────
+// Prototype: red dot + topic name + subject · % + "Practise →" link
+function NeedsAttention({ weakTopics, onPractise }) {
+  if (!weakTopics.length) return null
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Needs attention</p>
+        <Link href="/student/learn" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>
+          Learn →
+        </Link>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {weakTopics.map((t, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '12px 14px', borderRadius: 14,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            cursor: 'pointer',
+          }}>
+            {/* Red alert dot */}
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#E85050', flexShrink: 0 }} />
+
+            {/* Label */}
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.2 }}>{t.topicName}</p>
+              <p style={{ fontSize: 11, color: 'var(--text-sec)', marginTop: 2 }}>{t.subjectName} · {t.pct}%</p>
+            </div>
+
+            {/* Action */}
+            <button
+              onClick={() => onPractise(t)}
+              style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
+            >
+              Practise →
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── "Your target" strip ───────────────────────────────────────────────────────
+// Prototype: icon box + key/value rows + big days-left number on the right
+function TargetStrip({ profile, onEdit }) {
+  const course     = profile?.university_course?.trim() ?? ''
   const university = profile?.target_university?.trim()  ?? ''
-  const waecGrades = profile?.waec_target_grades         ?? {}
-  const jambScores = profile?.jamb_target_scores         ?? {}
-  const examType   = profile?.exam_type                  ?? ''
-  const hasWaec    = Object.keys(waecGrades).length > 0 && (examType === 'WAEC' || examType === 'BOTH')
-  const hasJamb    = Object.keys(jambScores).length > 0 && (examType === 'JAMB' || examType === 'BOTH')
-  const jambTotal  = profile?.jamb_total_target
-    ?? Object.values(jambScores).reduce((s, v) => s + (Number(v) || 0), 0)
-  const hasAny     = course || university || hasWaec || hasJamb
+  const examType   = profile?.exam_type ?? 'WAEC'
+  const jambTotal  = profile?.jamb_total_target ?? 0
+  const hasAny     = course || university
 
-  // Prompt to set targets
+  // Calculate days until next June (WAEC/JAMB exam period)
+  const now      = new Date()
+  const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
+  const daysLeft = Math.max(0, Math.ceil((nextJune - now) / 86400000))
+
   if (!hasAny) {
     return (
-      <button
-        onClick={onEdit}
-        className="w-full flex items-center gap-4 bg-card border border-default rounded-2xl px-4 py-4 text-left active:opacity-80 transition-opacity"
-      >
-        <span style={{ fontSize: 22 }}>🎯</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-primary">Set your exam targets</p>
-          <p className="text-xs text-secondary mt-0.5">WAEC grades · JAMB score · target university</p>
+      <button onClick={onEdit} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 16px', borderRadius: 14,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        cursor: 'pointer', textAlign: 'left',
+      }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎯</div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 2 }}>Set your exam target</p>
+          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>University, course, JAMB score goal</p>
         </div>
-        <span className="text-secondary">›</span>
+        <span style={{ color: 'var(--text-tert)', fontSize: 16 }}>›</span>
       </button>
     )
   }
 
-  // border colour adapts to mode
-  const borderCol   = isDark ? 'rgba(255,255,255,.07)' : '#e5e7eb'
-  const labelColor  = isDark ? '#6b7280' : '#9ca3af'
-  const valueColor  = isDark ? '#f9fafb' : '#111827'
-  const cardBg      = isDark ? '#111827' : '#ffffff'
+  const goalLine = course
+    ? (university ? `${course} — ${university.replace('University of ', '').replace('University', 'Uni')}` : course)
+    : university
 
   return (
-    <div style={{ background: cardBg, border: `1px solid ${borderCol}`, borderRadius: 18, overflow: 'hidden' }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '14px 16px', borderRadius: 14,
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+    }}>
+      {/* Icon box */}
+      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+        🎯
+      </div>
 
-      {/* Header row — icon + "My Targets" + chevron */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
-          padding: '14px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
-          textAlign: 'left',
-        }}
-      >
-        <div style={{
-          width: 34, height: 34, borderRadius: 10, flexShrink: 0, marginTop: 2,
-          background: 'rgba(255,195,107,.12)', border: '1px solid rgba(255,195,107,.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-        }}>🎯</div>
+      {/* Goal text */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-tert)', marginBottom: 2 }}>Goal</p>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goalLine}</p>
+        {jambTotal > 0 && (
+          <p style={{ fontSize: 10, color: '#9b7ae0', marginTop: 1 }}>{examType} · {jambTotal}/400 target</p>
+        )}
+      </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.09em', color: labelColor, marginBottom: 8 }}>
-            My Targets
-          </p>
-
-          {/* ── COLLAPSED: always-visible rows, each on its own line, generous spacing ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {course && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>Course</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>{course}</span>
-              </div>
-            )}
-            {university && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>Uni</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>{university}</span>
-              </div>
-            )}
-            {hasWaec && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>WAEC</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>
-                  {Object.keys(waecGrades).length} subjects targeted
-                </span>
-              </div>
-            )}
-            {hasJamb && jambTotal > 0 && (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 52, flexShrink: 0 }}>JAMB</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#9b7ae0', lineHeight: 1.2 }}>{jambTotal} / 400</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <svg
-          style={{ width: 16, height: 16, flexShrink: 0, marginTop: 4, transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : '', color: labelColor }}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+      {/* Days countdown */}
+      <button onClick={onEdit} style={{ textAlign: 'right', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
+        <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-prim)', lineHeight: 1 }}>{daysLeft}</p>
+        <p style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tert)' }}>days left</p>
       </button>
+    </div>
+  )
+}
 
-      {/* ── EXPANDED: full detail ── */}
-      {open && (
-        <div style={{ borderTop: `1px solid ${borderCol}`, padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {course && <TargetRow label="Course" value={course} labelColor={labelColor} valueColor={valueColor} />}
-          {university && <TargetRow label="University" value={university} labelColor={labelColor} valueColor={valueColor} />}
-          {hasJamb && jambTotal > 0 && (
-            <TargetRow label="JAMB" value={`${jambTotal} / 400`} labelColor={labelColor} valueColor='#9b7ae0' />
-          )}
-          {hasWaec && (
-            <div>
-              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, display: 'block', marginBottom: 7 }}>
-                WAEC
-              </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {Object.entries(waecGrades).map(([sub, grade]) => (
-                  <span key={sub} style={{
-                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
-                    background: 'rgba(108,206,142,.12)', color: '#6cce8e',
-                    border: '1px solid rgba(108,206,142,.25)',
-                  }}>
-                    {sub} · {grade}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          <button
-            onClick={onEdit}
-            style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: 2 }}
-          >
-            Edit targets →
+// ── "Or practise differently" quick mode grid ─────────────────────────────────
+function QuickModes({ router, onTimed, onWeak }) {
+  const MODES = [
+    { emoji: '⏱️', label: 'Timed',       onClick: onTimed },
+    { emoji: '📝', label: 'Mock Exam',   onClick: () => router.push('/student/exam') },
+    { emoji: '📊', label: 'Weak Topics', onClick: onWeak },
+    { emoji: '📚', label: 'Learn',       onClick: () => router.push('/student/learn') },
+  ]
+  return (
+    <div>
+      <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 10 }}>
+        Or practise differently
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {MODES.map(m => (
+          <button key={m.label} onClick={m.onClick} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            padding: '12px 4px', borderRadius: 14,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            cursor: 'pointer',
+          }}>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{m.emoji}</span>
+            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', lineHeight: 1.3 }}>{m.label}</span>
           </button>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   )
 }
 
-function TargetRow({ label, value, labelColor, valueColor }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: labelColor, width: 56, flexShrink: 0 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 13, fontWeight: 700, color: valueColor, lineHeight: 1.3 }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-// ─── SUBJECT MASTERY ──────────────────────────────────────────────────────────
-// FIX: progress bar track is always visible (explicit grey in light, dark in dark)
-// FIX: fill uses subject accent colour — always rendered via inline style
-const SubjectMastery = memo(function SubjectMastery({ subjects, isDark }) {
-  if (!subjects.length) return null
-
-  const cardBg    = isDark ? '#111827' : '#ffffff'
-  const borderCol = isDark ? 'rgba(255,255,255,.07)' : '#e5e7eb'
-  const divCol    = isDark ? 'rgba(255,255,255,.07)' : '#f3f4f6'
-  const namCol    = isDark ? '#f9fafb' : '#111827'
-  const trackCol  = isDark ? 'rgba(255,255,255,.08)' : '#e5e7eb'  // FIX: light mode track now clearly visible
-
-  return (
-    <div style={{ background: cardBg, border: `1px solid ${borderCol}`, borderRadius: 18, overflow: 'hidden' }}>
-      <div style={{ padding: '11px 16px', borderBottom: `1px solid ${divCol}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: isDark ? '#6b7280' : '#9ca3af' }}>
-          Subject Mastery
-        </span>
-        <Link href="/student/learn" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0' }}>
-          Details →
-        </Link>
-      </div>
-
-      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {subjects.map(sub => {
-          const name = sub.subjects?.name ?? ''
-          const cfg  = getCfg(name)
-          const pct  = sub.pct ?? 0
-          const pctLabel = pct >= 70 ? cfg.accent : pct >= 40 ? '#f59e0b' : '#ef4444'
-
-          return (
-            <div key={sub.subject_id}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: namCol }}>{name}</span>
-                <span style={{ fontSize: 11, fontWeight: 800, color: pctLabel }}>{pct}%</span>
-              </div>
-              {/* Track + fill — both always explicit values, never Tailwind */}
-              <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', background: trackCol }}>
-                <div style={{
-                  height: '100%', borderRadius: 3,
-                  width: `${Math.max(pct, 2)}%`,   // minimum 2% so bar is always visible
-                  background: cfg.accent,
-                  transition: 'width 0.7s ease',
-                }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontSize: 10, color: isDark ? '#6b7280' : '#9ca3af' }}>
-                  {sub.completed ?? 0} / {sub.total ?? 0} subtopics
-                </span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-})
-
-// ─── no-path state ────────────────────────────────────────────────────────────
+// ── Empty / no-path state ─────────────────────────────────────────────────────
 function NoPathState({ profile, onEdit }) {
   return (
-    <div className="bg-card rounded-2xl border border-default p-6 text-center space-y-4">
-      <span style={{ fontSize: 40, display: 'block' }}>📝</span>
-      <div>
-        <p className="font-black text-primary" style={{ fontSize: 16 }}>
-          Get your personalised practice path
-        </p>
-        <p className="text-secondary" style={{ fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>
-          Answer 10 questions and we'll prioritise the topics you need most.
-        </p>
-      </div>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: '28px 20px', textAlign: 'center' }}>
+      <span style={{ fontSize: 40, display: 'block', marginBottom: 16 }}>📝</span>
+      <p style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 8, letterSpacing: '-0.01em' }}>
+        Get your personalised practice path
+      </p>
+      <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.6, marginBottom: 20 }}>
+        Answer a few diagnostic questions and we'll build a study path around your weak areas.
+      </p>
       {!profile?.goals_set && (
-        <button
-          onClick={onEdit}
-          style={{
-            width: '100%', padding: '13px 0', borderRadius: 14,
-            background: '#ffc36b', color: '#0b1330',
-            fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer',
-          }}
-        >
+        <button onClick={onEdit} style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: '#F5B942', color: '#0b1330', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', marginBottom: 10, boxShadow: '0 4px 0 #c4922e' }}>
           Set your goals first →
         </button>
       )}
-      <Link
-        href="/diagnostic"
-        style={{
-          display: 'block', padding: '14px 0', borderRadius: 14,
-          background: '#0b1330', color: '#fff',
-          fontSize: 14, fontWeight: 700,
-          boxShadow: '0 6px 0 #05070f, 0 10px 20px rgba(0,0,0,.35)',
-          textAlign: 'center',
-        }}
-      >
+      <Link href="/diagnostic" style={{ display: 'block', padding: '14px 0', borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 14, fontWeight: 700, boxShadow: '0 6px 0 #05070f', textAlign: 'center', textDecoration: 'none' }}>
         Take the diagnostic →
       </Link>
     </div>
   )
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const supabase = createClient()
   const router   = useRouter()
@@ -559,31 +468,33 @@ export default function DashboardPage() {
   const [loading,       setLoading]       = useState(true)
   const [profile,       setProfile]       = useState(null)
   const [subjects,      setSubjects]      = useState([])
+  const [weakTopics,    setWeakTopics]    = useState([])
   const [planItems,     setPlanItems]     = useState({})
   const [showGoalModal, setShowGoalModal] = useState(false)
+  const [practiceModal, setPracticeModal] = useState(null)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, []) // eslint-disable-line
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const [
-      { data: prof },
-      { data: paths },
-      { data: prog },
-    ] = await Promise.all([
+    const [{ data: prof }, { data: paths }, { data: prog }, { data: mastery }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('student_learning_paths')
         .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
         .eq('student_id', user.id),
-      supabase.from('lesson_progress')
-        .select('subtopic_id, completed')
-        .eq('student_id', user.id),
+      supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
+      supabase.from('student_topic_mastery')
+        .select('topic_id, score, topics(id, name, subject_id, subjects(name))')
+        .eq('student_id', user.id)
+        .order('score', { ascending: true })
+        .limit(6),
     ])
 
     setProfile(prof)
 
+    // Subject progress
     const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
     const enriched = (paths ?? []).map(path => {
       const ids  = path.ordered_subtopic_ids ?? []
@@ -593,18 +504,26 @@ export default function DashboardPage() {
     })
     setSubjects(enriched)
 
-    // Load mastery-based next topic per subject (fast — reads student_topic_mastery)
-    if (enriched.length > 0) {
-      try {
-        const res  = await fetch('/api/student/next-topic')
-        const data = await res.json()
-        setPlanItems(data.topics ?? {})
-      } catch {
-        // non-critical — dashboard still works without topic recommendation
-      }
-    }
-
+    // Weak topics — lowest mastery scores, max 3
+    const weak = (mastery ?? [])
+      .filter(m => m.topics && (m.score ?? 0) < 40)
+      .slice(0, 3)
+      .map(m => ({
+        topicId:     m.topic_id,
+        topicName:   m.topics?.name ?? '',
+        subjectName: m.topics?.subjects?.name ?? '',
+        pct:         Math.round(m.score ?? 0),
+      }))
+    setWeakTopics(weak)
     setLoading(false)
+
+    // Fetch personalised next-topic recommendations non-blocking
+    if (enriched.length > 0) {
+      fetch('/api/student/next-topic')
+        .then(r => r.json())
+        .then(data => setPlanItems(data.topics ?? {}))
+        .catch(() => {})
+    }
   }
 
   if (loading) return <DashboardSkeleton />
@@ -612,43 +531,114 @@ export default function DashboardPage() {
   const firstName = profile?.full_name?.split(' ')[0] ?? ''
   const greeting  = getGreeting(firstName)
   const hasPath   = subjects.length > 0
+  const firstSub  = subjects[0] ? { id: subjects[0].subject_id, name: subjects[0].subjects?.name ?? '' } : null
+  const streakDays = profile?.streak_days ?? 0
+
+  function openPractice(sub, quickMode) {
+    const s = sub?.subject_id
+      ? { id: sub.subject_id, name: sub.subjects?.name ?? '' }
+      : sub
+    if (!s) return
+    setPracticeModal({ ...s, quickMode })
+  }
 
   return (
     <>
-      <div className="space-y-5 pb-28">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 112 }}>
 
-        {/* Greeting */}
-        <div className="pt-1">
-          <p className="text-secondary" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
-            {greeting.pre}
+        {/* ── 1. Greeting ── */}
+        <div style={{ paddingTop: 6 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 4 }}>
+            {greeting.eyebrow}
           </p>
-          <h1 className="text-primary" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1 }}>
-            {greeting.main}
+          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.15, color: 'var(--text-prim)', whiteSpace: 'pre-line' }}>
+            {greeting.hero}
           </h1>
+          {/* Streak chip — only if streak ≥ 2 */}
+          {streakDays >= 2 && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '4px 10px', borderRadius: 999, background: 'rgba(245,185,66,.1)', border: '1px solid rgba(245,185,66,.2)', fontSize: 11, fontWeight: 700, color: '#F5B942' }}>
+              🔥 {streakDays}-day streak
+            </div>
+          )}
         </div>
 
         {hasPath ? (
           <>
-            <SubjectCarousel subjects={subjects} planItems={planItems} isDark={isDark} />
-            <TargetsWidget    profile={profile} onEdit={() => setShowGoalModal(true)} isDark={isDark} />
-            <SubjectMastery   subjects={subjects} isDark={isDark} />
+            {/* ── 2. Hero carousel ── */}
+            <SubjectCarousel
+              subjects={subjects}
+              planItems={planItems}
+              onStartPractice={sub => openPractice(sub)}
+              isDark={isDark}
+            />
+
+            {/* ── 3. Your subjects ── */}
+            <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
+
+            {/* ── 4. Needs attention ── */}
+            <NeedsAttention
+              weakTopics={weakTopics}
+              onPractise={t => openPractice(
+                subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub
+              )}
+            />
+
+            {/* ── 5. Quick modes ── */}
+            <QuickModes
+              router={router}
+              onTimed={() => openPractice(firstSub, 'timed')}
+              onWeak={() => openPractice(firstSub, 'weak')}
+            />
+
+            {/* ── 6. Target strip ── */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your target</p>
+              </div>
+              <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
+            </div>
           </>
         ) : (
           <NoPathState profile={profile} onEdit={() => setShowGoalModal(true)} />
         )}
       </div>
 
+      {/* Goal modal */}
       {showGoalModal && (
         <Suspense fallback={null}>
           <GoalModal
             profile={profile}
             onClose={() => setShowGoalModal(false)}
-            onSave={updated => {
-              setProfile(prev => ({ ...prev, ...updated }))
-              setShowGoalModal(false)
-            }}
+            onSave={updated => { setProfile(prev => ({ ...prev, ...updated })); setShowGoalModal(false) }}
           />
         </Suspense>
+      )}
+
+      {/* Practice setup modal */}
+      {practiceModal && (
+        <PracticeSetupModal
+          initialSubject={practiceModal}
+          subjects={subjects.map(s => ({ id: s.subject_id, name: s.subjects?.name ?? '' }))}
+          nextTopics={planItems}
+          profile={profile}
+          onClose={() => setPracticeModal(null)}
+          onStart={({ subject, type, count, answerMode, topic, duration }) => {
+            const config = {
+              subjects:     [subject.name],
+              subject_id:   subject.id,
+              examType:     profile?.exam_type ?? 'WAEC',
+              count, mode: type, answerMode,
+              topicName:    topic?.topicName   ?? null,
+              topic_id:     topic?.topicId     ?? null,
+              isCore:       topic?.isCore      ?? false,
+              durationSecs: duration           ?? null,
+            }
+            sessionStorage.setItem('practice_config', JSON.stringify(config))
+            setPracticeModal(null)
+            router.push('/student/practice/session')
+          }}
+          onMockExam={() => { setPracticeModal(null); router.push('/student/exam') }}
+        />
       )}
     </>
   )

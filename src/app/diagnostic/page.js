@@ -123,24 +123,24 @@ function DiagnosticSetup() {
 
         {/* Header */}
         <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center mx-auto mb-4">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: '#0b1330', boxShadow: '0 5px 0 #05070f' }}>
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
             </svg>
           </div>
-          <h1 className="text-2xl font-black text-gray-900">Diagnostic Test</h1>
-          <p className="text-sm text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
+          <h1 className="text-2xl font-black text-primary">Diagnostic Test</h1>
+          <p className="text-sm text-secondary mt-1.5 leading-relaxed max-w-xs mx-auto">
             {isSignedIn
               ? "Pick one subject. We'll find your weak areas and add them to your study plan."
               : '10 quick questions to see where you stand. No account needed.'}
           </p>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-sm border border-default overflow-hidden">
 
           {/* Exam type */}
-          <div className="px-5 pt-5 pb-4 border-b border-gray-100">
-            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+          <div className="px-5 pt-5 pb-4 border-b border-default">
+            <p className="text-xs font-black text-secondary uppercase tracking-wide mb-3">
               Target exam
             </p>
             <div className="flex gap-2">
@@ -151,7 +151,7 @@ function DiagnosticSetup() {
                   className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${
                     examType === et
                       ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-subtle text-gray-500 hover:bg-gray-200'
+                      : 'bg-subtle text-secondary hover:bg-subtle'
                   }`}
                 >
                   {et}
@@ -162,7 +162,7 @@ function DiagnosticSetup() {
 
           {/* Subject picker */}
           <div className="px-5 py-4">
-            <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">
+            <p className="text-xs font-black text-secondary uppercase tracking-wide mb-3">
               Choose one subject
             </p>
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -185,13 +185,13 @@ function DiagnosticSetup() {
                       border-2 text-left transition-all
                       ${isSelected
                         ? 'shadow-sm font-bold'
-                        : 'bg-base text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-card'
+                        : 'bg-base text-secondary border-default hover:border-strong hover:bg-card'
                       }
                     `}
                   >
                     <span className="text-sm font-bold">{subject}</span>
                     {isDone && !isSelected && (
-                      <span className="text-[10px] font-black text-gray-400 bg-subtle px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-black text-tertiary bg-subtle px-2 py-0.5 rounded-full">
                         retake
                       </span>
                     )}
@@ -217,7 +217,7 @@ function DiagnosticSetup() {
 
           {/* Error */}
           {error && (
-            <div className="mx-5 mb-4 px-4 py-3 bg-red-50 rounded-xl">
+            <div className="mx-5 mb-4 px-4 py-3 bg-danger rounded-xl">
               <p className="text-xs font-bold text-red-600">{error}</p>
             </div>
           )}
@@ -227,8 +227,8 @@ function DiagnosticSetup() {
             <button
               onClick={handleStart}
               disabled={!examType || !selectedSubject}
-              className="w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl
-                hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="w-full py-3.5 text-sm font-black rounded-2xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              style={{ background: '#0b1330', color: '#fff', boxShadow: '0 5px 0 #05070f' }}
             >
               {selectedSubject
                 ? `Start ${selectedSubject} diagnostic →`
@@ -239,7 +239,7 @@ function DiagnosticSetup() {
 
         {/* Already have a plan */}
         {isSignedIn && (
-          <p className="text-center text-xs text-gray-400">
+          <p className="text-center text-xs text-tertiary">
             <a href="/student/study-plan" className="text-indigo-500 hover:underline font-medium">
               View your study plan
             </a>

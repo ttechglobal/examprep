@@ -1,21 +1,24 @@
 'use client'
-// src/app/student/learn/LearnPage.jsx — prototype-faithful redesign
-// Matches prototype-v3 exactly: greeting, continue-lesson hero card,
-// weak topics focus banner, subject 2×2 grid. No practice modes section.
+// src/app/student/learn/LearnPage.jsx — v4
+// ─────────────────────────────────────────────────────────────────────────────
+// Visual redesign to match the prototype exactly:
+//   • Header: eyebrow + hero title + streak pill + settings cog
+//   • "Focus these first" — weak topics strip with danger badge
+//   • EXL Learning World card (dark navy, violet CTA)
+//   • Subject sections — collapsible, topic rows sorted weakest first
+//   • All token variables, no Tailwind dynamic classes
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useMemo, memo, Suspense, lazy } from 'react'
+import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getMasteryLevel } from '@/lib/theme'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
 import { LearnHubSkeleton } from '@/components/ui/Skeletons'
 import Link from 'next/link'
-import PracticeHubFAB from '@/components/ui/PracticeHubFAB'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
-// Subject icon map — matches prototype
 const SUBJECT_ICONS = {
   'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
   'Further Mathematics':'📐','English Language':'📖','Use of English':'📖',
@@ -25,148 +28,163 @@ const SUBJECT_ICONS = {
 }
 const getIcon = n => SUBJECT_ICONS[n] ?? SUBJECT_ICONS.default
 
-// Mastery trend emoji: Strong=💪, Building=📈, Starting=🎯
-const getMasteryEmoji = pct => pct >= 70 ? '💪' : pct >= 40 ? '📈' : '🎯'
+const EXL_SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'Further Mathematics']
 
-// ── Subject card — 2-part: coloured top, white/surface footer ────────────────
-const SubjectCard = memo(function SubjectCard({ subject, pct, completed, total, isDark }) {
-  const s = resolveSubjectColors(subject.name, isDark)
-  const pctColor = pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)'
+// ── EXL Learning World card ───────────────────────────────────────────────────
+function EXLWorldCard({ studentSubjects }) {
+  const [open, setOpen] = useState(false)
+  const covered = studentSubjects.filter(s => EXL_SUBJECTS.includes(s))
+  if (covered.length === 0) return null
 
   return (
-    <Link
-      href={`/student/subjects/${subject.slug}`}
-      style={{ borderRadius: 14, overflow: 'hidden', border: `1px solid var(--border)`, display: 'block', transition: 'transform .15s' }}
-      className="active:scale-[.97]"
-    >
-      {/* Coloured top band — matches prototype subject-top */}
-      <div style={{ padding: '11px 11px 9px', background: s.bg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9, background: `${s.solid}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
-            {getIcon(subject.name)}
+    <>
+      <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(155,122,224,.25)' }}>
+        {/* Dark header */}
+        <div style={{ background: 'linear-gradient(150deg,#0b1330 0%,#1a1060 55%,#0b0d20 100%)', padding: '18px 16px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', inset: 0, opacity: .04, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(155,122,224,.15)', border: '1px solid rgba(155,122,224,.3)', borderRadius: 999, padding: '4px 10px', marginBottom: 10 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#9b7ae0' }} />
+              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#9b7ae0' }}>EXL Learning World</span>
+            </div>
+            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: 6 }}>
+              Learn {covered.join(', ')} interactively
+            </h3>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', lineHeight: 1.6, marginBottom: 14 }}>
+              For topics you're struggling with, EXL lets you interact with the concepts — not just read about them.
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              {covered.map(s => (
+                <span key={s} style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', color: 'rgba(255,255,255,.7)' }}>
+                  {getIcon(s)} {s}
+                </span>
+              ))}
+            </div>
+            <button
+              onClick={() => setOpen(true)}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 13, background: '#9b7ae0', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', letterSpacing: '-0.01em', boxShadow: '0 5px 0 #6d4ac0', transition: 'transform .1s' }}
+              onMouseDown={e => e.currentTarget.style.transform = 'translateY(3px)'}
+              onMouseUp={e => e.currentTarget.style.transform = ''}
+              onTouchStart={e => e.currentTarget.style.transform = 'translateY(3px)'}
+              onTouchEnd={e => e.currentTarget.style.transform = ''}
+            >
+              Open EXL Learning World →
+            </button>
           </div>
-          <span style={{ fontSize: 13 }}>{getMasteryEmoji(pct)}</span>
         </div>
-        <p style={{ fontSize: 12, fontWeight: 900, color: s.text }}>{subject.name}</p>
-      </div>
-
-      {/* White footer — bar + stats */}
-      <div style={{ padding: '8px 11px 10px', background: 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
-        <div style={{ height: 4, background: 'var(--bg-subtle)', borderRadius: 99, overflow: 'hidden', marginBottom: 4 }}>
-          <div style={{ height: '100%', borderRadius: 99, background: s.solid, width: `${pct}%`, transition: 'width .7s' }} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)' }}>{completed}/{total} topics</span>
-          <span style={{ fontSize: 11, fontWeight: 900, color: pctColor }}>{pct}%</span>
-        </div>
-      </div>
-    </Link>
-  )
-})
-
-// ── Continue lesson hero card — dark navy gradient + dot pattern ─────────────
-function ContinueLessonCard({ lesson }) {
-  if (!lesson) return null
-  const { subjectName, topicName, subtopicName, currentSlide, totalSlides, href, subjectIcon } = lesson
-  const pct = totalSlides > 0 ? Math.round((currentSlide / totalSlides) * 100) : 0
-
-  return (
-    <div style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
-      {/* Dark navy body */}
-      <div style={{ padding: 16, background: 'linear-gradient(140deg,#0b1330 0%,#1a2060 60%,#0b1330 100%)', position: 'relative' }}>
-        {/* Dot pattern overlay */}
-        <div style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none',
-          backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
-          backgroundSize: '20px 20px' }} />
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {/* Continue label */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} />
-            <span style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)' }}>
-              Continue · Slide {currentSlide} of {totalSlides}
+        <div style={{ background: 'var(--bg-card)', padding: '9px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 14 }}>
+          {['Interactive lessons', 'Step-by-step', 'Science & Maths'].map(f => (
+            <span key={f} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: '#9b7ae0' }}>✓</span> {f}
             </span>
-          </div>
-          {/* Subject + topic */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, flexShrink: 0 }}>
-              {subjectIcon || getIcon(subjectName)}
-            </div>
-            <div>
-              <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'rgba(255,255,255,.4)', marginBottom: 2 }}>
-                {subjectName} · {topicName}
-              </p>
-              <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-.01em', lineHeight: 1.2 }}>
-                {subtopicName}
-              </p>
-            </div>
-          </div>
-          {/* Progress bar */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,.35)' }}>Lesson progress</span>
-              <span style={{ fontSize: 9, fontWeight: 800, color: '#9b7ae0' }}>{currentSlide} / {totalSlides} slides</span>
-            </div>
-            <div style={{ height: 4, background: 'rgba(255,255,255,.1)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#9b7ae0,#ff8fab)', borderRadius: 99 }} />
-            </div>
-          </div>
-          {/* CTA */}
-          <Link href={href} style={{ display: 'block', padding: 13, borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none', boxShadow: '0 5px 0 #05070f', letterSpacing: '-.01em' }}>
-            Continue lesson →
-          </Link>
+          ))}
         </div>
       </div>
 
-      {/* Lesson type pill strip — white band below */}
-      <div style={{ background: 'var(--bg-card)', padding: '9px 11px', display: 'flex', gap: 6, borderTop: '1px solid var(--border)' }}>
-        {[['📖 Lesson', href], ['❓ Practice', '/student/practice'], ['🎮 Games', '/student/games'], ['🎬 Video', '/student/videos']].map(([label, to], i) => (
-          <Link key={label} href={to} style={{
-            padding: '4px 10px', borderRadius: 999, fontSize: 10, fontWeight: 700, textDecoration: 'none',
-            background: i === 0 ? 'var(--indigo-bg)' : 'var(--bg-card)',
-            border: `1.5px solid ${i === 0 ? 'var(--indigo-bd)' : 'var(--border)'}`,
-            color: i === 0 ? 'var(--indigo)' : 'var(--text-sec)',
-            whiteSpace: 'nowrap',
-          }}>{label}</Link>
-        ))}
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: '#0b1330', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b7ae0' }} />
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>EXL Learning World</span>
+            </div>
+            <button onClick={() => setOpen(false)} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Close ✕
+            </button>
+          </div>
+          <iframe src="https://exllearningworld.com" style={{ flex: 1, border: 'none', width: '100%' }} title="EXL Learning World" allow="fullscreen" />
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Topic row ─────────────────────────────────────────────────────────────────
+function TopicRow({ topic, accent }) {
+  const pct   = topic.pct ?? 0
+  const tier  = pct >= 70 ? 'strong' : pct >= 40 ? 'mid' : 'weak'
+  const color = tier === 'strong' ? '#4ade80' : tier === 'mid' ? '#fbbf24' : '#f87171'
+  const label = tier === 'strong' ? 'Strong' : tier === 'mid' ? 'Building' : 'Weak'
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.2 }}>{topic.name}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: `${color}18`, border: `1px solid ${color}40`, color }}>{label}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color }}>{pct}%</span>
+          </div>
+        </div>
+        <div style={{ height: 3, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: accent, borderRadius: 99, opacity: pct > 0 ? 1 : 0.3 }} />
+        </div>
       </div>
     </div>
   )
 }
 
-// ── Weak topics focus card ────────────────────────────────────────────────────
-function WeakTopicsCard({ weakTopics }) {
-  if (!weakTopics?.length) return null
+// ── Subject section ───────────────────────────────────────────────────────────
+function SubjectSection({ subjectData, isDark }) {
+  const [expanded, setExpanded] = useState(true)
+  const colors     = resolveSubjectColors(subjectData.name, isDark)
+  const pct        = subjectData.pct ?? 0
+  const weakTopics = subjectData.topics?.filter(t => t.pct < 40) ?? []
+  const remaining  = (subjectData.total ?? 0) - (subjectData.completed ?? 0)
+
   return (
-    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--danger-border)', overflow: 'hidden' }}>
-      <div style={{ padding: '9px 13px', background: 'var(--danger-bg)', borderBottom: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--danger)' }}>⚠ Focus areas right now</p>
-        <span style={{ padding: '3px 9px', borderRadius: 999, border: '1.5px solid var(--danger-border)', background: 'var(--danger-bg)', fontSize: 9, fontWeight: 700, color: 'var(--danger)' }}>
-          {weakTopics.length} topics
-        </span>
-      </div>
-      <div style={{ padding: '8px 12px' }}>
-        {weakTopics.map((t, i) => (
-          <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 0', borderBottom: i < weakTopics.length - 1 ? '1px solid var(--border)' : 'none' }}>
-            <div style={{ width: 30, height: 30, borderRadius: 9, background: t.pct < 40 ? 'rgba(220,38,38,.1)' : 'rgba(217,119,6,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-              {getIcon(t.subjectName)}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{t.name}</p>
-              <p style={{ fontSize: 10, color: t.pct < 40 ? 'var(--danger)' : 'var(--warning)' }}>
-                {t.pct}% mastery · {t.missed ?? 0} questions missed
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      {/* Header — tappable to expand/collapse */}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <div style={{ width: 38, height: 38, borderRadius: 11, background: colors.bg, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+          {getIcon(subjectData.name)}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)' }}>{subjectData.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: colors.solid }}>{pct}%</span>
+          </div>
+          <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: colors.solid, borderRadius: 99 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+            <span style={{ fontSize: 9, color: 'var(--text-tert)' }}>{subjectData.completed}/{subjectData.total} topics</span>
+            {remaining > 0 && <span style={{ fontSize: 9, color: 'var(--text-tert)' }}>{remaining} left</span>}
+          </div>
+        </div>
+        <span style={{ fontSize: 14, color: 'var(--text-tert)', transition: 'transform .2s', transform: expanded ? 'rotate(90deg)' : 'none', flexShrink: 0 }}>›</span>
+      </button>
+
+      {/* Topics */}
+      {expanded && subjectData.topics?.length > 0 && (
+        <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)' }}>
+          {weakTopics.length > 0 && (
+            <div style={{ margin: '10px 0 4px', padding: '7px 10px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--danger)' }}>
+                ⚠ {weakTopics.length} topic{weakTopics.length > 1 ? 's' : ''} need{weakTopics.length === 1 ? 's' : ''} attention
               </p>
             </div>
-            <Link href={`/student/practice?topic=${encodeURIComponent(t.name)}`}
-              style={{ padding: '4px 9px', borderRadius: 999, fontSize: 9, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
-                background: t.pct < 40 ? 'var(--danger-bg)' : 'var(--warning-bg)',
-                border: `1.5px solid ${t.pct < 40 ? 'var(--danger-border)' : 'var(--warning-border)'}`,
-                color: t.pct < 40 ? 'var(--danger)' : 'var(--warning)',
-              }}>
-              Study →
-            </Link>
-          </div>
-        ))}
-      </div>
+          )}
+          {subjectData.topics.slice().sort((a, b) => a.pct - b.pct).map(topic => (
+            <TopicRow key={topic.name} topic={topic} accent={colors.solid} />
+          ))}
+          <Link
+            href="/student/practice"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', margin: '6px 0 10px', background: `${colors.solid}12`, border: `1px solid ${colors.solid}28`, borderRadius: 11, textDecoration: 'none' }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 800, color: colors.solid }}>Practise {subjectData.name} →</span>
+          </Link>
+        </div>
+      )}
+
+      {expanded && (!subjectData.topics || subjectData.topics.length === 0) && (
+        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tert)' }}>No topic data yet — start practising to see your progress here.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -178,11 +196,7 @@ export default function LearnPage() {
   const supabase = useMemo(() => createClient(), [])
 
   const [profile,       setProfile]      = useState(null)
-  const [subjectList,   setSubjectList]  = useState([])
-  const [completedIds,  setCompletedIds] = useState(new Set())
-  const [learningPaths, setLearningPaths] = useState([])
-  const [lastLesson,    setLastLesson]   = useState(null)  // { subjectName, topicName, ... }
-  const [weakTopics,    setWeakTopics]   = useState([])
+  const [subjectData,   setSubjectData]  = useState([])
   const [loading,       setLoading]      = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
 
@@ -192,179 +206,145 @@ export default function LearnPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const [{ data: prof }, { data: prog }, { data: paths }, { data: mastery }] = await Promise.all([
-      supabase.from('profiles')
-        .select('id, full_name, exam_type, subjects, goals_set, university_course, streak_days')
-        .eq('id', user.id).single(),
-      supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
+    const [{ data: prof }, { data: paths }, { data: masteryRows }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, exam_type, subjects, streak_days').eq('id', user.id).single(),
       supabase.from('student_learning_paths')
-        .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
+        .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug)')
         .eq('student_id', user.id),
       supabase.from('student_topic_mastery')
-        .select('topic_id, score, attempt_count, topics(id, name, subjects(name))')
-        .eq('student_id', user.id)
-        .lt('score', 55)
-        .order('score', { ascending: true })
-        .limit(5),
+        .select('topic_id, score, attempt_count, topics(id, name, subject_id)')
+        .eq('student_id', user.id),
     ])
 
     setProfile(prof)
-    setCompletedIds(new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id)))
-    setLearningPaths(paths ?? [])
-    setSubjectList((paths ?? []).map(p => p.subjects).filter(Boolean))
 
-    // Build weak topics list
-    const weak = (mastery ?? [])
-      .filter(m => m.topics)
-      .map(m => ({
-        name: m.topics.name,
-        subjectName: m.topics.subjects?.name ?? '',
-        pct: Math.round(m.score ?? 0),
-        missed: Math.max(0, m.attempt_count - Math.round((m.score / 100) * m.attempt_count)),
-      }))
-    setWeakTopics(weak)
-
-    // Find last in-progress lesson from lesson_progress
-    const inProg = (prog ?? []).filter(p => !p.completed)
-    if (inProg.length > 0) {
-      const subtopicId = inProg[inProg.length - 1].subtopic_id
-      try {
-        const { data: sub } = await supabase
-          .from('subtopics')
-          .select('id, name, slug, topics(id, name, subjects(id, name, slug))')
-          .eq('id', subtopicId).single()
-        if (sub) {
-          const totalSlides = 8  // placeholder — actual count comes from lesson data
-          setLastLesson({
-            subjectName:  sub.topics?.subjects?.name ?? '',
-            subjectIcon:  getIcon(sub.topics?.subjects?.name ?? ''),
-            topicName:    sub.topics?.name ?? '',
-            subtopicName: sub.name,
-            currentSlide: 3,    // placeholder
-            totalSlides,
-            href:         `/student/learn/${sub.slug}`,
-          })
-        }
-      } catch {}
+    const masteryMap = {}
+    for (const row of masteryRows ?? []) {
+      if (!row.topics) continue
+      masteryMap[row.topic_id] = { score: row.score ?? 0, name: row.topics.name, subjectId: row.topics.subject_id }
     }
 
+    const subjectIds = (paths ?? []).map(p => p.subject_id)
+    if (subjectIds.length === 0) { setLoading(false); return }
+
+    const { data: allTopics } = await supabase
+      .from('topics').select('id, name, subject_id, order_index').in('subject_id', subjectIds).order('order_index')
+
+    const topicsBySubject = {}
+    for (const t of allTopics ?? []) {
+      if (!topicsBySubject[t.subject_id]) topicsBySubject[t.subject_id] = []
+      topicsBySubject[t.subject_id].push({ id: t.id, name: t.name, pct: Math.round(masteryMap[t.id]?.score ?? 0) })
+    }
+
+    const built = (paths ?? []).map(path => {
+      const name   = path.subjects?.name ?? ''
+      const topics = topicsBySubject[path.subject_id] ?? []
+      const withScore = topics.filter(t => masteryMap[t.id])
+      const pct = withScore.length > 0
+        ? Math.round(withScore.reduce((s, t) => s + t.pct, 0) / withScore.length)
+        : 0
+      return { name, pct, completed: withScore.length, total: topics.length, topics, subjectId: path.subject_id }
+    })
+
+    setSubjectData(built)
     setLoading(false)
   }
 
-  const subjectProgress = useMemo(() => {
-    return subjectList.map(subject => {
-      const path      = learningPaths.find(p => p.subject_id === subject.id)
-      const ids       = path?.ordered_subtopic_ids ?? []
-      const total     = ids.length
-      const completed = ids.filter(id => completedIds.has(id)).length
-      const pct       = total > 0 ? Math.round((completed / total) * 100) : 0
-      return { subject, pct, completed, total }
-    })
-  }, [subjectList, learningPaths, completedIds])
-
   if (loading) return <LearnHubSkeleton />
 
-  const firstName  = profile?.full_name?.split(' ')[0] ?? ''
-  const examLabel  = profile?.exam_type === 'BOTH' ? 'WAEC & JAMB' : (profile?.exam_type ?? 'WAEC')
-  const streakDays = profile?.streak_days ?? 0
-  // Get day of week
-  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-  const today    = dayNames[new Date().getDay()]
+  const firstName      = profile?.full_name?.split(' ')[0] ?? ''
+  const examLabel      = profile?.exam_type === 'BOTH' ? 'WAEC & JAMB' : (profile?.exam_type ?? 'WAEC')
+  const streakDays     = profile?.streak_days ?? 0
+  const allSubjectNames = subjectData.map(s => s.name)
+
+  // Weak topics across all subjects — for the "Focus these first" strip
+  const allWeakTopics = subjectData.flatMap(sub =>
+    (sub.topics ?? [])
+      .filter(t => t.pct < 40)
+      .map(t => ({ ...t, subjectName: sub.name }))
+  ).slice(0, 3)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 112 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 112 }}>
 
-      {/* Greeting row — day + exam label left, streak badge right */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 4 }}>
         <div>
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 3 }}>
-            {today} · {examLabel} {new Date().getFullYear() + 1}
+            {examLabel} · Topic progress
           </p>
-          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.2, color: 'var(--text-prim)' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.1, color: 'var(--text-prim)' }}>
             Learn{firstName ? `, ${firstName}` : ''} 📚
           </h1>
         </div>
-        {/* Settings + streak */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           {streakDays >= 3 && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,195,107,.12)', border: '1.5px solid rgba(255,195,107,.28)', fontSize: 10, fontWeight: 700, color: '#ffc36b', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,195,107,.12)', border: '1.5px solid rgba(255,195,107,.28)', fontSize: 10, fontWeight: 700, color: '#ffc36b' }}>
               🔥 {streakDays}
             </div>
           )}
-          <button onClick={() => setShowGoalModal(true)}
-            style={{ padding: '5px 10px', borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}>
+          <button
+            onClick={() => setShowGoalModal(true)}
+            style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}
+          >
             ⚙️
           </button>
         </div>
       </div>
 
-      {/* Continue lesson hero — only if there's an in-progress lesson */}
-      {lastLesson && <ContinueLessonCard lesson={lastLesson} />}
-
-      {/* No active lesson — show start CTA */}
-      {!lastLesson && subjectProgress.length > 0 && (
-        <div style={{ borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
-          <div style={{ padding: 16, background: 'linear-gradient(140deg,#0b1330 0%,#1a2060 60%,#0b1330 100%)', position: 'relative' }}>
-            <div style={{ position: 'absolute', inset: 0, opacity: .05, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,.55)', marginBottom: 12, lineHeight: 1.5 }}>
-                Pick up where your study plan recommends — start your next lesson.
-              </p>
-              <Link href={`/student/subjects/${subjectProgress[0]?.subject?.slug}`}
-                style={{ display: 'block', padding: 13, borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, textAlign: 'center', textDecoration: 'none', boxShadow: '0 5px 0 #05070f' }}>
-                Start next lesson →
-              </Link>
-            </div>
-          </div>
-          <div style={{ background: 'var(--bg-card)', padding: '9px 11px', display: 'flex', gap: 6, borderTop: '1px solid var(--border)' }}>
-            {[['📖 Lesson', '#'], ['❓ Practice', '/student/practice'], ['🎮 Games', '/student/games'], ['🎬 Video', '/student/videos']].map(([label, href], i) => (
-              <Link key={label} href={href} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 10, fontWeight: 700, textDecoration: 'none', background: i === 0 ? 'var(--indigo-bg)' : 'var(--bg-card)', border: `1.5px solid ${i === 0 ? 'var(--indigo-bd)' : 'var(--border)'}`, color: i === 0 ? 'var(--indigo)' : 'var(--text-sec)', whiteSpace: 'nowrap' }}>{label}</Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Weak topics */}
-      {weakTopics.length > 0 && <WeakTopicsCard weakTopics={weakTopics} />}
-
-      {/* Subject grid */}
-      {subjectProgress.length > 0 && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', letterSpacing: '-.01em' }}>Your subjects</p>
-            <button onClick={() => setShowGoalModal(true)} style={{ fontSize: 11, fontWeight: 700, color: 'var(--indigo)', background: 'none', border: 'none', cursor: 'pointer' }}>+ Add subject</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {subjectProgress.map(({ subject, pct, completed, total }) => (
-              <SubjectCard key={subject.id} subject={subject} pct={pct} completed={completed} total={total} isDark={isDark} />
-            ))}
-            {/* Add subject placeholder */}
-            <div onClick={() => setShowGoalModal(true)} style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 86, cursor: 'pointer' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, marginBottom: 3 }}>➕</div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)' }}>Add subject</p>
+      {subjectData.length > 0 ? (
+        <>
+          {/* ── "Focus these first" weak-topics strip ── */}
+          {allWeakTopics.length > 0 && (
+            <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+              <div style={{ padding: '9px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--danger)' }}>⚠ Focus these first</span>
+                <span style={{ fontSize: 10, color: 'var(--text-tert)' }}>Weakest topics</span>
+              </div>
+              <div style={{ padding: '6px 14px 4px' }}>
+                {allWeakTopics.map((t, i) => (
+                  <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < allWeakTopics.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 1 }}>{t.name}</p>
+                      <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>{t.subjectName} · {t.pct}% mastery</p>
+                    </div>
+                    <Link href="/student/practice" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      Study →
+                    </Link>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* No subjects empty state */}
-      {subjectProgress.length === 0 && !loading && (
-        <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 4 }}>No subjects yet</p>
-          <p style={{ fontSize: 12, color: 'var(--text-sec)', lineHeight: 1.55, marginBottom: 16 }}>
-            Set your exam goals and we'll build your personalised curriculum.
+          {/* ── EXL Learning World card ── */}
+          <EXLWorldCard studentSubjects={allSubjectNames} />
+
+          {/* ── Per-subject sections ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {subjectData.map(sub => (
+              <SubjectSection key={sub.name} subjectData={sub} isDark={isDark} />
+            ))}
+          </div>
+        </>
+      ) : (
+        /* ── Empty state ── */
+        <div style={{ borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '28px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📚</div>
+          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6, letterSpacing: '-0.01em' }}>No subjects yet</p>
+          <p style={{ fontSize: 12, color: 'var(--text-sec)', lineHeight: 1.6, marginBottom: 20 }}>
+            Set your exam and subjects to see your topic progress here.
           </p>
-          <button onClick={() => setShowGoalModal(true)}
-            style={{ padding: '11px 20px', borderRadius: 12, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>
+          <button
+            onClick={() => setShowGoalModal(true)}
+            style={{ padding: '13px 24px', borderRadius: 13, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #05070f' }}
+          >
             Set up my subjects →
           </button>
         </div>
       )}
 
-      {/* Goal modal */}
       {showGoalModal && (
         <Suspense fallback={null}>
           <GoalModal
@@ -374,8 +354,6 @@ export default function LearnPage() {
           />
         </Suspense>
       )}
-
-      <PracticeHubFAB />
     </div>
   )
 }

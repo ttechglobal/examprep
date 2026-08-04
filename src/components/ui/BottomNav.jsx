@@ -1,8 +1,6 @@
 'use client'
-// src/components/ui/BottomNav.jsx — DEFINITIVE VERSION
+// src/components/ui/BottomNav.jsx
 // 5 tabs: Home · Practise · Learn · Community · Profile
-// Uses bg-active / text-active CSS token classes — auto light/dark
-// Pill highlight on active tab
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -88,7 +86,6 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50">
       <div className="max-w-lg mx-auto px-3 pb-safe-or-3">
-        {/* Floating pill container — adapts via bg-card + border-default */}
         <div className="bg-card rounded-2xl border border-default px-1.5 py-1.5"
           style={{ boxShadow: 'var(--shadow-card-lg)' }}>
           <div className="flex items-center">
@@ -97,6 +94,7 @@ export default function BottomNav() {
                 (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
               return (
                 <Link key={href} href={href}
+                  prefetch={true}
                   className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 rounded-xl transition-all
                     ${isActive
                       ? 'bg-active text-active'
