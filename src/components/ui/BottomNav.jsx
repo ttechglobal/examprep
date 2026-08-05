@@ -1,116 +1,201 @@
 'use client'
-// src/components/ui/BottomNav.jsx
-// 5 tabs: Home · Practise · Learn · Community · Profile
+// src/components/ui/BottomNav.jsx — v2
+// Redesigned: floating pill, accent dot indicator, clean icon-label rhythm
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
+// Clean, purposeful SVG icons — consistent 20×20 viewBox, 1.6 stroke weight
+const ICONS = {
+  Home: {
+    active: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M3 8.5L10 2.5L17 8.5V17C17 17.55 16.55 18 16 18H13V13H7V18H4C3.45 18 3 17.55 3 17V8.5Z" fill="currentColor" />
+      </svg>
+    ),
+    inactive: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M3 8.5L10 2.5L17 8.5V17C17 17.55 16.55 18 16 18H13V13H7V18H4C3.45 18 3 17.55 3 17V8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill="none"/>
+      </svg>
+    ),
+  },
+  Practise: {
+    active: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="10" r="7.5" fill="currentColor" opacity=".15"/>
+        <path d="M7.5 6.5L14 10L7.5 13.5V6.5Z" fill="currentColor"/>
+        <path d="M14 7V13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      </svg>
+    ),
+    inactive: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M8 7L14 10L8 13V7Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/>
+      </svg>
+    ),
+  },
+  Learn: {
+    active: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 3L2 7.5L10 12L18 7.5L10 3Z" fill="currentColor"/>
+        <path d="M5 10V15C5 15 7 17 10 17C13 17 15 15 15 15V10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+        <path d="M18 7.5V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+      </svg>
+    ),
+    inactive: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 3L2 7.5L10 12L18 7.5L10 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
+        <path d="M5 10V15C5 15 7 17 10 17C13 17 15 15 15 15V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+        <path d="M18 7.5V13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  Community: {
+    active: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3" fill="currentColor"/>
+        <circle cx="4.5" cy="9" r="2.2" fill="currentColor" opacity=".6"/>
+        <circle cx="15.5" cy="9" r="2.2" fill="currentColor" opacity=".6"/>
+        <path d="M4 17C4 14.24 6.69 12 10 12C13.31 12 16 14.24 16 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+        <path d="M1 17C1 15.34 2.57 14 4.5 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity=".6"/>
+        <path d="M19 17C19 15.34 17.43 14 15.5 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity=".6"/>
+      </svg>
+    ),
+    inactive: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+        <circle cx="4.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+        <circle cx="15.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+        <path d="M4 17C4 14.24 6.69 12 10 12C13.31 12 16 14.24 16 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+        <path d="M1 17C1 15.34 2.57 14 4.5 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/>
+        <path d="M19 17C19 15.34 17.43 14 15.5 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none"/>
+      </svg>
+    ),
+  },
+  Profile: {
+    active: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3.5" fill="currentColor"/>
+        <path d="M3 18C3 14.69 6.13 12 10 12C13.87 12 17 14.69 17 18" fill="currentColor" opacity=".9"/>
+      </svg>
+    ),
+    inactive: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.6" fill="none"/>
+        <path d="M3 18C3 14.69 6.13 12 10 12C13.87 12 17 14.69 17 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+      </svg>
+    ),
+  },
+}
+
 const NAV = [
-  {
-    href: '/student/dashboard',
-    label: 'Home',
-    active: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]">
-        <path d="M11.47 3.841a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.061l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.689z"/>
-        <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198l.091-.086L12 5.432z"/>
-      </svg>
-    ),
-    inactive: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[18px] h-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/student/practice',
-    label: 'Practise',
-    active: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]">
-        <path fillRule="evenodd" d="M9.315 7.584C12.195 3.883 16.695 1.5 21.75 1.5a.75.75 0 01.75.75c0 5.056-2.383 9.555-6.084 12.436A6.75 6.75 0 019.75 22.5a.75.75 0 01-.75-.75v-4.131A15.838 15.838 0 016.382 15H2.25a.75.75 0 01-.75-.75 6.75 6.75 0 017.815-6.666zM15 6.75a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5z" clipRule="evenodd"/>
-        <path d="M5.26 17.242a.75.75 0 10-.897-1.203 5.243 5.243 0 00-2.05 5.022.75.75 0 00.625.627 5.243 5.243 0 005.022-2.051.75.75 0 10-1.202-.897 3.744 3.744 0 01-3.008 1.51c0-1.23.592-2.323 1.51-3.008z"/>
-      </svg>
-    ),
-    inactive: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[18px] h-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/student/learn',
-    label: 'Learn',
-    active: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]">
-        <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z"/>
-      </svg>
-    ),
-    inactive: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[18px] h-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/student/community',
-    label: 'Community',
-    active: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]">
-        <path fillRule="evenodd" d="M8.25 6.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM15.75 9.75a3 3 0 116 0 3 3 0 01-6 0zM2.25 9.75a3 3 0 116 0 3 3 0 01-6 0zM6.31 15.117A6.745 6.745 0 0112 12a6.745 6.745 0 016.709 7.498.75.75 0 01-.372.568A12.696 12.696 0 0112 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 01-.372-.568 6.787 6.787 0 011.019-4.38z" clipRule="evenodd"/>
-        <path d="M5.082 14.254a8.287 8.287 0 00-1.308 5.135 9.687 9.687 0 01-1.764-.44l-.115-.04a.563.563 0 01-.373-.487l-.01-.121a3.75 3.75 0 013.57-4.047zM20.226 19.389a8.287 8.287 0 00-1.308-5.135 3.75 3.75 0 013.57 4.047l-.01.121a.563.563 0 01-.373.486l-.115.04c-.567.2-1.156.349-1.764.441z"/>
-      </svg>
-    ),
-    inactive: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[18px] h-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
-      </svg>
-    ),
-  },
-  {
-    href: '/student/profile',
-    label: 'Profile',
-    active: (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]">
-        <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd"/>
-      </svg>
-    ),
-    inactive: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[18px] h-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
-      </svg>
-    ),
-  },
+  { href: '/student/dashboard', label: 'Home',      key: 'Home'      },
+  { href: '/student/practice',  label: 'Practise',  key: 'Practise'  },
+  { href: '/student/learn',     label: 'Learn',     key: 'Learn'     },
+  { href: '/student/community', label: 'Community', key: 'Community' },
+  { href: '/student/profile',   label: 'Profile',   key: 'Profile'   },
 ]
+
+// Subject-matched accent colors for the active indicator — defaults to indigo
+const ACCENT_BY_PATH = {
+  '/student/dashboard': '#0b1330',
+  '/student/practice':  '#9b7ae0',
+  '/student/learn':     '#5cb8ea',
+  '/student/community': '#6cce8e',
+  '/student/profile':   '#0b1330',
+}
 
 export default function BottomNav() {
   const pathname = usePathname()
+
+  const activeHref = NAV.find(({ href }) =>
+    href === pathname ||
+    (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
+  )?.href ?? ''
+
+  const accent = ACCENT_BY_PATH[activeHref] ?? '#0b1330'
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="max-w-lg mx-auto px-3 pb-safe-or-3">
-        <div className="bg-card rounded-2xl border border-default px-1.5 py-1.5"
-          style={{ boxShadow: 'var(--shadow-card-lg)' }}>
-          <div className="flex items-center">
-            {NAV.map(({ href, label, active: ActiveIcon, inactive: InactiveIcon }) => {
-              const isActive = pathname === href ||
-                (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
-              return (
-                <Link key={href} href={href}
-                  prefetch={true}
-                  className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 rounded-xl transition-all
-                    ${isActive
-                      ? 'bg-active text-active'
-                      : 'text-tertiary hover:text-secondary hover:bg-subtle'
-                    }`}
-                >
-                  {isActive ? ActiveIcon : InactiveIcon}
-                  <span className={`text-[9px] font-bold tracking-tight leading-tight
-                    ${isActive ? 'text-active' : 'text-tertiary'}`}>
-                    {label}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
+    <nav
+      style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+        padding: '0 12px',
+        paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{
+        maxWidth: 480, margin: '0 auto',
+        background: 'var(--nav-bg)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: 26,
+        border: '1px solid var(--nav-border)',
+        boxShadow: '0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.08)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '6px 4px',
+        pointerEvents: 'auto',
+      }}>
+        {NAV.map(({ href, label, key }) => {
+          const isActive = href === activeHref
+          const icons = ICONS[key]
+
+          return (
+            <Link
+              key={href}
+              href={href}
+              prefetch={true}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 3,
+                padding: '7px 4px 5px',
+                borderRadius: 18,
+                textDecoration: 'none',
+                color: isActive ? accent : 'var(--text-tert)',
+                background: isActive ? `${accent}10` : 'transparent',
+                transition: 'all 0.18s cubic-bezier(0.34,1.3,0.64,1)',
+                position: 'relative',
+              }}
+            >
+              {/* Active dot indicator above icon */}
+              <div style={{
+                position: 'absolute',
+                top: 5,
+                width: isActive ? 18 : 0,
+                height: 2.5,
+                borderRadius: 2,
+                background: accent,
+                transition: 'width 0.2s cubic-bezier(0.34,1.3,0.64,1)',
+                overflow: 'hidden',
+              }} />
+
+              {/* Icon */}
+              <div style={{
+                transform: isActive ? 'translateY(1px) scale(1.08)' : 'scale(1)',
+                transition: 'transform 0.18s cubic-bezier(0.34,1.3,0.64,1)',
+                lineHeight: 0,
+              }}>
+                {isActive ? icons.active : icons.inactive}
+              </div>
+
+              {/* Label */}
+              <span style={{
+                fontSize: isActive ? 9.5 : 9,
+                fontWeight: isActive ? 800 : 600,
+                letterSpacing: isActive ? '-0.01em' : '0',
+                lineHeight: 1,
+                color: isActive ? accent : 'var(--text-tert)',
+                transition: 'all 0.15s',
+              }}>
+                {label}
+              </span>
+            </Link>
+          )
+        })}
       </div>
     </nav>
   )

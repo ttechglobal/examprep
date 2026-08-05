@@ -87,7 +87,7 @@ function EXLWorldCard({ studentSubjects }) {
               Close ✕
             </button>
           </div>
-          <iframe src="https://exllearningworld.com" style={{ flex: 1, border: 'none', width: '100%' }} title="EXL Learning World" allow="fullscreen" />
+          <iframe src="https://exlgames.vercel.app/" style={{ flex: 1, border: 'none', width: '100%' }} title="EXL Learning World" allow="fullscreen" />
         </div>
       )}
     </>
