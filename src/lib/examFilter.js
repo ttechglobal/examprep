@@ -1,60 +1,73 @@
 // src/lib/examFilter.js
-// =============================================================================
-// Centralised helper for exam_types[] array filtering.
+// ─────────────────────────────────────────────────────────────────────────────
+// Centralised exam filtering for the question bank.
 //
-// BEFORE (old pattern, scattered everywhere):
-//   const examFilter = examType === 'BOTH' ? ['WAEC', 'JAMB', 'BOTH'] : [examType, 'BOTH']
-//   .in('exam_type', examFilter)
+// DATA MODEL:
+//   Questions have exam_types text[] (GIN indexed).
+//   e.g. ['WAEC'], ['JAMB'], ['WAEC','JAMB'], ['IGCSE']
 //
-// AFTER (new pattern, use this everywhere):
+//   "BOTH" no longer exists as a value. If a question appears in multiple exams
+//   it simply has multiple entries in its exam_types array.
+//
+//   This means adding IGCSE (or any future exam) requires zero schema changes —
+//   just upload questions tagged with ['IGCSE'].
+//
+// USAGE:
 //   import { applyExamFilter } from '@/lib/examFilter'
-//   applyExamFilter(query, examType)
-//
-// The new DB column is exam_types text[] (GIN indexed).
-// Supabase's .contains() maps to the Postgres @> operator:
-//   exam_types @> ARRAY['WAEC']  → question is available for WAEC
-// =============================================================================
+//   const { data } = await applyExamFilter(
+//     db.from('questions').select('*'),
+//     'WAEC'
+//   )
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { ALL_EXAMS } from '@/lib/constants'
 
 /**
  * Applies exam type filtering to a Supabase query builder.
- * Works with the new exam_types text[] column.
+ * Uses the @> (contains) operator on exam_types text[].
  *
- * @param {object} query   - Supabase query builder (chain continues after this)
- * @param {string} examType - 'WAEC' | 'JAMB'  (never 'BOTH' — that's gone)
- * @returns the query builder with the filter applied
- *
- * @example
- *   const { data } = await applyExamFilter(
- *     db.from('questions').select('*'),
- *     'WAEC'
- *   )
+ * @param {object} query    - Supabase query builder
+ * @param {string} examType - 'WAEC' | 'JAMB' | 'IGCSE' (or any future exam)
+ * @returns the query builder with filter applied
  */
 export function applyExamFilter(query, examType) {
-  if (!examType || examType === 'BOTH') {
-    // Defensive fallback: 'BOTH' should never arrive here post-migration,
-    // but if it does, return all questions rather than crashing.
+  if (!examType) return query
+  // Normalise: strip legacy 'BOTH', uppercase
+  const normalised = examType.toUpperCase()
+  if (!ALL_EXAMS.includes(normalised)) {
+    console.warn(`[examFilter] Unknown exam type: "${examType}" — filter not applied`)
     return query
   }
-  // @> operator: exam_types must CONTAIN the requested exam
-  return query.contains('exam_types', [examType])
+  return query.contains('exam_types', [normalised])
 }
 
 /**
- * Builds a raw Postgres filter string for cases where you need
- * to filter inside a `.filter()` call rather than a chained method.
- * Use applyExamFilter() wherever possible instead.
+ * Builds a raw Postgres filter string for use in .filter() calls.
  */
 export function examFilterString(examType) {
-  if (!examType || examType === 'BOTH') return null
-  return `exam_types.cs.{"${examType}"}`
+  if (!examType) return null
+  const normalised = examType.toUpperCase()
+  if (!ALL_EXAMS.includes(normalised)) return null
+  return `exam_types.cs.{"${normalised}"}`
 }
 
 /**
- * Given a student's profile exam_type, normalise it.
- * Profile still stores 'WAEC' | 'JAMB' — this is fine.
- * This helper is just a safety net.
+ * Normalises a raw exam type string to a valid value.
+ * Handles legacy 'BOTH' by returning the first exam in ALL_EXAMS as a fallback.
  */
 export function normaliseExamType(raw) {
-  if (raw === 'WAEC' || raw === 'JAMB') return raw
-  return 'WAEC' // safe default
+  if (!raw) return ALL_EXAMS[0]
+  const upper = raw.toUpperCase()
+  if (ALL_EXAMS.includes(upper)) return upper
+  // Legacy BOTH → no longer valid, default to WAEC
+  return ALL_EXAMS[0]
+}
+
+/**
+ * Given an array of exam types (e.g. from a question's exam_types[]),
+ * returns true if the question is available for the requested exam.
+ */
+export function questionAvailableFor(questionExamTypes, requestedExam) {
+  if (!Array.isArray(questionExamTypes) || !requestedExam) return false
+  return questionExamTypes.includes(requestedExam.toUpperCase())
 }

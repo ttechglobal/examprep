@@ -1,54 +1,53 @@
+// src/lib/constants.js
+
+// Exam types — no BOTH. Students select each exam independently.
+// Multi-exam students (e.g. WAEC + IGCSE) have separate subject entries per exam.
+// Topics and questions carry an exam_types[] array (e.g. ['WAEC'], ['JAMB'], ['WAEC','JAMB'], ['IGCSE'])
+// so content shared across exams is naturally represented without a magic "BOTH" value.
 export const EXAM_TYPES = {
-  WAEC: 'WAEC',
-  JAMB: 'JAMB',
-  BOTH: 'BOTH',
+  WAEC:  'WAEC',
+  JAMB:  'JAMB',
+  IGCSE: 'IGCSE',
 }
+
+// Human-readable labels for UI display
+export const EXAM_LABELS = {
+  WAEC:  'WAEC',
+  JAMB:  'JAMB / UTME',
+  IGCSE: 'Cambridge IGCSE',
+}
+
+// All supported exams as an ordered array — add new exams here only
+export const ALL_EXAMS = ['WAEC', 'JAMB', 'IGCSE']
 
 export const ROLES = {
-  SUPERADMIN: 'superadmin',
-  ADMIN: 'admin',
-  REVIEWER: 'reviewer',
+  SUPERADMIN:   'superadmin',
+  ADMIN:        'admin',
+  REVIEWER:     'reviewer',
   SCHOOL_ADMIN: 'school_admin',
-  STUDENT: 'student',
-}
-
-export const LESSON_STATUS = {
-  DRAFT: 'draft',
-  IN_REVIEW: 'in_review',
-  PUBLISHED: 'published',
+  STUDENT:      'student',
 }
 
 export const DIFFICULTY = {
-  EASY: 'easy',
+  EASY:   'easy',
   MEDIUM: 'medium',
-  HARD: 'hard',
+  HARD:   'hard',
 }
 
 export const QUESTION_TYPE = {
-  RECALL: 'recall',
+  RECALL:      'recall',
   APPLICATION: 'application',
-  REASONING: 'reasoning',
+  REASONING:   'reasoning',
 }
 
 export const QUESTION_FORMAT = {
-  MCQ: 'mcq',
-  TRUE_FALSE: 'true_false',
-  FILL_BLANK: 'fill_blank',
+  MCQ:         'mcq',
+  TRUE_FALSE:  'true_false',
+  FILL_BLANK:  'fill_blank',
 }
 
 export const QUESTION_CONTEXT = {
   DIAGNOSTIC: 'diagnostic',
-  LESSON: 'lesson',
-  PRACTICE: 'practice',
-  EXAM: 'exam',
+  PRACTICE:   'practice',
+  EXAM:       'exam',
 }
-
-export const SLIDE_TYPES = {
-  TEXT: 'text',
-  IMAGE_SLOT: 'image_slot',
-  INLINE_QUESTION: 'inline_question',
-  SUMMARY: 'summary',
-  VIDEO: 'video',
-}
-
-export const FREE_DAILY_LESSON_LIMIT = 2

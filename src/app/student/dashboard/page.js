@@ -26,7 +26,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { DashboardSkeleton } from '@/components/ui/Skeletons'
 import { PracticeSetupModal } from '@/app/student/practice/page'
+import CoachBanner from '@/components/ui/CoachBanner'
+import { homeCoach } from '@/lib/coach'
 import Link from 'next/link'
+import { usePoints } from '@/contexts/PointsContext'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
@@ -148,7 +151,7 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
       <div style={{ background: bg, padding: '20px 20px 20px', position: 'relative', overflow: 'hidden', minHeight: 248, display: 'flex', flexDirection: 'column' }}>
         <AmbientNodes n1={isDark ? cfg.n1 : 'rgba(139,108,232,.9)'} n2={isDark ? cfg.n2 : 'rgba(255,143,171,.8)'} />
 
-        {/* "Next best move" pill tag — prototype: violet-dim bg + violet border + violet text */}
+        {/* Subject pill */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
           padding: '3px 10px 3px 7px', borderRadius: 999,
@@ -159,7 +162,7 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
           alignSelf: 'flex-start', marginBottom: 14, position: 'relative', zIndex: 1,
         }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
-          Next best move
+          {subjectName}
         </div>
 
         {/* Flex spacer — pushes content to lower half of card */}
@@ -170,12 +173,12 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
           {subjectName}
         </p>
 
-        {/* Topic line */}
-        <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.45)', marginBottom: 6, position: 'relative', zIndex: 1 }}>
-          Topic: <strong style={{ color: isDark ? `${cfg.accent}cc` : 'rgba(139,108,232,.85)', fontWeight: 600 }}>
-            {topicName ?? 'Mixed practice'}
-          </strong>
-        </p>
+        {/* Topic line — only when there's a real topic */}
+        {topicName && (
+          <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.45)', marginBottom: 6, position: 'relative', zIndex: 1 }}>
+            Topic: <strong style={{ color: isDark ? `${cfg.accent}cc` : 'rgba(139,108,232,.85)', fontWeight: 600 }}>{topicName}</strong>
+          </p>
+        )}
 
         {/* Badges row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
@@ -459,6 +462,143 @@ function NoPathState({ profile, onEdit }) {
   )
 }
 
+// ── Mini activity chart (desktop right sidebar only) ─────────────────────────
+// Always Mon–Sun of current week, Monday-anchored
+function MiniActivityChart({ sessionDays, streak = 0 }) {
+  const isDark = useIsDark()
+  const today = new Date()
+  const dayOfWeek = (today.getDay() + 6) % 7  // Mon=0 … Sun=6
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - dayOfWeek)
+  monday.setHours(0, 0, 0, 0)
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const days = DAY_LABELS.map((label, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i)
+    const key = d.toISOString().slice(0, 10)
+    const isFuture = i > dayOfWeek
+    return { key, label, count: isFuture ? 0 : (sessionDays[key] ?? 0), isToday: i === dayOfWeek, isFuture }
+  })
+  const maxCount = Math.max(...days.map(d => d.count), 1)
+  const activeDays = days.filter(d => d.count > 0).length
+
+  return (
+    <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>Practice activity</p>
+        <Link href="/student/progress" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>See all →</Link>
+      </div>
+      <div style={{ padding: '12px 14px 10px' }}>
+        {/* Bar chart — Mon–Sun */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 52 }}>
+          {days.map((day) => {
+            const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 44)) : 3
+            const col = day.isFuture
+              ? (isDark ? 'rgba(255,255,255,.04)' : '#f8fafc')
+              : day.count > 0
+                ? (day.isToday ? '#9b7ae0' : isDark ? 'rgba(92,184,234,.6)' : '#5cb8ea')
+                : (isDark ? 'rgba(255,255,255,.07)' : '#f1f5f9')
+            return (
+              <div key={day.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ width: '100%', height: barH, borderRadius: '3px 3px 1px 1px', background: col, transition: 'height .4s ease' }} />
+                <span style={{ fontSize: 7, fontWeight: 700, color: day.isToday ? '#9b7ae0' : 'var(--text-tert)', lineHeight: 1 }}>{day.label.slice(0,2)}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      {/* Consistency note */}
+      <div style={{ padding: '8px 14px 12px' }}>
+        {streak >= 5
+          ? <p style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>🔥 {streak}-day streak — keep it going!</p>
+          : activeDays >= 7
+          ? <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>⚡ {activeDays}/14 days active — great consistency.</p>
+          : activeDays > 0
+          ? <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>📈 {activeDays}/14 days active. Daily practice compounds fast.</p>
+          : <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Start a session to build your streak.</p>
+        }
+      </div>
+    </div>
+  )
+}
+
+// ── Mini leaderboard (desktop right sidebar only) ─────────────────────────────
+function MiniLeaderboard({ leaderboard, myId }) {
+  const medals = ['🥇', '🥈', '🥉']
+  const { totalPoints: liveXP } = usePoints()
+  if (!leaderboard.length) return null
+
+  return (
+    <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>This week</p>
+        <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>Full board →</Link>
+      </div>
+      <div style={{ padding: '6px 0 4px' }}>
+        {leaderboard.slice(0, 5).map((entry, i) => {
+          const isMe = entry.student_id === myId
+          const pts = isMe ? liveXP : (entry.points ?? 0)
+          return (
+            <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: isMe ? 'rgba(155,122,224,.07)' : 'transparent' }}>
+              <span style={{ fontSize: i < 3 ? 13 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 18, textAlign: 'center', flexShrink: 0 }}>
+                {i < 3 ? medals[i] : `${i + 1}`}
+              </span>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {isMe ? 'You' : (entry.full_name?.split(' ')[0] ?? 'Student')}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: isMe ? '#ffc36b' : 'var(--text-tert)', flexShrink: 0 }}>
+                {pts.toLocaleString()} XP
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── EXL Learning World card (right sidebar) ───────────────────────────────────
+function EXLCard() {
+  return (
+    <div style={{
+      borderRadius: 16, overflow: 'hidden',
+      background: 'linear-gradient(160deg, #0f0a24 0%, #1a0f40 55%, #0f0a24 100%)',
+      border: '1px solid rgba(155,122,224,.3)',
+      padding: '14px 14px',
+      position: 'relative',
+    }}>
+      {/* Ambient glow */}
+      <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'rgba(155,122,224,.2)', filter: 'blur(24px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          {/* EXL icon */}
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(155,122,224,.25)', border: '1px solid rgba(155,122,224,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <path d="M3 5H17M3 10H17M3 15H17" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="10" cy="10" r="8" stroke="rgba(196,181,253,.3)" strokeWidth="1.5"/>
+            </svg>
+          </div>
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 900, color: '#e9d5ff', lineHeight: 1, letterSpacing: '-0.01em' }}>EXL Learning World</p>
+            <p style={{ fontSize: 9, color: 'rgba(196,181,253,.6)', marginTop: 2 }}>Interactive Science Platform</p>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', lineHeight: 1.55, marginBottom: 10 }}>
+          Learn Maths, Physics and Chemistry through interactive simulations and labs.
+        </p>
+        <a href="https://exllearning.com" target="_blank" rel="noopener noreferrer" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          padding: '8px 0', borderRadius: 10,
+          background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.35)',
+          color: '#c4b5fd', fontSize: 11, fontWeight: 800, textDecoration: 'none',
+          letterSpacing: '-0.01em',
+        }}>
+          Explore →
+        </a>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const supabase = createClient()
@@ -472,14 +612,45 @@ export default function DashboardPage() {
   const [planItems,     setPlanItems]     = useState({})
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [practiceModal, setPracticeModal] = useState(null)
+  const [sessionDays,   setSessionDays]   = useState({})   // date → count, current week
+  const [realStreak,    setRealStreak]    = useState(0)
+  const [leaderboard,   setLeaderboard]   = useState([])
 
   useEffect(() => { load() }, []) // eslint-disable-line
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetch('/api/leaderboard/global?limit=5')
+          .then(r => r.json())
+          .then(data => setLeaderboard(data.leaderboard ?? []))
+          .catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetch('/api/leaderboard/global?limit=5')
+          .then(r => r.json())
+          .then(data => setLeaderboard(data.leaderboard ?? []))
+          .catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const [{ data: prof }, { data: paths }, { data: prog }, { data: mastery }] = await Promise.all([
+    const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d.toISOString() })()
+
+    const [{ data: prof }, { data: paths }, { data: prog }, { data: mastery }, { data: attemptRows }, { data: streakRow }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('student_learning_paths')
         .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
@@ -490,7 +661,20 @@ export default function DashboardPage() {
         .eq('student_id', user.id)
         .order('score', { ascending: true })
         .limit(6),
+      supabase.from('question_attempts')
+        .select('created_at')
+        .eq('student_id', user.id)
+        .gte('created_at', weekStart),
+      supabase.from('student_streaks')
+        .select('current_streak, last_active_date')
+        .eq('student_id', user.id)
+        .maybeSingle(),
     ])
+    // practice_sessions table may not exist yet — fetch silently, fall back to question_attempts
+    const sessRows = await supabase
+      .from('practice_sessions').select('completed_at')
+      .eq('student_id', user.id).gte('completed_at', weekStart)
+      .then(r => r.data ?? []).catch(() => [])
 
     setProfile(prof)
 
@@ -515,6 +699,33 @@ export default function DashboardPage() {
         pct:         Math.round(m.score ?? 0),
       }))
     setWeakTopics(weak)
+
+    // Build practice activity map: date → count
+    // Prefer practice_sessions rows; fall back to question_attempts grouped by session
+    const byDate = {}
+    if (sessRows?.length > 0) {
+      for (const s of sessRows) {
+        const day = s.completed_at?.slice(0, 10)
+        if (day) byDate[day] = (byDate[day] ?? 0) + 1
+      }
+    } else if (attemptRows?.length > 0) {
+      // Group attempts into sessions (gap > 30 min = new session)
+      const sorted = [...attemptRows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      let lastTs = null
+      for (const a of sorted) {
+        if (!a.created_at) continue
+        const day = a.created_at.slice(0, 10)
+        const ts  = new Date(a.created_at).getTime()
+        if (!lastTs || ts - lastTs > 30 * 60 * 1000) byDate[day] = (byDate[day] ?? 0) + 1
+        lastTs = ts
+      }
+    }
+    setSessionDays(byDate)
+
+    // Real streak from student_streaks table
+    const realStreak = streakRow?.current_streak ?? prof?.streak_days ?? 0
+    setRealStreak(realStreak)
+
     setLoading(false)
 
     // Fetch personalised next-topic recommendations non-blocking
@@ -524,6 +735,12 @@ export default function DashboardPage() {
         .then(data => setPlanItems(data.topics ?? {}))
         .catch(() => {})
     }
+
+    // Fetch global leaderboard non-blocking
+    fetch('/api/leaderboard/global?limit=5')
+      .then(r => r.json())
+      .then(data => setLeaderboard(data.leaderboard ?? []))
+      .catch(() => {})
   }
 
   if (loading) return <DashboardSkeleton />
@@ -534,66 +751,87 @@ export default function DashboardPage() {
   const firstSub  = subjects[0] ? { id: subjects[0].subject_id, name: subjects[0].subjects?.name ?? '' } : null
   const streakDays = profile?.streak_days ?? 0
 
+  const coach = homeCoach({
+    firstName,
+    streakDays,
+    weakTopics,
+    yesterdayQs: profile?.yesterday_questions ?? 0,
+    nextSubject: subjects[0]?.subjects?.name,
+    nextTopic:   weakTopics[0]?.topicName,
+    todayQs:     profile?.today_questions ?? 0,
+  })
+
   function openPractice(sub, quickMode) {
-    const s = sub?.subject_id
-      ? { id: sub.subject_id, name: sub.subjects?.name ?? '' }
-      : sub
-    if (!s) return
-    setPracticeModal({ ...s, quickMode })
+    router.push('/student/practice/setup')
   }
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 112 }}>
+      {/* Two-column layout on desktop: main feed left, activity+leaderboard right */}
+      <style>{`
+        @media (min-width: 1100px) {
+          .dash-grid       { display: grid !important; grid-template-columns: 1fr 240px; gap: 24px; align-items: start; }
+          .dash-right      { display: flex !important; }
+          .exl-mobile-only { display: none !important; }
+        }
+        @media (max-width: 1099px) {
+          .dash-right      { display: none !important; }
+          .exl-mobile-only { display: block !important; }
+        }
+      `}</style>
 
-        {/* ── 1. Greeting ── */}
-        <div style={{ paddingTop: 6 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 4 }}>
-            {greeting.eyebrow}
-          </p>
-          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.15, color: 'var(--text-prim)', whiteSpace: 'pre-line' }}>
-            {greeting.hero}
-          </h1>
-          {/* Streak chip — only if streak ≥ 2 */}
-          {streakDays >= 2 && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '4px 10px', borderRadius: 999, background: 'rgba(245,185,66,.1)', border: '1px solid rgba(245,185,66,.2)', fontSize: 11, fontWeight: 700, color: '#F5B942' }}>
-              🔥 {streakDays}-day streak
-            </div>
+      <div className="dash-grid" style={{ display: 'block', paddingBottom: 112 }}>
+
+        {/* ── LEFT: main feed ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+          {hasPath ? (
+            <>
+              {/* ── Coach with greeting merged in ── */}
+              <CoachBanner emoji={coach.emoji} message={coach.message} greeting={greeting.hero} />
+
+              {/* ── 2. Hero carousel ── */}
+              <SubjectCarousel subjects={subjects} planItems={planItems} onStartPractice={sub => openPractice(sub)} isDark={isDark} />
+
+              {/* ── 3. Your subjects ── */}
+              <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
+
+              {/* ── 4. Needs attention ── */}
+              <NeedsAttention weakTopics={weakTopics} onPractise={t => openPractice(subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub)} />
+
+              {/* ── 5. Target strip ── */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your target</p>
+                </div>
+                <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
+              </div>
+
+              {/* ── 6. EXL Learning World — mobile only (desktop has it in sidebar) ── */}
+              <div className="exl-mobile-only" style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, #0b1330 0%, #1a1060 45%, #2a0e54 100%)', border: '1px solid rgba(155,122,224,.25)', padding: '20px 20px', position: 'relative' }}>
+                <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.12 }}>
+                  <circle cx="90%" cy="30%" r="60" fill="#9b7ae0"/><circle cx="75%" cy="80%" r="40" fill="#5cb8ea"/><circle cx="15%" cy="60%" r="30" fill="#ff8fab"/>
+                </svg>
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.35)', fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#c4b5fd', marginBottom: 10 }}>🌍 New from EXL</div>
+                  <p style={{ fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.2, marginBottom: 6 }}>EXL Learning World</p>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,.55)', lineHeight: 1.55, marginBottom: 16, maxWidth: 320 }}>Take your learning beyond ExamPrep — explore courses, live sessions, and skill challenges on the EXL platform.</p>
+                  <a href="https://exllearning.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 12, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.18)', color: '#fff', fontSize: 13, fontWeight: 800, textDecoration: 'none', letterSpacing: '-0.01em' }}>Explore EXL →</a>
+                </div>
+              </div>
+            </>
+          ) : (
+            <NoPathState profile={profile} onEdit={() => setShowGoalModal(true)} />
           )}
         </div>
 
-        {hasPath ? (
-          <>
-            {/* ── 2. Hero carousel ── */}
-            <SubjectCarousel
-              subjects={subjects}
-              planItems={planItems}
-              onStartPractice={sub => openPractice(sub)}
-              isDark={isDark}
-            />
+        {/* ── RIGHT sidebar (desktop only) ── */}
+        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 14, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
+          <MiniActivityChart sessionDays={sessionDays} streak={realStreak} />
+          <MiniLeaderboard leaderboard={leaderboard} myId={profile?.id} />
+          <EXLCard />
+        </div>
 
-            {/* ── 3. Your subjects ── */}
-            <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
-
-            {/* ── 4. Needs attention ── */}
-            <NeedsAttention
-              weakTopics={weakTopics}
-              onPractise={t => openPractice(
-                subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub
-              )}
-            />
-
-            {/* ── 5. Target strip ── */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your target</p>
-              </div>
-              <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
-            </div>
-          </>
-        ) : (
-          <NoPathState profile={profile} onEdit={() => setShowGoalModal(true)} />
-        )}
       </div>
 
       {/* Goal modal */}

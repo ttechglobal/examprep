@@ -30,9 +30,19 @@ export async function POST(request) {
   const merged = [...new Set([...(prof?.subjects ?? []), ...(subjects ?? [])])]
   await service.from('profiles').update({ exam_type: examType, subjects: merged }).eq('id', user.id)
 
-  // 2. Resolve subject rows
-  const { data: subjectRows } = await service.from('subjects').select('id, name').in('name', subjects ?? [])
-  console.log('[diag-save] subjectRows:', subjectRows?.map(s => s.name))
+  // 2. Resolve subject rows.
+  // If examType is 'BOTH' or missing, fetch all matching names regardless of exam_type.
+  // When examType is a single value (WAEC/JAMB), prefer that exam's rows but fall back
+  // to all rows so learning paths are always created.
+  const singleExam = examType && examType !== 'BOTH' ? examType : null
+  let { data: subjectRows } = await service
+    .from('subjects').select('id, name, exam_type').in('name', subjects ?? [])
+  if (singleExam && subjectRows?.length) {
+    const filtered = subjectRows.filter(s => s.exam_type === singleExam)
+    if (filtered.length) subjectRows = filtered
+    // else: fallback to all matching names (subject may only exist for one exam_type)
+  }
+  console.log('[diag-save] subjectRows:', subjectRows?.map(s => `${s.name} (${s.exam_type})`))
   if (!subjectRows?.length) return NextResponse.json({ success: true, warning: 'no subjects found' })
 
   const subjectIdByName = {}

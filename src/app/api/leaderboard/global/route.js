@@ -48,25 +48,46 @@ export async function GET(request) {
     // Current bi-weekly period: rank by points earned in period
     const p = getCurrentPeriod()
     const { data: rows } = await service
-      .from('points_transactions')
+      .from('points_log')
       .select('student_id, points')
       .gte('created_at', p.start.toISOString())
       .lte('created_at', p.end.toISOString())
 
-    if (!rows?.length) {
-      return NextResponse.json({
-        leaderboard: [],
-        my_rank: null,
-        my_entry: null,
-        total_count: 0,
-        period,
-      })
-    }
-
     // Aggregate points per student
     const totals = {}
-    for (const r of rows) {
+    for (const r of rows ?? []) {
       totals[r.student_id] = (totals[r.student_id] ?? 0) + (r.points ?? 0)
+    }
+
+    // If nobody has points this period, fall back to total_points from profiles
+    if (!Object.keys(totals).length) {
+      const { data: fallbackProfiles } = await service
+        .from('profiles')
+        .select('id, full_name, state, total_points')
+        .not('total_points', 'is', null)
+        .gt('total_points', 0)
+        .order('total_points', { ascending: false })
+        .limit(limit)
+      
+      if (!fallbackProfiles?.length) {
+        return NextResponse.json({ leaderboard: [], my_rank: null, my_entry: null, total_count: 0, period })
+      }
+
+      const fallbackRanked = fallbackProfiles.map((p, i) => ({
+        student_id: p.id,
+        first_name: p.full_name?.split(' ')[0] ?? 'Student',
+        state: p.state ?? '',
+        points: p.total_points ?? 0,
+        rank: i + 1,
+      }))
+      const myFallbackEntry = fallbackRanked.find(r => r.student_id === user.id)
+      return NextResponse.json({
+        leaderboard: fallbackRanked,
+        my_rank: myFallbackEntry?.rank ?? null,
+        my_entry: myFallbackEntry ?? null,
+        total_count: fallbackRanked.length,
+        period,
+      })
     }
 
     // Sort and build ranked list

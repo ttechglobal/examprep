@@ -1,11 +1,10 @@
 'use client'
-// src/components/ui/BottomNav.jsx — v2
-// Redesigned: floating pill, accent dot indicator, clean icon-label rhythm
+// src/components/ui/BottomNav.jsx — v3
+// CHANGE: Profile replaced by Progress in bottom nav. Profile moved to header.
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
-// Clean, purposeful SVG icons — consistent 20×20 viewBox, 1.6 stroke weight
 const ICONS = {
   Home: {
     active: (
@@ -72,17 +71,19 @@ const ICONS = {
       </svg>
     ),
   },
-  Profile: {
+  Progress: {
     active: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <circle cx="10" cy="7" r="3.5" fill="currentColor"/>
-        <path d="M3 18C3 14.69 6.13 12 10 12C13.87 12 17 14.69 17 18" fill="currentColor" opacity=".9"/>
+        <rect x="2" y="12" width="3.5" height="6" rx="1" fill="currentColor"/>
+        <rect x="8.25" y="8" width="3.5" height="10" rx="1" fill="currentColor"/>
+        <rect x="14.5" y="4" width="3.5" height="14" rx="1" fill="currentColor"/>
       </svg>
     ),
     inactive: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <circle cx="10" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.6" fill="none"/>
-        <path d="M3 18C3 14.69 6.13 12 10 12C13.87 12 17 14.69 17 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+        <rect x="2" y="12" width="3.5" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+        <rect x="8.25" y="8" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+        <rect x="14.5" y="4" width="3.5" height="14" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
       </svg>
     ),
   },
@@ -93,26 +94,23 @@ const NAV = [
   { href: '/student/practice',  label: 'Practise',  key: 'Practise'  },
   { href: '/student/learn',     label: 'Learn',     key: 'Learn'     },
   { href: '/student/community', label: 'Community', key: 'Community' },
-  { href: '/student/profile',   label: 'Profile',   key: 'Profile'   },
+  { href: '/student/progress',  label: 'Progress',  key: 'Progress'  },
 ]
 
-// Subject-matched accent colors for the active indicator — defaults to indigo
 const ACCENT_BY_PATH = {
   '/student/dashboard': '#0b1330',
   '/student/practice':  '#9b7ae0',
   '/student/learn':     '#5cb8ea',
   '/student/community': '#6cce8e',
-  '/student/profile':   '#0b1330',
+  '/student/progress':  '#f59e0b',
 }
 
 export default function BottomNav() {
   const pathname = usePathname()
-
   const activeHref = NAV.find(({ href }) =>
     href === pathname ||
     (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
   )?.href ?? ''
-
   const accent = ACCENT_BY_PATH[activeHref] ?? '#0b1330'
 
   return (
@@ -161,7 +159,6 @@ export default function BottomNav() {
                 position: 'relative',
               }}
             >
-              {/* Active dot indicator above icon */}
               <div style={{
                 position: 'absolute',
                 top: 5,
@@ -172,8 +169,6 @@ export default function BottomNav() {
                 transition: 'width 0.2s cubic-bezier(0.34,1.3,0.64,1)',
                 overflow: 'hidden',
               }} />
-
-              {/* Icon */}
               <div style={{
                 transform: isActive ? 'translateY(1px) scale(1.08)' : 'scale(1)',
                 transition: 'transform 0.18s cubic-bezier(0.34,1.3,0.64,1)',
@@ -181,8 +176,6 @@ export default function BottomNav() {
               }}>
                 {isActive ? icons.active : icons.inactive}
               </div>
-
-              {/* Label */}
               <span style={{
                 fontSize: isActive ? 9.5 : 9,
                 fontWeight: isActive ? 800 : 600,

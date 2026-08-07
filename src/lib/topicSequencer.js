@@ -187,6 +187,8 @@ export async function fetchStudentAccuracy(db, studentId, subjectIds) {
       .eq('student_id', studentId)
       .in('subject_id', subjectIds)
       .not('topic_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(500)   // cap at recent 500 attempts for perf — enough for accuracy signal
 
     if (error || !data?.length) return {}
 

@@ -260,8 +260,42 @@ export default function GoalModal({ profile, onClose, onSave }) {
       goals_set: true,
     }
     const { error: err } = await supabase.from('profiles').update(updates).eq('id', user.id)
+    if (err) { setSaving(false); setError(err.message); return }
+
+    // Ensure student_learning_paths rows exist for all saved subjects.
+    // GoalModal only updates profiles.subjects — this makes sure the setup page
+    // can find subjects even if the student never took a diagnostic.
+    try {
+      const { data: subjectRows } = await supabase
+        .from('subjects')
+        .select('id, name, exam_type')
+        .in('name', allSubjects)
+        .in('exam_type', ['WAEC', 'JAMB'])
+
+      if (subjectRows?.length) {
+        const { data: existingPaths } = await supabase
+          .from('student_learning_paths')
+          .select('subject_id')
+          .eq('student_id', user.id)
+        const existingIds = new Set((existingPaths ?? []).map(p => p.subject_id))
+        const newPaths = subjectRows
+          .filter(s => !existingIds.has(s.id))
+          .map(s => ({
+            student_id: user.id,
+            subject_id: s.id,
+            ordered_subtopic_ids: [],
+            last_calculated_at: new Date().toISOString(),
+          }))
+        if (newPaths.length) {
+          await supabase.from('student_learning_paths')
+            .upsert(newPaths, { onConflict: 'student_id,subject_id', ignoreDuplicates: true })
+        }
+      }
+    } catch (e) {
+      console.error('[GoalModal] learning_paths sync:', e.message)
+    }
+
     setSaving(false)
-    if (err) { setError(err.message); return }
     onSave?.({ ...profile, ...updates })
   }
 
@@ -330,34 +364,43 @@ export default function GoalModal({ profile, onClose, onSave }) {
               {/* Exam selector */}
               <div>
                 <SectionLabel>Which exam are you sitting?</SectionLabel>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {[
-                    { label: 'WAEC', val: 'WAEC' },
-                    { label: 'JAMB', val: 'JAMB' },
-                    { label: 'Both', val: 'BOTH' },
-                  ].map(({ label, val }) => {
-                    const active = examType === val
+                    { label: 'WAEC', sub: 'West African exams', val: 'WAEC' },
+                    { label: 'JAMB', sub: 'University entrance', val: 'JAMB' },
+                  ].map(({ label, sub, val }) => {
+                    const active = selectedExams.has(val)
                     return (
                       <button
-                        key={label}
+                        key={val}
                         onClick={() => {
-                          if (val === 'BOTH') setSelectedExams(new Set(['WAEC', 'JAMB']))
-                          else setSelectedExams(new Set([val]))
+                          setSelectedExams(prev => {
+                            const next = new Set(prev)
+                            if (next.has(val)) {
+                              if (next.size === 1) return prev
+                              next.delete(val)
+                            } else { next.add(val) }
+                            return next
+                          })
                           setPage(0)
                         }}
                         style={{
-                          padding: '11px 0', borderRadius: 12, fontSize: 13, fontWeight: 800,
-                          border: active ? 'none' : '1.5px solid var(--border)',
-                          background: active ? '#0b1330' : 'var(--bg-card)',
-                          color: active ? '#fff' : 'var(--text-sec)',
-                          cursor: 'pointer',
-                          boxShadow: active ? '0 4px 0 #05070f' : 'none',
-                          transition: 'all .12s',
+                          padding: '12px 8px', borderRadius: 12, textAlign: 'center',
+                          border: `2px solid ${active ? '#6366f1' : 'var(--border)'}`,
+                          background: active ? 'rgba(99,102,241,.08)' : 'var(--bg-card)',
+                          cursor: 'pointer', position: 'relative', transition: 'all .12s',
                         }}
-                      >{label}</button>
+                      >
+                        {active && <span style={{ position: 'absolute', top: 5, right: 8, fontSize: 9, color: '#6366f1', fontWeight: 900 }}>✓</span>}
+                        <div style={{ fontSize: 15, fontWeight: 900, color: active ? '#6366f1' : 'var(--text-prim)' }}>{label}</div>
+                        <div style={{ fontSize: 10, color: active ? '#6366f1' : 'var(--text-tert)', marginTop: 2, opacity: .8 }}>{sub}</div>
+                      </button>
                     )
                   })}
                 </div>
+                {selectedExams.size === 2 && (
+                  <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>Both selected — you'll pick subjects for each separately.</p>
+                )}
                 {examType === 'BOTH' && (
                   <p style={{ marginTop: 8, fontSize: 11, color: '#9b7ae0', background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.2)', padding: '8px 12px', borderRadius: 10 }}>
                     You'll select subjects for JAMB and WAEC separately in the next steps.

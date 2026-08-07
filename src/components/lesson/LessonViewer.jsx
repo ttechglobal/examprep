@@ -497,6 +497,16 @@ export default function LessonViewer({ lesson, subtopic, userId, existingProgres
 
   const [currentIndex,  setCurrent]  = useState(0)
   const [slideUnlocked, setUnlocked] = useState(false)
+  const [xpAwarded,     setXpAwarded] = useState(false)
+
+  // Import points context — may not be available in all contexts, so we guard
+  let awardPoints = null
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const pts = require('@/contexts/PointsContext')
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    awardPoints = pts.usePoints().awardPoints
+  } catch { /* not in PointsProvider */ }
 
   const currentSlide  = slides[currentIndex]
   const isInteraction = currentSlide?.type === 'interaction'
@@ -507,9 +517,17 @@ export default function LessonViewer({ lesson, subtopic, userId, existingProgres
 
   useEffect(() => { setUnlocked(false) }, [currentIndex])
 
-  function goNext() {
+  async function goNext() {
     if (!canProgress) return
-    if (isLast) { onComplete?.(); return }
+    if (isLast) {
+      // Award lesson XP once per completion
+      if (!xpAwarded && awardPoints && userId) {
+        setXpAwarded(true)
+        awardPoints('lesson_complete', subtopic?.id ?? null)
+      }
+      onComplete?.()
+      return
+    }
     setCurrent(i => i + 1)
   }
   function goPrev() { if (currentIndex > 0) setCurrent(i => i - 1) }

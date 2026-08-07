@@ -204,7 +204,17 @@ export async function POST(request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // DB trigger increments profiles.total_points — fetch updated total
+  // Explicitly increment total_points — don't rely on a DB trigger that may not exist.
+  // Mirror the same pattern used in /api/student/practice/save/route.js which is proven working.
+  const { error: rpcError } = await service.rpc('increment_total_points', { uid: user.id, delta: points })
+  if (rpcError) {
+    // RPC doesn't exist — manual read-then-write
+    const { data: curr } = await service.from('profiles').select('total_points').eq('id', user.id).single()
+    await service.from('profiles')
+      .update({ total_points: (curr?.total_points ?? 0) + points })
+      .eq('id', user.id)
+  }
+
   const { data: profile } = await service.from('profiles').select('total_points').eq('id', user.id).single()
 
   return NextResponse.json({

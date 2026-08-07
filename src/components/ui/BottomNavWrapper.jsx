@@ -9,6 +9,7 @@ import { useLessonNav } from '@/contexts/LessonNavContext'
 const HIDDEN_ROUTES = [
   '/student/practice/session',
   '/student/practice/results',
+  '/student/practice/setup',
   '/student/learn/',
 ]
 

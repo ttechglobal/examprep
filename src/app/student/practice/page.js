@@ -12,6 +12,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import CoachBanner from '@/components/ui/CoachBanner'
+import { practiceCoach } from '@/lib/coach'
 import Link from 'next/link'
 
 const ACCENT = {
@@ -91,8 +93,14 @@ export function PracticeSetupModal({
     if (step !== 2 || type !== 'topic' || !subject?.id) return
     setLoadingTopics(true)
     const sb = createClient()
-    sb.from('topics').select('id, name, is_core').eq('subject_id', subject.id).order('order_index')
-      .then(({ data }) => {
+    // Try order_index first, fall back to name ordering if result is empty
+    sb.from('topics')
+      .select('id, name, is_core, order_index')
+      .eq('subject_id', subject.id)
+      .order('order_index', { nullsLast: true })
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) console.error('[topic-drill] topics fetch error:', error.message)
         setAllTopics(data ?? [])
         setLoadingTopics(false)
         if (!topicId && recTopic) { setTopicId(recTopic.topicId); setTopicName(recTopic.topicName) }
@@ -255,6 +263,11 @@ export function PracticeSetupModal({
                       <div style={{width:18,height:18,borderRadius:'50%',border:`2px solid ${accent}`,borderTopColor:'transparent',animation:'spin .7s linear infinite'}} />
                       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                       <span style={{fontSize:12,color:'var(--text-tert)'}}>Loading topics…</span>
+                    </div>
+                  ) : allTopics.length === 0 ? (
+                    <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-subtle)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                      <p style={{ fontSize: 12, color: 'var(--text-tert)', marginBottom: 4 }}>No topics found for this subject yet.</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Switch to Mixed practice below.</p>
                     </div>
                   ) : (
                     <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -440,7 +453,6 @@ export default function PracticePage() {
   const [subjectMastery, setSubjectMastery] = useState({})
   const [weekTotal,      setWeekTotal]     = useState(0)
   const [loading,        setLoading]       = useState(true)
-  const [modal,          setModal]         = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -485,18 +497,6 @@ export default function PracticePage() {
     load()
   }, []) // eslint-disable-line
 
-  function startSession({ subject, type, count, answerMode, topic, duration }) {
-    const config = {
-      subjects: [subject.name], subject_id: subject.id,
-      examType: profile?.exam_type ?? 'WAEC', count, mode: type, answerMode,
-      topicName: topic?.topicName ?? null, topic_id: topic?.topicId ?? null,
-      isCore: topic?.isCore ?? false, durationSecs: duration ?? null,
-    }
-    sessionStorage.setItem('practice_config', JSON.stringify(config))
-    setModal(null)
-    router.push('/student/practice/session')
-  }
-
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 80 }}>
       <div style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid #9b7ae0', borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
@@ -532,12 +532,24 @@ export default function PracticePage() {
   const heroTopic   = nextTopics[heroSubject?.id] ?? null
   const heroAccent  = getAccent(heroSubject?.name ?? '')
 
+  const weakSubject = masteryList.sort((a, b) => a.pct - b.pct)[0]
+  const coach = practiceCoach({
+    firstName:   profile?.full_name?.split(' ')[0] ?? '',
+    weakSubject: weakSubject?.name,
+    weakTopic:   heroTopic?.topicName,
+    sessionCount: weekTotal,
+  })
+
   return (
     <div style={{ paddingBottom: 96 }}>
 
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 14 }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Practise</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-sec)', marginTop: 3 }}>A little practice every day adds up</p>
+      </div>
+
+      {/* ── Coach banner ── */}
+      <div style={{ marginBottom: 16 }}>
+        <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
       </div>
 
       {/* ── Hero practice card — the main CTA ── */}
@@ -581,7 +593,7 @@ export default function PracticePage() {
 
             {/* CTA button */}
             <button
-              onClick={() => setModal(heroSubject)}
+              onClick={() => router.push('/student/practice/setup')}
               style={{
                 width: '100%', padding: '15px 0', borderRadius: 14,
                 background: '#fff', color: '#0b1330',
@@ -606,7 +618,7 @@ export default function PracticePage() {
               const a  = getAccent(sub.name)
               const on = heroSubject?.id === sub.id
               return (
-                <button key={sub.id} onClick={() => setModal(sub)}
+                <button key={sub.id} onClick={() => router.push('/student/practice/setup')}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 999, flexShrink: 0, cursor: 'pointer', background: on ? `${a}18` : 'var(--bg-subtle)', border: `1.5px solid ${on ? a : 'var(--border)'}`, transition: 'all .12s' }}>
                   <span style={{ fontSize: 12 }}>{getIcon(sub.name)}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: on ? a : 'var(--text-sec)', whiteSpace: 'nowrap' }}>{sub.name}</span>
@@ -631,19 +643,7 @@ export default function PracticePage() {
         <span style={{ fontSize: 16, color: 'var(--text-tert)' }}>›</span>
       </button>
 
-      {/* Modal */}
-      {modal && (
-        <PracticeSetupModal
-          initialSubject={modal}
-          subjects={subjects}
-          nextTopics={nextTopics}
-          subjectMastery={subjectMastery}
-          profile={profile}
-          onClose={() => setModal(null)}
-          onStart={startSession}
-          onMockExam={() => { setModal(null); router.push('/student/exam') }}
-        />
-      )}
+
     </div>
   )
 }

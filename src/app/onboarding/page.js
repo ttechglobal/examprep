@@ -85,7 +85,7 @@ function OnboardForm() {
     </div>
   )
 
-  const visible = examType === 'JAMB' ? ALL_SUBJECTS.filter(s => s.tag.includes('JAMB')) : ALL_SUBJECTS
+  const visible = examType === 'JAMB' ? ALL_SUBJECTS.filter(s => s.tag.includes('JAMB')) : ALL_SUBJECTS.filter(s => s.tag.includes('WAEC'))
 
   return (
     <div className="min-h-dvh bg-base">
@@ -125,28 +125,31 @@ function OnboardForm() {
             Which exam are you sitting?
           </p>
 
-          {/* Exam chips */}
+          {/* Exam selector — pick one. More exams can be added in profile. */}
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'WAEC', sub: 'West African exams'  },
               { id: 'JAMB', sub: 'University entrance' },
-              { id: 'BOTH', sub: 'WAEC + JAMB'        },
             ].map(({ id, sub }) => {
               const on = examType === id
               return (
                 <button key={id} onClick={() => setExamType(id)} style={{
-                  flex: 1, padding: '11px 6px', borderRadius: 12,
-                  cursor: 'pointer', textAlign: 'center',
+                  flex: 1, padding: '12px 6px', borderRadius: 12,
+                  cursor: 'pointer', textAlign: 'center', position: 'relative',
                   background: on ? 'var(--active-bg)'   : 'var(--bg-card)',
                   border: `2px solid ${on ? 'var(--active-border)' : 'var(--border)'}`,
                   transition: 'all .15s',
                 }}>
-                  <div className="text-primary" style={{ fontSize: 14, fontWeight: 800 }}>{id}</div>
+                  {on && <span style={{ position: 'absolute', top: 6, right: 8, fontSize: 9, color: 'var(--active-border)', fontWeight: 900 }}>✓</span>}
+                  <div className="text-primary" style={{ fontSize: 15, fontWeight: 800 }}>{id}</div>
                   <div className="text-secondary" style={{ fontSize: 10, marginTop: 2 }}>{sub}</div>
                 </button>
               )
             })}
           </div>
+          <p style={{ fontSize: 11, textAlign: 'center', color: 'var(--text-tert)', marginTop: -4 }}>
+            You can add more exams later in your profile.
+          </p>
 
           {/* Subject label */}
           <p className="text-tertiary" style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.09em', marginTop: 4 }}>

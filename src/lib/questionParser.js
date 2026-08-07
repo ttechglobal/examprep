@@ -76,6 +76,9 @@ export function cleanLatex(text) {
 function cleanQuestion(q) {
   if (!q) return q
 
+  if (q.passage_text)
+    q.passage_text = cleanLatex(q.passage_text)
+
   if (q.question_text)
     q.question_text = cleanLatex(q.question_text)
 
@@ -113,10 +116,64 @@ function cleanQuestion(q) {
 
 // ── Main question extraction prompt ──────────────────────────────────────────
 export function buildQuestionPrompt(examType, subjectName) {
-  return `You are an expert Nigerian secondary school teacher extracting ${examType} past exam questions.
+  const examContext = {
+    WAEC:  'Nigerian WAEC (West African Senior School Certificate Examination)',
+    JAMB:  'Nigerian JAMB/UTME (Joint Admissions and Matriculation Board)',
+    IGCSE: 'Cambridge IGCSE',
+  }
+  const ctx = examContext[examType] ?? examType
+
+  return `You are an expert teacher extracting ${ctx} past exam questions.
 
 Subject: ${subjectName}
 Exam: ${examType}
+
+═══════════════════════════════════════════════
+PART 0 — DETECT SHARED CONTEXT (CRITICAL)
+═══════════════════════════════════════════════
+
+Many exam questions depend on shared context that MUST appear before the question.
+This context can be any of the following:
+
+  TYPE 1 — INSTRUCTION
+    A directive that tells the student how to answer a set of questions.
+    e.g. "In each of questions 1–5, choose the option that best fills the gap."
+    e.g. "From the words lettered A–D, choose the word that is nearest in meaning
+          to the underlined word."
+    e.g. "Questions 6–10 are based on the following passage. Read it carefully."
+
+  TYPE 2 — READING PASSAGE / EXTRACT
+    A paragraph, prose extract, poem, or news article that questions are set on.
+    Common in: English Language, Literature in English, Use of English.
+
+  TYPE 3 — SHARED DIAGRAM OR FIGURE
+    A labelled diagram, graph, or geometric figure that multiple questions refer to.
+    Common in: Mathematics, Physics, Geography, Biology.
+    → Set has_image: true on each question in the group.
+    → Set passage_text to describe what the diagram shows (since image upload is separate).
+
+  TYPE 4 — DATA TABLE OR CHART
+    A table of values, statistical data, or chart that questions are based on.
+    Common in: Economics, Commerce, Chemistry, Further Mathematics.
+
+  TYPE 5 — SCENARIO OR GIVEN-INFORMATION BLOCK
+    A paragraph of given data, a word problem setup, or a business scenario
+    shared across multiple questions.
+    e.g. "The following data relates to Company X in 2022: Revenue = ₦5m..."
+
+RULE — APPLY TO EVERY AFFECTED QUESTION:
+  • Copy the FULL context text into passage_text on EVERY question that needs it
+  • Do NOT truncate, summarise, or paraphrase — copy it word for word
+  • Apply the same KaTeX math formatting rules as question_text
+  • A question with NO shared context → passage_text: null
+
+WHY THIS IS CRITICAL:
+  Students answer in random CBT order. Question 12 may appear before question 3.
+  Each question must be 100% self-contained. Never rely on "refer to the passage
+  above" — there is no "above" in CBT mode.
+
+passage_image_url: always null — admin uploads images separately.
+  But set has_image: true on each question if the shared context includes a diagram.
 
 ═══════════════════════════════════════════════
 PART 1 — EXTRACT EACH QUESTION
@@ -139,7 +196,8 @@ PART 2 — WRITE THE EXPLANATION
   GOOD: ["Given: u = 0, a = 10, t = 5", "v = u + at", "v = 0 + 50", "v = 50 m/s"]
   BAD:  ["We substitute u=0 into v=u+at to get v=50 m/s"]
 
-"wrong_options": for each wrong key, one sentence explaining the specific mistake.
+"wrong_options": for EACH wrong option (B, C, D), write one sentence explaining the specific mistake. Include ALL — the UI will show only the one the student picked.
+Only include the option the student picked — not all wrong options.
 
 ═══════════════════════════════════════════════
 PART 3 — MATHEMATICAL FORMATTING (CRITICAL)
@@ -150,9 +208,6 @@ We use KaTeX to render math. Wrap ALL mathematical expressions in $...$
 FRACTIONS — always use \\frac:
   ✓  $\\frac{1}{x} + \\frac{4}{3x} = 0$
   ✗  1/x + 4/3x = 0
-
-  ✓  $\\frac{5b + (a+b)^2}{(a-b)^2}$
-  ✗  (5b+(a+b)^2)/((a-b)^2)
 
 MIXED FRACTIONS:
   ✓  $4\\frac{7}{9}$   or   $2\\frac{1}{3}$
@@ -174,10 +229,6 @@ ALGEBRAIC EXPRESSIONS — always wrap in $...$:
   ✓  $M = \\frac{3n}{2p^2}$
   ✗  M = 3n/2p^2
 
-EQUATIONS — wrap entire equation:
-  ✓  $k = m\\sqrt{\\frac{t-p}{r}}$
-  ✗  k = m√((t-p)/r)
-
 SET NOTATION:
   ✓  $\\{1, 7, 8\\}$  (always inside $ delimiters)
   ✗  \\{1, 7, 8\\}  (outside $ — renders as literal braces)
@@ -187,8 +238,8 @@ GEOMETRY / TRIANGLES:
   ✗  deltaPQR,  ΔPR  (without proper LaTeX)
 
 CURRENCY — CRITICAL:
-  ✓  ₦500.00  (use ₦ directly for Naira — just the character)
-  ✓  GH₵500.00  (Ghana cedis — just the character)
+  ✓  ₦500.00  (use ₦ directly for Naira)
+  ✓  GH₵500.00  (Ghana cedis — use character directly)
   ✓  $\\$500.00$  (US dollars inside math delimiters)
   ✗  \\500.00  (backslash before number — NEVER do this)
   ✗  \\text{N}500  (never use \\text{N} for Naira)
@@ -196,7 +247,6 @@ CURRENCY — CRITICAL:
 SPACING — CRITICAL:
   Always keep spaces between all words.
   Never join words that were on separate lines in the PDF.
-  Sentence: "A profit of 8% was made..." — keep every space.
 
 SYMBOLS:
   × → \\times    ÷ → \\div    ± → \\pm    ∴ → \\therefore
@@ -204,22 +254,17 @@ SYMBOLS:
   π → \\pi       α → \\alpha  β → \\beta  θ → \\theta
 
 EVERY mathematical expression — no matter how short — goes inside $...$
-Example question_text:
-  "Find the value of $x$ if $\\frac{1}{x} + \\frac{4}{3x} - \\frac{5}{6x} + 1 = 0$"
-
-Example options:
-  "A": "$x = \\frac{1}{2}$",  "B": "$x = -\\frac{3}{2}$"
 
 ═══════════════════════════════════════════════
 PART 4 — TAG TO CURRICULUM
 ═══════════════════════════════════════════════
 
-- topic_title: main topic (specific, not broad)
-- subtopic_title: specific subtopic
-- difficulty: "easy" | "medium" | "hard"
-  easy = direct recall or single substitution
-  medium = 2–3 step application
-  hard = multi-step reasoning
+- topic_title: main topic (specific, match the curriculum tree)
+- subtopic_title: specific subtopic (match the curriculum tree exactly if possible)
+- difficulty:
+    easy   = direct recall or single substitution
+    medium = 2–3 step application
+    hard   = multi-step reasoning or unfamiliar context
 
 ═══════════════════════════════════════════════
 RETURN FORMAT — JSON ARRAY ONLY
@@ -232,6 +277,7 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
     "exam": "${examType}",
     "subject": "${subjectName}",
     "year": "",
+    "passage_text": null,
     "question_text": "",
     "has_image": false,
     "image_description": "",
@@ -250,9 +296,9 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
         "Answer"
       ],
       "wrong_options": {
-        "B": "",
-        "C": "",
-        "D": ""
+        "B": "one sentence explaining why B is wrong",
+        "C": "one sentence explaining why C is wrong",
+        "D": "one sentence explaining why D is wrong"
       }
     },
     "topic_title": "",
@@ -264,10 +310,36 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
 
 // ── Image question prompt ─────────────────────────────────────────────────────
 export function buildImageQuestionPrompt(examType, subjectName) {
-  return `You are an expert Nigerian secondary school teacher analysing a ${examType} exam question that contains a diagram or image.
+  const examContext = {
+    WAEC:  'Nigerian WAEC',
+    JAMB:  'Nigerian JAMB/UTME',
+    IGCSE: 'Cambridge IGCSE',
+  }
+  const ctx = examContext[examType] ?? examType
+
+  return `You are an expert teacher analysing a ${ctx} exam question that contains a diagram or image.
 
 Subject: ${subjectName}
 Exam: ${examType}
+
+STEP 0 — DETECT SHARED CONTEXT (CRITICAL)
+Before extracting the question, check whether it depends on any shared context.
+Shared context includes ANY of:
+
+  • An instruction telling the student how to answer this and nearby questions
+    e.g. "In questions 1–5, choose the word nearest in meaning to the underlined word."
+  • A reading passage, poem, or prose extract
+  • A scenario or given-information block shared by multiple questions
+  • A data table or chart (copy the data as text into passage_text)
+  • A shared diagram or figure used by multiple questions
+    → For a shared diagram: describe it in passage_text AND set has_image: true
+      so the admin knows to upload the image for each affected question
+
+RULE: Copy the FULL shared context into passage_text on this question AND every
+other question in the group. Do not truncate. Students see questions in random
+CBT order — each question must be completely self-contained.
+
+No shared context → passage_text: null
 
 STEP 1 — DESCRIBE THE DIAGRAM
 Write a precise image_description covering: type of diagram, all labels, measurements, values shown.
@@ -287,12 +359,15 @@ Example for a circuit:
 FORMATTING: same KaTeX rules as main prompt — wrap ALL math in $...$
 Use ₦ for Naira directly. Never \\text{N} or \\500.
 
+"wrong_options": include ALL wrong options (B, C, D) — one sentence each explaining the specific mistake. The UI will only show the one the student picked.
+
 Return ONLY valid JSON:
 
 {
   "exam": "${examType}",
   "subject": "${subjectName}",
   "year": "",
+  "passage_text": null,
   "question_text": "",
   "has_image": true,
   "image_description": "",
@@ -301,7 +376,7 @@ Return ONLY valid JSON:
   "explanation": {
     "correct": "",
     "workings": ["step 1", "step 2", "answer"],
-    "wrong_options": { "B": "", "C": "", "D": "" }
+    "wrong_options": { "B": "...", "C": "...", "D": "..." }
   },
   "topic_title": "",
   "subtopic_title": "",
@@ -400,6 +475,7 @@ export function parseQuestions(rawText) {
       hard:         parsed.filter(q => q.difficulty === 'hard').length,
       withWorkings: parsed.filter(q => q.explanation?.workings?.length > 0).length,
       withImages:   parsed.filter(q => q.has_image).length,
+      withPassage:  parsed.filter(q => q.passage_text).length,
     },
   }
 }
@@ -419,45 +495,61 @@ export function matchTopicSubtopic(question, topics) {
   const qSubtopic = (question.subtopic_title ?? '').toLowerCase().trim()
   const qTopic    = (question.topic_title    ?? '').toLowerCase().trim()
 
-  let bestSubtopic = null
-  let bestTopic    = null
-  let bestScore    = 0
+  // Score every subtopic across every topic
+  const candidates = []
 
   for (const topic of topics) {
-    const topicBonus = stringSimilarity(qTopic, topic.name.toLowerCase()) * 0.2
+    const topicScore = stringSimilarity(qTopic, topic.name.toLowerCase())
+    // Topic bonus: strong when topic name matches well, small when it doesn't
+    // This prevents a good topic match from overriding a bad subtopic match
+    const topicBonus = topicScore * 0.25
 
     for (const sub of topic.subtopics ?? []) {
       const subScore = stringSimilarity(qSubtopic, sub.name.toLowerCase())
-      const combined = subScore + topicBonus
+      const combined = Math.min(subScore + topicBonus, 1)
 
-      if (combined > bestScore) {
-        bestScore    = combined
-        bestSubtopic = sub
-        bestTopic    = topic
+      if (combined > 0.1) { // filter out totally irrelevant
+        candidates.push({
+          topic,
+          subtopic:   sub,
+          score:      combined,
+          subScore,
+          topicScore,
+        })
       }
     }
   }
 
-  const confidence = Math.min(bestScore, 1)
+  // Sort by score descending
+  candidates.sort((a, b) => b.score - a.score)
 
-  if (confidence < 0.4) {
-    return {
-      topic:           null,
-      subtopic:        null,
-      confidence:      0,
-      needsReview:     true,
-      aiTopicTitle:    question.topic_title    ?? '',
-      aiSubtopicTitle: question.subtopic_title ?? '',
-    }
+  // Top 3 suggestions for UI display
+  const suggestions = candidates.slice(0, 3).map(c => ({
+    topic:        c.topic,
+    subtopic:     c.subtopic,
+    score:        c.score,
+    label:        `${c.topic.name} → ${c.subtopic.name}`,
+  }))
+
+  const best       = candidates[0]
+  const confidence = best ? Math.min(best.score, 1) : 0
+
+  const base = {
+    aiTopicTitle:    question.topic_title    ?? '',
+    aiSubtopicTitle: question.subtopic_title ?? '',
+    suggestions,  // top 3 ranked matches for UI
+  }
+
+  if (!best || confidence < 0.35) {
+    return { ...base, topic: null, subtopic: null, confidence: 0, needsReview: true }
   }
 
   return {
-    topic:           bestTopic,
-    subtopic:        bestSubtopic,
+    ...base,
+    topic:       best.topic,
+    subtopic:    best.subtopic,
     confidence,
-    needsReview:     confidence < 0.7,
-    aiTopicTitle:    question.topic_title    ?? '',
-    aiSubtopicTitle: question.subtopic_title ?? '',
+    needsReview: confidence < 0.65,
   }
 }
 

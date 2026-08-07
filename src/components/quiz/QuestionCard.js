@@ -305,6 +305,54 @@ export default function QuestionCard({
   return (
     <div className="space-y-3">
 
+      {/* ── PASSAGE / SHARED CONTEXT ─────────────────────────────────────────
+           Shown whenever passage_text or passage_image_url is present.
+           Appears before the question image and question text every time —
+           students see questions in random CBT order so each question must
+           carry its own passage context. */}
+      {(question.passage_text || question.passage_image_url) && (
+        <div
+          className="rounded-[20px] border-2 overflow-hidden"
+          style={{ borderColor: `${accent}40`, background: `${accent}08` }}
+        >
+          {/* Passage header */}
+          <div
+            className="px-4 py-2 border-b-2 flex items-center gap-2"
+            style={{ borderColor: `${accent}30`, background: `${accent}12` }}
+          >
+            <span className="text-xs" style={{ color: accent }}>📄</span>
+            <p
+              className="text-xs font-black uppercase tracking-wide"
+              style={{ color: accent, fontFamily: "'Baloo 2', 'Inter', sans-serif" }}
+            >
+              Read this first
+            </p>
+          </div>
+
+          {/* Passage image (shared diagram) */}
+          {question.passage_image_url && (
+            <div className="border-b-2 border-default">
+              <img
+                src={question.passage_image_url}
+                alt="Shared passage diagram"
+                className="w-full object-contain max-h-64 bg-card p-3"
+              />
+            </div>
+          )}
+
+          {/* Passage text */}
+          {question.passage_text && (
+            <div className="px-4 py-3">
+              <MathText
+                text={question.passage_text}
+                className="text-sm text-primary leading-relaxed"
+                as="div"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Question image */}
       {question.has_image && question.image_url && (
         <div className="rounded-[20px] overflow-hidden bg-base border-2 border-default">

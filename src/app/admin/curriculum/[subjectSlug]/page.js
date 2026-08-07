@@ -1,160 +1,187 @@
-// src/app/admin/curriculum/[subjectSlug]/page.js  (REPLACE existing file)
-// Adds a "Prerequisites" tab to the subject page alongside the existing curriculum viewer.
-
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { notFound } from 'next/navigation'
+// src/app/admin/curriculum/[subjectSlug]/page.js
+'use client'
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import CurriculumViewerClient from '@/components/admin/CurriculumViewerClient'
-import PrerequisiteMapEditor from '@/components/admin/PrerequisiteMapEditor'
 
-const EXAM_COLORS = {
-  WAEC: 'bg-blue-100 text-blue-700 border-blue-200',
-  JAMB: 'bg-purple-100 text-purple-700 border-purple-200',
-  BOTH: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+const EXAM_STYLE = {
+  WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
+  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
 }
 
-export default async function SubjectCurriculumPage({ params, searchParams }) {
-  const { subjectSlug }  = await params
-  const { tab = 'topics' } = await searchParams
-
-  const db = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+function ExamBadge({ exam }) {
+  if (!exam) return null
+  const s = EXAM_STYLE[exam] ?? { bg: '#f9fafb', color: '#6b7280', border: '#e5e7eb' }
+  return (
+    <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 5,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
+      {exam}
+    </span>
   )
+}
 
-  const { data: subject } = await db
-    .from('subjects')
-    .select(`
-      id, name, slug, exam_type, is_active,
-      waec_uploaded, jamb_uploaded, merged,
-      prereq_map_status, prereq_depth, prereq_pass_threshold
-    `)
-    .eq('slug', subjectSlug)
-    .single()
-
-  if (!subject) notFound()
-
-  const { data: topics } = await db
-    .from('topics')
-    .select(`
-      id, name, slug, exam_type, order_index,
-      subtopics ( id, name, slug, lesson_generated, lesson_status, exam_type, order_index, objectives )
-    `)
-    .eq('subject_id', subject.id)
-    .order('order_index')
-
-  const enrichedTopics = (topics ?? []).map(topic => {
-    const subs = topic.subtopics ?? []
-    return {
-      ...topic,
-      subtopic_count:    subs.length,
-      lessons_ready:     subs.filter(s => s.lesson_generated).length,
-      lessons_published: subs.filter(s => s.lesson_status === 'published').length,
-    }
-  })
-
-  const totalSubtopics = enrichedTopics.reduce((a, t) => a + t.subtopic_count, 0)
-  const totalReady     = enrichedTopics.reduce((a, t) => a + t.lessons_ready, 0)
-  const overallPct     = totalSubtopics > 0
-    ? Math.round((totalReady / totalSubtopics) * 100) : 0
-
-  const prereqStatus = subject.prereq_map_status ?? 'none'
+function TopicRow({ topic, questionCount, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="space-y-6">
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 13, color: '#9ca3af', transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>›</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{topic.name}</p>
+            <ExamBadge exam={topic.exam_type} />
+          </div>
+          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+            {topic.subtopics?.length ?? 0} subtopics
+            {questionCount > 0 && ` · ${questionCount} questions`}
+          </p>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', flexShrink: 0, padding: '3px 10px', borderRadius: 20, background: '#eef2ff' }}>
+          {topic.subtopics?.length ?? 0}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ borderTop: '1px solid #f3f4f6' }}>
+          {(topic.subtopics ?? []).length === 0 ? (
+            <p style={{ padding: '12px 16px 12px 44px', fontSize: 12, color: '#9ca3af' }}>No subtopics yet</p>
+          ) : (topic.subtopics ?? []).map((sub, i) => (
+            <div key={sub.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px 9px 44px',
+              borderBottom: i < (topic.subtopics.length - 1) ? '1px solid #f9fafb' : 'none',
+            }}>
+              <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0, width: 20, textAlign: 'right' }}>{i + 1}</span>
+              <p style={{ flex: 1, fontSize: 13, color: '#374151', fontWeight: 500 }}>{sub.name}</p>
+              {sub.exam_type && sub.exam_type !== topic.exam_type && (
+                <ExamBadge exam={sub.exam_type} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function SubjectCurriculumPage() {
+  const params = useParams()
+  const slug   = params?.subjectSlug
+
+  const [subject,  setSubject]  = useState(null)
+  const [topics,   setTopics]   = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [search,   setSearch]   = useState('')
+  const [error,    setError]    = useState(null)
+
+  useEffect(() => {
+    if (!slug) return
+
+    // Step 1: load all subjects to resolve slug → UUID
+    // Step 2: use the UUID to fetch the curriculum
+    fetch('/api/admin/subjects')
+      .then(r => r.json())
+      .then(subjects => {
+        const subj = Array.isArray(subjects) ? subjects.find(s => s.slug === slug) : null
+        if (!subj) {
+          setError('Subject not found')
+          setLoading(false)
+          return
+        }
+        setSubject(subj)
+        // Now fetch curriculum with the real UUID
+        return fetch(`/api/admin/curriculum?subjectId=${subj.id}`)
+          .then(r => r.json())
+          .then(topicData => {
+            if (Array.isArray(topicData)) setTopics(topicData)
+            else if (topicData?.error) setError(topicData.error)
+            setLoading(false)
+          })
+      })
+      .catch(() => { setError('Failed to load'); setLoading(false) })
+  }, [slug])
+
+  const filtered = topics.filter(t =>
+    !search || t.name.toLowerCase().includes(search.toLowerCase()) ||
+    (t.subtopics ?? []).some(s => s.name.toLowerCase().includes(search.toLowerCase()))
+  )
+
+  const totalSubtopics = topics.reduce((a, t) => a + (t.subtopics?.length ?? 0), 0)
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin .7s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+
+  if (error) return <p style={{ padding: 40, color: '#dc2626', textAlign: 'center' }}>{error}</p>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/admin/curriculum" className="hover:text-gray-600">Curriculum</Link>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#9ca3af' }}>
+        <Link href="/admin/curriculum" style={{ color: '#9ca3af', textDecoration: 'none' }}>Topic Tree</Link>
         <span>/</span>
-        <h1 className="text-gray-900 font-bold">{subject.name}</h1>
+        <span style={{ color: '#111827', fontWeight: 600 }}>{subject?.name ?? slug}</span>
       </div>
 
       {/* Subject header */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-5">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-xl font-black text-gray-900">{subject.name}</h2>
-              <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${EXAM_COLORS[subject.exam_type]}`}>
-                {subject.exam_type}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              {subject.waec_uploaded && <span className="text-xs font-medium text-blue-600">WAEC ✓</span>}
-              {subject.jamb_uploaded && <span className="text-xs font-medium text-purple-600">JAMB ✓</span>}
-              {subject.merged && <span className="text-xs font-medium text-green-600">Merged ✓</span>}
-              {prereqStatus === 'approved' && (
-                <span className="text-xs font-medium text-emerald-600">Prerequisites ✓</span>
-              )}
-              {prereqStatus === 'draft' && (
-                <span className="text-xs font-medium text-amber-600">Prerequisites — needs approval</span>
-              )}
-            </div>
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: '18px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111827', letterSpacing: '-0.02em', margin: 0 }}>{subject?.name ?? slug}</h1>
+            <ExamBadge exam={subject?.exam_type} />
           </div>
-          <Link
-            href="/admin/curriculum/upload"
-            className="text-xs font-bold px-3 py-2 border border-indigo-200 text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors"
-          >
-            Upload new
+          <p style={{ fontSize: 13, color: '#6b7280' }}>
+            {topics.length} topics · {totalSubtopics} subtopics
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/admin/curriculum/upload"
+            style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid #e0e7ff', color: '#4f46e5', fontSize: 12, fontWeight: 700, textDecoration: 'none', background: '#eef2ff' }}>
+            Upload curriculum
           </Link>
-        </div>
-
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-2">
-          <div
-            className="h-full bg-indigo-500 rounded-full transition-all"
-            style={{ width: `${overallPct}%` }}
-          />
-        </div>
-        <div className="flex items-center gap-4 text-xs text-gray-400">
-          <span>{enrichedTopics.length} topics</span>
-          <span>{totalSubtopics} subtopics</span>
-          <span className="text-green-600 font-medium">{totalReady} lessons ready</span>
-          <span className="text-amber-600 font-medium">{totalSubtopics - totalReady} pending</span>
-          <span className="ml-auto font-bold text-gray-600">{overallPct}% complete</span>
+          <Link href={`/admin/past-questions?subject=${encodeURIComponent(subject?.name ?? '')}`}
+            style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid #e5e7eb', color: '#374151', fontSize: 12, fontWeight: 700, textDecoration: 'none', background: '#f9fafb' }}>
+            View questions
+          </Link>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl w-fit">
-        {[
-          { id: 'topics',        label: `Topics (${enrichedTopics.length})` },
-          {
-            id: 'prerequisites',
-            label: prereqStatus === 'approved'
-              ? '🗺 Prerequisites ✓'
-              : prereqStatus === 'draft'
-              ? '🗺 Prerequisites ●'
-              : '🗺 Prerequisites',
-          },
-        ].map(t => (
-          <Link
-            key={t.id}
-            href={`/admin/curriculum/${subjectSlug}?tab=${t.id}`}
-            className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors whitespace-nowrap ${
-              tab === t.id
-                ? 'bg-white text-indigo-600 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Tab: Topics */}
-      {tab === 'topics' && (
-        <CurriculumViewerClient
-          subject={subject}
-          topics={enrichedTopics}
+      {/* Search */}
+      {topics.length > 0 && (
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search topics and subtopics…"
+          style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 13, outline: 'none', background: '#fff' }}
         />
       )}
 
-      {/* Tab: Prerequisites */}
-      {tab === 'prerequisites' && (
-        <PrerequisiteMapEditor
-          subject={subject}
-          topics={enrichedTopics}
-        />
+      {/* Topics */}
+      {topics.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px dashed #e5e7eb', padding: '48px 24px', textAlign: 'center' }}>
+          <p style={{ fontSize: 28, marginBottom: 8 }}>🌿</p>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 6 }}>No topics yet</p>
+          <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 20 }}>Upload the curriculum to populate the topic tree.</p>
+          <Link href="/admin/curriculum/upload"
+            style={{ display: 'inline-block', padding: '9px 20px', background: '#4f46e5', color: '#fff', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+            Upload curriculum →
+          </Link>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.map((topic, i) => (
+            <TopicRow key={topic.id} topic={topic} questionCount={0} defaultOpen={i === 0 && topics.length <= 5} />
+          ))}
+          {filtered.length === 0 && search && (
+            <p style={{ textAlign: 'center', color: '#9ca3af', padding: '24px 0', fontSize: 13 }}>
+              No topics match "{search}"
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

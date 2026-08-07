@@ -1,12 +1,34 @@
 'use client'
 
+// NOTE: MergeReviewUI removed — no more merge flow.
+// examType is no longer a separate step; it comes from the selected subject's exam_type.
+
 import { useState, useEffect } from 'react'
 import { parseCurriculum, buildCurriculumPrompt } from '@/lib/curriculumParser'
-import MergeReviewUI from '@/components/admin/MergeReviewUI'
 import Link from 'next/link'
 
+const EXAM_STYLE = {
+  WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
+  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+}
+
+function ExamBadge({ exam }) {
+  if (!exam) return null
+  const s = EXAM_STYLE[exam] ?? { bg: '#f9fafb', color: '#6b7280', border: '#e5e7eb' }
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+    }}>
+      {exam}
+    </span>
+  )
+}
+
+// Steps: Subject → Prompt → Paste → Preview → Done  (Exam step removed)
 function StepIndicator({ current }) {
-  const steps = ['Subject', 'Exam', 'Prompt', 'Paste', 'Preview', 'Done']
+  const steps = ['Subject', 'Prompt', 'Paste', 'Preview', 'Done']
   return (
     <div className="flex items-center mb-8">
       {steps.map((label, i) => (
@@ -65,9 +87,9 @@ function CurriculumPreview({ data }) {
   })
 
   const tagColors = {
-    WAEC: 'bg-blue-100 text-blue-700', waec: 'bg-blue-100 text-blue-700',
-    JAMB: 'bg-purple-100 text-purple-700', jamb: 'bg-purple-100 text-purple-700',
-    BOTH: 'bg-indigo-100 text-indigo-700', both: 'bg-indigo-100 text-indigo-700',
+    WAEC: 'bg-blue-100 text-blue-700',
+    JAMB: 'bg-purple-100 text-purple-700',
+    IGCSE: 'bg-green-100 text-green-700',
   }
 
   return (
@@ -82,9 +104,11 @@ function CurriculumPreview({ data }) {
               {ti + 1}
             </span>
             <span className="flex-1 text-sm font-bold text-gray-900">{topic.title ?? topic.name}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tagColors[topic.exam_tag] ?? 'bg-gray-100 text-gray-500'}`}>
-              {String(topic.exam_tag ?? 'BOTH').toUpperCase()}
-            </span>
+            {topic.exam_tag && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tagColors[String(topic.exam_tag).toUpperCase()] ?? 'bg-gray-100 text-gray-500'}`}>
+                {String(topic.exam_tag).toUpperCase()}
+              </span>
+            )}
             <span className="text-xs text-gray-400">{topic.subtopics?.length ?? 0} subtopics</span>
             <span className={`text-gray-300 text-xs transition-transform ${open.has(ti) ? 'rotate-180' : ''}`}>▼</span>
           </button>
@@ -96,9 +120,6 @@ function CurriculumPreview({ data }) {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-800">{sub.title ?? sub.name}</p>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${tagColors[sub.exam_tag] ?? 'bg-gray-100 text-gray-500'}`}>
-                        {String(sub.exam_tag ?? 'BOTH').toUpperCase()}
-                      </span>
                     </div>
                     {(sub.objectives ?? []).length > 0 && (
                       <ul className="mt-1 space-y-0.5">
@@ -124,7 +145,6 @@ export default function CurriculumUploaderPage() {
   const [step, setStep] = useState(1)
   const [subjects, setSubjects] = useState([])
   const [selectedSubject, setSelectedSubject] = useState(null)
-  const [examType, setExamType] = useState('')
   const [rawJson, setRawJson] = useState('')
   const [parseResult, setParseResult] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -135,10 +155,16 @@ export default function CurriculumUploaderPage() {
   const [clearPreview, setClearPreview] = useState(null)
   const [clearing, setClearing] = useState(false)
 
+  // examType is derived directly from the selected subject — no separate step
+  const examType = selectedSubject?.exam_type ?? ''
+
   useEffect(() => {
     fetch('/api/admin/subjects')
       .then(r => r.json())
-      .then(data => { setSubjects(Array.isArray(data) ? data.filter(s => s.is_active) : []); setLoadingSubjects(false) })
+      .then(data => {
+        setSubjects(Array.isArray(data) ? data.filter(s => s.is_active) : [])
+        setLoadingSubjects(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -160,11 +186,9 @@ export default function CurriculumUploaderPage() {
     setClearing(false)
     setShowClearModal(false)
     setClearPreview(null)
-    // Refresh subjects
     const res = await fetch('/api/admin/subjects')
     const data = await res.json()
     setSubjects(Array.isArray(data) ? data.filter(s => s.is_active) : [])
-    // Update selected subject
     const updated = data.find(s => s.id === selectedSubject.id)
     if (updated) setSelectedSubject({ ...updated, subtopic_count: 0 })
   }
@@ -185,17 +209,17 @@ export default function CurriculumUploaderPage() {
       })
       const data = await res.json()
       setSaveResponse(data)
-      setStep(6)
+      setStep(5)
     } catch {
       setSaveResponse({ status: 'error', message: 'Network error — try again' })
-      setStep(6)
+      setStep(5)
     } finally {
       setSaving(false)
     }
   }
 
   const reset = () => {
-    setStep(1); setSelectedSubject(null); setExamType('')
+    setStep(1); setSelectedSubject(null)
     setRawJson(''); setParseResult(null); setSaveResponse(null)
     setReplaceExisting(false)
   }
@@ -203,19 +227,6 @@ export default function CurriculumUploaderPage() {
   const prompt = selectedSubject && examType
     ? buildCurriculumPrompt(selectedSubject.name, examType)
     : ''
-
-  // Merge review
-  if (step === 6 && saveResponse?.status === 'merge_ready') {
-    return (
-      <MergeReviewUI
-        subjectId={selectedSubject.id}
-        subjectName={saveResponse.subjectName ?? selectedSubject.name}
-        mergeResult={saveResponse.mergeResult}
-        affectedLessons={saveResponse.affectedLessons ?? 0}
-        onDone={reset}
-      />
-    )
-  }
 
   return (
     <div className="max-w-3xl">
@@ -229,11 +240,6 @@ export default function CurriculumUploaderPage() {
               <p className="text-sm font-bold text-red-800">This will permanently delete:</p>
               <p className="text-sm text-red-700">· {clearPreview.topicCount} topics</p>
               <p className="text-sm text-red-700">· {clearPreview.subtopicCount} subtopics</p>
-              {clearPreview.lessonsCount > 0 && (
-                <p className="text-sm text-red-700 font-bold">
-                  · {clearPreview.lessonsCount} lessons with generated content ⚠️
-                </p>
-              )}
             </div>
             <p className="text-xs text-gray-500">
               This cannot be undone. The subject record will remain but all curriculum content will be cleared.
@@ -271,12 +277,12 @@ export default function CurriculumUploaderPage() {
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-black text-gray-900 mb-1">Select a subject</h2>
-            <p className="text-sm text-gray-500">Which subject are you uploading curriculum for?</p>
+            <p className="text-sm text-gray-500">The exam type is set on the subject. Pick a subject to continue.</p>
           </div>
 
           {loadingSubjects ? (
             <div className="flex items-center justify-center py-10">
-              <div className="w-6 h-6 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
             <div className="space-y-2">
@@ -291,24 +297,19 @@ export default function CurriculumUploaderPage() {
                   }`}
                 >
                   <div>
-                    <p className={`text-sm font-bold ${selectedSubject?.id === subject.id ? 'text-indigo-800' : 'text-gray-900'}`}>
-                      {subject.name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {subject.waec_uploaded && <span className="text-xs text-blue-600 font-medium">WAEC ✓</span>}
-                      {subject.jamb_uploaded && <span className="text-xs text-purple-600 font-medium">JAMB ✓</span>}
-                      {subject.merged && <span className="text-xs text-green-600 font-medium">Merged ✓</span>}
-                      {!subject.waec_uploaded && !subject.jamb_uploaded && (
-                        <span className="text-xs text-gray-400">No curriculum yet</span>
-                      )}
-                      <span className="text-xs text-gray-400">
-                        {subject.subtopic_count} subtopics
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm font-bold ${selectedSubject?.id === subject.id ? 'text-indigo-800' : 'text-gray-900'}`}>
+                        {subject.name}
+                      </p>
+                      <ExamBadge exam={subject.exam_type} />
                     </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {subject.topic_count ?? 0} topics · {subject.subtopic_count ?? 0} subtopics
+                    </p>
                   </div>
 
-                  {/* Clear button — only if subject has content */}
-                  {(subject.waec_uploaded || subject.jamb_uploaded) && selectedSubject?.id === subject.id && (
+                  {/* Clear button — only shown when selected and has content */}
+                  {(subject.topic_count ?? 0) > 0 && selectedSubject?.id === subject.id && (
                     <button
                       onClick={e => { e.stopPropagation(); handleLoadClearPreview(subject) }}
                       className="text-xs px-3 py-1.5 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 font-medium transition-colors"
@@ -321,70 +322,11 @@ export default function CurriculumUploaderPage() {
             </div>
           )}
 
-          <p className="text-xs text-gray-400 text-center">
-            Subject not listed?{' '}
-            <Link href="/admin/subjects-manager" className="text-indigo-600 hover:underline font-medium">
-              Add it in Subjects Manager →
-            </Link>
-          </p>
-
-          <button
-            onClick={() => setStep(2)}
-            disabled={!selectedSubject}
-            className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
-          >
-            Continue with {selectedSubject?.name ?? '...'} →
-          </button>
-        </div>
-      )}
-
-      {/* ── STEP 2: Exam ── */}
-      {step === 2 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-black text-gray-900 mb-1">Which exam syllabus?</h2>
-              <p className="text-sm text-gray-500">Upload one exam at a time.</p>
-            </div>
-            <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { value: 'WAEC', desc: 'Official WAEC syllabus', uploaded: selectedSubject?.waec_uploaded },
-              { value: 'JAMB', desc: 'Official JAMB syllabus', uploaded: selectedSubject?.jamb_uploaded },
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setExamType(opt.value)}
-                className={`p-4 rounded-2xl border-2 text-left transition-colors ${
-                  examType === opt.value
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <p className={`font-black text-lg ${examType === opt.value ? 'text-indigo-700' : 'text-gray-800'}`}>
-                    {opt.value}
-                  </p>
-                  {opt.uploaded && (
-                    <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
-                      Uploaded
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500">{opt.desc}</p>
-                {opt.uploaded && (
-                  <p className="text-xs text-amber-600 mt-1">Re-uploading will trigger duplicate check</p>
-                )}
-              </button>
-            ))}
-          </div>
-
           {/* Replace existing toggle */}
-          <div className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-colors cursor-pointer ${
-            replaceExisting ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'
-          }`}
+          <div
+            className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-colors cursor-pointer ${
+              replaceExisting ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'
+            }`}
             onClick={() => setReplaceExisting(r => !r)}
           >
             <div>
@@ -404,27 +346,34 @@ export default function CurriculumUploaderPage() {
             </div>
           </div>
 
+          <p className="text-xs text-gray-400 text-center">
+            Subject not listed?{' '}
+            <Link href="/admin/subjects-manager" className="text-indigo-600 hover:underline font-medium">
+              Add it in Subjects Manager →
+            </Link>
+          </p>
+
           <button
-            onClick={() => setStep(3)}
-            disabled={!examType}
+            onClick={() => setStep(2)}
+            disabled={!selectedSubject}
             className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
           >
-            Continue with {examType || '...'} →
+            Continue with {selectedSubject ? `${selectedSubject.name} (${examType})` : '...'} →
           </button>
         </div>
       )}
 
-      {/* ── STEP 3: Prompt ── */}
-      {step === 3 && (
+      {/* ── STEP 2: Prompt ── */}
+      {step === 2 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Copy the AI prompt</h2>
               <p className="text-sm text-gray-500">
-                {selectedSubject?.name} — {examType}
+                {selectedSubject?.name} <ExamBadge exam={examType} />
               </p>
             </div>
-            <button onClick={() => setStep(2)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
+            <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
           <div className="bg-gray-50 rounded-xl p-4">
@@ -439,21 +388,21 @@ export default function CurriculumUploaderPage() {
 
           <CopyBox text={prompt} />
 
-          <button onClick={() => setStep(4)} className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors">
+          <button onClick={() => setStep(3)} className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors">
             I have the JSON →
           </button>
         </div>
       )}
 
-      {/* ── STEP 4: Paste ── */}
-      {step === 4 && (
+      {/* ── STEP 3: Paste ── */}
+      {step === 3 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Paste the curriculum JSON</h2>
               <p className="text-sm text-gray-500">Paste exactly what Claude or Gemini returned.</p>
             </div>
-            <button onClick={() => setStep(3)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
+            <button onClick={() => setStep(2)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
           <textarea
@@ -490,7 +439,7 @@ export default function CurriculumUploaderPage() {
           )}
 
           <button
-            onClick={() => setStep(5)}
+            onClick={() => setStep(4)}
             disabled={!parseResult?.valid}
             className="w-full py-3 bg-indigo-600 text-white text-sm font-black rounded-xl disabled:opacity-40 hover:bg-indigo-500 transition-colors"
           >
@@ -499,33 +448,27 @@ export default function CurriculumUploaderPage() {
         </div>
       )}
 
-      {/* ── STEP 5: Preview ── */}
-      {step === 5 && parseResult?.valid && (
+      {/* ── STEP 4: Preview ── */}
+      {step === 4 && parseResult?.valid && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Preview</h2>
-              <p className="text-sm text-gray-500">
-                {selectedSubject?.name} — {examType} ·{' '}
-                {parseResult.stats.topicCount} topics · {parseResult.stats.subtopicCount} subtopics
+              <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                {selectedSubject?.name}
+                <ExamBadge exam={examType} />
+                · {parseResult.stats.topicCount} topics · {parseResult.stats.subtopicCount} subtopics
               </p>
             </div>
-            <button onClick={() => setStep(4)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
+            <button onClick={() => setStep(3)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
           </div>
 
           <CurriculumPreview data={parseResult.data} />
 
-          {/* Warnings */}
-          {(selectedSubject?.waec_uploaded || selectedSubject?.jamb_uploaded) && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1">
+          {replaceExisting && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
               <p className="text-xs font-bold text-amber-800">
-                {examType === 'WAEC' && selectedSubject?.jamb_uploaded
-                  ? '⚡ Both WAEC and JAMB exist — auto-merge will run after saving.'
-                  : examType === 'JAMB' && selectedSubject?.waec_uploaded
-                  ? '⚡ Both WAEC and JAMB exist — auto-merge will run after saving.'
-                  : replaceExisting
-                  ? '⚠️ Replace mode is ON — existing topics and subtopics will be overwritten.'
-                  : 'ℹ️ Existing topics and subtopics will be skipped.'}
+                ⚠️ Replace mode is ON — existing topics and subtopics will be overwritten.
               </p>
             </div>
           )}
@@ -540,44 +483,50 @@ export default function CurriculumUploaderPage() {
         </div>
       )}
 
-      {/* ── STEP 6: Saved (single exam) ── */}
-      {step === 6 && saveResponse?.status === 'saved_single' && (
+      {/* ── STEP 5: Done ── */}
+      {step === 5 && saveResponse && (
         <div className="space-y-4 py-4">
           <div className="text-center">
             <div className="text-5xl mb-3">
-              {saveResponse.errors?.length > 0 ? '⚠️' : '✅'}
+              {saveResponse.status === 'error' ? '❌' : saveResponse.hasErrors ? '⚠️' : '✅'}
             </div>
             <h2 className="text-xl font-black text-gray-900 mb-1">
-              {examType} curriculum saved!
+              {saveResponse.status === 'error'
+                ? 'Something went wrong'
+                : `${selectedSubject?.name} (${examType}) saved!`}
             </h2>
+            {saveResponse.status === 'error' && (
+              <p className="text-sm text-red-600">{saveResponse.message}</p>
+            )}
           </div>
 
-          {/* Upload summary */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-2">
-            <p className="text-sm font-bold text-gray-700">Upload summary</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-green-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-black text-green-700">{saveResponse.topics_created ?? 0}</p>
-                <p className="text-green-600">Topics saved</p>
-              </div>
-              <div className="bg-indigo-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-black text-indigo-700">{saveResponse.subtopics_created ?? 0}</p>
-                <p className="text-indigo-600">Subtopics saved</p>
-              </div>
-              {(saveResponse.topics_skipped ?? 0) > 0 && (
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-black text-gray-500">{saveResponse.topics_skipped}</p>
-                  <p className="text-gray-400">Topics already existed (skipped)</p>
+          {saveResponse.status !== 'error' && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-2">
+              <p className="text-sm font-bold text-gray-700">Upload summary</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-green-50 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-green-700">{saveResponse.topics_created ?? 0}</p>
+                  <p className="text-green-600">Topics saved</p>
                 </div>
-              )}
-              {(saveResponse.subtopics_skipped ?? 0) > 0 && (
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-black text-gray-500">{saveResponse.subtopics_skipped}</p>
-                  <p className="text-gray-400">Subtopics already existed (skipped)</p>
+                <div className="bg-indigo-50 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-indigo-700">{saveResponse.subtopics_created ?? 0}</p>
+                  <p className="text-indigo-600">Subtopics saved</p>
                 </div>
-              )}
+                {(saveResponse.topics_skipped ?? 0) > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <p className="text-xl font-black text-gray-500">{saveResponse.topics_skipped}</p>
+                    <p className="text-gray-400">Topics already existed (skipped)</p>
+                  </div>
+                )}
+                {(saveResponse.subtopics_skipped ?? 0) > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <p className="text-xl font-black text-gray-500">{saveResponse.subtopics_skipped}</p>
+                    <p className="text-gray-400">Subtopics already existed (skipped)</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Failed topics */}
           {saveResponse.failed_topics?.length > 0 && (
@@ -592,7 +541,7 @@ export default function CurriculumUploaderPage() {
                     <p className="text-xs text-red-500">{t.reason}</p>
                   </div>
                   <Link
-                    href={`/admin/curriculum/${selectedSubject?.slug}?recover=true`}
+                    href={`/admin/curriculum/${selectedSubject?.slug}`}
                     className="text-xs font-bold text-indigo-600 hover:underline"
                   >
                     Fix →
@@ -603,9 +552,9 @@ export default function CurriculumUploaderPage() {
           )}
 
           {/* Other errors */}
-          {saveResponse.errors?.filter(e => !saveResponse.failed_topics?.some(t => e.includes(t.title))).length > 0 && (
+          {saveResponse.errors?.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-amber-700 mb-1">Additional warnings:</p>
+              <p className="text-xs font-bold text-amber-700 mb-1">Warnings:</p>
               <ul className="space-y-0.5 max-h-32 overflow-y-auto">
                 {saveResponse.errors.map((err, i) => (
                   <li key={i} className="text-xs text-amber-600">· {err}</li>
@@ -614,18 +563,12 @@ export default function CurriculumUploaderPage() {
             </div>
           )}
 
-          <p className="text-sm text-gray-500 text-center">
-            {examType === 'WAEC'
-              ? 'Upload the JAMB curriculum to trigger auto-merge.'
-              : 'Upload the WAEC curriculum to trigger auto-merge.'}
-          </p>
-
           <div className="flex gap-3">
             <Link
               href={`/admin/curriculum/${selectedSubject?.slug}`}
               className="flex-1 py-3 bg-indigo-600 text-white text-sm font-black rounded-xl text-center hover:bg-indigo-500 transition-colors"
             >
-              View curriculum →
+              View topic tree →
             </Link>
             <button
               onClick={reset}

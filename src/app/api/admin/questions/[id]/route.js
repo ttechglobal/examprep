@@ -34,6 +34,7 @@ export async function PATCH(request, { params }) {
     'difficulty', 'exam_type',
     'topic_id', 'subtopic_id',
     'has_image', 'image_url', 'image_description',
+    'passage_text', 'passage_image_url',
     'explanation', 'is_active', 'is_flagged',
   ]
 
@@ -54,7 +55,7 @@ export async function PATCH(request, { params }) {
     .update(update)
     .eq('id', id)
     .select(`
-      id, question_text, options, correct_answer,
+      id, question_text, passage_text, passage_image_url, options, correct_answer,
       difficulty, exam_type, has_image, image_url, image_description,
       explanation, is_active, is_flagged, year, source,
       topic_id, subtopic_id, subject_id,

@@ -12,7 +12,7 @@ export async function POST(request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const { schoolName, city, state, address } = await request.json()
+  const { schoolName, city, state, address, phone } = await request.json()
 
   if (!schoolName?.trim()) {
     return NextResponse.json({ error: 'School name is required' }, { status: 400 })
@@ -22,10 +22,11 @@ export async function POST(request) {
   const { data: school, error: schoolError } = await service
     .from('schools')
     .insert({
-      name: schoolName.trim(),
-      city: city?.trim() ?? '',
-      state: state ?? '',
-      address: address?.trim() ?? '',
+      name:           schoolName.trim(),
+      city:           city?.trim() ?? '',
+      state:          state ?? '',
+      address:        address?.trim() ?? '',
+      phone:          phone?.trim() ?? null,
       setup_complete: false,
     })
     .select()

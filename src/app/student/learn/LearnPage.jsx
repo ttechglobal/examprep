@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
 import { LearnHubSkeleton } from '@/components/ui/Skeletons'
+import CoachBanner from '@/components/ui/CoachBanner'
+import { learnCoach } from '@/lib/coach'
 import Link from 'next/link'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
@@ -259,12 +261,22 @@ export default function LearnPage() {
   const streakDays     = profile?.streak_days ?? 0
   const allSubjectNames = subjectData.map(s => s.name)
 
-  // Weak topics across all subjects — for the "Focus these first" strip
+  // Weak topics across all subjects
   const allWeakTopics = subjectData.flatMap(sub =>
     (sub.topics ?? [])
       .filter(t => t.pct < 40)
       .map(t => ({ ...t, subjectName: sub.name }))
   ).slice(0, 3)
+
+  const totalTopics   = subjectData.reduce((s, sub) => s + (sub.total ?? 0), 0)
+  const coveredTopics = subjectData.reduce((s, sub) => s + (sub.completed ?? 0), 0)
+  const coach = learnCoach({
+    firstName,
+    weakTopics: allWeakTopics,
+    totalTopics,
+    coveredTopics,
+    nextRecommended: allWeakTopics[0]?.name,
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 112 }}>
@@ -296,6 +308,9 @@ export default function LearnPage() {
 
       {subjectData.length > 0 ? (
         <>
+          {/* ── 0. Coach banner ── */}
+          <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
+
           {/* ── 1. EXL Learning World card (at the top) ── */}
           <EXLWorldCard studentSubjects={allSubjectNames} />
 

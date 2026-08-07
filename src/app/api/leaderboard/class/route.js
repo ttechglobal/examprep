@@ -62,7 +62,16 @@ export async function GET(request) {
     .gte('created_at', periodStart)
     .lte('created_at', periodEnd)
 
-  const totals = aggregatePoints(pointsRows ?? [], members)
+  // Also fetch total_points as fallback for members with no period activity
+  const { data: memberProfiles } = await service
+    .from('profiles')
+    .select('id, total_points')
+    .in('id', memberIds)
+
+  const totalPtsMap = {}
+  ;(memberProfiles ?? []).forEach(p => { totalPtsMap[p.id] = p.total_points ?? 0 })
+
+  const totals = aggregatePoints(pointsRows ?? [], members, totalPtsMap)
   const myRank = totals.findIndex(e => e.student_id === user.id) + 1
 
   return NextResponse.json({
@@ -73,27 +82,29 @@ export async function GET(request) {
   })
 }
 
-function aggregatePoints(rows, members) {
+function aggregatePoints(rows, members, totalPtsMap = {}) {
   const nameMap = {}
   members.forEach(m => { nameMap[m.id] = m.full_name })
 
-  const totals = {}
+  const periodTotals = {}
   rows.forEach(r => {
-    if (!totals[r.student_id]) totals[r.student_id] = 0
-    totals[r.student_id] += r.points
+    if (!periodTotals[r.student_id]) periodTotals[r.student_id] = 0
+    periodTotals[r.student_id] += r.points
   })
 
-  // Include all members even if 0 points
-  members.forEach(m => {
-    if (!totals[m.id]) totals[m.id] = 0
-  })
-
-  return Object.entries(totals)
-    .map(([student_id, points]) => ({
-      student_id,
-      // First name only for privacy
-      first_name: (nameMap[student_id] ?? '').split(' ')[0] || 'Student',
-      points,
-    }))
+  // Build final list: use period points if earned any, else fall back to total_points
+  // This ensures every member always shows on the board with their XP
+  return members
+    .map(m => {
+      const periodPts = periodTotals[m.id] ?? 0
+      const totalPts  = totalPtsMap[m.id]  ?? 0
+      return {
+        student_id:    m.id,
+        first_name:    (nameMap[m.id] ?? '').split(' ')[0] || 'Student',
+        points:        periodPts > 0 ? periodPts : totalPts,
+        points_change: periodPts,  // actual period earnings for "this week" display
+        using_total:   periodPts === 0 && totalPts > 0,  // flag for UI
+      }
+    })
     .sort((a, b) => b.points - a.points)
 }

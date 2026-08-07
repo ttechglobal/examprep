@@ -17,6 +17,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import CoachBanner from '@/components/ui/CoachBanner'
+import { communityCoach } from '@/lib/coach'
+import { usePoints } from '@/contexts/PointsContext'
 
 function getAppUrl() {
   if (typeof window !== 'undefined') return window.location.origin
@@ -237,7 +240,7 @@ function SchoolBadge({ name, onShare }) {
 }
 
 // ── My rank card ──────────────────────────────────────────────────────────────
-function MyRankCard({ rank, total, pts, ptsChange, label, gradient, border, icon }) {
+function MyRankCard({ rank, total, pts, ptsChange, label, gradient, border, icon, liveXP = 0 }) {
   return (
     <div style={{ borderRadius: 18, background: gradient, border: `1px solid ${border}`, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,.08)', border: '1.5px solid rgba(255,255,255,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
@@ -253,12 +256,16 @@ function MyRankCard({ rank, total, pts, ptsChange, label, gradient, border, icon
           <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.5)' }}>Not ranked yet — start practising!</p>
         )}
       </div>
-      {pts != null && (
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <p style={{ fontSize: 18, fontWeight: 900, color: 'rgba(255,255,255,.9)', lineHeight: 1 }}>{pts.toLocaleString()}</p>
-          {ptsChange != null && <p style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginTop: 2 }}>+{ptsChange} pts</p>}
-        </div>
-      )}
+      {(() => {
+        const displayPts = (pts != null && pts > 0) ? pts : liveXP
+        if (displayPts == null || displayPts < 0) return null
+        return (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontSize: 18, fontWeight: 900, color: 'rgba(255,255,255,.9)', lineHeight: 1 }}>{displayPts.toLocaleString()}</p>
+            <p style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginTop: 2 }}>{ptsChange != null && ptsChange > 0 ? `+${ptsChange} this week` : 'Total XP'}</p>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -310,7 +317,10 @@ function LbRow({ entry, rank, userId }) {
   const isMe    = entry.student_id === userId
   const initial = (entry.first_name ?? entry.full_name ?? '?')[0].toUpperCase()
   const avBg    = isMe ? '#9b7ae0' : avColor(entry.first_name ?? entry.full_name)
-  const sub     = entry.cohort_name || entry.state || (entry.points_change != null ? `+${entry.points_change} this week` : null)
+  const sub     = entry.cohort_name || entry.state || (
+    entry.using_total ? 'Total XP' :
+    (entry.points_change != null && entry.points_change > 0 ? `+${entry.points_change} this week` : null)
+  )
   const medal   = rankMedal(rank)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14, background: isMe ? 'rgba(155,122,224,.08)' : 'var(--bg-subtle)', border: `1px solid ${isMe ? 'rgba(155,122,224,.25)' : 'var(--border)'}` }}>
@@ -345,18 +355,20 @@ function LeaderboardCard({ entries, userId, title, headerRight, emptyMsg }) {
     </Widget>
   )
 
-  const top3   = entries.slice(0, 3)
-  const rest   = entries.slice(3, 8)
-  const myIdx  = entries.findIndex(e => e.student_id === userId)
-  const myEntry = myIdx >= 0 ? entries[myIdx] : null
+  const showPodium = entries.length >= 3
+  const top3       = entries.slice(0, 3)
+  // Always show all rows — podium takes top 3 visually, rows show everyone ranked
+  const rowEntries = showPodium ? entries.slice(0, Math.min(entries.length, 10)) : entries
+  const myIdx      = entries.findIndex(e => e.student_id === userId)
+  const myEntry    = myIdx >= 0 ? entries[myIdx] : null
 
   return (
     <Widget header={<><SectionLabel>{title}</SectionLabel>{headerRight}</>}>
-      <Podium entries={top3} userId={userId} />
+      {showPodium && <Podium entries={top3} userId={userId} />}
       <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 2 }}>All students</p>
-        {rest.map((e, i) => <LbRow key={e.student_id} entry={e} rank={i + 4} userId={userId} />)}
-        {myEntry && myIdx >= 8 && (
+        {rowEntries.map((e, i) => <LbRow key={e.student_id} entry={e} rank={i + 1} userId={userId} />)}
+        {myEntry && myIdx >= 10 && (
           <>
             <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', padding: '4px 0' }}>· · ·</p>
             <LbRow entry={myEntry} rank={myIdx + 1} userId={userId} />
@@ -412,7 +424,7 @@ function ChallengeCard({ challenge, type = 'weekly' }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CLASS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function ClassTab({ userId, profile }) {
+function ClassTab({ userId, profile, liveXP = 0 }) {
   const [leaderboard, setLeaderboard] = useState([])
   const [classData,   setClassData]   = useState(null)
   const [myRank,      setMyRank]      = useState(null)
@@ -469,6 +481,7 @@ function ClassTab({ userId, profile }) {
 
       {/* My rank */}
       <MyRankCard rank={myRank} total={leaderboard.length || undefined} pts={myEntry?.points} ptsChange={myEntry?.points_change}
+        liveXP={liveXP}
         label={`${classData?.name ?? 'My class'} · This week`}
         gradient="linear-gradient(155deg,#0b1330 0%,#1e1b4b 100%)" border="rgba(155,122,224,.3)" icon="😊" />
 
@@ -514,7 +527,7 @@ function ClassTab({ userId, profile }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHOOL TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function SchoolTab({ userId, profile }) {
+function SchoolTab({ userId, profile, liveXP = 0 }) {
   const [leaderboard, setLeaderboard] = useState([])
   const [cohortData,  setCohortData]  = useState(null)
   const [myRank,      setMyRank]      = useState(null)
@@ -569,6 +582,7 @@ function SchoolTab({ userId, profile }) {
       {showPicker && <PeriodPicker periods={periods} selected={selectedPeriod} onSelect={p => { setSelectedPeriod(p); load(scope, p) }} onClose={() => setShowPicker(false)} />}
 
       <MyRankCard rank={myRank} total={leaderboard.length || undefined} pts={myEntry?.points} ptsChange={myEntry?.points_change}
+        liveXP={liveXP}
         label={`${schoolName} · ${scope === 'cohort' ? 'My cohort' : 'Whole school'}`}
         gradient="linear-gradient(155deg,#052e16 0%,#064e3b 100%)" border="rgba(52,211,153,.3)" icon="🏫" />
 
@@ -597,7 +611,7 @@ function SchoolTab({ userId, profile }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // NATIONAL TAB (renamed from Global)
 // ─────────────────────────────────────────────────────────────────────────────
-function NationalTab({ userId }) {
+function NationalTab({ userId, liveXP = 0 }) {
   const [period,   setPeriod]   = useState('week')
   const [lb,       setLb]       = useState([])
   const [surround, setSurround] = useState([])
@@ -687,10 +701,10 @@ function NationalTab({ userId }) {
           </div>
         ) : (
           <>
-            <Podium entries={lb.slice(0, 3)} userId={userId} />
-            <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {lb.length >= 3 && <Podium entries={lb.slice(0, 3)} userId={userId} />}
+            <div style={{ padding: lb.length >= 3 ? '4px 12px 12px' : '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
               <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 2 }}>All students</p>
-              {lb.slice(3, 10).map((e, i) => <LbRow key={e.student_id} entry={e} rank={i + 4} userId={userId} />)}
+              {lb.slice(0, 10).map((e, i) => <LbRow key={e.student_id} entry={e} rank={i + 1} userId={userId} />)}
               {surround.length > 0 && (
                 <>
                   <p style={{ fontSize: 9, color: 'var(--text-tert)', textAlign: 'center', padding: '4px 0' }}>· · ·</p>
@@ -756,6 +770,7 @@ const TABS = [
 export default function CommunityPage() {
   const router   = useRouter()
   const supabase = createClient()
+  const { totalPoints: liveXP } = usePoints()
 
   const [user,      setUser]      = useState(null)
   const [profile,   setProfile]   = useState(null)
@@ -789,6 +804,9 @@ export default function CommunityPage() {
   const daysToMonday = (7 - now.getDay() + 1) % 7 || 7
   const hoursRem     = 24 - now.getHours()
 
+  const firstName = profile?.full_name?.split(' ')[0] ?? ''
+  const coach = communityCoach({ firstName })
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 112 }}>
 
@@ -803,6 +821,9 @@ export default function CommunityPage() {
           <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>{daysToMonday}d {hoursRem}h left</span>
         </div>
       </div>
+
+      {/* ── Coach banner ── */}
+      <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
 
       {/* ── Tab strip ── */}
       <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 14, padding: 3 }}>
@@ -824,9 +845,9 @@ export default function CommunityPage() {
       </div>
 
       {/* ── Tab content ── */}
-      {activeTab === 'class'    && <ClassTab    userId={user?.id} profile={profile} />}
-      {activeTab === 'school'   && <SchoolTab   userId={user?.id} profile={profile} />}
-      {activeTab === 'national' && <NationalTab userId={user?.id} />}
+      {activeTab === 'class'    && <ClassTab    userId={user?.id} profile={profile} liveXP={liveXP} />}
+      {activeTab === 'school'   && <SchoolTab   userId={user?.id} profile={profile} liveXP={liveXP} />}
+      {activeTab === 'national' && <NationalTab userId={user?.id} liveXP={liveXP} />}
     </div>
   )
 }

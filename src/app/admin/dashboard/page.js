@@ -1,6 +1,4 @@
-// src/app/admin/dashboard/page.js — EXL Studio style
-// Good morning greeting + stat row + subject-grouped content cards
-
+// src/app/admin/dashboard/page.js
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 
@@ -13,133 +11,83 @@ function svc() {
 
 function getGreeting() {
   const h = new Date().getHours()
-  if (h < 12) return 'GOOD MORNING'
-  if (h < 17) return 'GOOD AFTERNOON'
-  return 'GOOD EVENING'
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
-// ── Stat card — matches EXL top row ───────────────────────────────────────────
-function StatCard({ label, value, sub, barColor }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 28, fontWeight: 900, color: '#111827', lineHeight: 1, marginBottom: 4 }}>{value ?? '—'}</p>
-      {sub && <p style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>{sub}</p>}
-      <div style={{ height: 3, background: '#e5e7eb', borderRadius: 99, overflow: 'hidden' }}>
-        <div style={{ height: '100%', background: barColor ?? '#6366f1', width: '100%', borderRadius: 99 }} />
+const SUBJECT_CFG = {
+  'Chemistry':        { icon: '⚗️',  color: '#9b7ae0' },
+  'Physics':          { icon: '⚡',  color: '#ff8fab' },
+  'Biology':          { icon: '🧬',  color: '#6cce8e' },
+  'Mathematics':      { icon: '📐',  color: '#5cb8ea' },
+  'Further Mathematics': { icon: '📐', color: '#5cb8ea' },
+  'English Language': { icon: '📖',  color: '#a78bfa' },
+  'Use of English':   { icon: '📖',  color: '#a78bfa' },
+  'Economics':        { icon: '📊',  color: '#fcd34d' },
+  'Government':       { icon: '🏛️', color: '#f87171' },
+  'Geography':        { icon: '🌍',  color: '#34d399' },
+  'default':          { icon: '📝',  color: '#9ca3af' },
+}
+
+function StatCard({ label, value, sub, color = '#6366f1', href }) {
+  const inner = (
+    <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', padding: '16px 20px', flex: 1, minWidth: 0, transition: 'border-color .15s' }}>
+      <p style={{ fontSize: 9, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 6 }}>{label}</p>
+      <p style={{ fontSize: 26, fontWeight: 900, color: '#111827', lineHeight: 1, marginBottom: 3, letterSpacing: '-0.03em' }}>{value ?? '—'}</p>
+      {sub && <p style={{ fontSize: 11, color: '#9ca3af' }}>{sub}</p>}
+      <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden', marginTop: 10 }}>
+        <div style={{ height: '100%', background: color, width: '60%', borderRadius: 99 }} />
       </div>
     </div>
   )
+  if (href) return <Link href={href} style={{ flex: 1, minWidth: 0, textDecoration: 'none', display: 'flex' }}>{inner}</Link>
+  return inner
 }
 
-// ── Subject section — matches EXL "Chemistry / 3 games" row ──────────────────
-function SubjectSection({ name, icon, color, items, addLabel, addHref }) {
-  return (
-    <div style={{ marginBottom: 32 }}>
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
-          <span style={{ fontSize: 16, marginRight: 2 }}>{icon}</span>
-          <span style={{ fontSize: 15, fontWeight: 900, color: '#111827' }}>{name}</span>
-        </div>
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>{items.length} items</span>
-      </div>
-
-      {/* Card grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-        {items.map(item => (
-          <ContentCard key={item.id} item={item} accentColor={color} />
-        ))}
-        {/* Add new placeholder */}
-        <Link href={addHref ?? '#'} style={{
-          borderRadius: 16, border: '2px dashed #e5e7eb',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          minHeight: 160, cursor: 'pointer', textDecoration: 'none', gap: 6,
-          transition: 'border-color .15s',
-        }}
-        className="hover:border-gray-400"
-        >
-          <span style={{ fontSize: 22, color: '#d1d5db' }}>+</span>
-          <p style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600 }}>{addLabel ?? `New ${name} content`}</p>
-        </Link>
-      </div>
-    </div>
-  )
-}
-
-// ── Content card — matches EXL game card ─────────────────────────────────────
-function ContentCard({ item, accentColor }) {
-  const pctColor = item.pct >= 70 ? '#34d399' : item.pct >= 40 ? '#fbbf24' : '#f87171'
+function SubjectRow({ subject, questionCount, attemptCount, accuracy, topicCount }) {
+  const cfg = SUBJECT_CFG[subject.name] ?? SUBJECT_CFG.default
+  const pctColor = accuracy >= 70 ? '#16a34a' : accuracy >= 50 ? '#d97706' : '#dc2626'
+  const examBadges = subject.exam_type ? [subject.exam_type] : []
 
   return (
-    <div style={{ borderRadius: 16, overflow: 'hidden', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-      {/* Coloured top image area */}
-      <div style={{
-        height: 100, background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}44)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        <span style={{ fontSize: 36 }}>{item.icon ?? '📖'}</span>
-        {/* Status pill */}
-        <div style={{
-          position: 'absolute', top: 8, right: 8,
-          display: 'flex', alignItems: 'center', gap: 4,
-          padding: '3px 8px', borderRadius: 999,
-          background: item.status === 'published' ? '#065f46' : item.status === 'in_review' ? '#92400e' : '#374151',
-          border: `1px solid ${item.status === 'published' ? '#34d399' : item.status === 'in_review' ? '#fbbf24' : '#6b7280'}`,
-        }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: item.status === 'published' ? '#34d399' : item.status === 'in_review' ? '#fbbf24' : '#6b7280' }} />
-          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-            {item.status === 'published' ? 'LIVE' : item.status === 'in_review' ? 'REVIEW' : 'DRAFT'}
-          </span>
-        </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: '1px solid #f3f4f6' }}>
+      {/* Icon */}
+      <div style={{ width: 36, height: 36, borderRadius: 10, background: `${cfg.color}14`, border: `1px solid ${cfg.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+        {cfg.icon}
       </div>
 
-      {/* Card body */}
-      <div style={{ padding: '12px 14px 14px' }}>
-        <p style={{ fontSize: 14, fontWeight: 800, color: '#111827', marginBottom: 4, lineHeight: 1.3 }}>{item.name}</p>
-        <p style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
-          {item.questionCount ?? 0} questions · {item.attemptCount ?? 0} attempts
+      {/* Name + exams */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{subject.name}</p>
+          {examBadges.map(e => (
+            <span key={e} style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 5,
+              background: e === 'WAEC' ? '#eff6ff' : e === 'JAMB' ? '#f5f3ff' : '#f0fdf4',
+              color: e === 'WAEC' ? '#1d4ed8' : e === 'JAMB' ? '#7c3aed' : '#15803d',
+              border: `1px solid ${e === 'WAEC' ? '#bfdbfe' : e === 'JAMB' ? '#ddd6fe' : '#bbf7d0'}`,
+            }}>{e}</span>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+          {topicCount} topics · {questionCount.toLocaleString()} questions
         </p>
+      </div>
 
-        {/* Accuracy bar */}
-        {item.pct !== null && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ height: 4, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden', display: 'flex', gap: 2 }}>
-              <div style={{ height: '100%', background: '#34d399', width: `${Math.min(item.pct, 100)}%`, borderRadius: 99, transition: 'width .7s' }} />
-            </div>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Link href={item.editHref ?? '#'}
-            style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: '#f9fafb', border: '1px solid #e5e7eb', fontSize: 11, fontWeight: 700, color: '#374151', textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-            Edit
-          </Link>
-          <Link href={item.viewHref ?? '#'}
-            style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: '#f0fdf4', border: '1px solid #a7f3d0', fontSize: 11, fontWeight: 700, color: '#065f46', textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-            View ↗
-          </Link>
+      {/* Accuracy */}
+      {attemptCount > 0 && (
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 800, color: pctColor, lineHeight: 1 }}>{accuracy}%</p>
+          <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{attemptCount.toLocaleString()} attempts</p>
         </div>
-      </div>
-    </div>
-  )
-}
+      )}
 
-// ── Quick action row (EXL "Quick actions" sidebar widget) ─────────────────────
-function QuickAction({ icon, label, sub, href }) {
-  return (
-    <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: '#fff', border: '1px solid #e5e7eb', textDecoration: 'none', transition: 'border-color .15s' }} className="hover:border-gray-300">
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f9fafb', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-        {icon}
-      </div>
-      <div>
-        <p style={{ fontSize: 12, fontWeight: 800, color: '#111827' }}>{label}</p>
-        {sub && <p style={{ fontSize: 10, color: '#9ca3af' }}>{sub}</p>}
-      </div>
-    </Link>
+      {/* Action */}
+      <Link href={`/admin/past-questions?subject=${encodeURIComponent(subject.name)}`}
+        style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none', flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#eef2ff', border: '1px solid #e0e7ff' }}>
+        View →
+      </Link>
+    </div>
   )
 }
 
@@ -148,46 +96,44 @@ export default async function AdminDashboardPage() {
 
   const [
     { data: subjects },
-    { data: subtopics },
-    { data: students },
+    { data: topics },
     { data: questions },
     { data: attempts },
+    { data: students },
     { data: schools },
+    { data: recentQs },
   ] = await Promise.all([
-    db.from('subjects').select('id, name, slug, exam_type'),
-    db.from('subtopics').select('id, name, slug, lesson_status, topic_id, topics(subject_id)'),
+    db.from('subjects').select('id, name, slug, exam_type, is_active').eq('is_active', true).order('order_index'),
+    db.from('topics').select('id, subject_id'),
+    db.from('questions').select('id, subject_id, exam_type, created_at'),
+    db.from('question_attempts').select('id, subject_id, is_correct').limit(10000),
     db.from('profiles').select('id').eq('role', 'student'),
-    db.from('questions').select('id, subject_id, topic_id'),
-    db.from('question_attempts').select('id, subject_id, is_correct').limit(5000),
     db.from('schools').select('id, name'),
+    db.from('questions').select('id, question_text, subject_id, created_at').order('created_at', { ascending: false }).limit(5),
   ])
 
-  const totalStudents  = students?.length ?? 0
-  const totalQs        = questions?.length ?? 0
-  const totalAttempts  = attempts?.length ?? 0
-  const totalSchools   = schools?.length ?? 0
+  // Aggregate stats
+  const totalQs       = questions?.length ?? 0
+  const totalAttempts = attempts?.length ?? 0
+  const totalStudents = students?.length ?? 0
+  const totalSchools  = schools?.length ?? 0
+  const correctCount  = (attempts ?? []).filter(a => a.is_correct).length
+  const successRate   = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
 
-  const correctCount   = (attempts ?? []).filter(a => a.is_correct).length
-  const successRate    = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
+  // Questions added this week
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const newThisWeek = (questions ?? []).filter(q => q.created_at > weekAgo).length
 
-  // Total XP estimate (5 + correct*2 per session, rough estimate from attempts)
-  const xpEarned = correctCount * 2 + Math.floor(totalAttempts / 10) * 5
-
-  // Group subtopics by subject
-  const bySubject = {}
-  for (const sub of (subjects ?? [])) { bySubject[sub.id] = { ...sub, subtopics: [] } }
-  for (const st of (subtopics ?? [])) {
-    const sid = st.topics?.subject_id
-    if (sid && bySubject[sid]) bySubject[sid].subtopics.push(st)
+  // Per-subject aggregates
+  const topicsBySubject = {}
+  for (const t of (topics ?? [])) {
+    topicsBySubject[t.subject_id] = (topicsBySubject[t.subject_id] ?? 0) + 1
   }
-
-  // Per-subject question count + accuracy
-  const qBySubject = {}
-  const attemptsBySubject = {}
+  const qsBySubject = {}
   for (const q of (questions ?? [])) {
-    if (!q.subject_id) continue
-    qBySubject[q.subject_id] = (qBySubject[q.subject_id] ?? 0) + 1
+    if (q.subject_id) qsBySubject[q.subject_id] = (qsBySubject[q.subject_id] ?? 0) + 1
   }
+  const attemptsBySubject = {}
   for (const a of (attempts ?? [])) {
     if (!a.subject_id) continue
     if (!attemptsBySubject[a.subject_id]) attemptsBySubject[a.subject_id] = { total: 0, correct: 0 }
@@ -195,175 +141,162 @@ export default async function AdminDashboardPage() {
     if (a.is_correct) attemptsBySubject[a.subject_id].correct++
   }
 
-  const SUBJECT_CFG = {
-    'Chemistry':   { icon: '⚗️', color: '#9b7ae0' },
-    'Physics':     { icon: '⚡', color: '#ff8fab' },
-    'Biology':     { icon: '🧬', color: '#6cce8e' },
-    'Mathematics': { icon: '📐', color: '#5cb8ea' },
-    'English Language': { icon: '📖', color: '#a78bfa' },
-    'Economics':   { icon: '📊', color: '#fcd34d' },
-    'Government':  { icon: '🏛️', color: '#f87171' },
-    'default':     { icon: '📝', color: '#9ca3af' },
-  }
-
-  const subjectSections = Object.values(bySubject).map(subj => {
-    const cfg    = SUBJECT_CFG[subj.name] ?? SUBJECT_CFG.default
-    const aData  = attemptsBySubject[subj.id]
-    const subPct = aData?.total ? Math.round((aData.correct / aData.total) * 100) : null
-    const items  = subj.subtopics.slice(0, 6).map(st => ({
-      id:           st.id,
-      name:         st.name,
-      icon:         cfg.icon,
-      status:       st.lesson_status ?? 'draft',
-      questionCount: qBySubject[subj.id] ?? 0,
-      attemptCount:  aData?.total ?? 0,
-      pct:           subPct,
-      editHref:     `/admin/curriculum/${subj.slug}`,
-      viewHref:     `/admin/subjects/${subj.slug}/${st.id}`,
-    }))
+  const subjectRows = (subjects ?? []).map(s => {
+    const att = attemptsBySubject[s.id]
     return {
-      id:      subj.id,
-      name:    subj.name,
-      icon:    cfg.icon,
-      color:   cfg.color,
-      items,
-      addHref: `/admin/curriculum/${subj.slug}`,
+      subject:       s,
+      questionCount: qsBySubject[s.id] ?? 0,
+      topicCount:    topicsBySubject[s.id] ?? 0,
+      attemptCount:  att?.total ?? 0,
+      accuracy:      att?.total ? Math.round((att.correct / att.total) * 100) : 0,
     }
   })
 
   const greeting = getGreeting()
 
   return (
-    <div>
-      {/* ── Top bar: greeting + actions ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+    <>
+      <style>{`
+        .admin-stat-row { display: flex; gap: 14px; flex-wrap: wrap; }
+        .admin-stat-row > * { flex: 1; min-width: 140px; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: flex-start; }
+        @media (max-width: 900px) {
+          .admin-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+          .admin-stat-row > * { min-width: 120px; }
+        }
+      `}</style>
+
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>{greeting}</p>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#111827', letterSpacing: '-0.025em', lineHeight: 1.05 }}>Content Library</h1>
+          <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 3 }}>{greeting}</p>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111827', letterSpacing: '-0.025em', lineHeight: 1.1 }}>Dashboard</h1>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 3 }}>Past questions · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link href="/admin/questions/upload"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#fff', border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 700, color: '#374151', textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-            ↑ Upload Questions
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#fff', border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 700, color: '#374151', textDecoration: 'none', boxShadow: '0 1px 2px rgba(0,0,0,.04)', whiteSpace: 'nowrap' }}>
+            ⬆️ Upload Questions
           </Link>
-          <Link href="/admin/curriculum"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#4f46e5', fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none', boxShadow: '0 3px 0 #2d3a9e' }}>
-            + New Lesson
+          <Link href="/admin/past-questions"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#4f46e5', fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none', boxShadow: '0 3px 0 #2d3a9e', whiteSpace: 'nowrap' }}>
+            🗃 Question Bank
           </Link>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, alignItems: 'flex-start' }}>
+      {/* ── Stat row ── */}
+      <div className="admin-stat-row" style={{ marginBottom: 24 }}>
+        <StatCard label="Total Questions" value={totalQs.toLocaleString()} sub={`+${newThisWeek} this week`} color="#6366f1" href="/admin/past-questions" />
+        <StatCard label="Total Attempts"  value={totalAttempts.toLocaleString()} sub="across all students" color="#34d399" />
+        <StatCard label="Success Rate"    value={`${successRate}%`} sub="platform average" color="#f59e0b" />
+        <StatCard label="Students"        value={totalStudents.toLocaleString()} sub={`${totalSchools} school${totalSchools !== 1 ? 's' : ''}`} color="#a78bfa" href="/admin/users" />
+      </div>
 
-        {/* ── LEFT: stats + subject sections ── */}
+      <div className="admin-grid">
+
+        {/* ── LEFT: subjects ── */}
         <div>
-          {/* Stat row — EXL top stats */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: '20px 24px', marginBottom: 28, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-            <StatCard label="Students" value={totalStudents.toLocaleString()} sub="+10 this week" barColor="#6366f1" />
-            <div style={{ width: 1, background: '#f3f4f6' }} />
-            <StatCard label="Attempts" value={totalAttempts.toLocaleString()} sub={`${Math.min(totalAttempts, 999)} this week`} barColor="#34d399" />
-            <div style={{ width: 1, background: '#f3f4f6' }} />
-            <StatCard label="Success Rate" value={`${successRate}%`} sub="across all questions" barColor="#fbbf24" />
-            <div style={{ width: 1, background: '#f3f4f6' }} />
-            <StatCard label="XP Earned" value={xpEarned.toLocaleString()} sub="lifetime total" barColor="#a78bfa" />
-          </div>
-
-          {/* Subject sections */}
-          {subjectSections.length > 0 ? (
-            subjectSections.map(section => (
-              <SubjectSection
-                key={section.id}
-                name={section.name}
-                icon={section.icon}
-                color={section.color}
-                items={section.items}
-                addHref={section.addHref}
-                addLabel={`New ${section.name} lesson`}
-              />
-            ))
-          ) : (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 40, textAlign: 'center' }}>
-              <p style={{ fontSize: 32, marginBottom: 8 }}>📚</p>
-              <p style={{ fontWeight: 900, color: '#111827' }}>No content yet</p>
-              <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Set up your curriculum to get started.</p>
-              <Link href="/admin/curriculum" style={{ display: 'inline-block', marginTop: 16, padding: '10px 20px', background: '#4f46e5', color: '#fff', borderRadius: 10, fontSize: 13, fontWeight: 800, textDecoration: 'none' }}>Set up curriculum →</Link>
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Questions by subject</p>
+              <Link href="/admin/subjects-manager" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>Manage subjects →</Link>
             </div>
-          )}
+            <div style={{ padding: '0 20px' }}>
+              {subjectRows.length > 0 ? (
+                subjectRows.map(r => (
+                  <SubjectRow
+                    key={r.subject.id}
+                    subject={r.subject}
+                    questionCount={r.questionCount}
+                    topicCount={r.topicCount}
+                    attemptCount={r.attemptCount}
+                    accuracy={r.accuracy}
+                  />
+                ))
+              ) : (
+                <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                  <p style={{ fontSize: 28, marginBottom: 8 }}>📭</p>
+                  <p style={{ fontWeight: 800, color: '#111827', marginBottom: 4 }}>No subjects set up yet</p>
+                  <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>Add subjects and upload questions to get started.</p>
+                  <Link href="/admin/subjects-manager" style={{ display: 'inline-block', padding: '9px 18px', background: '#4f46e5', color: '#fff', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                    Set up subjects →
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* ── RIGHT: sidebar widgets ── */}
+        {/* ── RIGHT sidebar ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Activity chart placeholder */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 16 }}>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 12 }}>ACTIVITY · 14 DAYS</p>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 60 }}>
-              {[40, 65, 30, 80, 55, 70, 45, 90, 60, 75, 50, 85, 70, 95].map((h, i) => (
-                <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: 3, background: '#e9d5ff', transition: 'height .5s' }}
-                  className="hover:bg-violet-400" />
+          {/* Quick actions */}
+          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', padding: 14 }}>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#9ca3af', marginBottom: 10 }}>QUICK ACTIONS</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                { icon: '⬆️', label: 'Upload Questions',  sub: 'Add from PDF',              href: '/admin/questions/upload' },
+                { icon: '🔍', label: 'Question Bank',     sub: `${totalQs} questions`,       href: '/admin/questions' },
+                { icon: '🌿', label: 'Topic Tree',        sub: 'Manage curriculum',           href: '/admin/curriculum' },
+                { icon: '⭐', label: 'Core Topics',       sub: 'Set exam frequency',          href: '/admin/core-topics' },
+                { icon: '📈', label: 'Analytics',         sub: 'Student performance',         href: '/admin/analytics' },
+              ].map(a => (
+                <Link key={a.href} href={a.href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: '#f9fafb', border: '1px solid #f3f4f6', textDecoration: 'none', transition: 'border-color .12s' }}>
+                  <span style={{ fontSize: 15, width: 22, textAlign: 'center', flexShrink: 0 }}>{a.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{a.label}</p>
+                    <p style={{ fontSize: 10, color: '#9ca3af' }}>{a.sub}</p>
+                  </div>
+                  <span style={{ fontSize: 12, color: '#d1d5db' }}>›</span>
+                </Link>
               ))}
             </div>
           </div>
 
-          {/* Quick actions */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 10 }}>QUICK ACTIONS</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              <QuickAction icon="◼" label="All Content" sub={`${(subtopics ?? []).length} subtopics`} href="/admin/curriculum" />
-              <QuickAction icon="◎" label="Students" sub={`${totalStudents} enrolled`} href="/admin/users" />
-              <QuickAction icon="◇" label="Question Bank" sub={`${totalQs} questions`} href="/admin/questions" />
-              <QuickAction icon="↑" label="Upload Questions" sub="Add from PDFs" href="/admin/questions/upload" />
-            </div>
-          </div>
-
-          {/* Needs attention */}
-          {(() => {
-            const unpublished = (subtopics ?? []).filter(s => s.lesson_status !== 'published').length
-            const inReview    = (subtopics ?? []).filter(s => s.lesson_status === 'in_review').length
-            if (!unpublished && !inReview) return null
-            return (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
-                <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af', marginBottom: 10 }}>NEEDS ATTENTION</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {inReview > 0 && (
-                    <Link href="/admin/reviewers" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a', textDecoration: 'none' }}>
-                      <span style={{ fontSize: 13 }}>🔍</span>
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>{inReview} lessons in review</p>
-                        <p style={{ fontSize: 10, color: '#d97706' }}>Awaiting approval</p>
-                      </div>
-                    </Link>
-                  )}
-                  {unpublished > 0 && (
-                    <Link href="/admin/curriculum" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: '#f9fafb', border: '1px solid #e5e7eb', textDecoration: 'none' }}>
-                      <span style={{ fontSize: 13 }}>📝</span>
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{unpublished} unpublished</p>
-                        <p style={{ fontSize: 10, color: '#9ca3af' }}>Drafts + in review</p>
-                      </div>
-                    </Link>
-                  )}
-                </div>
+          {/* Recent uploads */}
+          {(recentQs ?? []).length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#9ca3af' }}>RECENTLY ADDED</p>
+                <Link href="/admin/questions" style={{ fontSize: 10, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>All →</Link>
               </div>
-            )
-          })()}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {(recentQs ?? []).map(q => (
+                  <div key={q.id} style={{ padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                    <p style={{ fontSize: 11, color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {q.question_text?.slice(0, 60)}{(q.question_text?.length ?? 0) > 60 ? '…' : ''}
+                    </p>
+                    <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>
+                      {new Date(q.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Schools */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 14 }}>
+          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', padding: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af' }}>SCHOOLS</p>
-              <Link href="/admin/schools" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>All →</Link>
+              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#9ca3af' }}>SCHOOLS</p>
+              <Link href="/admin/schools" style={{ fontSize: 10, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>All →</Link>
             </div>
-            {(schools ?? []).slice(0, 4).map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: 13 }}>🏫</span>
-                <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</p>
-              </div>
-            ))}
-            {(schools?.length ?? 0) === 0 && <p style={{ fontSize: 12, color: '#9ca3af' }}>No partner schools yet</p>}
+            {(schools ?? []).length > 0 ? (
+              (schools ?? []).slice(0, 5).map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
+                  <span style={{ fontSize: 13 }}>🏫</span>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</p>
+                </div>
+              ))
+            ) : (
+              <p style={{ fontSize: 12, color: '#9ca3af' }}>No partner schools yet</p>
+            )}
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

@@ -1,15 +1,24 @@
 'use client'
 // src/contexts/PointsContext.js
-// ─────────────────────────────────────────────────────────────────────────────
-// UPDATED:
-//   awardPoints(reason, referenceId, extraData)
-//   extraData = { correct, total } for practice_complete
-//   Passed through to /api/points/award so server can calculate proportional pts
-//
-//   Toast now shows actual awarded points (from API response), not the old flat value
-// ─────────────────────────────────────────────────────────────────────────────
+// XP is stored in localStorage so it survives layout re-renders between pages.
+// PointsProvider takes initialTotal from the server but always uses the higher
+// of (localStorage, initialTotal) — so a just-earned XP update isn't wiped
+// when the layout Server Component re-fetches a stale profile.total_points.
 
-import { createContext, useContext, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+
+const LS_KEY = 'ep_total_xp'
+
+function readCachedXP() {
+  if (typeof window === 'undefined') return 0
+  try { return parseInt(localStorage.getItem(LS_KEY) ?? '0', 10) || 0 } catch { return 0 }
+}
+
+function writeCachedXP(val) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(LS_KEY, String(val)) } catch {}
+}
 
 const PointsContext = createContext({
   awardPoints: async () => {},
@@ -26,14 +35,64 @@ const REASON_LABELS = {
 }
 
 export function PointsProvider({ children, initialTotal = 0 }) {
-  const [totalPoints, setTotalPoints] = useState(initialTotal)
-  const [toast,       setToast]       = useState(null)
+  // Start with the best known value: max(server, localStorage)
+  const [totalPoints, setTotalPointsRaw] = useState(() => {
+    const cached = readCachedXP()
+    return Math.max(initialTotal, cached)
+  })
+  const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
+
+  // Keep localStorage in sync whenever totalPoints changes
+  useEffect(() => { writeCachedXP(totalPoints) }, [totalPoints])
+
+  // On mount: reconcile with the DB directly so we never show a stale/zero value.
+  // This is the authoritative sync — localStorage is a cache, DB is truth.
+  useEffect(() => {
+    async function reconcile() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('total_points')
+          .eq('id', user.id)
+          .single()
+        const dbVal = prof?.total_points ?? 0
+        if (dbVal > 0) {
+          // DB value wins if it's higher than both localStorage and current state
+          setTotalPointsRaw(prev => {
+            const best = Math.max(prev, dbVal)
+            writeCachedXP(best)
+            return best
+          })
+        }
+      } catch { /* non-fatal */ }
+    }
+    reconcile()
+  }, []) // eslint-disable-line
+
+  // Also sync when server layout re-renders with a fresher initialTotal prop
+  useEffect(() => {
+    if (initialTotal > 0) {
+      setTotalPointsRaw(prev => {
+        const best = Math.max(prev, initialTotal)
+        writeCachedXP(best)
+        return best
+      })
+    }
+  }, [initialTotal]) // eslint-disable-line
+
+  const setTotalPoints = useCallback((val) => {
+    setTotalPointsRaw(val)
+    writeCachedXP(val)
+  }, [])
 
   const showToast = useCallback((reason, points) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ reason, points, id: Date.now() })
-    toastTimer.current = setTimeout(() => setToast(null), 3000)
+    toastTimer.current = setTimeout(() => setToast(null), 3500)
   }, [])
 
   const awardPoints = useCallback(async (reason, referenceId = null, extraData = {}) => {
@@ -41,23 +100,19 @@ export function PointsProvider({ children, initialTotal = 0 }) {
       const res = await fetch('/api/points/award', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason,
-          reference_id: referenceId,
-          ...extraData, // spreads { correct, total } for practice_complete
-        }),
+        body: JSON.stringify({ reason, reference_id: referenceId, ...extraData }),
       })
       const data = await res.json()
       if (data.awarded) {
         setTotalPoints(data.new_total)
-        showToast(reason, data.points_awarded) // use actual awarded amount
+        showToast(reason, data.points_awarded)
       }
       return data
     } catch (err) {
       console.error('[PointsContext] awardPoints failed:', err)
       return null
     }
-  }, [showToast])
+  }, [showToast, setTotalPoints])
 
   return (
     <PointsContext.Provider value={{ awardPoints, totalPoints, setTotalPoints, toast }}>
@@ -77,15 +132,23 @@ function PointsToast({ toast, onDismiss }) {
   return (
     <button
       onClick={onDismiss}
-      className="fixed top-20 left-1/2 -translate-x-1/2 z-[999]
-                 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl
-                 bg-indigo-600 text-white text-sm font-black
-                 animate-in slide-in-from-top-4 duration-300"
+      style={{
+        position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 999, display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 20px', borderRadius: 20,
+        background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+        border: '1px solid rgba(255,255,255,.2)',
+        boxShadow: '0 8px 32px rgba(79,70,229,.4)',
+        color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+        whiteSpace: 'nowrap', letterSpacing: '-0.01em',
+        animation: 'ep-toast-in .35s cubic-bezier(0.34,1.56,0.64,1)',
+      }}
     >
-      <span className="text-base">{meta.emoji}</span>
-      <div className="text-left">
-        <p className="font-black leading-tight">{meta.label}</p>
-        <p className="text-indigo-200 text-xs font-medium">+{toast.points} points</p>
+      <style>{`@keyframes ep-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}`}</style>
+      <span style={{ fontSize: 16 }}>{meta.emoji}</span>
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ fontWeight: 900, lineHeight: 1.2 }}>{meta.label}</p>
+        <p style={{ color: 'rgba(255,255,255,.7)', fontSize: 11, fontWeight: 600 }}>+{toast.points} XP earned</p>
       </div>
     </button>
   )

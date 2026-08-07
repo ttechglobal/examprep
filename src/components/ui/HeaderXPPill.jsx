@@ -30,8 +30,8 @@ export default function HeaderXPPill({ points: initialPoints, streak = 0 }) {
   const isDark = useIsDark()
   const [pulse, setPulse] = useState(false)
 
-  // Use context points (live) but fall back to SSR-passed initial value
-  const displayPoints = totalPoints > 0 ? totalPoints : (initialPoints ?? 0)
+  // totalPoints from context is always authoritative (backed by localStorage)
+  const displayPoints = totalPoints
   const formattedXP = displayPoints >= 1000
     ? `${(displayPoints / 1000).toFixed(1)}k`
     : String(displayPoints)

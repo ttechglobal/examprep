@@ -33,7 +33,7 @@ import { applyExamFilter, normaliseExamType } from '@/lib/examFilter'
 const VALID_SOURCES = ['past_paper', 'ai_generated', 'all']
 
 function normaliseSource(raw) {
-  return VALID_SOURCES.includes(raw) ? raw : 'past_paper'
+  return VALID_SOURCES.includes(raw) ? raw : 'all'
 }
 
 // Applies the source filter to a query, unless source is 'all'
@@ -50,6 +50,8 @@ export async function GET(request) {
   const mode         = searchParams.get('mode') ?? 'practice'
   const subjectNames = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
   const source       = normaliseSource(searchParams.get('source'))
+  const year         = searchParams.get('year') ?? null
+  const weakTopicIds = searchParams.get('weak_topic_ids')?.split(',').filter(Boolean) ?? []
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -75,11 +77,19 @@ export async function GET(request) {
     return NextResponse.json({ error: 'No subjects found' }, { status: 400 })
   }
 
-  const { data: subjectRows } = await service
+  let { data: subjectRows } = await service
     .from('subjects').select('id, name, slug').in('name', subjects)
 
+  // Fallback: slug-based lookup for name mismatches (e.g. "Use of English" → "use-of-english")
   if (!subjectRows?.length) {
-    return NextResponse.json({ error: 'Subjects not found in database' }, { status: 404 })
+    const slugs = subjects.map(s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+    const { data: bySlug } = await service
+      .from('subjects').select('id, name, slug').in('slug', slugs)
+    subjectRows = bySlug ?? []
+  }
+
+  if (!subjectRows?.length) {
+    return NextResponse.json({ questions: [], source, error: 'Subject not found: ' + subjects.join(', ') })
   }
 
   const legacyExamFilter = examType === 'BOTH'
@@ -100,6 +110,8 @@ export async function GET(request) {
       const selectClause = `
         id, question_text, options, correct_answer, explanation,
         difficulty, subtopic_id, topic_id, subject_id, source,
+        passage_text, passage_image_url,
+        has_image, image_url, image_description,
         subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
       `
       let query = service
@@ -144,6 +156,8 @@ export async function GET(request) {
     const selectClause = `
       id, question_text, options, correct_answer, explanation,
       difficulty, subtopic_id, topic_id, subject_id, source,
+      passage_text, passage_image_url,
+      has_image, image_url, image_description,
       subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
     `
 
@@ -183,6 +197,62 @@ export async function GET(request) {
     }
   }
 
+  // ── BRANCH B2: Year-specific practice ─────────────────────────────────────
+  else if (year) {
+    const subject = subjectRows[0]
+    const selectClause = `id, question_text, options, correct_answer, explanation,
+      difficulty, subtopic_id, topic_id, subject_id, source, year,
+      passage_text, passage_image_url, has_image, image_url, image_description,
+      subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )`
+
+    let { data: questions } = await applyExamFilter(
+      applySourceFilter(service.from('questions').select(selectClause)
+        .eq('subject_id', subject.id).eq('is_active', true).eq('year', year).limit(count + 20), source),
+      examType
+    )
+    if (!questions?.length) {
+      const fb = await applySourceFilter(service.from('questions').select(selectClause)
+        .eq('subject_id', subject.id).eq('is_active', true).eq('year', year).limit(count + 20), source)
+      questions = fb.data ?? []
+    }
+    if (questions?.length) {
+      allQuestions.push(...questions.sort(() => Math.random() - 0.5).slice(0, count).map(q => ({
+        ...q, subject_name: subject.name, subject_slug: subject.slug,
+        subtopic_name: q.subtopics?.name ?? '', topic_name: q.subtopics?.topics?.name ?? '',
+        topic_id: q.subtopics?.topics?.id ?? q.topic_id ?? null,
+      })))
+    }
+  }
+
+  // ── BRANCH B3: Weak-areas practice ────────────────────────────────────────
+  else if (weakTopicIds.length > 0) {
+    const subject = subjectRows[0]
+    const selectClause = `id, question_text, options, correct_answer, explanation,
+      difficulty, subtopic_id, topic_id, subject_id, source,
+      passage_text, passage_image_url, has_image, image_url, image_description,
+      subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )`
+
+    let { data: questions } = await applyExamFilter(
+      applySourceFilter(service.from('questions').select(selectClause)
+        .in('topic_id', weakTopicIds).eq('subject_id', subject.id)
+        .eq('is_active', true).limit(count + 30), source),
+      examType
+    )
+    if (!questions?.length) {
+      const fb = await applySourceFilter(service.from('questions').select(selectClause)
+        .in('topic_id', weakTopicIds).eq('subject_id', subject.id)
+        .eq('is_active', true).limit(count + 30), source)
+      questions = fb.data ?? []
+    }
+    if (questions?.length) {
+      allQuestions.push(...questions.sort(() => Math.random() - 0.5).slice(0, count).map(q => ({
+        ...q, subject_name: subject.name, subject_slug: subject.slug,
+        subtopic_name: q.subtopics?.name ?? '', topic_name: q.subtopics?.topics?.name ?? '',
+        topic_id: q.subtopics?.topics?.id ?? q.topic_id ?? null,
+      })))
+    }
+  }
+
   // ── BRANCH C: Normal practice — sequencer applied ──────────────────────────
   else {
     const perSubject = Math.ceil(count / subjectRows.length)
@@ -204,6 +274,8 @@ export async function GET(request) {
       const selectClause = `
         id, question_text, options, correct_answer, explanation,
         difficulty, subtopic_id, topic_id, subject_id, source,
+        passage_text, passage_image_url,
+        has_image, image_url, image_description,
         subtopics ( id, name, slug, topic_id, topics ( id, name, slug ) )
       `
 

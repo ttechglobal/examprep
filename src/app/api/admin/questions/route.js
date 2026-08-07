@@ -120,3 +120,84 @@ export async function GET(request) {
     limit,
   })
 }
+
+export async function POST(request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const db = svc()
+  const { questions, examType, subjectId, batchId, defaultYear } = await request.json()
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return NextResponse.json({ error: 'questions array is required' }, { status: 400 })
+  }
+  if (!subjectId) {
+    return NextResponse.json({ error: 'subjectId is required' }, { status: 400 })
+  }
+
+  const saved  = []
+  const errors = []
+
+  for (const q of questions) {
+    try {
+      const row = {
+        // Core content
+        question_text:      q.question_text?.trim() ?? '',
+        options:            q.options ?? {},
+        correct_answer:     q.correct_answer ?? '',
+        explanation:        q.explanation ?? {},
+        difficulty:         q.difficulty ?? 'medium',
+
+        // Passage / shared context — new fields
+        passage_text:       q.passage_text     ?? null,
+        passage_image_url:  q.passage_image_url ?? null,
+
+        // Images
+        has_image:          q.has_image         ?? false,
+        image_url:          q.image_url         ?? null,
+        image_description:  q.image_description ?? null,
+
+        // Classification
+        exam_type:    examType,
+        subject_id:   subjectId,
+        topic_id:     q.topic_id    ?? null,
+        subtopic_id:  q.subtopic_id ?? null,
+        year:         q.year || defaultYear || null,
+        source:       q.source ?? 'past_paper',
+
+        // State
+        is_active:  true,
+        is_flagged: false,
+      }
+
+      const { data, error } = await db
+        .from('questions')
+        .insert(row)
+        .select('id')
+        .single()
+
+      if (error) {
+        errors.push(`Q "${q.question_text?.slice(0, 40)}…": ${error.message}`)
+      } else {
+        saved.push(data.id)
+      }
+    } catch (err) {
+      errors.push(`Q "${q.question_text?.slice(0, 40)}…": ${err.message}`)
+    }
+  }
+
+  // Update batch record with final counts
+  if (batchId) {
+    await db
+      .from('upload_batches')
+      .update({ saved: saved.length, errors: errors.length })
+      .eq('id', batchId)
+  }
+
+  return NextResponse.json({
+    saved:  saved.length,
+    ids:    saved,
+    errors,
+  })
+}

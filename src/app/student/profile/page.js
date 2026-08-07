@@ -20,6 +20,8 @@ import { useRouter } from 'next/navigation'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
 import GoalModal from '@/components/dashboard/GoalModal'
+import CoachBanner from '@/components/ui/CoachBanner'
+import { profileCoach } from '@/lib/coach'
 import Link from 'next/link'
 
 const ICONS = {
@@ -146,7 +148,7 @@ export default function ProfilePage() {
 
       const [{ data: prof }, { data: paths }, { data: prog }, { data: attempts }, { data: streak }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(name)').eq('student_id', user.id),
+        supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name, exam_type)').eq('student_id', user.id),
         supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
         supabase.from('question_attempts').select('is_correct').eq('student_id', user.id),
         supabase.from('student_streaks').select('current_streak').eq('student_id', user.id).maybeSingle(),
@@ -158,11 +160,12 @@ export default function ProfilePage() {
 
       const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
       setSubjectMastery((paths ?? []).map(path => {
-        const name  = path.subjects?.name ?? ''
-        const ids   = path.ordered_subtopic_ids ?? []
-        const done  = ids.filter(id => completedIds.has(id)).length
-        const pct   = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
-        return { name, pct, completed: done, total: ids.length }
+        const name     = path.subjects?.name ?? ''
+        const examType = path.subjects?.exam_type ?? ''
+        const ids      = path.ordered_subtopic_ids ?? []
+        const done     = ids.filter(id => completedIds.has(id)).length
+        const pct      = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
+        return { id: path.subject_id, name, examType, pct, completed: done, total: ids.length }
       }))
 
       const totalQs = (attempts ?? []).length
@@ -207,9 +210,18 @@ export default function ProfilePage() {
   const badges    = buildBadges(profile, stats)
   const jambTotal = profile?.jamb_total_target ?? 0
   const streakColor = stats.streak >= 14 ? '#fbbf24' : stats.streak >= 7 ? '#f87171' : 'var(--text-prim)'
+  const firstName = (profile?.full_name ?? '').split(' ')[0]
+
+  const now      = new Date()
+  const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
+  const daysToExam = Math.max(0, Math.ceil((nextJune - now) / 86400000))
+  const coach = profileCoach({ firstName, totalQs: stats.totalQs, streakDays: stats.streak, examType, daysToExam })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 112 }}>
+
+      {/* ── Coach banner ── */}
+      <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
 
       {/* Toast */}
       {message && (
@@ -275,17 +287,26 @@ export default function ProfilePage() {
           header={<><SectionLabel>Subject mastery</SectionLabel><Link href="/student/progress" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>Details →</Link></>}
         >
           {subjectMastery.map((sub, i) => {
-            const colors   = resolveSubjectColors(sub.name, isDark)
-            const pctColor = sub.pct >= 70 ? '#4ade80' : sub.pct >= 40 ? '#fbbf24' : '#f87171'
-            const status   = sub.pct >= 70 ? 'Strong' : sub.pct >= 40 ? 'Building' : 'Starting'
+            const colors    = resolveSubjectColors(sub.name, isDark)
+            const pctColor  = sub.pct >= 70 ? '#4ade80' : sub.pct >= 40 ? '#fbbf24' : '#f87171'
+            const status    = sub.pct >= 70 ? 'Strong' : sub.pct >= 40 ? 'Building' : 'Starting'
+            // Check if another subject has the same name (e.g. Mathematics WAEC + Mathematics JAMB)
+            const isDuplicate = subjectMastery.filter(s => s.name === sub.name).length > 1
             return (
-              <div key={sub.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < subjectMastery.length - 1 ? '1px solid var(--border)' : 'none' }}>
+              <div key={sub.id ?? `${sub.name}-${sub.examType}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < subjectMastery.length - 1 ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
                   {getIcon(sub.name)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{sub.name}</p>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {sub.name}
+                      {isDuplicate && sub.examType && (
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: sub.examType === 'JAMB' ? 'rgba(139,92,246,.12)' : 'rgba(59,130,246,.12)', color: sub.examType === 'JAMB' ? '#7c3aed' : '#1d4ed8' }}>
+                          {sub.examType}
+                        </span>
+                      )}
+                    </p>
                     <span style={{ fontSize: 11, fontWeight: 900, color: pctColor }}>{sub.pct}%</span>
                   </div>
                   <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>

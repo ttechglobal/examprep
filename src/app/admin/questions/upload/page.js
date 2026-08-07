@@ -13,6 +13,26 @@ const DIFFICULTY_COLORS = {
   hard:   'bg-red-100 text-red-700',
 }
 
+const EXAM_STYLE = {
+  WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
+  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+}
+
+function ExamBadge({ exam }) {
+  if (!exam) return null
+  const s = EXAM_STYLE[exam] ?? { bg: '#f9fafb', color: '#6b7280', border: '#e5e7eb' }
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      display: 'inline-block',
+    }}>
+      {exam}
+    </span>
+  )
+}
+
 const CONFIDENCE_BADGE = (conf, hasMapping) => {
   if (!hasMapping) return { label: 'Untagged', cls: 'bg-red-100 text-red-700' }
   if (conf >= 0.7)  return { label: `${Math.round(conf * 100)}% match`, cls: 'bg-green-100 text-green-700' }
@@ -176,13 +196,16 @@ function ImageDropZone({ question, examType, subjectName, questionIndex, onImage
 
 // ── Question preview card (tag review step 4) ─────────────────────────────────
 function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdateMapping, onRemove, onImageUploaded }) {
-  const [expanded,          setExpanded]  = useState(false)
-  const [selectedTopicId,   setTopicId]   = useState(question.topic_id    ?? '')
-  const [selectedSubtopicId, setSubId]   = useState(question.subtopic_id ?? '')
+  const [expanded, setExpanded] = useState(
+    !question.subtopic_id || question._needsReview
+  )
+  const [selectedTopicId,    setTopicId] = useState(question.topic_id    ?? '')
+  const [selectedSubtopicId, setSubId]  = useState(question.subtopic_id ?? '')
 
   const subtopics = topics.find(t => t.id === selectedTopicId)?.subtopics ?? []
   const isImage   = question._hasImage
   const badge     = CONFIDENCE_BADGE(question._matchConfidence ?? 0, !!question.subtopic_id)
+  const suggestions = question._suggestions ?? []
 
   const handleTopicChange = (topicId) => {
     setTopicId(topicId)
@@ -195,11 +218,24 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
     onUpdateMapping(question._index, { topic_id: selectedTopicId, subtopic_id: subId })
   }
 
+  const handleSuggestionClick = (suggestion) => {
+    setTopicId(suggestion.topic.id)
+    setSubId(suggestion.subtopic.id)
+    onUpdateMapping(question._index, {
+      topic_id:    suggestion.topic.id,
+      subtopic_id: suggestion.subtopic.id,
+    })
+  }
+
+  const currentSubtopicName = topics
+    .flatMap(t => t.subtopics ?? [])
+    .find(s => s.id === selectedSubtopicId)?.name ?? ''
+  const currentTopicName = topics.find(t => t.id === selectedTopicId)?.name ?? ''
+
   return (
     <div className={`bg-white border rounded-2xl overflow-hidden transition-colors ${
       !question.subtopic_id ? 'border-red-200' : question._needsReview ? 'border-amber-200' : 'border-gray-200'
     }`}>
-      {/* Card header — always visible */}
       <div
         className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
         onClick={() => setExpanded(e => !e)}
@@ -220,11 +256,21 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>
               {badge.label}
             </span>
+            {question.subtopic_id && (
+              <span className="text-[10px] text-gray-500 truncate max-w-[200px]">
+                {currentTopicName} → {currentSubtopicName}
+              </span>
+            )}
             {isImage && (
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                 question.image_url ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
               }`}>
                 {question.image_url ? '🖼 Image ✓' : '🖼 Image needed'}
+              </span>
+            )}
+            {question.passage_text && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                📄 Passage
               </span>
             )}
           </div>
@@ -240,41 +286,95 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
         </div>
       </div>
 
-      {/* Expanded controls */}
       {expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3 bg-gray-50">
-          {/* Topic / subtopic selects */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Topic</label>
-              <select
-                value={selectedTopicId}
-                onChange={e => handleTopicChange(e.target.value)}
-                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
-              >
-                <option value="">Select topic…</option>
-                {topics.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+
+          {/* AI suggested label */}
+          {(question._aiTopicTitle || question._aiSubtopicTitle) && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+              <p className="text-[10px] font-bold text-indigo-500 uppercase mb-0.5">AI suggested</p>
+              <p className="text-xs text-indigo-800 font-medium">
+                {question._aiTopicTitle}
+                {question._aiTopicTitle && question._aiSubtopicTitle && ' → '}
+                {question._aiSubtopicTitle}
+              </p>
             </div>
+          )}
+
+          {/* One-click suggestions */}
+          {suggestions.length > 0 && (
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Subtopic</label>
-              <select
-                value={selectedSubtopicId}
-                onChange={e => handleSubtopicChange(e.target.value)}
-                disabled={!selectedTopicId}
-                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-gray-50 disabled:text-gray-300 bg-white"
-              >
-                <option value="">Select subtopic…</option>
-                {subtopics.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Top matches — click to apply</p>
+              <div className="flex flex-col gap-1.5">
+                {suggestions.map((s, i) => {
+                  const isSelected = selectedSubtopicId === s.subtopic.id
+                  const pct = Math.round(s.score * 100)
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleSuggestionClick(s)}
+                      className={`w-full text-left px-3 py-2 rounded-xl border text-xs transition-colors ${
+                        isSelected
+                          ? 'border-indigo-400 bg-indigo-50 text-indigo-800'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{s.label}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${pct >= 65 ? 'bg-green-400' : pct >= 35 ? 'bg-amber-400' : 'bg-gray-300'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] font-bold ${pct >= 65 ? 'text-green-600' : pct >= 35 ? 'text-amber-600' : 'text-gray-400'}`}>
+                            {pct}%
+                          </span>
+                          {isSelected && <span className="text-indigo-500 text-[10px] font-black">✓</span>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Manual override dropdowns */}
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Manual override</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Topic</label>
+                <select
+                  value={selectedTopicId}
+                  onChange={e => handleTopicChange(e.target.value)}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                >
+                  <option value="">Select topic…</option>
+                  {topics.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Subtopic</label>
+                <select
+                  value={selectedSubtopicId}
+                  onChange={e => handleSubtopicChange(e.target.value)}
+                  disabled={!selectedTopicId}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-gray-50 disabled:text-gray-300 bg-white"
+                >
+                  <option value="">Select subtopic…</option>
+                  {subtopics.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Image drop zone — only for image questions */}
           {isImage && (
             <ImageDropZone
               question={question}
@@ -285,7 +385,6 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
             />
           )}
 
-          {/* Explanation preview */}
           {question.explanation?.correct && (
             <div className="bg-white rounded-xl px-3 py-2.5 border border-gray-100">
               <p className="text-xs font-bold text-gray-500 mb-0.5">Explanation</p>
@@ -302,6 +401,7 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
 export default function QuestionUploadPage() {
   const [step,             setStep]             = useState(1)
   const [examType,         setExamType]         = useState('')
+  const [uploadYear,       setUploadYear]       = useState('')
   const [subjects,         setSubjects]         = useState([])
   const [selectedSubject,  setSelectedSubject]  = useState(null)
   const [rawJson,          setRawJson]          = useState('')
@@ -312,11 +412,25 @@ export default function QuestionUploadPage() {
   const [saving,           setSaving]           = useState(false)
   const [saveResult,       setSaveResult]       = useState(null)
 
+  // ── FIX: Reload and filter subjects whenever examType changes ──────────────
+  // Previously subjects loaded once on mount with no exam filter, causing
+  // WAEC subjects to appear when JAMB was selected (and vice versa).
   useEffect(() => {
+    if (!examType) {
+      setSubjects([])
+      setSelectedSubject(null)
+      return
+    }
     fetch('/api/admin/subjects')
       .then(r => r.json())
-      .then(data => setSubjects(Array.isArray(data) ? data.filter(s => s.is_active) : []))
-  }, [])
+      .then(data => {
+        const filtered = Array.isArray(data)
+          ? data.filter(s => s.is_active && s.exam_type === examType)
+          : []
+        setSubjects(filtered)
+        setSelectedSubject(null) // clear stale selection when exam changes
+      })
+  }, [examType])
 
   useEffect(() => {
     if (rawJson.trim().length > 10) {
@@ -346,10 +460,15 @@ export default function QuestionUploadPage() {
         ...q,
         _index:           i,
         _hasImage:        hasImage,
-        topic_id:         match.topic?.id    ?? null,
-        subtopic_id:      match.subtopic?.id ?? null,
-        _needsReview:     match.needsReview,
-        _matchConfidence: match.confidence,
+        passage_text:       q.passage_text      ?? null,
+        passage_image_url:  q.passage_image_url ?? null,
+        topic_id:           match.topic?.id    ?? null,
+        subtopic_id:        match.subtopic?.id ?? null,
+        _needsReview:       match.needsReview,
+        _matchConfidence:   match.confidence,
+        _suggestions:       match.suggestions  ?? [],
+        _aiTopicTitle:      match.aiTopicTitle  ?? '',
+        _aiSubtopicTitle:   match.aiSubtopicTitle ?? '',
       }
     })
 
@@ -391,10 +510,11 @@ export default function QuestionUploadPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          questions: taggedQuestions,
+          questions: taggedQuestions.map(q => ({ ...q, year: q.year || uploadYear || null })),
           examType,
           subjectId: selectedSubject.id,
           batchId:   batch.id,
+          defaultYear: uploadYear || null,
         }),
       })
       const result = await res.json()
@@ -431,10 +551,11 @@ export default function QuestionUploadPage() {
         <div className="space-y-5">
           <h2 className="text-lg font-black text-gray-900">Select exam and subject</h2>
 
+          {/* Exam selector */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">Exam</label>
-            <div className="grid grid-cols-2 gap-3">
-              {['WAEC', 'JAMB'].map(e => (
+            <div className="grid grid-cols-3 gap-3">
+              {['WAEC', 'JAMB', 'IGCSE'].map(e => (
                 <button
                   key={e}
                   onClick={() => setExamType(e)}
@@ -450,33 +571,75 @@ export default function QuestionUploadPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Subject</label>
-            <div className="space-y-2">
-              {subjects.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSubject(s)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 text-left transition-colors ${
-                    selectedSubject?.id === s.id
-                      ? 'border-indigo-600 bg-indigo-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <span className={`text-sm font-bold ${
-                    selectedSubject?.id === s.id ? 'text-indigo-700' : 'text-gray-700'
-                  }`}>
-                    {s.name}
-                  </span>
-                  {selectedSubject?.id === s.id && (
-                    <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                    </svg>
-                  )}
-                </button>
-              ))}
+          {/* Subject selector — only shown after exam is picked, filtered to match */}
+          {examType && (
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Subject
+                <span className="ml-2 font-normal text-xs text-gray-400">
+                  — showing {examType} subjects only
+                </span>
+              </label>
+              {subjects.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-2xl">
+                  <p className="text-sm text-gray-500">No {examType} subjects found.</p>
+                  <Link href="/admin/subjects-manager" className="text-xs text-indigo-600 hover:underline mt-1 block">
+                    Add subjects in Subjects Manager →
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {subjects.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedSubject(s)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 text-left transition-colors ${
+                        selectedSubject?.id === s.id
+                          ? 'border-indigo-600 bg-indigo-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-bold ${
+                          selectedSubject?.id === s.id ? 'text-indigo-700' : 'text-gray-700'
+                        }`}>
+                          {s.name}
+                        </span>
+                        <ExamBadge exam={s.exam_type} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400">{s.question_count ?? 0} questions</span>
+                        {selectedSubject?.id === s.id && (
+                          <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* Year selector */}
+          {selectedSubject && (
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Year <span className="text-gray-400 font-normal text-xs">— which exam year is this batch from?</span>
+              </label>
+              <select
+                value={uploadYear}
+                onChange={e => setUploadYear(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+              >
+                <option value="">Mixed / Unknown</option>
+                {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button
             onClick={() => setStep(2)}
@@ -494,8 +657,9 @@ export default function QuestionUploadPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Copy the AI prompt</h2>
-              <p className="text-sm text-gray-500">
-                Paste this into Claude or Gemini along with your PDF or question text.
+              <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                {selectedSubject?.name} <ExamBadge exam={examType} />
+                — paste into Claude or Gemini with your PDF.
               </p>
             </div>
             <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
@@ -561,6 +725,7 @@ export default function QuestionUploadPage() {
                     ✓ {parseResult.stats?.total} questions detected
                     {parseResult.stats?.withWorkings > 0 && ` · ${parseResult.stats.withWorkings} with workings`}
                     {parseResult.stats?.withImages > 0 && ` · ${parseResult.stats.withImages} with images`}
+                    {parseResult.stats?.withPassage > 0 && ` · ${parseResult.stats.withPassage} with shared passage`}
                   </p>
                   <p className="text-xs text-green-600 mt-0.5">
                     {parseResult.stats?.easy} easy · {parseResult.stats?.medium} medium · {parseResult.stats?.hard} hard
@@ -595,12 +760,13 @@ export default function QuestionUploadPage() {
       {/* ── STEP 4: Tag Review ──────────────────────────────────────────────── */}
       {step === 4 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-black text-gray-900 mb-1">Review topic tagging</h2>
               <p className="text-sm text-gray-500">
-                AI auto-tagged {taggedQuestions.filter(q => q.subtopic_id).length} of {taggedQuestions.length} questions.
-                Review and fix any mismatches.
+                {taggedQuestions.filter(q => q.subtopic_id && !q._needsReview).length} auto-tagged ·{' '}
+                {taggedQuestions.filter(q => q._needsReview).length} need review ·{' '}
+                {taggedQuestions.filter(q => !q.subtopic_id).length} untagged
               </p>
             </div>
             <button onClick={() => setStep(3)} className="text-sm text-gray-400 hover:text-gray-600">← Back</button>
@@ -611,9 +777,7 @@ export default function QuestionUploadPage() {
               <p className="text-sm font-bold text-violet-800">
                 {missingImages} question{missingImages > 1 ? 's' : ''} need images
               </p>
-              <p className="text-xs text-violet-600 mt-0.5">
-                Expand each flagged question to upload the diagram.
-              </p>
+              <p className="text-xs text-violet-600 mt-0.5">Expand each flagged question to upload the diagram.</p>
             </div>
           )}
 
@@ -657,7 +821,7 @@ export default function QuestionUploadPage() {
         </div>
       )}
 
-      {/* ── STEP 5: Preview (exact student view + QA score) ─────────────────── */}
+      {/* ── STEP 5: Preview ─────────────────────────────────────────────────── */}
       {step === 5 && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -677,7 +841,6 @@ export default function QuestionUploadPage() {
 
               return (
                 <div key={q._index} className="border border-gray-200 rounded-2xl overflow-hidden">
-                  {/* Question meta strip */}
                   <div className="flex items-center gap-3 flex-wrap px-4 py-3 bg-gray-50 border-b border-gray-200">
                     <span className="text-xs font-black text-gray-400">Q{i + 1}</span>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[q.difficulty] ?? 'bg-gray-100 text-gray-500'}`}>
@@ -688,8 +851,6 @@ export default function QuestionUploadPage() {
                     <span className="text-xs text-gray-600 font-medium">{subtopicName}</span>
                     {q.year && <span className="text-xs text-gray-400 ml-auto">{q.year}</span>}
                   </div>
-
-                  {/* Exact student view */}
                   <div className="p-4 bg-white">
                     <QuestionStudentPreview question={q} showRawTab={true} />
                   </div>
@@ -735,6 +896,7 @@ export default function QuestionUploadPage() {
             <button
               onClick={() => {
                 setStep(1)
+                setExamType('')
                 setRawJson('')
                 setParseResult(null)
                 setTaggedQuestions([])

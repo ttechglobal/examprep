@@ -10,6 +10,7 @@ export default function SchoolSignupPage() {
 
   const [fullName, setFullName] = useState('')
   const [email,    setEmail]    = useState('')
+  const [phone,    setPhone]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
@@ -25,7 +26,7 @@ export default function SchoolSignupPage() {
 
     const { error: signupError } = await supabase.auth.signUp({
       email, password,
-      options: { data: { full_name: fullName }, emailRedirectTo: redirectTo },
+      options: { data: { full_name: fullName, phone }, emailRedirectTo: redirectTo },
     })
 
     if (signupError) { setError(signupError.message); setLoading(false); return }
@@ -86,6 +87,7 @@ export default function SchoolSignupPage() {
           {[
             { label: 'Your name', value: fullName, set: setFullName, type: 'text',     placeholder: 'e.g. Mrs Adaeze Okafor' },
             { label: 'Email address', value: email, set: setEmail,   type: 'email',    placeholder: 'you@school.edu.ng' },
+            { label: 'Phone number', value: phone, set: setPhone,    type: 'tel',      placeholder: 'e.g. 08012345678' },
             { label: 'Password',   value: password, set: setPassword, type: 'password', placeholder: 'At least 8 characters' },
           ].map(({ label, value, set, type, placeholder }) => (
             <div key={label}>
