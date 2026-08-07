@@ -261,22 +261,22 @@ export default function GoalModal({ profile, onClose, onSave }) {
     }
     const { error: err } = await supabase.from('profiles').update(updates).eq('id', user.id)
     if (err) { setSaving(false); setError(err.message); return }
+    console.debug('[GoalModal] profile saved. allSubjects:', allSubjects, 'examType:', examType)
 
     // Ensure student_learning_paths rows exist for all saved subjects.
-    // GoalModal only updates profiles.subjects — this makes sure the setup page
-    // can find subjects even if the student never took a diagnostic.
     try {
-      const { data: subjectRows } = await supabase
+      const { data: subjectRows, error: subErr } = await supabase
         .from('subjects')
         .select('id, name, exam_type')
         .in('name', allSubjects)
-        .in('exam_type', ['WAEC', 'JAMB'])
+      console.debug('[GoalModal] subjects found in DB:', subjectRows?.map(s => s.name), subErr)
 
       if (subjectRows?.length) {
-        const { data: existingPaths } = await supabase
+        const { data: existingPaths, error: epErr } = await supabase
           .from('student_learning_paths')
           .select('subject_id')
           .eq('student_id', user.id)
+        console.debug('[GoalModal] existingPaths:', existingPaths, epErr)
         const existingIds = new Set((existingPaths ?? []).map(p => p.subject_id))
         const newPaths = subjectRows
           .filter(s => !existingIds.has(s.id))
@@ -286,13 +286,17 @@ export default function GoalModal({ profile, onClose, onSave }) {
             ordered_subtopic_ids: [],
             last_calculated_at: new Date().toISOString(),
           }))
+        console.debug('[GoalModal] newPaths to insert:', newPaths.length, newPaths.map(p => p.subject_id))
         if (newPaths.length) {
-          await supabase.from('student_learning_paths')
+          const { error: upsertErr } = await supabase.from('student_learning_paths')
             .upsert(newPaths, { onConflict: 'student_id,subject_id', ignoreDuplicates: true })
+          console.debug('[GoalModal] upsert result:', upsertErr ? `ERROR: ${upsertErr.message}` : 'OK')
         }
+      } else {
+        console.warn('[GoalModal] No matching subjects found in DB for:', allSubjects)
       }
     } catch (e) {
-      console.error('[GoalModal] learning_paths sync:', e.message)
+      console.error('[GoalModal] learning_paths sync error:', e.message, e.stack)
     }
 
     setSaving(false)

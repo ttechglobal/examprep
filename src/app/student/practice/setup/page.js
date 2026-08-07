@@ -232,33 +232,29 @@ export default function PracticeSetupPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const [{ data: prof }, { data: paths }] = await Promise.all([
+      // Load profile (for exam_type) and subjects (via robust API) in parallel
+      const [{ data: prof }, subjectsRes] = await Promise.all([
         supabase.from('profiles').select('exam_type, subjects').eq('id', user.id).single(),
-        supabase.from('student_learning_paths')
-          .select('subject_id, subjects(id, name, exam_type, is_active)')
-          .eq('student_id', user.id),
+        fetch('/api/student/subjects'),
       ])
+      const allSubjectsFromAPI = subjectsRes.ok ? await subjectsRes.json() : []
 
       const examType = prof?.exam_type ?? 'WAEC'
       setProfileExamType(examType)
       setExam(examType === 'JAMB' ? 'JAMB' : 'WAEC')
 
-      if (paths && paths.length > 0) {
-        setAllPaths(paths)
-      } else if (prof?.subjects?.length) {
-        // Fallback: look up subjects by name from the subjects table
-        const { data: subjectRows } = await supabase
-          .from('subjects')
-          .select('id, name, exam_type, is_active')
-          .in('name', prof.subjects)
-          .in('exam_type', ['WAEC', 'JAMB', 'BOTH', 'both'])
-        // Shape into the same format as learning_path rows
-        const fakePaths = (subjectRows ?? []).map(s => ({
-          subject_id: s.id,
-          subjects:   s,
-        }))
-        setAllPaths(fakePaths)
-      }
+      // Shape API response into allPaths format for compatibility
+      const fakePaths = (allSubjectsFromAPI ?? []).map(s => ({
+        subject_id: s.id,
+        subjects: {
+          id:        s.id,
+          name:      s.name,
+          slug:      s.slug,
+          exam_type: s.exam_type,
+          is_active: true,
+        },
+      }))
+      setAllPaths(fakePaths)
       setLoadingData(false)
     }
     load()
@@ -287,12 +283,10 @@ export default function PracticeSetupPage() {
 
     const filtered = allPaths
       .map(p => p.subjects)
-      .filter(s => s && s.is_active !== false && (
-        s.exam_type === exam ||
-        s.exam_type === 'BOTH' ||
-        s.exam_type === 'both'
-      ))
+      .filter(s => s && s.is_active !== false)
       .map(s => ({ id: s.id, name: s.name, exam_type: s.exam_type, emoji: SUBJECT_ICONS[s.name] ?? '📝' }))
+      // Deduplicate by name (a subject may appear in multiple paths)
+      .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i)
       .sort((a, b) => a.name.localeCompare(b.name))
 
     setSubjects(filtered)
@@ -399,7 +393,7 @@ export default function PracticeSetupPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
+    <div>
       {/* ── Page title row — inside layout content, NO second header ── */}
       {/* Page header — centred */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0 24px' }}>
@@ -432,7 +426,7 @@ export default function PracticeSetupPage() {
       </div>
 
       {/* ── BODY — extra bottom padding clears the sticky start button ── */}
-      <div style={{ paddingBottom: 96, maxWidth: 560, margin: '0 auto' }}>
+      <div style={{ paddingBottom: 96, maxWidth: 560 }}>
 
         {/* ── 1. EXAM — only show tabs the profile has ── */}
         {examTabs.length > 0 && (
@@ -686,7 +680,7 @@ export default function PracticeSetupPage() {
       </div>
 
       {/* Desktop: inline button below content */}
-      <div className="hidden lg:block" style={{ maxWidth: 560, margin: '0 auto', paddingBottom: 40 }}>
+      <div className="hidden lg:block" style={{ maxWidth: 560, paddingBottom: 40 }}>
         <button
           onClick={handleStart}
           disabled={!canStart}

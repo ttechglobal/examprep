@@ -282,9 +282,11 @@ function ReviewExplModal({ question, selectedKey, accent, onClose, onNext, isLas
   const workings      = expl.workings ?? []
   const myWrongReason = !isCorrect && selectedKey ? (wrongOptions[selectedKey] ?? '') : ''
   const otherWrong    = Object.entries(wrongOptions).filter(([k]) => k !== question?.correct_answer)
+  const subjectName   = question?.subject_name ?? ''
+  const isLangSubject = /english|literature|yoruba|igbo|hausa/i.test(subjectName)
   const tabs = [
-    ...(workings.length > 0 ? [{ key: 'worked', label: 'Worked solution' }] : []),
-    { key: 'explain', label: 'Explanation' },
+    ...(workings.length > 0 ? [{ key: 'worked', label: isLangSubject ? 'Explanation' : 'Worked solution' }] : []),
+    ...(workings.length === 0 ? [{ key: 'explain', label: 'Explanation' }] : [{ key: 'explain', label: 'Why this answer' }]),
     ...(otherWrong.length > 0 ? [{ key: 'wrong', label: 'Distractors' }] : []),
   ]
   const [tab, setTab] = useState(tabs[0]?.key ?? 'explain')
@@ -313,7 +315,7 @@ function ReviewExplModal({ question, selectedKey, accent, onClose, onNext, isLas
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {tab === 'worked' && workings.map((step, i) => (
             <div key={i} style={{ display: 'flex', gap: 10 }}>
-              <span style={{ width: 20, height: 20, borderRadius: 6, background: `${accent}18`, color: accent, fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>{i+1}</span>
+              {!isLangSubject && <span style={{ width: 20, height: 20, borderRadius: 6, background: `${accent}18`, color: accent, fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>{i+1}</span>}
               <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-sec)', flex: 1 }}><MathText text={typeof step==='string'?step:step.text??step.step??''} as="span" /></p>
             </div>
           ))}

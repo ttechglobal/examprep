@@ -1,13 +1,7 @@
-// src/app/api/student/subjects/route.js
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/student/subjects?exam=WAEC
-//
-// Returns the subjects the authenticated student is enrolled in, filtered
-// to the requested exam type (WAEC or JAMB only — never IGCSE on student side).
-//
-// Reads from student_learning_paths joined to subjects so we only return
-// subjects the student has actually enrolled in, not every subject in the DB.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/api/student/subjects/route.js — v3
+// Simplified: reads directly from profiles.subjects (string array)
+// cross-referenced against the subjects table. No dependency on
+// student_learning_paths which may not exist or have RLS issues.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -21,20 +15,11 @@ function svc() {
 }
 
 const SUBJECT_ICONS = {
-  'Chemistry':             '⚗️',
-  'Physics':               '⚡',
-  'Biology':               '🧬',
-  'Mathematics':           '📐',
-  'Further Mathematics':   '📐',
-  'English Language':      '📖',
-  'Use of English':        '📖',
-  'Economics':             '📊',
-  'Government':            '🏛️',
-  'Geography':             '🌍',
-  'Literature in English': '📚',
-  'Agricultural Science':  '🌱',
-  'Commerce':              '💼',
-  'Accounting':            '🧮',
+  'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
+  'Further Mathematics':'📐','English Language':'📖','Use of English':'📖',
+  'Economics':'📊','Government':'🏛️','Geography':'🌍',
+  'Literature in English':'📚','Agricultural Science':'🌱',
+  'Commerce':'💼','Accounting':'🧮',
 }
 
 export async function GET(request) {
@@ -42,43 +27,51 @@ export async function GET(request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { searchParams } = new URL(request.url)
-  const exam = searchParams.get('exam') // 'WAEC' | 'JAMB'
-
   const db = svc()
 
-  // Load the student's enrolled subjects via their learning paths
-  const { data: paths, error } = await db
-    .from('student_learning_paths')
-    .select('subject_id, subjects(id, name, slug, exam_type, is_active)')
-    .eq('student_id', user.id)
+  // Read profile.subjects directly — this is the source of truth
+  const { data: profile } = await db
+    .from('profiles')
+    .select('subjects, exam_type')
+    .eq('id', user.id)
+    .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const subjectNames = profile?.subjects ?? []
 
-  // Get question counts per subject for the display label
-  const subjectIds = (paths ?? []).map(p => p.subject_id).filter(Boolean)
-  let countMap = {}
-  if (subjectIds.length) {
-    const { data: counts } = await db
-      .from('questions')
-      .select('subject_id')
-      .in('subject_id', subjectIds)
-      .eq('is_active', true)
-    ;(counts ?? []).forEach(q => {
-      countMap[q.subject_id] = (countMap[q.subject_id] ?? 0) + 1
-    })
+  if (!subjectNames.length) {
+    return NextResponse.json([])
   }
 
-  const subjects = (paths ?? [])
-    .map(p => p.subjects)
-    .filter(s =>
-      s &&
-      s.is_active &&
-      // Only ever return WAEC or JAMB on the student side
-      ['WAEC', 'JAMB'].includes(s.exam_type) &&
-      // Filter to the requested exam if provided
-      (!exam || s.exam_type === exam)
-    )
+  // Look up subjects in DB to get IDs and metadata
+  const { data: subjectRows } = await db
+    .from('subjects')
+    .select('id, name, slug, exam_type, is_active')
+    .in('name', subjectNames)
+
+  // For any name not found in DB, create a stub so UI still shows it
+  const foundNames = new Set((subjectRows ?? []).map(s => s.name))
+  const stubs = subjectNames
+    .filter(name => !foundNames.has(name))
+    .map((name, i) => ({
+      id: `stub-${i}`, name,
+      slug: name.toLowerCase().replace(/\s+/g, '-'),
+      exam_type: profile?.exam_type ?? 'WAEC',
+      is_active: true,
+    }))
+
+  const allRows = [...(subjectRows ?? []), ...stubs]
+
+  // Get question counts
+  const realIds = (subjectRows ?? []).map(s => s.id)
+  let countMap = {}
+  if (realIds.length) {
+    const { data: counts } = await db
+      .from('questions').select('subject_id').in('subject_id', realIds).eq('is_active', true)
+    ;(counts ?? []).forEach(q => { countMap[q.subject_id] = (countMap[q.subject_id] ?? 0) + 1 })
+  }
+
+  const result = allRows
+    .filter(s => s.is_active !== false)
     .map(s => ({
       id:             s.id,
       name:           s.name,
@@ -89,5 +82,5 @@ export async function GET(request) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  return NextResponse.json(subjects)
+  return NextResponse.json(result)
 }

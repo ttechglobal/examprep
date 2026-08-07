@@ -192,16 +192,43 @@ PART 2 — WRITE THE EXPLANATION
 
 "correct" field: 1–2 sentences explaining WHY the correct answer is right.
 
-"workings" field — MUST be a JSON array of strings, one step per string:
-  GOOD: ["Given: u = 0, a = 10, t = 5", "v = u + at", "v = 0 + 50", "v = 50 m/s"]
-  BAD:  ["We substitute u=0 into v=u+at to get v=50 m/s"]
+"workings" field:
+
+  FOR MATHS / SCIENCE / QUANTITATIVE SUBJECTS (Mathematics, Physics, Chemistry,
+  Further Mathematics, Economics calculations, etc.):
+    MUST be a JSON array of strings, one calculation step per string.
+    GOOD: ["Given: u = 0, a = 10, t = 5", "v = u + at", "v = 0 + 50", "v = 50 m/s"]
+    BAD:  ["We substitute u=0 into v=u+at to get v=50 m/s"]
+
+  FOR ENGLISH / LANGUAGE / COMPREHENSION SUBJECTS (English Language, Use of English,
+  Literature in English, Yoruba, Igbo, Hausa, etc.):
+    Do NOT write step-by-step workings. These subjects have no calculation steps.
+    Instead write 1–2 plain sentences explaining the grammar rule, vocabulary meaning,
+    or literary device that makes the answer correct.
+    Set "workings" to [] (empty array) for all English/language questions.
+    GOOD correct: "The word \"garrulous\" means excessively talkative. Option A \"talkative\" is the nearest synonym."
+    BAD: ["Step 1: identify root word", "Step 2: match synonym"] — never write steps for language questions.
 
 "wrong_options": for EACH wrong option (B, C, D), write one sentence explaining the specific mistake. Include ALL — the UI will show only the one the student picked.
 Only include the option the student picked — not all wrong options.
 
 ═══════════════════════════════════════════════
-PART 3 — MATHEMATICAL FORMATTING (CRITICAL)
+PART 3 — TEXT & MATHEMATICAL FORMATTING (CRITICAL)
 ═══════════════════════════════════════════════
+
+UNDERLINED WORDS (English, Use of English):
+  Exam papers print certain words underlined (e.g. "Choose the synonym for the
+  UNDERLINED word"). In plain text, indicate underlines with **double asterisks**
+  so the UI can render them bold/underlined.
+  e.g. "Choose the word nearest in meaning to the **underlined** word in the sentence:
+       The politician was **garrulous** during the debate."
+  NEVER leave a question that says "the underlined word" without including the
+  actual underlined word in the question_text using **word** markers.
+  If the original PDF uses italics for emphasis, use *single asterisks* for italics.
+
+WORD STRESS MARKS (English phonetics):
+  Use ˈ (primary stress) and ˌ (secondary stress) directly as characters.
+  e.g. ˈrecord (noun) vs reˈcord (verb)
 
 We use KaTeX to render math. Wrap ALL mathematical expressions in $...$
 

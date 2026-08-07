@@ -225,11 +225,8 @@ export default function StudentLayoutClient({ children, profile }) {
       }}>
         <div style={{ width: '100%', maxWidth: 1440, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, textDecoration: 'none' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: '#0b1330', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 0 #05070f', flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 13L6 4L10 10.5L12 7.5L15 13H2Z" fill="white" opacity=".9"/>
-                <circle cx="12.5" cy="4" r="1.8" fill="#9b7ae0"/>
-              </svg>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: '#0b1330', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 0 #05070f', flexShrink: 0, fontSize: 13, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', fontFamily: 'inherit' }}>
+              E
             </div>
             <div style={{ lineHeight: 1 }}>
               <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.03em' }}>Exam</span>

@@ -108,7 +108,7 @@ export default function ExamSessionPage() {
       exam:     cfg.examType ?? 'WAEC',
       count:    String(cfg.count ?? 50),
       mode:     'exam',
-      source:   'all',
+      source:   'past_paper',
     })
 
     fetch(`/api/practice/questions?${params}`)
@@ -330,6 +330,34 @@ export default function ExamSessionPage() {
                     Exam mode
                   </span>
                 </div>
+                {/* ── Passage / shared context (English comprehension, etc.) ── */}
+                {q.passage_text && (
+                  <div style={{ marginBottom: 14, borderRadius: 12, border: '1.5px solid var(--border)', overflow: 'hidden', background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(248,250,252,1)' }}>
+                    <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontSize: 11 }}>📄</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: accent }}>Read the passage</span>
+                    </div>
+                    {q.passage_image_url && (
+                      <div style={{ borderBottom: '1px solid var(--border)' }}>
+                        <img src={q.passage_image_url} alt="Passage" style={{ width: '100%', objectFit: 'contain', maxHeight: 240, display: 'block' }} />
+                      </div>
+                    )}
+                    <div style={{ padding: '12px 14px' }}>
+                      <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-sec)', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{q.passage_text}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Diagram / image ── */}
+                {q.has_image && q.image_url && (
+                  <div style={{ marginBottom: 12, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-tert)' }}>Diagram</span>
+                    </div>
+                    <img src={q.image_url} alt={q.image_description ?? 'Question diagram'} style={{ width: '100%', objectFit: 'contain', maxHeight: 220, display: 'block', padding: 8 }} />
+                  </div>
+                )}
+
                 <MathText
                   text={q.question_text ?? q.question ?? ''}
                   style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.6, color: '#0a0d1a' }}

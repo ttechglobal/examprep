@@ -1,13 +1,4 @@
 // src/app/api/leaderboard/global/route.js
-// GET /api/leaderboard/global
-//
-// Returns the national leaderboard ranked by total points in the current
-// bi-weekly period, with the current student's surrounding rows always
-// included regardless of their rank.
-//
-// Query params:
-//   period   — 'week' (default) | 'alltime'
-//   limit    — how many top rows to return (default 20, max 50)
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -20,123 +11,121 @@ export async function GET(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
-  const period  = searchParams.get('period') ?? 'week'
-  const limit   = Math.min(parseInt(searchParams.get('limit') ?? '20'), 50)
+  const period = searchParams.get('period') ?? 'week'
+  const limit  = Math.min(parseInt(searchParams.get('limit') ?? '20'), 50)
 
   const service = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // Get current student's state (region for display)
-  const { data: myProfile } = await service
+  // Always fetch all profiles with XP so we can build an all-time fallback
+  const { data: allProfiles } = await service
     .from('profiles')
     .select('id, full_name, state, total_points')
-    .eq('id', user.id)
-    .single()
+    .not('total_points', 'is', null)
+    .gt('total_points', 0)
+    .order('total_points', { ascending: false })
+    .limit(limit + 10)
 
-  let query
-  if (period === 'alltime') {
-    // All-time: rank by total_points on profile
-    query = service
-      .from('profiles')
-      .select('id, full_name, state, total_points')
-      .not('total_points', 'is', null)
-      .order('total_points', { ascending: false })
-      .limit(limit + 5) // fetch a few extra so we can show context around user
-  } else {
-    // Current bi-weekly period: rank by points earned in period
-    const p = getCurrentPeriod()
-    const { data: rows } = await service
-      .from('points_log')
-      .select('student_id, points')
-      .gte('created_at', p.start.toISOString())
-      .lte('created_at', p.end.toISOString())
-
-    // Aggregate points per student
-    const totals = {}
-    for (const r of rows ?? []) {
-      totals[r.student_id] = (totals[r.student_id] ?? 0) + (r.points ?? 0)
-    }
-
-    // If nobody has points this period, fall back to total_points from profiles
-    if (!Object.keys(totals).length) {
-      const { data: fallbackProfiles } = await service
-        .from('profiles')
-        .select('id, full_name, state, total_points')
-        .not('total_points', 'is', null)
-        .gt('total_points', 0)
-        .order('total_points', { ascending: false })
-        .limit(limit)
-      
-      if (!fallbackProfiles?.length) {
-        return NextResponse.json({ leaderboard: [], my_rank: null, my_entry: null, total_count: 0, period })
-      }
-
-      const fallbackRanked = fallbackProfiles.map((p, i) => ({
-        student_id: p.id,
-        first_name: p.full_name?.split(' ')[0] ?? 'Student',
-        state: p.state ?? '',
-        points: p.total_points ?? 0,
-        rank: i + 1,
-      }))
-      const myFallbackEntry = fallbackRanked.find(r => r.student_id === user.id)
-      return NextResponse.json({
-        leaderboard: fallbackRanked,
-        my_rank: myFallbackEntry?.rank ?? null,
-        my_entry: myFallbackEntry ?? null,
-        total_count: fallbackRanked.length,
-        period,
-      })
-    }
-
-    // Sort and build ranked list
-    const sorted = Object.entries(totals)
-      .sort(([, a], [, b]) => b - a)
-
-    // Fetch names for top N + the current user
-    const topIds = sorted.slice(0, limit).map(([id]) => id)
-    const needsUser = !topIds.includes(user.id)
-    const fetchIds  = needsUser ? [...topIds, user.id] : topIds
-
-    const { data: profiles } = await service
-      .from('profiles')
-      .select('id, full_name, state')
-      .in('id', fetchIds)
-
-    const profileMap = {}
-    for (const p of profiles ?? []) profileMap[p.id] = p
-
-    const ranked = sorted.map(([id, pts], i) => ({
-      student_id:  id,
-      first_name:  profileMap[id]?.full_name?.split(' ')[0] ?? 'Student',
-      state:       profileMap[id]?.state ?? '',
-      points:      pts,
-      rank:        i + 1,
+  function buildFromProfiles(profiles) {
+    const ranked = (profiles ?? []).map((p, i) => ({
+      student_id: p.id,
+      first_name: p.full_name?.split(' ')[0] ?? 'Student',
+      state:      p.state ?? '',
+      points:     p.total_points ?? 0,
+      rank:       i + 1,
+      using_total: true,
     }))
-
-    const myRankEntry  = ranked.find(r => r.student_id === user.id)
-    const myRank       = myRankEntry?.rank ?? null
-    const topRows      = ranked.slice(0, limit)
-
-    // Include 2 rows above and below user if not in top list
-    let surroundRows = []
-    if (myRank && myRank > limit) {
-      const myIdx   = ranked.findIndex(r => r.student_id === user.id)
-      const sliceStart = Math.max(0, myIdx - 2)
-      const sliceEnd   = Math.min(ranked.length, myIdx + 3)
-      surroundRows = ranked.slice(sliceStart, sliceEnd)
-    }
-
-    return NextResponse.json({
-      leaderboard:  topRows,
-      surround:     surroundRows,
-      my_rank:      myRank,
-      my_entry:     myRankEntry ?? null,
-      total_count:  sorted.length,
-      period,
-    })
+    const myEntry = ranked.find(r => r.student_id === user.id)
+    return { ranked, myEntry }
   }
 
-  return NextResponse.json({ leaderboard: [], my_rank: null, total_count: 0, period })
+  if (period === 'alltime') {
+    const { ranked, myEntry } = buildFromProfiles(allProfiles)
+    const res = NextResponse.json({
+      leaderboard: ranked.slice(0, limit),
+      surround:    [],
+      my_rank:     myEntry?.rank ?? null,
+      my_entry:    myEntry ?? null,
+      total_count: ranked.length,
+      period,
+    })
+    res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return res
+  }
+
+  // ── Week period: aggregate points_log ─────────────────────────────────────
+  const p = getCurrentPeriod()
+  const { data: rows } = await service
+    .from('points_log')
+    .select('student_id, points')
+    .gte('created_at', p.start.toISOString())
+    .lte('created_at', p.end.toISOString())
+
+  const periodTotals = {}
+  for (const r of rows ?? []) {
+    periodTotals[r.student_id] = (periodTotals[r.student_id] ?? 0) + (r.points ?? 0)
+  }
+
+  // If no period activity at all, fall back to all-time total_points
+  if (!Object.keys(periodTotals).length) {
+    const { ranked, myEntry } = buildFromProfiles(allProfiles)
+    if (!ranked.length) {
+      return NextResponse.json({ leaderboard: [], my_rank: null, my_entry: null, total_count: 0, period })
+    }
+    const res = NextResponse.json({
+      leaderboard: ranked.slice(0, limit),
+      surround:    [],
+      my_rank:     myEntry?.rank ?? null,
+      my_entry:    myEntry ?? null,
+      total_count: ranked.length,
+      period,
+    })
+    res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return res
+  }
+
+  // Build ranked list from period points, merging in names from profiles
+  const profileMap = {}
+  for (const p of allProfiles ?? []) profileMap[p.id] = p
+
+  const sorted = Object.entries(periodTotals).sort(([, a], [, b]) => b - a)
+
+  // For any student in period data not already in allProfiles, fetch them
+  const missingIds = sorted.map(([id]) => id).filter(id => !profileMap[id])
+  if (missingIds.length) {
+    const { data: extra } = await service
+      .from('profiles').select('id, full_name, state, total_points').in('id', missingIds)
+    for (const p of extra ?? []) profileMap[p.id] = p
+  }
+
+  const ranked = sorted.map(([id, pts], i) => ({
+    student_id:  id,
+    first_name:  profileMap[id]?.full_name?.split(' ')[0] ?? 'Student',
+    state:       profileMap[id]?.state ?? '',
+    points:      pts,
+    rank:        i + 1,
+  }))
+
+  const myRankEntry = ranked.find(r => r.student_id === user.id)
+  const myRank      = myRankEntry?.rank ?? null
+  const topRows     = ranked.slice(0, limit)
+
+  let surroundRows = []
+  if (myRank && myRank > limit) {
+    const myIdx = ranked.findIndex(r => r.student_id === user.id)
+    surroundRows = ranked.slice(Math.max(0, myIdx - 2), Math.min(ranked.length, myIdx + 3))
+  }
+
+  const res = NextResponse.json({
+    leaderboard:  topRows,
+    surround:     surroundRows,
+    my_rank:      myRank,
+    my_entry:     myRankEntry ?? null,
+    total_count:  sorted.length,
+    period,
+  })
+  res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+  return res
 }
