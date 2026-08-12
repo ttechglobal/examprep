@@ -1,115 +1,220 @@
-// src/components/ui/Skeletons.jsx
-// Reusable skeleton loader components used across all pages while data loads.
-// Import the one matching the page's content structure.
+// src/components/ui/Skeletons.jsx — EXL ExamPrep v2
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton loaders that match the real page structure exactly.
+// Uses the .skeleton CSS class (shimmer animation in globals.css).
+// All structural colours via CSS tokens so dark/light mode works automatically.
+//
+// USAGE: render immediately while data loads, swap to real content on arrival.
+// ─────────────────────────────────────────────────────────────────────────────
 
+const S = {
+  // Skeleton block
+  block: (h = 40, br = 12, mb = 0, w = '100%') => ({
+    height: h, borderRadius: br, marginBottom: mb,
+    width: w, display: 'block',
+  }),
+  // Flex row
+  row: (gap = 10, mb = 0, align = 'center') => ({
+    display: 'flex', alignItems: align, gap, marginBottom: mb,
+  }),
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
 export function DashboardSkeleton() {
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 100 }}>
       {/* Greeting */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="space-y-1.5">
-          <div className="skeleton h-3 w-20" />
-          <div className="skeleton h-7 w-36" />
+      <div style={S.row(0, 4, 'flex-start')}>
+        <div>
+          <div className="skeleton" style={S.block(10, 6, 6, 80)} />
+          <div className="skeleton" style={S.block(22, 8, 0, 200)} />
         </div>
       </div>
-      {/* Goals card */}
-      <div className="skeleton h-32 w-full rounded-3xl" />
-      {/* Practice CTA */}
-      <div className="skeleton h-16 w-full rounded-3xl" />
-      {/* Subject grid */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {[1,2,3,4].map(i => <div key={i} className="skeleton h-20 rounded-2xl" />)}
+      {/* Zara banner */}
+      <div className="skeleton" style={S.block(64, 14)} />
+      {/* Quest card */}
+      <div className="skeleton" style={S.block(160, 20)} />
+      {/* Weak topics */}
+      <div className="skeleton" style={S.block(10, 6, 4, 120)} />
+      {[1, 2].map(i => <div key={i} className="skeleton" style={S.block(62, 13)} />)}
+      {/* Subject rows */}
+      <div className="skeleton" style={S.block(10, 6, 4, 120)} />
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} style={{ ...S.row(11), padding: '11px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
+            <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={S.block(12, 6, 6, '60%')} />
+              <div className="skeleton" style={S.block(5, 99)} />
+            </div>
+            <div className="skeleton" style={S.block(14, 6, 0, 36)} />
+          </div>
+        ))}
       </div>
-      {/* Study plan */}
-      <div className="skeleton h-48 w-full rounded-3xl" />
+      {/* Target strip */}
+      <div className="skeleton" style={S.block(60, 14)} />
     </div>
   )
 }
 
-export function LearnHubSkeleton() {
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="space-y-1.5">
-        <div className="skeleton h-7 w-32" />
-        <div className="skeleton h-4 w-48" />
-      </div>
-      <div className="skeleton h-9 w-24 rounded-full" />
-      {/* Study plan */}
-      <div className="skeleton h-44 w-full rounded-3xl" />
-      {/* Subject grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {[1,2,3,4,5,6].map(i => <div key={i} className="skeleton h-28 rounded-2xl" />)}
-      </div>
-    </div>
-  )
-}
-
-export function SubjectPageSkeleton() {
-  return (
-    <div className="space-y-4 animate-in fade-in duration-300">
-      <div className="skeleton h-4 w-16" />
-      <div className="skeleton h-28 w-full rounded-3xl" />
-      <div className="skeleton h-14 w-full rounded-2xl" />
-      <div className="skeleton h-10 w-full rounded-2xl" />
-      {[1,2,3,4].map(i => <div key={i} className="skeleton h-16 w-full rounded-2xl" />)}
-    </div>
-  )
-}
-
+// ── Practice landing ───────────────────────────────────────────────────────────
 export function PracticePageSkeleton() {
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="space-y-1.5">
-        <div className="skeleton h-7 w-36" />
-        <div className="skeleton h-4 w-52" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div>
+        <div className="skeleton" style={S.block(10, 6, 6, 80)} />
+        <div className="skeleton" style={S.block(22, 8, 0, 160)} />
       </div>
-      <div className="skeleton h-9 w-40 rounded-2xl" />
-      {[1,2,3,4].map(i => <div key={i} className="skeleton h-20 w-full rounded-2xl" />)}
+      <div className="skeleton" style={S.block(64, 14)} />
+      <div className="skeleton" style={S.block(10, 6, 4, 140)} />
+      <div className="skeleton" style={S.block(148, 18)} />
+      <div className="skeleton" style={S.block(10, 6, 4, 140)} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={S.block(110, 14)} />)}
+      </div>
+      <div className="skeleton" style={S.block(10, 6, 4, 80)} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={S.block(52, 13)} />)}
+      </div>
     </div>
   )
 }
 
-export function VideoPageSkeleton() {
+// ── Learn ──────────────────────────────────────────────────────────────────────
+export function LearnHubSkeleton() {
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="space-y-1.5">
-        <div className="skeleton h-7 w-36" />
-        <div className="skeleton h-4 w-60" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div>
+        <div className="skeleton" style={S.block(10, 6, 6, 80)} />
+        <div className="skeleton" style={S.block(22, 8, 0, 120)} />
       </div>
-      <div className="skeleton h-10 w-full rounded-2xl" />
-      <div className="flex gap-2">
-        {[1,2,3].map(i => <div key={i} className="skeleton h-8 w-20 rounded-full" />)}
+      <div className="skeleton" style={S.block(64, 14)} />
+      {/* EXL Learning World card */}
+      <div className="skeleton" style={S.block(164, 18)} />
+      <div className="skeleton" style={S.block(10, 6, 4, 120)} />
+      {[1, 2].map(i => <div key={i} className="skeleton" style={S.block(70, 13)} />)}
+      <div className="skeleton" style={S.block(10, 6, 4, 120)} />
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} style={{ ...S.row(11), padding: '11px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
+            <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={S.block(12, 6, 6, '55%')} />
+              <div className="skeleton" style={S.block(5, 99)} />
+            </div>
+            <div className="skeleton" style={S.block(14, 6, 0, 36)} />
+          </div>
+        ))}
       </div>
-      {[1,2,3].map(i => <div key={i} className="skeleton h-32 w-full rounded-2xl" />)}
     </div>
   )
 }
 
+// ── Leaderboard / Community ────────────────────────────────────────────────────
 export function CommunityPageSkeleton() {
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="space-y-1.5">
-        <div className="skeleton h-7 w-36" />
-        <div className="skeleton h-4 w-52" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div style={S.row(0, 0, 'flex-start')}>
+        <div style={{ flex: 1 }}>
+          <div className="skeleton" style={S.block(10, 6, 6, 80)} />
+          <div className="skeleton" style={S.block(22, 8, 0, 140)} />
+        </div>
+        <div className="skeleton" style={{ width: 80, height: 28, borderRadius: 999 }} />
       </div>
-      <div className="flex gap-2">
-        {[1,2,3].map(i => <div key={i} className="skeleton h-12 flex-1 rounded-2xl" />)}
+      <div className="skeleton" style={S.block(64, 14)} />
+      {/* Tab pills */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {[80, 70, 90].map((w, i) => <div key={i} className="skeleton" style={{ width: w, height: 30, borderRadius: 999 }} />)}
       </div>
-      <div className="skeleton h-24 w-full rounded-2xl" />
-      {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-14 w-full rounded-2xl" />)}
+      {/* Podium */}
+      <div className="skeleton" style={S.block(180, 18)} />
+      {/* Rows */}
+      {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={S.block(48, 12)} />)}
+      {/* Challenge */}
+      <div className="skeleton" style={S.block(100, 15)} />
     </div>
   )
 }
 
-export function CardSkeleton({ className = '' }) {
-  return <div className={`skeleton rounded-2xl ${className}`} />
+// ── Progress ───────────────────────────────────────────────────────────────────
+export function ProgressPageSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div style={{ ...S.row(0, 0, 'flex-start'), justifyContent: 'space-between' }}>
+        <div>
+          <div className="skeleton" style={S.block(10, 6, 6, 80)} />
+          <div className="skeleton" style={S.block(22, 8, 0, 120)} />
+        </div>
+        <div style={{ display: 'flex', gap: 7 }}>
+          <div className="skeleton" style={{ width: 70, height: 30, borderRadius: 999 }} />
+          <div className="skeleton" style={{ width: 80, height: 30, borderRadius: 999 }} />
+        </div>
+      </div>
+      <div className="skeleton" style={S.block(64, 14)} />
+      {/* 3 stat tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+        {[1, 2, 3].map(i => <div key={i} className="skeleton" style={S.block(72, 14)} />)}
+      </div>
+      {/* Activity chart */}
+      <div className="skeleton" style={S.block(110, 16)} />
+      {/* Subject mastery */}
+      <div className="skeleton" style={S.block(10, 6, 4, 140)} />
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} style={{ ...S.row(11), padding: '11px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
+            <div className="skeleton" style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={S.block(12, 6, 5, '50%')} />
+              <div className="skeleton" style={S.block(5, 99)} />
+            </div>
+            <div className="skeleton" style={S.block(14, 6, 0, 40)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-export function ListSkeleton({ rows = 4, rowHeight = 'h-14' }) {
+// ── Profile ────────────────────────────────────────────────────────────────────
+export function ProfilePageSkeleton() {
   return (
-    <div className="space-y-2 animate-in fade-in duration-300">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div className="skeleton" style={S.block(64, 14)} />
+      {/* Hero card */}
+      <div className="skeleton" style={S.block(200, 20)} />
+      {/* Info grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={S.block(80, 13)} />)}
+      </div>
+      {/* Settings rows */}
+      {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={S.block(50, 13)} />)}
+    </div>
+  )
+}
+
+// ── Generic full-page ──────────────────────────────────────────────────────────
+export function PageSkeleton({ rows = 5 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 100 }}>
+      <div className="skeleton" style={S.block(22, 8, 0, 160)} />
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className={`skeleton w-full rounded-2xl ${rowHeight}`} />
+        <div key={i} className="skeleton" style={S.block(60 + (i % 2) * 20, 14)} />
+      ))}
+    </div>
+  )
+}
+
+// Legacy exports (used in existing pages)
+export function SubjectPageSkeleton() { return <PageSkeleton rows={6} /> }
+export function VideoPageSkeleton()   { return <PageSkeleton rows={5} /> }
+export function CardSkeleton({ className = '' }) {
+  return <div className={`skeleton ${className}`} style={{ borderRadius: 14, minHeight: 60 }} />
+}
+export function ListSkeleton({ rows = 4, rowHeight = 56 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="skeleton" style={{ height: rowHeight, borderRadius: 14 }} />
       ))}
     </div>
   )

@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { LessonNavProvider } from '@/contexts/LessonNavContext'
 import { PointsProvider } from '@/contexts/PointsContext'
+import { UserProvider } from '@/contexts/UserContext'
 import StudentLayoutClient from './StudentLayoutClient'
 
 export const revalidate = 60
@@ -27,9 +28,11 @@ export default async function StudentLayout({ children }) {
   return (
     <LessonNavProvider>
       <PointsProvider initialTotal={profile?.total_points ?? 0}>
-        <StudentLayoutClient profile={profile}>
-          {children}
-        </StudentLayoutClient>
+        <UserProvider userId={user.id} profile={profile}>
+          <StudentLayoutClient profile={profile}>
+            {children}
+          </StudentLayoutClient>
+        </UserProvider>
       </PointsProvider>
     </LessonNavProvider>
   )

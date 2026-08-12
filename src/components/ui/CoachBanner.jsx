@@ -82,24 +82,23 @@ export default function CoachBanner({ emoji, message, buddy = 'zara', greeting =
 
   return (
     <div style={{
-      borderRadius: 16,
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      padding: '12px 14px',
+      borderRadius: 14,
+      background: 'rgba(18,100,229,.08)',
+      border: '1.5px solid rgba(18,100,229,.22)',
+      padding: '11px 13px',
       display: 'flex',
       alignItems: 'flex-start',
-      gap: 11,
+      gap: 10,
     }}>
-      <div style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden', width: 40, height: 40, boxShadow: '0 2px 8px rgba(0,0,0,.15)' }}>
+      <div style={{ flexShrink: 0, borderRadius: 10, overflow: 'hidden', width: 36, height: 36 }}>
         {isZara ? <ZaraAvatar /> : <EmekaAvatar />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: isZara ? '#9b7ae0' : '#6cce8e', marginBottom: 4, lineHeight: 1 }}>
+        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#18B7F2', marginBottom: 3, lineHeight: 1 }}>
           {isZara ? 'Zara' : 'Emeka'} · Study buddy
         </p>
-        {/* Greeting + message flow as one natural sentence */}
-        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-prim)', lineHeight: 1.5 }}>
-          {greeting ? <><strong style={{ fontWeight: 700 }}>{greeting}</strong> — {message}</> : message}
+        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-sec)', lineHeight: 1.5 }}>
+          {greeting ? <><strong style={{ fontWeight: 700, color: 'var(--text-prim)' }}>{greeting}</strong> — {message}</> : message}
         </p>
       </div>
     </div>

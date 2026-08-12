@@ -371,51 +371,93 @@ export default function QuestionCard({
         as="p"
       />
 
-      {/* Options */}
+      {/* Options — v2: larger tap targets, navy-fill on select, strong correct/wrong */}
       <div className="space-y-2.5">
         {optionEntries.map(([key, text]) => {
           const isSelected = selectedAnswer === key
           const isRight    = revealed && key === question.correct_answer
           const isWrong    = revealed && isSelected && !isRight
 
-          let style = 'border-default bg-base hover:border-indigo-300 dark:hover:border-indigo-700'
-          let extraStyle = {}
+          // Build inline styles — one object covers all states
+          let optStyle = {}
           if (isRight) {
-            style = 'border-green-500'
-            extraStyle = { background: '#f0fdf4', borderWidth: 3, boxShadow: '0 3px 0 rgba(34,197,94,0.18)' }
+            // correct: bright green border + tinted bg, both modes
+            optStyle = {
+              background: 'var(--success-bg)',
+              border: '2px solid var(--success)',
+              boxShadow: '0 3px 0 rgba(34,197,94,0.20)',
+            }
           } else if (isWrong) {
-            style = 'border-red-400'
-            extraStyle = { background: '#fef2f2', borderWidth: 3, boxShadow: '0 3px 0 rgba(239,68,68,0.18)' }
+            // wrong: red border + tinted bg, both modes
+            optStyle = {
+              background: 'var(--danger-bg)',
+              border: '2px solid var(--danger)',
+              boxShadow: '0 3px 0 rgba(239,68,68,0.20)',
+            }
           } else if (isSelected) {
-            style = ''
-            extraStyle = { background: accentBg, borderColor: accent, borderWidth: 3, boxShadow: '0 3px 0 rgba(0,0,0,0.08)' }
+            // selected (pre-reveal): navy fill — dark in both modes, white text
+            optStyle = {
+              background: '#0b1330',
+              border: '2px solid #0b1330',
+              boxShadow: '0 5px 0 #05070f',
+              transform: 'translateY(-1px)',
+            }
+          } else {
+            // idle
+            optStyle = {
+              background: 'var(--bg-base)',
+              border: '1.5px solid var(--border)',
+            }
           }
 
-          const dotStyle =
-            isRight  ? 'border-success bg-success text-white' :
-            isWrong  ? 'border-danger bg-danger text-white' :
-            'border-default text-tertiary'
-          const dotExtraStyle = isSelected && !revealed ? { borderColor: accent, color: accentText } : {}
+          // Letter badge
+          let badgeBg = 'var(--bg-subtle)'
+          let badgeColor = 'var(--text-tert)'
+          let badgeBorder = '1px solid var(--border)'
+          if (isRight)     { badgeBg = 'var(--success)';  badgeColor = '#fff'; badgeBorder = 'none' }
+          if (isWrong)     { badgeBg = 'var(--danger)';   badgeColor = '#fff'; badgeBorder = 'none' }
+          if (isSelected && !revealed) { badgeBg = 'rgba(255,255,255,.15)'; badgeColor = '#fff'; badgeBorder = 'none' }
 
-          const dotContent =
-            isRight   ? '✓' :
-            isWrong   ? '✗' :
-            key
+          const badgeContent = isRight ? '✓' : isWrong ? '✗' : key
+
+          // Text color
+          const textColor = (isSelected && !revealed)
+            ? '#fff'
+            : isRight
+            ? 'var(--success)'
+            : isWrong
+            ? 'var(--danger)'
+            : 'var(--text-prim)'
 
           return (
             <button
               key={key}
               onClick={() => handleSelect(key)}
               disabled={revealed}
-              style={extraStyle}
-              className={`w-full text-left px-4 py-3.5 rounded-[20px] border-2 text-sm transition-all duration-150 ${style} ${!revealed ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
+              style={{
+                width: '100%', textAlign: 'left',
+                padding: '15px 16px',
+                borderRadius: 16,
+                display: 'flex', alignItems: 'flex-start', gap: 12,
+                cursor: revealed ? 'default' : 'pointer',
+                transition: 'transform .1s, box-shadow .1s, background .15s',
+                ...optStyle,
+              }}
             >
-              <div className="flex items-start gap-3">
-                <span style={dotExtraStyle} className={`w-7 h-7 rounded-[10px] border-2 text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5 ${dotStyle}`}>
-                  {dotContent}
-                </span>
-                <MathText text={String(text ?? '')} className="flex-1 leading-snug" as="span" />
-              </div>
+              <span style={{
+                width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+                fontSize: 11, fontWeight: 900,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: badgeBg, color: badgeColor, border: badgeBorder,
+                marginTop: 1,
+              }}>
+                {badgeContent}
+              </span>
+              <MathText
+                text={String(text ?? '')}
+                style={{ flex: 1, lineHeight: 1.55, fontSize: 14, fontWeight: isSelected || isRight ? 600 : 400, color: textColor, paddingTop: 2 }}
+                as="span"
+              />
             </button>
           )
         })}

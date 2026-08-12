@@ -14,6 +14,7 @@ import { LearnHubSkeleton } from '@/components/ui/Skeletons'
 import CoachBanner from '@/components/ui/CoachBanner'
 import { learnCoach } from '@/lib/coach'
 import Link from 'next/link'
+import { useUser } from '@/contexts/UserContext'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
@@ -37,7 +38,7 @@ function EXLWorldCard({ studentSubjects }) {
   return (
     <>
       <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(155,122,224,.25)' }}>
-        <div style={{ background: 'linear-gradient(150deg,#0b1330 0%,#1a1060 55%,#0b0d20 100%)', padding: '18px 16px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ background: 'linear-gradient(145deg,#071B49 0%,#1a1060 55%,#0b0d20 100%)', padding: '18px 16px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, opacity: .04, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(155,122,224,.15)', border: '1px solid rgba(155,122,224,.3)', borderRadius: 999, padding: '4px 10px', marginBottom: 10 }}>
@@ -80,7 +81,7 @@ function EXLWorldCard({ studentSubjects }) {
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: '#0b1330', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ background: '#1264E5', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b7ae0' }} />
               <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>EXL Learning World</span>
@@ -113,7 +114,7 @@ function TopicRow({ topic, accent }) {
             <span style={{ fontSize: 11, fontWeight: 800, color }}>{pct}%</span>
           </div>
         </div>
-        <div style={{ height: 3, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
           <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: accent, borderRadius: 99, opacity: pct > 0 ? 1 : 0.3 }} />
         </div>
       </div>
@@ -129,6 +130,12 @@ function SubjectSection({ subjectData, isDark }) {
   const weakTopics = subjectData.topics?.filter(t => t.pct < 40) ?? []
   const remaining  = (subjectData.total ?? 0) - (subjectData.completed ?? 0)
 
+  // Mastery tier — visible in collapsed state so students can scan all subjects at once
+  const tier      = pct >= 70 ? 'Strong' : pct >= 40 ? 'Building' : 'Needs work'
+  const tierColor = pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)'
+  const tierBg    = pct >= 70 ? 'var(--success-bg)' : pct >= 40 ? 'var(--warning-bg)' : 'var(--danger-bg)'
+  const tierBdr   = pct >= 70 ? 'var(--success-border)' : pct >= 40 ? 'var(--warning-border)' : 'var(--danger-border)'
+
   return (
     <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
       {/* Header — tappable to expand/collapse */}
@@ -142,16 +149,15 @@ function SubjectSection({ subjectData, isDark }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
             <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)' }}>{subjectData.name}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {weakTopics.length > 0 && !expanded && (
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' }}>
-                  {weakTopics.length} weak
-                </span>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Mastery tier pill — always visible, even when collapsed */}
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: tierBg, border: `1px solid ${tierBdr}`, color: tierColor }}>
+                {tier}
+              </span>
               <span style={{ fontSize: 12, fontWeight: 900, color: colors.solid }}>{pct}%</span>
             </div>
           </div>
-          <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
             <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', background: colors.solid, borderRadius: 99 }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
@@ -166,9 +172,10 @@ function SubjectSection({ subjectData, isDark }) {
       {expanded && subjectData.topics?.length > 0 && (
         <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)' }}>
           {weakTopics.length > 0 && (
-            <div style={{ margin: '10px 0 4px', padding: '7px 10px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--danger)' }}>
-                ⚠ {weakTopics.length} topic{weakTopics.length > 1 ? 's' : ''} need{weakTopics.length === 1 ? 's' : ''} attention
+            // Amber instead of red — less alarming, more motivating
+            <div style={{ margin: '10px 0 4px', padding: '7px 10px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 10 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--warning)' }}>
+                {weakTopics.length} topic{weakTopics.length > 1 ? 's' : ''} need{weakTopics.length === 1 ? 's' : ''} more practice
               </p>
             </div>
           )}
@@ -198,26 +205,24 @@ export default function LearnPage() {
   const router   = useRouter()
   const isDark   = useIsDark()
   const supabase = useMemo(() => createClient(), [])
+  const { userId } = useUser()
 
   const [profile,       setProfile]      = useState(null)
   const [subjectData,   setSubjectData]  = useState([])
   const [loading,       setLoading]      = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
 
-  useEffect(() => { init() }, []) // eslint-disable-line
+  useEffect(() => { if (userId) init(userId) }, [userId]) // eslint-disable-line
 
-  async function init() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
+  async function init(uid) {
     const [{ data: prof }, { data: paths }, { data: masteryRows }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, exam_type, subjects, streak_days').eq('id', user.id).single(),
+      supabase.from('profiles').select('id, full_name, exam_type, subjects, streak_days').eq('id', uid).single(),
       supabase.from('student_learning_paths')
         .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug)')
-        .eq('student_id', user.id),
+        .eq('student_id', uid),
       supabase.from('student_topic_mastery')
         .select('topic_id, score, attempt_count, topics(id, name, subject_id)')
-        .eq('student_id', user.id),
+        .eq('student_id', uid),
     ])
 
     setProfile(prof)
@@ -309,44 +314,61 @@ export default function LearnPage() {
       {subjectData.length > 0 ? (
         <>
           {/* ── 0. Coach banner ── */}
-          <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
+          <CoachBanner emoji={coach.emoji} message={coach.message} />
 
-          {/* ── 1. EXL Learning World card (at the top) ── */}
+          {/* ── 1. EXL Learning World card — prototype puts this first ── */}
           <EXLWorldCard studentSubjects={allSubjectNames} />
 
-          {/* ── 2. "Focus these first" weak-topics strip ── */}
+          {/* ── 2. Focus areas — weak topics matching prototype style ── */}
           {allWeakTopics.length > 0 && (
-            <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div style={{ padding: '9px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--danger)' }}>⚠ Focus these first</span>
-                <span style={{ fontSize: 10, color: 'var(--text-tert)' }}>Weakest topics</span>
-              </div>
-              <div style={{ padding: '6px 14px 4px' }}>
-                {allWeakTopics.map((t, i) => (
-                  <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < allWeakTopics.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 1 }}>{t.name}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>{t.subjectName} · {t.pct}% mastery</p>
+            <div>
+              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Focus areas</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {allWeakTopics.map(t => {
+                  const accentMap = { 'Physics': '#18B7F2', 'Chemistry': '#9b7ae0', 'Biology': '#4ade80', 'Mathematics': '#FFB800', 'Further Mathematics': '#FFB800' }
+                  const color = accentMap[t.subjectName] ?? '#9b7ae0'
+                  return (
+                    <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: 'var(--bg-card)', border: `1.5px solid ${color}25`, borderRadius: 13 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}14`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{getIcon(t.subjectName)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 1 }}>{t.subjectName} · {t.pct}% mastered</p>
+                        <div style={{ marginTop: 4, height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(t.pct, 2)}%` }} />
+                        </div>
+                      </div>
+                      <Link href="/student/practice" style={{ fontSize: 11, fontWeight: 800, color, background: `${color}12`, border: `1px solid ${color}25`, padding: '5px 10px', borderRadius: 8, textDecoration: 'none', flexShrink: 0 }}>
+                        Study →
+                      </Link>
                     </div>
-                    <Link href="/student/practice" style={{ fontSize: 10, fontWeight: 800, color: '#9b7ae0', textDecoration: 'none', whiteSpace: 'nowrap', padding: '5px 11px', borderRadius: 8, background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.2)' }}>
-                      Practice →
-                    </Link>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {/* ── 3. Per-subject sections (collapsed by default) ── */}
+          {/* ── 3. Subject mastery rows — clean list, no expand/collapse ── */}
           <div>
-            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
-              All subjects
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {subjectData.map(sub => (
-                <SubjectSection key={sub.name} subjectData={sub} isDark={isDark} />
-              ))}
+            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Subject mastery</span>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
+              {subjectData.map((sub, i) => {
+                const colors   = resolveSubjectColors(sub.name, isDark)
+                const pctColor = sub.pct >= 70 ? '#4ade80' : sub.pct >= 40 ? '#FFB800' : '#f87171'
+                return (
+                  <div key={sub.name} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderBottom: i < subjectData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: colors.bg, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{getIcon(sub.name)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{sub.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 900, color: pctColor }}>{sub.pct}%</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(sub.pct, 2)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </>
@@ -360,7 +382,7 @@ export default function LearnPage() {
           </p>
           <button
             onClick={() => setShowGoalModal(true)}
-            style={{ padding: '13px 24px', borderRadius: 13, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #05070f' }}
+            style={{ padding: '13px 24px', borderRadius: 13, background: '#1264E5', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #0a3fa0' }}
           >
             Set up my subjects →
           </button>

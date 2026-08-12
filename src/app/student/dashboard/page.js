@@ -30,6 +30,7 @@ import CoachBanner from '@/components/ui/CoachBanner'
 import { homeCoach } from '@/lib/coach'
 import Link from 'next/link'
 import { usePoints } from '@/contexts/PointsContext'
+import { useUser } from '@/contexts/UserContext'
 
 const GoalModal = lazy(() => import('@/components/dashboard/GoalModal'))
 
@@ -107,7 +108,7 @@ function AmbientNodes({ n1, n2 }) {
   )
 }
 
-// ── 3D press button ───────────────────────────────────────────────────────────
+// ── 3D press button — EXL Blue ────────────────────────────────────────────────
 function PressBtn({ onClick, children, style = {} }) {
   const [p, setP] = useState(false)
   return (
@@ -116,14 +117,16 @@ function PressBtn({ onClick, children, style = {} }) {
       onMouseDown={() => setP(true)} onMouseUp={() => setP(false)} onMouseLeave={() => setP(false)}
       onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
       style={{
-        background: '#0b1330', color: '#fff', border: 'none', cursor: 'pointer',
-        fontWeight: 800, fontSize: 15, borderRadius: 14, letterSpacing: '-0.01em',
+        background: '#1264E5', color: '#fff', border: 'none', cursor: 'pointer',
+        fontWeight: 900, fontSize: 14, borderRadius: 14, letterSpacing: '-0.015em',
         transform: p ? 'translateY(3px)' : '',
-        boxShadow: p ? '0 2px 0 #05070f' : '0 6px 0 #05070f, 0 10px 24px rgba(0,0,0,.4)',
+        boxShadow: p ? '0 2px 0 #0a3fa0' : '0 5px 0 #0a3fa0, 0 8px 20px rgba(18,100,229,.3)',
         transition: 'transform .1s, box-shadow .1s',
+        position: 'relative', overflow: 'hidden',
         ...style,
       }}
     >
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%)', backgroundSize: '200% 100%', animation: 'exl-shimmer 2.5s infinite', pointerEvents: 'none' }} />
       {children}
     </button>
   )
@@ -136,29 +139,29 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
   const topicName   = planItem?.topicName ?? null
   const isCore      = planItem?.isCore    ?? false
 
-  // Light mode hero uses a flat deep-navy card (prototype uses --navy for light)
-  const bg = isDark ? cfg.cardBg : '#0b1330'
+  // Both modes use the dark ambient card — light mode just has a stronger shadow
+  const bg = cfg.cardBg
 
   return (
     <div style={{
       borderRadius: 20,
       overflow: 'hidden',
-      border: isDark ? `1px solid ${cfg.accent}30` : 'none',
+      border: `1px solid ${cfg.accent}${isDark ? '30' : '22'}`,
       boxShadow: isDark
         ? `0 24px 56px rgba(0,0,0,.6), inset 0 1px 0 ${cfg.accent}18`
-        : '0 20px 48px rgba(11,19,48,.35)',
+        : `0 20px 48px rgba(11,19,48,.28), 0 4px 12px rgba(11,19,48,.15)`,
     }}>
       <div style={{ background: bg, padding: '20px 20px 20px', position: 'relative', overflow: 'hidden', minHeight: 248, display: 'flex', flexDirection: 'column' }}>
-        <AmbientNodes n1={isDark ? cfg.n1 : 'rgba(139,108,232,.9)'} n2={isDark ? cfg.n2 : 'rgba(255,143,171,.8)'} />
+        <AmbientNodes n1={cfg.n1} n2={cfg.n2} />
 
         {/* Subject pill */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
           padding: '3px 10px 3px 7px', borderRadius: 999,
-          background: isDark ? `${cfg.accent}18` : 'rgba(139,108,232,.18)',
-          border: `1px solid ${isDark ? `${cfg.accent}30` : 'rgba(139,108,232,.35)'}`,
+          background: `${cfg.accent}18`,
+          border: `1px solid ${cfg.accent}30`,
           fontSize: 9, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase',
-          color: isDark ? cfg.accent : '#C0A6FF',
+          color: cfg.accent,
           alignSelf: 'flex-start', marginBottom: 14, position: 'relative', zIndex: 1,
         }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
@@ -176,7 +179,7 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
         {/* Topic line — only when there's a real topic */}
         {topicName && (
           <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.45)', marginBottom: 6, position: 'relative', zIndex: 1 }}>
-            Topic: <strong style={{ color: isDark ? `${cfg.accent}cc` : 'rgba(139,108,232,.85)', fontWeight: 600 }}>{topicName}</strong>
+            Topic: <strong style={{ color: `${cfg.accent}cc`, fontWeight: 600 }}>{topicName}</strong>
           </p>
         )}
 
@@ -248,37 +251,28 @@ function SubjectRow({ sub, isLast }) {
   const name = sub.subjects?.name ?? ''
   const cfg  = getCfg(name)
   const pct  = sub.pct ?? 0
-  const pctColor = pct >= 70 ? '#4CC987' : pct >= 40 ? '#F5B942' : '#E85050'
+  const pctColor = pct >= 70 ? '#4ade80' : pct >= 40 ? '#FFB800' : '#f87171'
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '12px 0',
+      display: 'flex', alignItems: 'center', gap: 11,
+      padding: '11px 0',
       borderBottom: isLast ? 'none' : '1px solid var(--border)',
     }}>
-      {/* Subject icon */}
       <div style={{
         width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 16,
-        background: `${cfg.accent}14`,
-        border: `1px solid ${cfg.accent}22`,
-      }}>
-        {cfg.icon}
-      </div>
-
-      {/* Name + bar */}
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+        background: `${cfg.accent}18`, border: `1px solid ${cfg.accent}22`,
+      }}>{cfg.icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 5 }}>{name}</p>
-        <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--bg-inset)' }}>
-          <div style={{ height: '100%', borderRadius: 2, background: cfg.accent, width: `${Math.max(pct, 2)}%`, transition: 'width 0.7s ease' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{name}</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: pctColor, flexShrink: 0, marginLeft: 8 }}>{pct}%</span>
+        </div>
+        <div style={{ height: 5, borderRadius: 99, overflow: 'hidden', background: 'var(--border)' }}>
+          <div style={{ height: '100%', borderRadius: 99, background: `linear-gradient(90deg,#18B7F2,#1264E5)`, width: `${Math.max(pct, 2)}%`, transition: 'width .8s cubic-bezier(.34,1.56,.64,1)' }} />
         </div>
       </div>
-
-      {/* % */}
-      <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, marginLeft: 8, color: pctColor }}>
-        {pct}%
-      </span>
     </div>
   )
 }
@@ -286,59 +280,57 @@ function SubjectRow({ sub, isLast }) {
 function SubjectsList({ subjects, onSeeAll }) {
   return (
     <div>
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your subjects</p>
-        <button onClick={onSeeAll} style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          All →
-        </button>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)' }}>Your subjects</span>
+        <button onClick={onSeeAll} style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>All →</button>
       </div>
-      {subjects.map((sub, i) => (
-        <SubjectRow key={sub.subject_id} sub={sub} isLast={i === subjects.length - 1} />
-      ))}
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
+        {subjects.map((sub, i) => (
+          <SubjectRow key={sub.subject_id} sub={sub} isLast={i === subjects.length - 1} />
+        ))}
+      </div>
     </div>
   )
 }
 
-// ── "Needs attention" ─────────────────────────────────────────────────────────
-// Prototype: red dot + topic name + subject · % + "Practise →" link
+// ── "Level up faster" — Quick 5 weak topic cards ─────────────────────────────
 function NeedsAttention({ weakTopics, onPractise }) {
   if (!weakTopics.length) return null
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Needs attention</p>
-        <Link href="/student/learn" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>
-          Learn →
-        </Link>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)' }}>Level up faster</span>
+        <Link href="/student/learn" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>Study →</Link>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {weakTopics.map((t, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '12px 14px', borderRadius: 14,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            cursor: 'pointer',
-          }}>
-            {/* Red alert dot */}
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#E85050', flexShrink: 0 }} />
-
-            {/* Label */}
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.2 }}>{t.topicName}</p>
-              <p style={{ fontSize: 11, color: 'var(--text-sec)', marginTop: 2 }}>{t.subjectName} · {t.pct}%</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {weakTopics.map((t, i) => {
+          const cfg = SUBJECT_CFG[t.subjectName] ?? SUBJECT_CFG.default
+          return (
+            <div key={i} onClick={() => onPractise(t)} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '11px 13px', borderRadius: 13,
+              background: 'var(--bg-card)', border: `1px solid ${cfg.accent}22`,
+              cursor: 'pointer',
+            }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                background: `${cfg.accent}14`, border: `1px solid ${cfg.accent}22`,
+              }}>{cfg.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.topicName}</p>
+                <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>{t.subjectName} · {t.pct}% mastered</p>
+              </div>
+              <button onClick={e => { e.stopPropagation(); onPractise(t) }} style={{
+                fontSize: 10, fontWeight: 800, color: cfg.accent,
+                background: `${cfg.accent}12`, border: `1px solid ${cfg.accent}25`,
+                padding: '5px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+                fontFamily: 'inherit',
+              }}>Quick 5 →</button>
             </div>
-
-            {/* Action */}
-            <button
-              onClick={() => onPractise(t)}
-              style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}
-            >
-              Practise →
-            </button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -383,39 +375,48 @@ function TargetStrip({ profile, onEdit }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
-      padding: '14px 16px', borderRadius: 14,
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      padding: '13px 14px', borderRadius: 14,
+      background: 'rgba(255,184,0,.07)', border: '1px solid rgba(255,184,0,.18)',
     }}>
-      {/* Icon box */}
-      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
-        🎯
-      </div>
-
-      {/* Goal text */}
+      <span style={{ fontSize: 20, flexShrink: 0 }}>🎯</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-tert)', marginBottom: 2 }}>Goal</p>
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goalLine}</p>
-        {jambTotal > 0 && (
-          <p style={{ fontSize: 10, color: '#9b7ae0', marginTop: 1 }}>{examType} · {jambTotal}/400 target</p>
-        )}
+        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goalLine}</p>
+        <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>
+          {examType}{jambTotal > 0 ? ` · ${jambTotal}/400 target` : ''}
+        </p>
       </div>
-
-      {/* Days countdown */}
       <button onClick={onEdit} style={{ textAlign: 'right', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
-        <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-prim)', lineHeight: 1 }}>{daysLeft}</p>
-        <p style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tert)' }}>days left</p>
+        <p style={{ fontSize: 22, fontWeight: 900, color: '#FFB800', lineHeight: 1 }}>{daysLeft}</p>
+        <p style={{ fontSize: 9, color: 'var(--text-tert)' }}>days left</p>
       </button>
     </div>
   )
 }
 
-// ── "Or practise differently" quick mode grid ─────────────────────────────────
+// ── "Or practise differently" quick mode grid — v2 ────────────────────────────
+// Each mode has a distinct colored icon background so they're scannable at a glance.
 function QuickModes({ router, onTimed, onWeak }) {
   const MODES = [
-    { emoji: '⏱️', label: 'Timed',       onClick: onTimed },
-    { emoji: '📝', label: 'Mock Exam',   onClick: () => router.push('/student/exam') },
-    { emoji: '📊', label: 'Weak Topics', onClick: onWeak },
-    { emoji: '📚', label: 'Learn',       onClick: () => router.push('/student/learn') },
+    {
+      emoji: '⏱️', label: 'Timed',
+      iconBg: 'rgba(155,122,224,.15)', iconBorder: 'rgba(155,122,224,.25)',
+      onClick: onTimed,
+    },
+    {
+      emoji: '📝', label: 'Mock Exam',
+      iconBg: 'rgba(11,19,48,.6)',    iconBorder: 'rgba(255,255,255,.15)',
+      onClick: () => router.push('/student/exam'),
+    },
+    {
+      emoji: '🎯', label: 'Weak Topics',
+      iconBg: 'rgba(232,80,80,.12)',  iconBorder: 'rgba(232,80,80,.22)',
+      onClick: onWeak,
+    },
+    {
+      emoji: '📚', label: 'Learn',
+      iconBg: 'rgba(92,184,234,.12)', iconBorder: 'rgba(92,184,234,.22)',
+      onClick: () => router.push('/student/learn'),
+    },
   ]
   return (
     <div>
@@ -425,12 +426,19 @@ function QuickModes({ router, onTimed, onWeak }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {MODES.map(m => (
           <button key={m.label} onClick={m.onClick} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-            padding: '12px 4px', borderRadius: 14,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
+            padding: '14px 6px', borderRadius: 16,
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            cursor: 'pointer',
+            cursor: 'pointer', transition: 'border-color .18s',
           }}>
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{m.emoji}</span>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, lineHeight: 1,
+              background: m.iconBg, border: `1px solid ${m.iconBorder}`,
+            }}>
+              {m.emoji}
+            </div>
             <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', lineHeight: 1.3 }}>{m.label}</span>
           </button>
         ))}
@@ -455,23 +463,23 @@ function NoPathState({ profile, onEdit }) {
           Set your goals first →
         </button>
       )}
-      <Link href="/diagnostic" style={{ display: 'block', padding: '14px 0', borderRadius: 14, background: '#0b1330', color: '#fff', fontSize: 14, fontWeight: 700, boxShadow: '0 6px 0 #05070f', textAlign: 'center', textDecoration: 'none' }}>
+      <Link href="/diagnostic" style={{ display: 'block', padding: '14px 0', borderRadius: 14, background: '#1264E5', color: '#fff', fontSize: 14, fontWeight: 700, boxShadow: '0 5px 0 #0a3fa0', textAlign: 'center', textDecoration: 'none' }}>
         Take the diagnostic →
       </Link>
     </div>
   )
 }
 
-// ── Mini activity chart (desktop right sidebar only) ─────────────────────────
-// Always Mon–Sun of current week, Monday-anchored
-function MiniActivityChart({ sessionDays, streak = 0 }) {
+// ── Right sidebar: Activity chart ─────────────────────────────────────────────
+// Matches prototype exactly: small bar chart Mon–Sun + streak label
+function SidebarActivity({ sessionDays, streak = 0 }) {
   const isDark = useIsDark()
   const today = new Date()
   const dayOfWeek = (today.getDay() + 6) % 7  // Mon=0 … Sun=6
   const monday = new Date(today)
   monday.setDate(today.getDate() - dayOfWeek)
   monday.setHours(0, 0, 0, 0)
-  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const days = DAY_LABELS.map((label, i) => {
     const d = new Date(monday); d.setDate(monday.getDate() + i)
     const key = d.toISOString().slice(0, 10)
@@ -479,74 +487,62 @@ function MiniActivityChart({ sessionDays, streak = 0 }) {
     return { key, label, count: isFuture ? 0 : (sessionDays[key] ?? 0), isToday: i === dayOfWeek, isFuture }
   })
   const maxCount = Math.max(...days.map(d => d.count), 1)
-  const activeDays = days.filter(d => d.count > 0).length
 
   return (
-    <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-      <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>Practice activity</p>
-        <Link href="/student/progress" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>See all →</Link>
+    <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Activity</p>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#FF6A00' }}>🔥 {streak}d</span>
       </div>
-      <div style={{ padding: '12px 14px 10px' }}>
-        {/* Bar chart — Mon–Sun */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 52 }}>
-          {days.map((day) => {
-            const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 44)) : 3
+      <div style={{ padding: '11px 13px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 40 }}>
+          {days.map((day, i) => {
+            const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 32)) : 2
             const col = day.isFuture
-              ? (isDark ? 'rgba(255,255,255,.04)' : '#f8fafc')
+              ? (isDark ? 'rgba(255,255,255,.04)' : '#f1f5f9')
               : day.count > 0
-                ? (day.isToday ? '#9b7ae0' : isDark ? 'rgba(92,184,234,.6)' : '#5cb8ea')
-                : (isDark ? 'rgba(255,255,255,.07)' : '#f1f5f9')
+                ? (day.isToday ? '#1264E5' : isDark ? 'rgba(24,183,242,.5)' : '#5cb8ea')
+                : (isDark ? 'rgba(255,255,255,.07)' : '#e8eef8')
             return (
-              <div key={day.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <div style={{ width: '100%', height: barH, borderRadius: '3px 3px 1px 1px', background: col, transition: 'height .4s ease' }} />
-                <span style={{ fontSize: 7, fontWeight: 700, color: day.isToday ? '#9b7ae0' : 'var(--text-tert)', lineHeight: 1 }}>{day.label.slice(0,2)}</span>
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ width: '100%', height: barH, borderRadius: '3px 3px 1px 1px', background: col }} />
+                <span style={{ fontSize: 7, fontWeight: day.isToday ? 700 : 400, color: day.isToday ? '#1264E5' : 'var(--text-tert)', lineHeight: 1 }}>{day.label}</span>
               </div>
             )
           })}
         </div>
       </div>
-      {/* Consistency note */}
-      <div style={{ padding: '8px 14px 12px' }}>
-        {streak >= 5
-          ? <p style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>🔥 {streak}-day streak — keep it going!</p>
-          : activeDays >= 7
-          ? <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>⚡ {activeDays}/14 days active — great consistency.</p>
-          : activeDays > 0
-          ? <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>📈 {activeDays}/14 days active. Daily practice compounds fast.</p>
-          : <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Start a session to build your streak.</p>
-        }
-      </div>
     </div>
   )
 }
 
-// ── Mini leaderboard (desktop right sidebar only) ─────────────────────────────
-function MiniLeaderboard({ leaderboard, myId }) {
+// ── Right sidebar: Class rank snapshot ────────────────────────────────────────
+// Matches prototype: medal/rank + first name + XP, "you" row highlighted cyan
+function SidebarClassRank({ leaderboard, myId }) {
   const medals = ['🥇', '🥈', '🥉']
   const { totalPoints: liveXP } = usePoints()
   if (!leaderboard.length) return null
 
   return (
-    <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-      <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>This week</p>
-        <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>Full board →</Link>
+    <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Class rank</p>
+        <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>Full board →</Link>
       </div>
-      <div style={{ padding: '6px 0 4px' }}>
+      <div>
         {leaderboard.slice(0, 5).map((entry, i) => {
           const isMe = entry.student_id === myId
           const pts = isMe ? liveXP : (entry.points ?? 0)
           return (
-            <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: isMe ? 'rgba(155,122,224,.07)' : 'transparent' }}>
-              <span style={{ fontSize: i < 3 ? 13 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 18, textAlign: 'center', flexShrink: 0 }}>
+            <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', background: isMe ? 'rgba(24,183,242,.07)' : 'transparent' }}>
+              <span style={{ fontSize: i < 3 ? 12 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>
                 {i < 3 ? medals[i] : `${i + 1}`}
               </span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {isMe ? 'You' : (entry.full_name?.split(' ')[0] ?? 'Student')}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: isMe ? '#ffc36b' : 'var(--text-tert)', flexShrink: 0 }}>
-                {pts.toLocaleString()} XP
+              <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
+                {pts.toLocaleString()}
               </span>
             </div>
           )
@@ -556,44 +552,155 @@ function MiniLeaderboard({ leaderboard, myId }) {
   )
 }
 
-// ── EXL Learning World card (right sidebar) ───────────────────────────────────
-function EXLCard() {
+// ── Right sidebar: Target card ────────────────────────────────────────────────
+// Matches prototype: goal name + days-left big number
+function SidebarTarget({ profile, onEdit }) {
+  const course     = profile?.university_course?.trim() ?? ''
+  const university = profile?.target_university?.trim()  ?? ''
+  const examType   = profile?.exam_type ?? 'WAEC'
+  const jambTotal  = profile?.jamb_total_target ?? 0
+  const hasAny     = course || university
+
+  const now      = new Date()
+  const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
+  const daysLeft = Math.max(0, Math.ceil((nextJune - now) / 86400000))
+
+  if (!hasAny) {
+    return (
+      <button onClick={onEdit} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+        padding: '13px', borderRadius: 14,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        cursor: 'pointer', textAlign: 'left',
+      }}>
+        <span style={{ fontSize: 18 }}>🎯</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)' }}>Set your target</p>
+          <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>University + course goal</p>
+        </div>
+      </button>
+    )
+  }
+
+  const goalLine = course
+    ? (university ? `${course} · ${university.replace('University of ', '').replace('University', 'Uni')}` : course)
+    : university
+
   return (
-    <div style={{
-      borderRadius: 16, overflow: 'hidden',
-      background: 'linear-gradient(160deg, #0f0a24 0%, #1a0f40 55%, #0f0a24 100%)',
-      border: '1px solid rgba(155,122,224,.3)',
-      padding: '14px 14px',
-      position: 'relative',
-    }}>
-      {/* Ambient glow */}
-      <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'rgba(155,122,224,.2)', filter: 'blur(24px)', pointerEvents: 'none' }} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          {/* EXL icon */}
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(155,122,224,.25)', border: '1px solid rgba(155,122,224,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-              <path d="M3 5H17M3 10H17M3 15H17" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="10" cy="10" r="8" stroke="rgba(196,181,253,.3)" strokeWidth="1.5"/>
+    <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: 13 }}>
+      <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>Your target</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>🎯</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goalLine}</p>
+          <p style={{ fontSize: 10, color: '#18B7F2', marginTop: 1 }}>{examType}{jambTotal > 0 ? ` · ${jambTotal}/400 target` : ''}</p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+        <p style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-prim)', lineHeight: 1 }}>{daysLeft}</p>
+        <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>days left</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Daily Quest card — the hero game-feel component ───────────────────────────
+// Progress ring (0/5), streak dots Mon–Sun, +50 XP reward, EXL Blue CTA
+function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) {
+  const [pressed, setPressed] = useState(false)
+
+  // Build weekly dot state from sessionDays
+  const days  = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+  const today = new Date()
+  const weekDots = days.map((label, i) => {
+    const d = new Date(today)
+    d.setDate(today.getDate() - ((today.getDay() + 6) % 7) + i)
+    const key = d.toISOString().slice(0, 10)
+    const isToday = i === ((today.getDay() + 6) % 7)
+    const done = !!sessionDays[key] || (isToday && Object.keys(sessionDays).length > 0)
+    return { label, isToday, done }
+  })
+
+  const topicHint = weakTopics[0]
+    ? `${weakTopics[0].topicName} · ${weakTopics[0].subjectName}`
+    : subjects[0]?.subjects?.name ?? 'Your next topic'
+
+  // Ring SVG — 0/5 empty (ready for today)
+  const ringSize = 72, stroke = 7, r = (ringSize - stroke) / 2
+  const circ = 2 * Math.PI * r
+
+  return (
+    <div>
+      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Daily quest</span>
+      <div style={{
+        borderRadius: 20, overflow: 'hidden', position: 'relative', cursor: 'pointer',
+        background: 'linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%)',
+        border: '1px solid rgba(24,183,242,.2)',
+        animation: 'exl-glow-pulse 3s ease-in-out infinite',
+        padding: 18,
+      }} onClick={onStart}>
+
+        {/* Glow orb */}
+        <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'radial-gradient(circle,rgba(24,183,242,.18) 0%,transparent 70%)', pointerEvents: 'none' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
+          {/* Progress ring */}
+          <div style={{ position: 'relative', flexShrink: 0, width: ringSize, height: ringSize }}>
+            <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}
+              style={{ filter: 'drop-shadow(0 0 8px #1264E588)' }}>
+              <circle cx={ringSize/2} cy={ringSize/2} r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth={stroke}/>
+              <circle cx={ringSize/2} cy={ringSize/2} r={r} fill="none" stroke="#1264E5" strokeWidth={stroke}
+                strokeLinecap="round" strokeDasharray={`0 ${circ}`}
+                transform={`rotate(-90 ${ringSize/2} ${ringSize/2})`}/>
             </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <p style={{ fontSize: 18, fontWeight: 900, color: '#fff', lineHeight: 1 }}>0</p>
+              <p style={{ fontSize: 8, color: 'rgba(255,255,255,.4)', fontWeight: 700 }}>/ 5</p>
+            </div>
           </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 900, color: '#e9d5ff', lineHeight: 1, letterSpacing: '-0.01em' }}>EXL Learning World</p>
-            <p style={{ fontSize: 9, color: 'rgba(196,181,253,.6)', marginTop: 2 }}>Interactive Science Platform</p>
+
+          {/* Content */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+              <p style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '-.01em' }}>Quick 5</p>
+              <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(255,184,0,.15)', border: '1px solid rgba(255,184,0,.25)', color: '#FFB800' }}>+50 XP</span>
+            </div>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginBottom: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {topicHint} · ~4 min
+            </p>
+            <button
+              onMouseDown={() => setPressed(true)} onMouseUp={() => setPressed(false)} onMouseLeave={() => setPressed(false)}
+              onTouchStart={() => setPressed(true)} onTouchEnd={() => setPressed(false)}
+              onClick={e => { e.stopPropagation(); onStart() }}
+              style={{
+                width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
+                background: '#1264E5', color: '#fff', fontSize: 13, fontWeight: 900, letterSpacing: '-.015em',
+                transform: pressed ? 'translateY(2px)' : '',
+                boxShadow: pressed ? '0 2px 0 #0a3fa0' : '0 4px 0 #0a3fa0, 0 6px 16px rgba(18,100,229,.35)',
+                transition: 'transform .1s, box-shadow .1s',
+                position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
+              }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)', backgroundSize: '200% 100%', animation: 'exl-shimmer 2.5s infinite', pointerEvents: 'none' }} />
+              Start today's quest →
+            </button>
           </div>
         </div>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', lineHeight: 1.55, marginBottom: 10 }}>
-          Learn Maths, Physics and Chemistry through interactive simulations and labs.
-        </p>
-        <a href="https://exllearning.com" target="_blank" rel="noopener noreferrer" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          padding: '8px 0', borderRadius: 10,
-          background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.35)',
-          color: '#c4b5fd', fontSize: 11, fontWeight: 800, textDecoration: 'none',
-          letterSpacing: '-0.01em',
-        }}>
-          Explore →
-        </a>
+
+        {/* Weekly streak dots */}
+        <div style={{ display: 'flex', gap: 5, marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.06)', position: 'relative', zIndex: 1, alignItems: 'center' }}>
+          {weekDots.map(({ label, isToday, done }, i) => {
+            let bg = 'rgba(255,255,255,.04)', bd = 'rgba(255,255,255,.08)', col = 'rgba(255,255,255,.2)', txt = label[0]
+            if (isToday) { bg = '#1264E5'; bd = '#1264E5'; col = '#fff'; txt = '●' }
+            else if (done) { bg = 'rgba(24,183,242,.15)'; bd = 'rgba(24,183,242,.3)'; col = '#18B7F2'; txt = '✓' }
+            return (
+              <div key={i} style={{ width: 26, height: 26, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, background: bg, border: `1px solid ${bd}`, color: col }}>{txt}</div>
+            )
+          })}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ animation: 'exl-flame 1.8s ease-in-out infinite', display: 'inline-block' }}>🔥</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#FF6A00' }}>{streak} days</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -604,6 +711,7 @@ export default function DashboardPage() {
   const supabase = createClient()
   const router   = useRouter()
   const isDark   = useIsDark()
+  const { userId } = useUser()
 
   const [loading,       setLoading]       = useState(true)
   const [profile,       setProfile]       = useState(null)
@@ -612,11 +720,11 @@ export default function DashboardPage() {
   const [planItems,     setPlanItems]     = useState({})
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [practiceModal, setPracticeModal] = useState(null)
-  const [sessionDays,   setSessionDays]   = useState({})   // date → count, current week
+  const [sessionDays,   setSessionDays]   = useState({})
   const [realStreak,    setRealStreak]    = useState(0)
   const [leaderboard,   setLeaderboard]   = useState([])
 
-  useEffect(() => { load() }, []) // eslint-disable-line
+  useEffect(() => { if (userId) load(userId) }, [userId]) // eslint-disable-line
 
   useEffect(() => {
     const onVisible = () => {
@@ -631,118 +739,92 @@ export default function DashboardPage() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        fetch('/api/leaderboard/global?limit=5')
-          .then(r => r.json())
-          .then(data => setLeaderboard(data.leaderboard ?? []))
-          .catch(() => {})
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
-
-  async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-
+  async function load(uid) {
     const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d.toISOString() })()
+    try {
+      const [{ data: prof }, { data: paths }, { data: mastery }, { data: streakRow }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', uid).single(),
+        supabase.from('student_learning_paths')
+          .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
+          .eq('student_id', uid),
+        supabase.from('student_topic_mastery')
+          .select('topic_id, score, topics(id, name, subject_id, subjects(name))')
+          .eq('student_id', uid)
+          .order('score', { ascending: true })
+          .limit(6),
+        supabase.from('student_streaks')
+          .select('current_streak, last_active_date')
+          .eq('student_id', uid)
+          .maybeSingle(),
+      ])
 
-    const [{ data: prof }, { data: paths }, { data: prog }, { data: mastery }, { data: attemptRows }, { data: streakRow }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('student_learning_paths')
-        .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
-        .eq('student_id', user.id),
-      supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
-      supabase.from('student_topic_mastery')
-        .select('topic_id, score, topics(id, name, subject_id, subjects(name))')
-        .eq('student_id', user.id)
-        .order('score', { ascending: true })
-        .limit(6),
-      supabase.from('question_attempts')
-        .select('created_at')
-        .eq('student_id', user.id)
-        .gte('created_at', weekStart),
-      supabase.from('student_streaks')
-        .select('current_streak, last_active_date')
-        .eq('student_id', user.id)
-        .maybeSingle(),
-    ])
-    // practice_sessions table may not exist yet — fetch silently, fall back to question_attempts
-    const sessRows = await supabase
-      .from('practice_sessions').select('completed_at')
-      .eq('student_id', user.id).gte('completed_at', weekStart)
-      .then(r => r.data ?? []).catch(() => [])
+      setProfile(prof)
 
-    setProfile(prof)
-
-    // Subject progress
-    const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
-    const enriched = (paths ?? []).map(path => {
-      const ids  = path.ordered_subtopic_ids ?? []
-      const done = ids.filter(id => completedIds.has(id)).length
-      const pct  = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
-      return { subject_id: path.subject_id, subjects: path.subjects, total: ids.length, completed: done, pct }
-    })
-    setSubjects(enriched)
-
-    // Weak topics — lowest mastery scores, max 3
-    const weak = (mastery ?? [])
-      .filter(m => m.topics && (m.score ?? 0) < 40)
-      .slice(0, 3)
-      .map(m => ({
-        topicId:     m.topic_id,
-        topicName:   m.topics?.name ?? '',
-        subjectName: m.topics?.subjects?.name ?? '',
-        pct:         Math.round(m.score ?? 0),
-      }))
-    setWeakTopics(weak)
-
-    // Build practice activity map: date → count
-    // Prefer practice_sessions rows; fall back to question_attempts grouped by session
-    const byDate = {}
-    if (sessRows?.length > 0) {
-      for (const s of sessRows) {
-        const day = s.completed_at?.slice(0, 10)
-        if (day) byDate[day] = (byDate[day] ?? 0) + 1
+      const topicScoresBySubject = {}
+      for (const m of mastery ?? []) {
+        const sid = m.topics?.subject_id
+        if (!sid) continue
+        if (!topicScoresBySubject[sid]) topicScoresBySubject[sid] = []
+        topicScoresBySubject[sid].push(m.score ?? 0)
       }
-    } else if (attemptRows?.length > 0) {
-      // Group attempts into sessions (gap > 30 min = new session)
-      const sorted = [...attemptRows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
-      let lastTs = null
-      for (const a of sorted) {
-        if (!a.created_at) continue
-        const day = a.created_at.slice(0, 10)
-        const ts  = new Date(a.created_at).getTime()
-        if (!lastTs || ts - lastTs > 30 * 60 * 1000) byDate[day] = (byDate[day] ?? 0) + 1
-        lastTs = ts
-      }
-    }
-    setSessionDays(byDate)
 
-    // Real streak from student_streaks table
-    const realStreak = streakRow?.current_streak ?? prof?.streak_days ?? 0
-    setRealStreak(realStreak)
+      const enriched = (paths ?? []).map(path => {
+        const scores = topicScoresBySubject[path.subject_id] ?? []
+        const pct = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
+        const total = (path.ordered_subtopic_ids ?? []).length
+        const completed = scores.filter(s => s >= 50).length
+        return { subject_id: path.subject_id, subjects: path.subjects, total, completed, pct }
+      })
+      setSubjects(enriched)
 
-    setLoading(false)
+      const weak = (mastery ?? [])
+        .filter(m => m.topics && (m.score ?? 0) < 40)
+        .slice(0, 3)
+        .map(m => ({
+          topicId:     m.topic_id,
+          topicName:   m.topics?.name ?? '',
+          subjectName: m.topics?.subjects?.name ?? '',
+          pct:         Math.round(m.score ?? 0),
+        }))
+      setWeakTopics(weak)
 
-    // Fetch personalised next-topic recommendations non-blocking
-    if (enriched.length > 0) {
+      const streak = streakRow?.current_streak ?? prof?.streak_days ?? 0
+      setRealStreak(streak)
+
+      // Non-blocking secondaries — fire after state is set
+      supabase.from('question_attempts').select('created_at')
+        .eq('student_id', uid).gte('created_at', weekStart)
+        .then(r => {
+          const rows = r.data ?? []
+          const byDate = {}
+          const sorted = [...rows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+          let lastTs = null
+          for (const a of sorted) {
+            if (!a.created_at) continue
+            const day = a.created_at.slice(0, 10)
+            const ts  = new Date(a.created_at).getTime()
+            if (!lastTs || ts - lastTs > 30 * 60 * 1000) byDate[day] = (byDate[day] ?? 0) + 1
+            lastTs = ts
+          }
+          setSessionDays(byDate)
+        }).catch(() => {})
+
       fetch('/api/student/next-topic')
         .then(r => r.json())
         .then(data => setPlanItems(data.topics ?? {}))
         .catch(() => {})
+
+      fetch('/api/leaderboard/global?limit=5')
+        .then(r => r.json())
+        .then(data => setLeaderboard(data.leaderboard ?? []))
+        .catch(() => {})
+
+    } catch (err) {
+      console.error('[dashboard load]', err?.message ?? err)
+    } finally {
+      setLoading(false)
     }
-
-    // Fetch global leaderboard non-blocking
-    fetch('/api/leaderboard/global?limit=5')
-      .then(r => r.json())
-      .then(data => setLeaderboard(data.leaderboard ?? []))
-      .catch(() => {})
   }
-
   if (loading) return <DashboardSkeleton />
 
   const firstName = profile?.full_name?.split(' ')[0] ?? ''
@@ -769,14 +851,12 @@ export default function DashboardPage() {
     <>
       {/* Two-column layout on desktop: main feed left, activity+leaderboard right */}
       <style>{`
-        @media (min-width: 1100px) {
-          .dash-grid       { display: grid !important; grid-template-columns: 1fr 240px; gap: 24px; align-items: start; }
-          .dash-right      { display: flex !important; }
-          .exl-mobile-only { display: none !important; }
+        @media (min-width: 1024px) {
+          .dash-grid  { display: grid !important; grid-template-columns: 1fr 196px; gap: 20px; align-items: start; }
+          .dash-right { display: flex !important; }
         }
-        @media (max-width: 1099px) {
-          .dash-right      { display: none !important; }
-          .exl-mobile-only { display: block !important; }
+        @media (max-width: 1023px) {
+          .dash-right { display: none !important; }
         }
       `}</style>
 
@@ -787,38 +867,28 @@ export default function DashboardPage() {
 
           {hasPath ? (
             <>
-              {/* ── Coach with greeting merged in ── */}
-              <CoachBanner emoji={coach.emoji} message={coach.message} greeting={greeting.hero} />
+              {/* ── 1. Greeting + pills ── */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>{greeting.eyebrow}</p>
+                  <p style={{ fontSize: 17, fontWeight: 900, letterSpacing: '-0.025em', color: 'var(--text-prim)', lineHeight: 1.2 }}>{greeting.hero}</p>
+                </div>
+              </div>
 
-              {/* ── 2. Hero carousel ── */}
-              <SubjectCarousel subjects={subjects} planItems={planItems} onStartPractice={sub => openPractice(sub)} isDark={isDark} />
+              {/* ── 2. Zara coach banner ── */}
+              <CoachBanner emoji={coach.emoji} message={coach.message} />
 
-              {/* ── 3. Your subjects ── */}
-              <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
+              {/* ── 3. Daily Quest card ── */}
+              <DailyQuestCard subjects={subjects} weakTopics={weakTopics} streak={realStreak} sessionDays={sessionDays} onStart={() => router.push('/student/practice')} />
 
-              {/* ── 4. Needs attention ── */}
+              {/* ── 4. Level up faster (weak topics) ── */}
               <NeedsAttention weakTopics={weakTopics} onPractise={t => openPractice(subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub)} />
 
-              {/* ── 5. Target strip ── */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>Your target</p>
-                </div>
-                <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
-              </div>
+              {/* ── 5. Subject mastery rows ── */}
+              <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
 
-              {/* ── 6. EXL Learning World — mobile only (desktop has it in sidebar) ── */}
-              <div className="exl-mobile-only" style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, #0b1330 0%, #1a1060 45%, #2a0e54 100%)', border: '1px solid rgba(155,122,224,.25)', padding: '20px 20px', position: 'relative' }}>
-                <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.12 }}>
-                  <circle cx="90%" cy="30%" r="60" fill="#9b7ae0"/><circle cx="75%" cy="80%" r="40" fill="#5cb8ea"/><circle cx="15%" cy="60%" r="30" fill="#ff8fab"/>
-                </svg>
-                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.35)', fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#c4b5fd', marginBottom: 10 }}>🌍 New from EXL</div>
-                  <p style={{ fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.2, marginBottom: 6 }}>EXL Learning World</p>
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,.55)', lineHeight: 1.55, marginBottom: 16, maxWidth: 320 }}>Take your learning beyond ExamPrep — explore courses, live sessions, and skill challenges on the EXL platform.</p>
-                  <a href="https://exllearning.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 12, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.18)', color: '#fff', fontSize: 13, fontWeight: 800, textDecoration: 'none', letterSpacing: '-0.01em' }}>Explore EXL →</a>
-                </div>
-              </div>
+              {/* ── 6. Target strip ── */}
+              <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
             </>
           ) : (
             <NoPathState profile={profile} onEdit={() => setShowGoalModal(true)} />
@@ -826,10 +896,10 @@ export default function DashboardPage() {
         </div>
 
         {/* ── RIGHT sidebar (desktop only) ── */}
-        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 14, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
-          <MiniActivityChart sessionDays={sessionDays} streak={realStreak} />
-          <MiniLeaderboard leaderboard={leaderboard} myId={profile?.id} />
-          <EXLCard />
+        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
+          <SidebarActivity sessionDays={sessionDays} streak={realStreak} />
+          <SidebarClassRank leaderboard={leaderboard} myId={profile?.id} />
+          <SidebarTarget profile={profile} onEdit={() => setShowGoalModal(true)} />
         </div>
 
       </div>

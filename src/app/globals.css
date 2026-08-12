@@ -1,17 +1,26 @@
-/* src/app/globals.css — DEFINITIVE REPLACEMENT
+/* src/app/globals.css — EXL EXAM PREP Design System v4
  * ─────────────────────────────────────────────────────────────────────────────
- * EXL EXAM PREP — Design System v3
- * Full light + dark. Every screen adapts. No exceptions.
+ * BRAND IDENTITY: EXL ExamPrep — dark-navy-first, game-feel, achievement energy
  *
- * BRAND:   Navy #0b1330 anchors CTAs in both modes. Non-negotiable.
- * LIGHT:   Warm white canvas (#f7f8fc). Cards pure white. Accents rich.
- * DARK:    Navy-tinted canvas (#0d1117). Cards #161d2e. Same identity.
+ * PALETTE:
+ *   EXL Navy    #062A78   primary brand / dark surfaces
+ *   EXL Blue    #1264E5   primary UI / CTA
+ *   EXL Cyan    #18B7F2   highlights / active states
+ *   EXL Gold    #FFB800   achievement / XP / streaks
+ *   EXL Orange  #FF6A00   progress / action / fire
+ *   Dark Navy   #071B49   dark backgrounds
  *
- * RULES (never break these):
+ * DARK MODE (default feel — the game canvas):
+ *   Canvas: #0a0c14  Cards: rgba(255,255,255,.04)  Text: #ffffff
+ *
+ * LIGHT MODE (clean day mode):
+ *   Canvas: #f0f4ff  Cards: #ffffff  Text: #071B49
+ *
+ * RULES:
  *   1. Structural colours → CSS token classes (bg-card, text-primary, etc.)
- *   2. Subject/brand accents → inline style + resolveSubjectColors(name, isDark)
+ *   2. Subject/brand accents → inline style + resolveSubjectColors()
  *   3. Never dynamic Tailwind classes for colours (Tailwind v4 limitation)
- *   4. --shadow-* are light-mode only; dark mode uses border emphasis instead
+ *   4. CTA buttons always use EXL Blue #1264E5 — never the old #0b1330 navy
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -36,123 +45,122 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    LIGHT MODE  ─  :root
-   Warm white canvas. Clean. Easy to read. Accents pop.
+   EXL light: crisp blue-white canvas. Feels premium, not flat.
    ══════════════════════════════════════════════════════════════════════════ */
 :root {
   /* Canvas */
-  --bg-base:           #f7f8fc;  /* page bg — navy-tinted off-white                */
+  --bg-base:           #f0f4ff;  /* EXL light canvas — cool blue-white              */
   --bg-card:           #ffffff;  /* cards, panels, drawers                          */
-  --bg-subtle:         #eef0f8;  /* hover, chip bg, inset areas                     */
-  --bg-inset:          #e4e7f4;  /* inset within cards                              */
-  --bg-overlay:        rgba(0,0,0,0.45); /* modal backdrop                          */
+  --bg-subtle:         #e8eeff;  /* hover, chip bg, inset areas                     */
+  --bg-inset:          #dde4f8;  /* inset within cards                              */
+  --bg-overlay:        rgba(6,42,120,0.5); /* modal backdrop — EXL navy tint       */
 
   /* Text */
-  --text-prim:         #0a0d1a;  /* headings, body — navy-tinted near-black         */
-  --text-sec:          #4a5070;  /* supporting text, labels, meta                   */
-  --text-tert:         #8890aa;  /* placeholders, disabled, hints                   */
+  --text-prim:         #071B49;  /* EXL dark navy — strong, brand-aligned           */
+  --text-sec:          #3a4870;  /* supporting — mid-navy                           */
+  --text-tert:         #7a8aaa;  /* placeholders, disabled, hints                   */
 
   /* Borders */
-  --border:            #dde0f0;  /* default — navy-tinted light grey                */
-  --border-strong:     #bcc0d8;  /* stronger separators                             */
+  --border:            #dde4f5;  /* default — cool blue-grey                        */
+  --border-strong:     #c4cfed;  /* stronger separators                             */
 
-  /* Brand CTA — NEVER changes between modes */
-  --cta-bg:            #0b1330;
-  --cta-shadow:        #05070f;
+  /* Brand CTA — EXL Blue, always */
+  --cta-bg:            #1264E5;
+  --cta-shadow:        #0a3fa0;
   --cta-text:          #ffffff;
 
   /* Active / selected states */
-  --active-bg:         #e6e8f8;
-  --active-text:       #3730a3;  /* indigo-800                                      */
-  --active-border:     #a5b4fc;  /* indigo-300                                      */
+  --active-bg:         rgba(18,100,229,0.08);
+  --active-text:       #1264E5;
+  --active-border:     rgba(18,100,229,0.25);
 
-  /* Status — question feedback, mastery indicators */
-  --success:           #059669;  /* emerald-600                                     */
+  /* Status */
+  --success:           #059669;
   --success-bg:        #ecfdf5;
   --success-border:    #a7f3d0;
-  --danger:            #dc2626;  /* red-600                                         */
+  --danger:            #dc2626;
   --danger-bg:         #fef2f2;
   --danger-border:     #fecaca;
-  --warning:           #d97706;  /* amber-600                                       */
+  --warning:           #d97706;
   --warning-bg:        #fffbeb;
   --warning-border:    #fde68a;
-  --gold:              #d97706;  /* amber — XP, streaks — readable on white         */
-  --gold-bright:       #f59e0b;  /* icons, ring fills                               */
+  --gold:              #d97706;  /* amber — XP, streaks — readable on light         */
+  --gold-bright:       #FFB800;  /* EXL Gold — icons, ring fills                   */
 
   /* Navigation */
-  --nav-bg:            rgba(255,255,255,0.96);
-  --nav-border:        #dde0f0;
+  --nav-bg:            rgba(248,251,255,0.97);
+  --nav-border:        #dde4f5;
 
-  /* Shadows — card elevation in light mode */
-  --shadow-xs:         0 1px 2px rgba(10,13,26,0.06);
-  --shadow-sm:         0 1px 4px rgba(10,13,26,0.07), 0 1px 2px rgba(10,13,26,0.05);
-  --shadow-card:       0 2px 8px rgba(10,13,26,0.07), 0 1px 3px rgba(10,13,26,0.05);
-  --shadow-card-lg:    0 8px 24px rgba(10,13,26,0.10), 0 2px 6px rgba(10,13,26,0.06);
-  --shadow-modal:      0 20px 60px rgba(10,13,26,0.20), 0 4px 12px rgba(10,13,26,0.10);
-  --shadow-cta:        0 6px 0 #05070f, 0 10px 24px rgba(10,13,26,0.18);
-  --shadow-cta-press:  0 2px 0 #05070f;
+  /* Shadows */
+  --shadow-xs:         0 1px 2px rgba(6,42,120,0.06);
+  --shadow-sm:         0 1px 4px rgba(6,42,120,0.07), 0 1px 2px rgba(6,42,120,0.05);
+  --shadow-card:       0 2px 8px rgba(6,42,120,0.07), 0 1px 3px rgba(6,42,120,0.05);
+  --shadow-card-lg:    0 8px 24px rgba(6,42,120,0.10), 0 2px 6px rgba(6,42,120,0.06);
+  --shadow-modal:      0 20px 60px rgba(6,42,120,0.20), 0 4px 12px rgba(6,42,120,0.10);
+  --shadow-cta:        0 5px 0 #0a3fa0, 0 8px 20px rgba(18,100,229,0.30);
+  --shadow-cta-press:  0 2px 0 #0a3fa0;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
    DARK MODE  ─  .dark
-   Navy-tinted canvas. Not grey — branded dark.
+   EXL dark: deep game canvas. Rich navy-black. Achievement energy.
    ══════════════════════════════════════════════════════════════════════════ */
 .dark {
   /* Canvas */
-  --bg-base:           #0d1117;  /* near-black, navy tint                           */
-  --bg-card:           #161d2e;  /* navy-dark card surface                          */
-  --bg-subtle:         #1e2640;  /* hover, chip bg, inset areas                     */
-  --bg-inset:          #111827;  /* deep inset inside cards                         */
-  --bg-overlay:        rgba(0,0,0,0.65);
+  --bg-base:           #0a0c14;  /* deep game canvas — near-black, navy tint        */
+  --bg-card:           rgba(255,255,255,0.04);  /* glass card surface              */
+  --bg-subtle:         rgba(255,255,255,0.06);  /* hover, chip bg                  */
+  --bg-inset:          rgba(255,255,255,0.08);  /* inset within cards              */
+  --bg-overlay:        rgba(0,0,0,0.70);
 
   /* Text */
-  --text-prim:         #e8ecf8;  /* near-white with cool-blue undertone             */
-  --text-sec:          #7a85a8;  /* supporting — blue-grey                          */
-  --text-tert:         #454f6b;  /* placeholders, disabled                          */
+  --text-prim:         #ffffff;  /* pure white — maximum contrast on dark canvas    */
+  --text-sec:          rgba(255,255,255,0.70);  /* supporting                      */
+  --text-tert:         rgba(255,255,255,0.35);  /* placeholders, hints             */
 
   /* Borders */
-  --border:            rgba(255,255,255,0.08);
-  --border-strong:     rgba(255,255,255,0.16);
+  --border:            rgba(255,255,255,0.07);
+  --border-strong:     rgba(255,255,255,0.14);
 
-  /* Brand CTA — same navy, always */
-  --cta-bg:            #0b1330;
-  --cta-shadow:        #05070f;
+  /* Brand CTA — EXL Blue, same as light */
+  --cta-bg:            #1264E5;
+  --cta-shadow:        #0a3fa0;
   --cta-text:          #ffffff;
 
   /* Active */
-  --active-bg:         rgba(99,102,241,0.18);
-  --active-text:       #a5b4fc;
-  --active-border:     rgba(99,102,241,0.4);
+  --active-bg:         rgba(24,183,242,0.12);
+  --active-text:       #18B7F2;
+  --active-border:     rgba(24,183,242,0.3);
 
-  /* Status — lifted for dark bg legibility */
-  --success:           #34d399;  /* emerald-400                                     */
+  /* Status — lifted for dark bg */
+  --success:           #34d399;
   --success-bg:        rgba(52,211,153,0.10);
   --success-border:    rgba(52,211,153,0.25);
-  --danger:            #f87171;  /* red-400                                         */
+  --danger:            #f87171;
   --danger-bg:         rgba(248,113,113,0.10);
   --danger-border:     rgba(248,113,113,0.25);
-  --warning:           #fbbf24;  /* amber-400                                       */
+  --warning:           #fbbf24;
   --warning-bg:        rgba(251,191,36,0.10);
   --warning-border:    rgba(251,191,36,0.25);
-  --gold:              #ffc36b;
-  --gold-bright:       #ffc36b;
+  --gold:              #FFB800;  /* EXL Gold — full brightness on dark              */
+  --gold-bright:       #FFB800;
 
   /* Navigation */
-  --nav-bg:            rgba(13,17,23,0.96);
-  --nav-border:        rgba(255,255,255,0.08);
+  --nav-bg:            rgba(6,10,20,0.95);
+  --nav-border:        rgba(255,255,255,0.07);
 
   /* Shadows — borders do the work in dark mode */
   --shadow-xs:         none;
   --shadow-sm:         none;
   --shadow-card:       none;
   --shadow-card-lg:    none;
-  --shadow-modal:      0 20px 60px rgba(0,0,0,0.6);
-  --shadow-cta:        0 6px 0 #05070f, 0 10px 20px rgba(0,0,0,0.50);
-  --shadow-cta-press:  0 2px 0 #05070f;
+  --shadow-modal:      0 20px 60px rgba(0,0,0,0.7);
+  --shadow-cta:        0 5px 0 #0a3fa0, 0 8px 20px rgba(18,100,229,0.35);
+  --shadow-cta-press:  0 2px 0 #0a3fa0;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   LEGACY ALIASES — stale --color-* names still resolve correctly.
-   Do not add new uses of --color-*; use the canonical token names directly.
+   LEGACY ALIASES
    ══════════════════════════════════════════════════════════════════════════ */
 :root {
   --color-card:           var(--bg-card);
@@ -167,6 +175,41 @@
   --color-border-default: var(--border);
   --color-text-secondary: var(--text-sec);
   --color-text-tertiary:  var(--text-tert);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   GAME FEEL — ambient animations used across non-session pages
+   ══════════════════════════════════════════════════════════════════════════ */
+@keyframes exl-flame {
+  0%,100% { transform: scaleY(1) skewX(0deg); }
+  33%     { transform: scaleY(1.07) skewX(-2deg); }
+  66%     { transform: scaleY(0.96) skewX(1deg); }
+}
+@keyframes exl-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes exl-glow-pulse {
+  0%,100% { box-shadow: 0 0 10px rgba(18,100,229,0.2); }
+  50%     { box-shadow: 0 0 28px rgba(18,100,229,0.5); }
+}
+@keyframes exl-star {
+  0%,100% { opacity: 0.10; transform: scale(1); }
+  50%     { opacity: 0.45; transform: scale(1.35); }
+}
+@keyframes exl-slide-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes exl-bounce-in {
+  0%  { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.08); }
+  100%{ transform: scale(1);   opacity: 1; }
+}
+@keyframes exl-xp-pop {
+  0%  { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100%{ transform: scale(1); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -194,33 +237,26 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    SEMANTIC UTILITIES
-   These are the only classes components should use for structural colour.
-   They auto-adapt to light/dark via CSS variables — zero dark: prefixes needed.
    ══════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
-  /* Surfaces */
   .bg-base      { background-color: var(--bg-base);    }
   .bg-card      { background-color: var(--bg-card);    }
   .bg-subtle    { background-color: var(--bg-subtle);  }
   .bg-inset     { background-color: var(--bg-inset);   }
   .bg-overlay   { background-color: var(--bg-overlay); }
 
-  /* Text */
   .text-primary   { color: var(--text-prim); }
   .text-secondary { color: var(--text-sec);  }
   .text-tertiary  { color: var(--text-tert); }
 
-  /* Borders */
   .border-default { border-color: var(--border);        }
   .border-strong  { border-color: var(--border-strong); }
   .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
 
-  /* Active / selected */
   .bg-active     { background-color: var(--active-bg);     }
   .text-active   { color:            var(--active-text);   }
   .border-active { border-color:     var(--active-border); }
 
-  /* Status */
   .text-success   { color: var(--success); }
   .bg-success     { background-color: var(--success-bg);     }
   .border-success { border-color:     var(--success-border); }
@@ -232,18 +268,8 @@
   .border-warning { border-color:     var(--warning-border); }
   .text-gold      { color: var(--gold); }
 
-  /* Dividers using semantic border token */
-  .divide-default > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
+  .bg-base-inv  { background-color: var(--bg-card); }
 
-  /* Additional surface aliases used in components */
-  .bg-base-inv  { background-color: var(--bg-card); }  /* Inverse — card bg on base */
-
-  /* Ensure text-primary / text-secondary / text-tertiary all resolve */
-  .text-primary   { color: var(--text-prim); }
-  .text-secondary { color: var(--text-sec);  }
-  .text-tertiary  { color: var(--text-tert); }
-
-  /* Shadows */
   .shadow-xs       { box-shadow: var(--shadow-xs);      }
   .shadow-sm       { box-shadow: var(--shadow-sm);      }
   .shadow-card     { box-shadow: var(--shadow-card);    }
@@ -251,17 +277,98 @@
   .shadow-modal    { box-shadow: var(--shadow-modal);   }
   .shadow-cta      { box-shadow: var(--shadow-cta);     }
 
-  /* z-layers */
   .z-viewer { z-index: 100; }
   .z-modal  { z-index: 200; }
   .z-toast  { z-index: 300; }
+
+  /* ── EXL Game-feel utilities ── */
+  .exl-flame       { animation: exl-flame 1.8s ease-in-out infinite; display: inline-block; }
+  .exl-slide-up    { animation: exl-slide-up .4s ease; }
+  .exl-bounce-in   { animation: exl-bounce-in .5s ease; }
+  .exl-glow-quest  { animation: exl-glow-pulse 3s ease-in-out infinite; }
+
+  /* Press button — EXL Blue CTA */
+  .btn-exl {
+    background: var(--cta-bg);
+    box-shadow: var(--shadow-cta);
+    color: var(--cta-text);
+    border: none;
+    cursor: pointer;
+    font-weight: 900;
+    border-radius: 14px;
+    transition: transform .1s, box-shadow .1s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-exl:active {
+    transform: translateY(3px);
+    box-shadow: var(--shadow-cta-press);
+  }
+  .btn-exl::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.12) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: exl-shimmer 2.5s infinite;
+  }
+
+  /* XP pill */
+  .exl-xp-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 999px;
+    background: rgba(255,184,0,.12);
+    border: 1.5px solid rgba(255,184,0,.28);
+    font-size: 11px; font-weight: 800; color: var(--gold);
+  }
+
+  /* Streak badge */
+  .exl-streak {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,106,0,.12);
+    border: 1.5px solid rgba(255,106,0,.28);
+    font-size: 11px; font-weight: 800; color: #FF6A00;
+  }
+
+  /* XP bar */
+  .exl-xp-track {
+    height: 5px; border-radius: 99px;
+    background: var(--border); overflow: hidden;
+  }
+  .exl-xp-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, #18B7F2, #1264E5);
+    transition: width .8s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  /* Section micro-label */
+  .exl-label {
+    font-size: 9px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .12em;
+    color: var(--text-tert);
+  }
+
+  /* Coach/Zara banner */
+  .exl-coach {
+    padding: 11px 13px;
+    background: var(--active-bg);
+    border: 1.5px solid var(--active-border);
+    border-radius: 14px;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+
+  /* Star ambient dot */
+  .exl-star {
+    position: absolute; border-radius: 50%;
+    background: var(--text-prim);
+    animation: exl-star var(--dur, 3s) var(--delay, 0s) ease-in-out infinite;
+    opacity: .12;
+  }
 }
+
 /* ══════════════════════════════════════════════════════════════════════════
    DARK MODE OVERRIDES FOR LEGACY HARDCODED GRAYS
-   These catch components still using Tailwind gray classes (bg-gray-50,
-   text-gray-900 etc.) that weren't updated to use semantic tokens.
-   Targeting .dark so light mode is unaffected.
-   Long-term fix: migrate each component to semantic tokens.
    ══════════════════════════════════════════════════════════════════════════ */
 .dark .bg-gray-50,
 .dark .bg-gray-100 { background-color: var(--bg-subtle) !important; }
@@ -279,19 +386,38 @@
 .dark .border-gray-200 { border-color: var(--border)        !important; }
 .dark .border-gray-300  { border-color: var(--border-strong) !important; }
 
-/* Score ring hardcoded light track */
 .dark .bg-slate-100 { background-color: var(--bg-inset) !important; }
-
-/* Answer options in QuestionCard that use hardcoded hover */
 .dark .hover\:border-indigo-300:hover { border-color: var(--active-border) !important; }
 
-/* Smooth transitions for all token-driven properties */
+/* ══════════════════════════════════════════════════════════════════════════
+   TRANSITIONS
+   ══════════════════════════════════════════════════════════════════════════ */
 *, *::before, *::after {
   transition-property: background-color, border-color, color;
   transition-duration: 0.2s;
   transition-timing-function: ease;
 }
-/* But not for transforms/animations — keep those instant */
 button, a, [role="button"] {
   transition-property: background-color, border-color, color, transform, box-shadow, opacity;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SKELETON LOADERS
+   Shimmer animation for all skeleton placeholder components.
+   ══════════════════════════════════════════════════════════════════════════ */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    var(--bg-inset)  50%,
+    var(--bg-subtle) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }

@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client'
 import CoachBanner from '@/components/ui/CoachBanner'
 import { communityCoach } from '@/lib/coach'
 import { usePoints } from '@/contexts/PointsContext'
+import { useUser } from '@/contexts/UserContext'
 
 function getAppUrl() {
   if (typeof window !== 'undefined') return window.location.origin
@@ -226,13 +227,12 @@ function SchoolBadge({ name, onShare }) {
   if (!name) return null
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px 5px 8px', borderRadius: 999, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <span style={{ fontSize: 13 }}>🏫</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)' }}>{name}</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: 'rgba(255,184,0,.1)', border: '1px solid rgba(255,184,0,.25)' }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#FFB800' }}>🏫 {name}</span>
       </div>
       {onShare && (
-        <button onClick={onShare} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, background: 'rgba(155,122,224,.1)', border: '1px solid rgba(155,122,224,.25)', fontSize: 11, fontWeight: 700, color: '#9b7ae0', cursor: 'pointer' }}>
-          <span>Invite friends</span> <span>+</span>
+        <button onClick={onShare} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, background: 'rgba(24,183,242,.1)', border: '1px solid rgba(24,183,242,.25)', fontSize: 11, fontWeight: 700, color: '#18B7F2', cursor: 'pointer' }}>
+          Invite friends +
         </button>
       )}
     </div>
@@ -287,10 +287,20 @@ function Podium({ entries, userId }) {
         const avBg    = isMe ? '#9b7ae0' : avColor(e.first_name ?? e.full_name)
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 1 }}>
-            {/* Crown or spacer */}
-            <span style={{ fontSize: 14, lineHeight: 1, marginBottom: 2, opacity: crown ? 1 : 0 }}>👑</span>
+            {/* SVG crown for 1st place, invisible spacer for others */}
+            {rank === 1 ? (
+              <svg width="24" height="18" viewBox="0 0 24 18" fill="none" style={{ marginBottom: 2 }}>
+                <path d="M2 14L5 5L10 10L12 3L14 10L19 5L22 14H2Z" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" strokeLinejoin="round"/>
+                <rect x="2" y="14" width="20" height="3" rx="1.5" fill="#f59e0b"/>
+                <circle cx="2" cy="5" r="1.5" fill="#fbbf24"/>
+                <circle cx="12" cy="3" r="1.5" fill="#fbbf24"/>
+                <circle cx="22" cy="5" r="1.5" fill="#fbbf24"/>
+              </svg>
+            ) : (
+              <div style={{ height: 20, marginBottom: 2 }} />
+            )}
             {/* Rank label */}
-            <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.06em', color: rank === 1 ? '#fbbf24' : 'var(--text-tert)' }}>{rank === 1 ? `🥇 ${label}` : label}</p>
+            <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.06em', color: rank === 1 ? '#fbbf24' : 'var(--text-tert)' }}>{label}</p>
             {/* Avatar */}
             <div style={{ width: sz, height: sz, borderRadius: '50%', background: avBg, border: `2px solid ${isMe ? 'rgba(155,122,224,.5)' : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(sz * 0.38), fontWeight: 900, color: '#fff', boxShadow: rank === 1 ? `0 0 0 3px ${border}40` : 'none' }}>
               {isMe ? 'YOU' : initial}
@@ -301,8 +311,8 @@ function Podium({ entries, userId }) {
             <p style={{ fontSize: 10, fontWeight: 700, color: rank === 1 ? '#fbbf24' : 'var(--text-tert)', textAlign: 'center' }}>
               {e.points?.toLocaleString()}
             </p>
-            {/* Bar */}
-            <div style={{ width: '100%', borderRadius: '8px 8px 0 0', height: h, background: bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 8 }}>
+            {/* Bar — top border for 1st place emphasis */}
+            <div style={{ width: '100%', borderRadius: '8px 8px 0 0', height: h, background: bg, border: rank === 1 ? `1px solid ${border}30` : 'none', borderBottom: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 8 }}>
               <span style={{ fontSize: rank === 1 ? 20 : rank === 2 ? 16 : 14 }}>{medal}</span>
             </div>
           </div>
@@ -315,28 +325,39 @@ function Podium({ entries, userId }) {
 // ── Leaderboard row ───────────────────────────────────────────────────────────
 function LbRow({ entry, rank, userId }) {
   const isMe    = entry.student_id === userId
-  const initial = (entry.first_name ?? entry.full_name ?? '?')[0].toUpperCase()
-  const avBg    = isMe ? '#9b7ae0' : avColor(entry.first_name ?? entry.full_name)
-  const sub     = entry.cohort_name || entry.state || (
+  const name    = entry.first_name ?? entry.full_name ?? '?'
+  const initial = name[0].toUpperCase()
+  const avBg    = isMe ? '#9b7ae0' : avColor(name)
+  const sub     = entry.state || (
     entry.using_total ? 'Total XP' :
     (entry.points_change != null && entry.points_change > 0 ? `+${entry.points_change} this week` : null)
   )
   const medal   = rankMedal(rank)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14, background: isMe ? 'rgba(155,122,224,.08)' : 'var(--bg-subtle)', border: `1px solid ${isMe ? 'rgba(155,122,224,.25)' : 'var(--border)'}` }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14,
+      background: isMe ? 'rgba(155,122,224,.08)' : 'transparent',
+      border: `1px solid ${isMe ? 'rgba(155,122,224,.3)' : 'var(--border)'}`,
+    }}>
       <div style={{ width: 26, textAlign: 'center', flexShrink: 0 }}>
         {medal ? <span style={{ fontSize: 16 }}>{medal}</span> : <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tert)' }}>#{rank}</span>}
       </div>
-      <div style={{ width: 34, height: 34, borderRadius: '50%', background: avBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-        {isMe ? 'YOU' : initial}
+      <div style={{
+        width: 34, height: 34, borderRadius: '50%',
+        background: isMe ? 'linear-gradient(135deg,#9b7ae0,#5cb8ea)' : avBg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0,
+        border: isMe ? '2px solid rgba(155,122,224,.4)' : 'none',
+      }}>
+        {initial}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: isMe ? 800 : 700, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {isMe ? `You (${entry.first_name ?? 'You'})` : (entry.first_name ?? entry.full_name ?? '—')}
+        <p style={{ fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {isMe ? `You` : name}
         </p>
         {sub && <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>{sub}</p>}
       </div>
-      <span style={{ fontSize: 13, fontWeight: 900, color: isMe ? '#9b7ae0' : 'var(--text-prim)', flexShrink: 0 }}>
+      <span style={{ fontSize: 13, fontWeight: 900, color: isMe ? '#ffc36b' : 'var(--text-prim)', flexShrink: 0 }}>
         {entry.points?.toLocaleString()}
       </span>
     </div>
@@ -406,17 +427,44 @@ function ChallengeCard({ challenge, type = 'weekly' }) {
           </div>
         )}
       </div>
-      {challenge.my_entry && (
-        <div style={{ padding: '0 14px 13px' }}>
-          <div style={{ height: 5, background: 'rgba(255,255,255,.08)', borderRadius: 99, overflow: 'hidden', marginBottom: 5 }}>
-            <div style={{ height: '100%', background: isMonthly ? 'linear-gradient(90deg,#9b7ae0,#c4b5fd)' : 'linear-gradient(90deg,#f59e0b,#fbbf24)', borderRadius: 99, width: `${progress}%`, transition: 'width .7s' }} />
+      {challenge.my_entry && (() => {
+        // Mini SVG progress ring — more visual than a flat bar
+        const ringColor = isMonthly ? '#9b7ae0' : '#fbbf24'
+        const r = 20, circ = 2 * Math.PI * r
+        const dash = (progress / 100) * circ
+        return (
+          <div style={{ padding: '0 14px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Ring */}
+            <div style={{ position: 'relative', width: 52, height: 52, flexShrink: 0 }}>
+              <svg width="52" height="52" viewBox="0 0 52 52">
+                <circle cx="26" cy="26" r={r} fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="6"/>
+                <circle cx="26" cy="26" r={r} fill="none" stroke={ringColor} strokeWidth="6" strokeLinecap="round"
+                  strokeDasharray={`${dash} ${circ}`} transform="rotate(-90 26 26)"
+                  style={{ transition: 'stroke-dasharray .7s ease' }}/>
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 900, color: ringColor }}>{progress}%</span>
+              </div>
+            </div>
+            {/* Text */}
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                {challenge.my_entry.questions_completed} / {challenge.target_count} questions
+              </p>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>
+                {challenge.target_count - challenge.my_entry.questions_completed > 0
+                  ? `${challenge.target_count - challenge.my_entry.questions_completed} more to claim prize`
+                  : '🎉 Challenge complete!'}
+              </p>
+              {challenge.my_entry.rank && (
+                <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, fontWeight: 800, color: ringColor, background: `${ringColor}14`, border: `1px solid ${ringColor}28`, padding: '2px 7px', borderRadius: 999 }}>
+                  You're #{challenge.my_entry.rank}
+                </span>
+              )}
+            </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>{progress}% complete</span>
-            {challenge.my_entry.rank && <span style={{ fontSize: 10, fontWeight: 800, color: isMonthly ? '#c4b5fd' : '#fbbf24' }}>You're #{challenge.my_entry.rank}</span>}
-          </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -491,14 +539,6 @@ function ClassTab({ userId, profile, liveXP = 0 }) {
       {/* Challenges */}
       <ChallengeCard challenge={challenge} type="weekly" />
       <ChallengeCard challenge={monthlyChallenge} type="monthly" />
-
-      {/* Period selector row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-tert)' }}>
-          {selectedPeriod ? selectedPeriod.label : activePeriod ? formatPeriod(activePeriod.start, activePeriod.end) : 'This week'}
-        </span>
-        <button onClick={() => setShowPicker(true)} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tert)', background: 'none', border: 'none', cursor: 'pointer' }}>Past results ▾</button>
-      </div>
 
       <LeaderboardCard entries={leaderboard} userId={userId} title="Class leaderboard"
         headerRight={<button onClick={() => setShowPicker(true)} style={{ padding: '3px 8px', borderRadius: 999, border: '1.5px solid var(--border)', background: 'var(--bg-subtle)', fontSize: 9, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}>This week ▾</button>}
@@ -654,9 +694,9 @@ function NationalTab({ userId, liveXP = 0 }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {showInvite && <InviteSheet code={inviteCode} name="ExamPrep Nigeria" type="national" onClose={() => setShowInvite(false)} />}
 
-      {/* My national rank */}
-      <div style={{ borderRadius: 18, background: 'linear-gradient(155deg,#050b1a 0%,#0b1330 45%,#1a1060 100%)', border: '1px solid rgba(155,122,224,.3)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(155,122,224,.12)', border: '1.5px solid rgba(155,122,224,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🇳🇬</div>
+      {/* My national rank — always shown */}
+      <div style={{ borderRadius: 18, background: 'linear-gradient(155deg,#050b1a 0%,#0b1330 45%,#1a1060 100%)', border: '1px solid rgba(24,183,242,.2)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(24,183,242,.12)', border: '1.5px solid rgba(24,183,242,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🇳🇬</div>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.09em', color: 'rgba(255,255,255,.38)', marginBottom: 3 }}>
             Nationwide · {total.toLocaleString()} students
@@ -666,12 +706,12 @@ function NationalTab({ userId, liveXP = 0 }) {
               #{myRank.toLocaleString()} <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,.38)' }}>of {total.toLocaleString()}</span>
             </p>
           ) : (
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.5)' }}>Not ranked yet — start practising!</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.5)' }}>Keep practising to climb the board!</p>
           )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          {topPct != null && <p style={{ fontSize: 13, fontWeight: 800, color: '#c4b5fd', lineHeight: 1 }}>Top {topPct}%</p>}
-          <button onClick={() => setShowInvite(true)} style={{ marginTop: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(155,122,224,.15)', border: '1px solid rgba(155,122,224,.3)', fontSize: 9, fontWeight: 700, color: '#c4b5fd', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {topPct != null && <p style={{ fontSize: 13, fontWeight: 800, color: '#18B7F2', lineHeight: 1 }}>Top {topPct}%</p>}
+          <button onClick={() => setShowInvite(true)} style={{ marginTop: 4, padding: '4px 10px', borderRadius: 999, background: 'rgba(24,183,242,.15)', border: '1px solid rgba(24,183,242,.3)', fontSize: 9, fontWeight: 700, color: '#18B7F2', cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Invite friends +
           </button>
         </div>
@@ -771,27 +811,25 @@ export default function CommunityPage() {
   const router   = useRouter()
   const supabase = createClient()
   const { totalPoints: liveXP } = usePoints()
+  const { userId } = useUser()
 
-  const [user,      setUser]      = useState(null)
   const [profile,   setProfile]   = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [activeTab, setActiveTab] = useState('class')
 
   useEffect(() => {
+    if (!userId) return
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      setUser(user)
       const { data: prof } = await supabase
         .from('profiles')
         .select('id, cohort_id, class_id, cohorts(id, name, session, invite_code, schools(name, city))')
-        .eq('id', user.id).single()
+        .eq('id', userId).single()
       setProfile(prof)
       if (prof?.cohort_id && !prof?.class_id) setActiveTab('school')
       setLoading(false)
     }
     init()
-  }, []) // eslint-disable-line
+  }, [userId]) // eslint-disable-line
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
@@ -808,13 +846,13 @@ export default function CommunityPage() {
   const coach = communityCoach({ firstName })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 112 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 112, maxWidth: 680, margin: '0 auto' }}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 4 }}>
         <div>
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 3 }}>This week</p>
-          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.1, color: 'var(--text-prim)' }}>Leaderboard 🏆</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-.025em', lineHeight: 1.1, color: 'var(--text-prim)' }}>Leaderboard</h1>
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: 'rgba(251,191,36,.1)', border: '1px solid rgba(251,191,36,.25)', flexShrink: 0, marginTop: 4 }}>
           <span style={{ fontSize: 10 }}>⏱</span>
@@ -823,31 +861,31 @@ export default function CommunityPage() {
       </div>
 
       {/* ── Coach banner ── */}
-      <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
+      <CoachBanner emoji={coach.emoji} message={coach.message} />
 
-      {/* ── Tab strip ── */}
-      <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 14, padding: 3 }}>
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{
-              flex: 1, padding: '9px 4px', borderRadius: 11, fontSize: 11, fontWeight: 800,
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              transition: 'all .18s',
-              background: activeTab === tab.id ? 'var(--bg-card)' : 'transparent',
-              color: activeTab === tab.id ? 'var(--text-prim)' : 'var(--text-tert)',
-              boxShadow: activeTab === tab.id ? '0 1px 6px rgba(0,0,0,.1)' : 'none',
-            }}>
-            <span style={{ fontSize: 14, lineHeight: 1 }}>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      {/* ── Tab strip — pill buttons matching prototype exactly ── */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {TABS.map(tab => {
+          const on = activeTab === tab.id
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '5px 13px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                border: `1.5px solid ${on ? 'rgba(24,183,242,.4)' : 'var(--border)'}`,
+                cursor: 'pointer', background: on ? 'rgba(24,183,242,.12)' : 'transparent',
+                color: on ? '#18B7F2' : 'var(--text-tert)',
+                transition: 'all .15s',
+              }}>
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Tab content ── */}
-      {activeTab === 'class'    && <ClassTab    userId={user?.id} profile={profile} liveXP={liveXP} />}
-      {activeTab === 'school'   && <SchoolTab   userId={user?.id} profile={profile} liveXP={liveXP} />}
-      {activeTab === 'national' && <NationalTab userId={user?.id} liveXP={liveXP} />}
+      {activeTab === 'class'    && <ClassTab    userId={userId} profile={profile} liveXP={liveXP} />}
+      {activeTab === 'school'   && <SchoolTab   userId={userId} profile={profile} liveXP={liveXP} />}
+      {activeTab === 'national' && <NationalTab userId={userId} liveXP={liveXP} />}
     </div>
   )
 }

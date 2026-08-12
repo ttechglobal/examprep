@@ -23,6 +23,7 @@ import GoalModal from '@/components/dashboard/GoalModal'
 import CoachBanner from '@/components/ui/CoachBanner'
 import { profileCoach } from '@/lib/coach'
 import Link from 'next/link'
+import { useUser } from '@/contexts/UserContext'
 
 const ICONS = {
   'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
@@ -109,7 +110,7 @@ function EditableField({ label, value, placeholder, onSave }) {
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} autoFocus
             style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1.5px solid rgba(155,122,224,.5)', background: 'var(--bg-subtle)', color: 'var(--text-prim)', fontSize: 13, outline: 'none' }} />
-          <button onClick={handleSave} disabled={saving} style={{ padding: '8px 12px', borderRadius: 10, background: '#0b1330', color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 3px 0 #05070f' }}>
+          <button onClick={handleSave} disabled={saving} style={{ padding: '8px 12px', borderRadius: 10, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 3px 0 #05070f' }}>
             {saving ? '…' : 'Save'}
           </button>
           <button onClick={() => { setEditing(false); setVal(value ?? '') }} style={{ padding: '8px 10px', borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', fontSize: 12, cursor: 'pointer' }}>✕</button>
@@ -129,6 +130,7 @@ export default function ProfilePage() {
   const router   = useRouter()
   const supabase = createClient()
   const isDark   = useIsDark()
+  const { userId } = useUser()
 
   const [profile,        setProfile]        = useState(null)
   const [loading,        setLoading]        = useState(true)
@@ -142,39 +144,40 @@ export default function ProfilePage() {
   const [saving,         setSaving]         = useState(false)
 
   useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+    if (userId) init(userId)
+  }, [userId]) // eslint-disable-line
 
-      const [{ data: prof }, { data: paths }, { data: prog }, { data: attempts }, { data: streak }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name, exam_type)').eq('student_id', user.id),
-        supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', user.id),
-        supabase.from('question_attempts').select('is_correct').eq('student_id', user.id),
-        supabase.from('student_streaks').select('current_streak').eq('student_id', user.id).maybeSingle(),
-      ])
+  async function init(uid) {
+    // Limit question_attempts to last 90 days — avoids scanning entire history
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
 
-      setProfile(prof)
-      setParentEmail(prof?.parent_email ?? '')
-      setParentReports(prof?.parent_reports_enabled ?? false)
+    const [{ data: prof }, { data: paths }, { data: prog }, { data: attempts }, { data: streak }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', uid).single(),
+      supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name, exam_type)').eq('student_id', uid),
+      supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', uid),
+      supabase.from('question_attempts').select('is_correct').eq('student_id', uid).gte('created_at', ninetyDaysAgo),
+      supabase.from('student_streaks').select('current_streak').eq('student_id', uid).maybeSingle(),
+    ])
 
-      const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
-      setSubjectMastery((paths ?? []).map(path => {
-        const name     = path.subjects?.name ?? ''
-        const examType = path.subjects?.exam_type ?? ''
-        const ids      = path.ordered_subtopic_ids ?? []
-        const done     = ids.filter(id => completedIds.has(id)).length
-        const pct      = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
-        return { id: path.subject_id, name, examType, pct, completed: done, total: ids.length }
-      }))
+    setProfile(prof)
+    setParentEmail(prof?.parent_email ?? '')
+    setParentReports(prof?.parent_reports_enabled ?? false)
 
-      const totalQs = (attempts ?? []).length
-      const correct = (attempts ?? []).filter(a => a.is_correct).length
-      setStats({ streak: streak?.current_streak ?? 0, totalQs, avgScore: totalQs > 0 ? Math.round((correct / totalQs) * 100) : 0 })
-      setLoading(false)
-    }
-    init()
-  }, []) // eslint-disable-line
+    const completedIds = new Set((prog ?? []).filter(p => p.completed).map(p => p.subtopic_id))
+    setSubjectMastery((paths ?? []).map(path => {
+      const name     = path.subjects?.name ?? ''
+      const examType = path.subjects?.exam_type ?? ''
+      const ids      = path.ordered_subtopic_ids ?? []
+      const done     = ids.filter(id => completedIds.has(id)).length
+      const pct      = ids.length > 0 ? Math.round((done / ids.length) * 100) : 0
+      return { id: path.subject_id, name, examType, pct, completed: done, total: ids.length }
+    }))
+
+    const totalQs = (attempts ?? []).length
+    const correct = (attempts ?? []).filter(a => a.is_correct).length
+    setStats({ streak: streak?.current_streak ?? 0, totalQs, avgScore: totalQs > 0 ? Math.round((correct / totalQs) * 100) : 0 })
+    setLoading(false)
+  }
 
   async function updateProfile(updates) {
     const { error } = await supabase.from('profiles').update(updates).eq('id', profile.id)
@@ -218,173 +221,96 @@ export default function ProfilePage() {
   const coach = profileCoach({ firstName, totalQs: stats.totalQs, streakDays: stats.streak, examType, daysToExam })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 112 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 112, maxWidth: 560, margin: '0 auto' }}>
 
       {/* ── Coach banner ── */}
-      <CoachBanner emoji={coach.emoji} message={coach.message} dismissible />
+      <CoachBanner emoji={coach.emoji} message={coach.message} />
 
       {/* Toast */}
       {message && (
-        <div style={{ padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, background: message.type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${message.type === 'success' ? 'var(--success-border)' : 'var(--danger-border)'}`, color: message.type === 'success' ? 'var(--success)' : 'var(--danger)' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, background: message.type === 'success' ? 'rgba(74,222,128,.1)' : 'rgba(248,113,113,.1)', border: `1px solid ${message.type === 'success' ? 'rgba(74,222,128,.3)' : 'rgba(248,113,113,.3)'}`, color: message.type === 'success' ? '#4ade80' : '#f87171' }}>
           {message.text}
         </div>
       )}
 
-      {/* ── Hero card ── */}
-      <div style={{ borderRadius: 22, overflow: 'hidden', background: 'linear-gradient(155deg,#050b1a 0%,#0b1330 45%,#1a1060 100%)', border: '1px solid rgba(255,255,255,.08)', position: 'relative' }}>
-        {/* Dot grid overlay */}
-        <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: .045, pointerEvents: 'none' }}>
-          <defs><pattern id="pgrd2" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#fff"/></pattern></defs>
-          <rect width="100%" height="100%" fill="url(#pgrd2)"/>
-        </svg>
-
-        <div style={{ padding: '22px 18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 10, position: 'relative', zIndex: 1 }}>
-          {/* Avatar */}
-          <div style={{ width: 76, height: 76, borderRadius: 22, background: 'rgba(155,122,224,.2)', border: '2px solid rgba(155,122,224,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900, color: '#fff', boxShadow: '0 8px 24px rgba(0,0,0,.35)' }}>
+      {/* ── Hero card — matches prototype exactly ── */}
+      <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(155deg,#050b1a 0%,#062A78 45%,#1a1060 100%)', border: '1px solid rgba(24,183,242,.15)', position: 'relative' }}>
+        <div style={{ position: 'absolute', inset: 0, opacity: .04, backgroundImage: 'radial-gradient(circle,#fff 1px,transparent 1px)', backgroundSize: '18px 18px', pointerEvents: 'none' }} />
+        <div style={{ padding: '22px 18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          <div style={{ width: 68, height: 68, borderRadius: 18, background: 'linear-gradient(135deg,#18B7F2,#062A78)', border: '2.5px solid rgba(24,183,242,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, color: '#fff', boxShadow: '0 8px 24px rgba(18,100,229,.4)', marginBottom: 10 }}>
             {initials}
           </div>
-
-          {/* Name + subtitle */}
-          <div>
-            <p style={{ fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: '-.02em', marginBottom: 3 }}>
-              {profile?.full_name ?? 'Student'}
-            </p>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', fontWeight: 500 }}>
-              {examLabel(examType)} {new Date().getFullYear() + 1}
-              {profile?.subjects?.length ? ` · ${profile.subjects.length} subjects` : ''}
-              {profile?.school_name ? ` · ${profile.school_name}` : ''}
-            </p>
-          </div>
-
-          {/* Badge shelf */}
-          <div style={{ width: '100%', display: 'flex', gap: 7, overflowX: 'auto', padding: '2px 0', justifyContent: 'center' }}>
-            {badges.map((b, i) => (
-              <div key={i} title={b.label} style={{ width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, border: `1.5px solid ${b.earned ? 'rgba(255,195,107,.4)' : 'rgba(255,255,255,.1)'}`, background: b.earned ? 'rgba(255,195,107,.12)' : 'rgba(255,255,255,.05)', opacity: b.earned ? 1 : 0.45, transition: 'opacity .2s' }}>
-                {b.emoji}
-              </div>
-            ))}
+          <p style={{ fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-.02em', marginBottom: 3 }}>{profile?.full_name ?? 'Student'}</p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,.45)' }}>
+            {examLabel(examType)} · {profile?.class_year ?? 'SS3'}{profile?.school_name ? ` · ${profile.school_name}` : ''}
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 999, background: 'rgba(255,106,0,.12)', border: '1.5px solid rgba(255,106,0,.28)', fontSize: 11, fontWeight: 800, color: '#FF6A00' }}>
+              🔥 {stats.streak} days
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, background: 'rgba(255,184,0,.12)', border: '1.5px solid rgba(255,184,0,.28)', fontSize: 11, fontWeight: 800, color: '#FFB800' }}>
+              ✦ {stats.totalQs > 0 ? Math.round(stats.totalQs * 2.4).toLocaleString() : 0} XP
+            </div>
           </div>
         </div>
-
-        {/* Stats row — attached to bottom of hero card */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid rgba(255,255,255,.07)' }}>
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid rgba(255,255,255,.1)' }}>
           {[
-            { val: stats.streak,   col: streakColor,          suffix: ' 🔥', lbl: 'Streak' },
-            { val: stats.totalQs,  col: '#fff',                suffix: '',    lbl: 'Questions' },
-            { val: `${stats.avgScore}%`, col: stats.avgScore >= 70 ? '#4ade80' : stats.avgScore >= 40 ? '#fbbf24' : '#f87171', suffix: '', lbl: 'Accuracy' },
-          ].map(({ val, col, suffix, lbl }, i) => (
-            <div key={lbl} style={{ padding: '12px 6px', textAlign: 'center', borderRight: i < 2 ? '1px solid rgba(255,255,255,.07)' : 'none' }}>
-              <p style={{ fontSize: 20, fontWeight: 900, color: col, lineHeight: 1 }}>{typeof val === 'number' ? val.toLocaleString() : val}{suffix}</p>
+            { val: `${stats.streak} 🔥`, lbl: 'Streak' },
+            { val: stats.totalQs.toLocaleString(), lbl: 'Questions' },
+            { val: `${stats.avgScore}%`, lbl: 'Accuracy' },
+          ].map(({ val, lbl }, i) => (
+            <div key={lbl} style={{ padding: '12px 6px', textAlign: 'center', borderRight: i < 2 ? '1px solid rgba(255,255,255,.1)' : 'none' }}>
+              <p style={{ fontSize: 18, fontWeight: 900, color: '#fff', lineHeight: 1 }}>{val}</p>
               <p style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.35)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 3 }}>{lbl}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Subject mastery ── */}
-      {subjectMastery.length > 0 && (
-        <Widget
-          header={<><SectionLabel>Subject mastery</SectionLabel><Link href="/student/progress" style={{ fontSize: 11, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>Details →</Link></>}
-        >
-          {subjectMastery.map((sub, i) => {
-            const colors    = resolveSubjectColors(sub.name, isDark)
-            const pctColor  = sub.pct >= 70 ? '#4ade80' : sub.pct >= 40 ? '#fbbf24' : '#f87171'
-            const status    = sub.pct >= 70 ? 'Strong' : sub.pct >= 40 ? 'Building' : 'Starting'
-            // Check if another subject has the same name (e.g. Mathematics WAEC + Mathematics JAMB)
-            const isDuplicate = subjectMastery.filter(s => s.name === sub.name).length > 1
-            return (
-              <div key={sub.id ?? `${sub.name}-${sub.examType}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < subjectMastery.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-                  {getIcon(sub.name)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {sub.name}
-                      {isDuplicate && sub.examType && (
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: sub.examType === 'JAMB' ? 'rgba(139,92,246,.12)' : 'rgba(59,130,246,.12)', color: sub.examType === 'JAMB' ? '#7c3aed' : '#1d4ed8' }}>
-                          {sub.examType}
-                        </span>
-                      )}
-                    </p>
-                    <span style={{ fontSize: 11, fontWeight: 900, color: pctColor }}>{sub.pct}%</span>
-                  </div>
-                  <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 99, background: colors.solid, width: `${Math.max(sub.pct, 2)}%`, transition: 'width .7s' }} />
-                  </div>
-                  <p style={{ fontSize: 9, color: 'var(--text-tert)', marginTop: 3 }}>{sub.completed}/{sub.total} topics · {status}</p>
-                </div>
+      {/* ── 2×2 info grid — matches prototype ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {[
+          { icon: '🎯', lbl: 'Goal',      val: profile?.university_course || 'Not set' },
+          { icon: '📋', lbl: 'Exam',      val: examLabel(examType) + (new Date().getFullYear() + 1 ? ` ${new Date().getFullYear() + 1}` : '') },
+          { icon: '📅', lbl: 'Days left', val: `${daysToExam} days` },
+          { icon: '🏫', lbl: 'School',    val: profile?.school_name || 'Not connected' },
+        ].map(({ icon, lbl, val }) => (
+          <div key={lbl} style={{ padding: 12, borderRadius: 13, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 16, marginBottom: 4 }}>{icon}</p>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 2 }}>{lbl}</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Settings rows — matches prototype ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {[
+          { icon: '🌙', lbl: 'Dark mode',       sub: '',                             onClick: () => setShowEditSheet(v => !v) },
+          { icon: '🔔', lbl: 'Notifications',   sub: '',                             onClick: () => {} },
+          { icon: '👨‍👩‍👧', lbl: 'Parent report', sub: 'Weekly email',                onClick: () => {} },
+          { icon: '🏫', lbl: 'My class',        sub: profile?.school_name ?? '',     href: '/student/community' },
+          { icon: '📤', lbl: 'Share app',       sub: '',                             onClick: () => {} },
+        ].map(({ icon, lbl, sub, href, onClick }) => {
+          const inner = (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 13px', borderRadius: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', cursor: 'pointer', textDecoration: 'none' }}>
+              <span style={{ fontSize: 16 }}>{icon}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-prim)' }}>{lbl}</p>
+                {sub && <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>{sub}</p>}
               </div>
-            )
-          })}
-        </Widget>
-      )}
-
-      {/* ── Exam targets ── */}
-      <Widget
-        header={
-          <><SectionLabel>🎯 Exam targets</SectionLabel>
-          <button onClick={() => setShowGoalModal(true)} style={{ padding: '3px 10px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg-subtle)', fontSize: 10, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}>
-            Edit
-          </button></>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4, paddingBottom: 4 }}>
-          {[
-            { k: 'Exam',   v: examLabel(examType) },
-            { k: 'Course', v: profile?.university_course || '—' },
-            { k: 'Uni',    v: profile?.target_university  || '—' },
-            ...(jambTotal > 0 ? [{ k: 'JAMB', v: `${jambTotal} / 400`, vc: '#9b7ae0' }] : []),
-          ].map(({ k, v, vc }) => (
-            <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-tert)', width: 44, flexShrink: 0 }}>{k}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: vc ?? 'var(--text-prim)' }}>{v}</span>
+              <span style={{ color: 'var(--text-tert)', fontSize: 18 }}>›</span>
             </div>
-          ))}
-        </div>
-      </Widget>
+          )
+          if (href) return <Link key={lbl} href={href} style={{ textDecoration: 'none' }}>{inner}</Link>
+          return <div key={lbl} onClick={onClick}>{inner}</div>
+        })}
 
-      {/* ── Account settings ── */}
-      <Widget header={<SectionLabel>Account</SectionLabel>}>
-        <SettingRow icon="✏️" iconBg="rgba(155,122,224,.12)" label="Edit profile" sub={profile?.full_name} onClick={() => setShowEditSheet(v => !v)} />
-        <SettingRow icon="👨‍👩‍👧" iconBg="rgba(251,191,36,.12)" label="Parent reports" sub="Weekly progress email to parent" href="/student/profile/parent" />
-        <SettingRow icon="🏫" iconBg="rgba(108,206,142,.12)" label="School & class" sub={profile?.school_name ?? 'Not connected'} href="/student/profile/school" />
-        <SettingRow icon="📊" iconBg="rgba(92,184,234,.12)"  label="My progress"   sub="Subjects, topics & mastery breakdown" href="/student/progress" />
-        <SettingRow icon="👥" iconBg="rgba(155,122,224,.12)" label="Community"     sub="Leaderboard & class challenges" href="/student/community" />
-        <SettingRow icon="🚪" iconBg="var(--danger-bg)" label="Sign out" danger onClick={handleSignOut} right={<span />} />
-      </Widget>
-
-      {/* ── Edit profile inline ── */}
-      {showEditSheet && (
-        <Widget header={
-          <><SectionLabel>Edit profile</SectionLabel>
-          <button onClick={() => setShowEditSheet(false)} style={{ fontSize: 13, color: 'var(--text-sec)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button></>
-        }>
-          <EditableField label="Full name"   value={profile?.full_name}   placeholder="Your name"   onSave={val => updateProfile({ full_name: val })} />
-          <EditableField label="School"      value={profile?.school_name} placeholder="Your school"  onSave={val => updateProfile({ school_name: val })} />
-          <EditableField label="Class / Year" value={profile?.class_year} placeholder="e.g. SS3"     onSave={val => updateProfile({ class_year: val })} />
-        </Widget>
-      )}
-
-      {/* ── Parent reports ── */}
-      <Widget header={<SectionLabel>Parent reports</SectionLabel>}>
-        <div style={{ paddingTop: 4, paddingBottom: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-tert)', marginBottom: 5 }}>Parent email</p>
-            <input type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="parent@example.com"
-              style={{ width: '100%', padding: '9px 11px', borderRadius: 11, border: '1px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-prim)', fontSize: 13, outline: 'none' }} />
-            <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 3 }}>Weekly summary emails with your progress.</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--border)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-prim)' }}>Enable parent reports</p>
-            <Toggle on={parentReports} onToggle={() => setParentReports(p => !p)} />
-          </div>
-          <button onClick={saveParentSettings} disabled={saving}
-            style={{ width: '100%', padding: '12px', borderRadius: 13, background: '#0b1330', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 4px 0 #05070f', opacity: saving ? 0.5 : 1 }}>
-            {saving ? 'Saving…' : 'Save parent settings'}
-          </button>
-        </div>
-      </Widget>
+        <button onClick={handleSignOut} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid rgba(220,38,38,.25)', background: 'rgba(220,38,38,.07)', color: '#f87171', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Sign out
+        </button>
+      </div>
 
       {/* Goal modal */}
       {showGoalModal && profile && (

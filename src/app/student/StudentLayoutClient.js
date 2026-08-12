@@ -1,86 +1,126 @@
 'use client'
-// src/app/student/StudentLayoutClient.js — v5
-// CHANGES:
-//   • No left outline/accent bar on active sidebar items
-//   • Profile avatar button in header (top-right)
-//   • Progress in sidebar (replaces profile in main nav)
-//   • Right sidebar with leaderboard snapshot on desktop (non-dashboard pages)
+// src/app/student/StudentLayoutClient.js — EXL Game Feel v1
+// ─────────────────────────────────────────────────────────────────────────────
+// Full redesign matching the EXL ExamPrep game-feel prototype.
+//
+// DESIGN SYSTEM:
+//   • Dark-first: #0a0c14 canvas, glass cards, EXL brand blues
+//   • Light mode: #f0f4ff canvas, white cards, EXL navy text
+//   • CTA: EXL Blue #1264E5 (never old #0b1330)
+//   • Gold: #FFB800 for XP/streaks/achievement
+//   • Active nav: EXL Cyan #18B7F2
+//
+// LAYOUT:
+//   • Mobile: sticky header + bottom nav (5 items)
+//   • Desktop lg+: header + left sidebar (220px) + content + right aside (200px)
+//   • Right aside: activity chart + class rank + target (home/progress/leaderboard only)
+//
+// GAME FEEL (shell only — not in session/exam pages):
+//   • Streak flame animation
+//   • Ambient star dots on sidebar
+//   • XP pill with gold tint
+//   • Sidebar streak card with amber glow
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { usePoints } from '@/contexts/PointsContext'
+import { useUser } from '@/contexts/UserContext'
 import BottomNavWrapper from '@/components/ui/BottomNavWrapper'
 import DarkModeToggle from '@/components/ui/DarkModeToggle'
-import HeaderXPPill from '@/components/ui/HeaderXPPill'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
-// ── SVG Icons (20×20) ─────────────────────────────────────────────────────────
+// ── EXL Logo mark ─────────────────────────────────────────────────────────────
+function EXLLogo({ size = 30 }) {
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <div style={{
+        width: size, height: size, borderRadius: Math.round(size * 0.28),
+        background: '#062A78', boxShadow: `0 ${Math.round(size * 0.1)}px 0 #020c20`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      }}>
+        <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 512 512" fill="none">
+          <path d="M292 105C235 103 167 118 137 153C112 182 122 208 155 215C185 221 222 210 263 196L226 236C185 253 139 274 131 307C122 344 165 363 208 354C250 345 292 323 331 298L302 353C267 379 210 406 155 403C98 400 64 369 76 325C86 286 120 262 165 241C124 247 83 239 69 210C52 175 81 136 121 116C164 94 226 83 292 86Z" fill="url(#exlG)"/>
+          <path d="M98 94L202 48L306 94L202 139Z" fill="#062A78"/>
+          <path d="M123 91L202 57L281 91L202 123Z" fill="#1264E5"/>
+          <path d="M61 335C123 401 272 427 383 365C430 339 451 309 444 287" stroke="#FFB800" strokeWidth="44" strokeLinecap="round" fill="none"/>
+          <defs>
+            <linearGradient id="exlG" x1="0" y1="0" x2="1" y2="1">
+              <stop stopColor="#18B7F2"/>
+              <stop offset=".5" stopColor="#1264E5"/>
+              <stop offset="1" stopColor="#062A78"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div style={{
+        position: 'absolute', top: -5, right: -7,
+        background: '#FFB800', borderRadius: 4,
+        fontSize: 6, fontWeight: 900, color: '#062A78',
+        padding: '1px 4px', lineHeight: 1.4, letterSpacing: '-.01em',
+      }}>A1</div>
+    </div>
+  )
+}
+
+// ── SVG Nav icons ─────────────────────────────────────────────────────────────
 const Icons = {
   Home: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <path d="M3 9.5L10 3L17 9.5V18H13V13H7V18H3V9.5Z"
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <path d="M3 10L11 3L19 10V19H14.5V14H7.5V19H3V10Z"
         fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
     </svg>
   ),
   Practise: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.7"/>
-      <path d="M8 7L14 10L8 13V7Z" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.7" fill={active ? 'none' : 'none'}/>
+      <path d="M9 8L15 11L9 14V8Z" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
     </svg>
   ),
   Learn: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <path d="M10 2L2 7L10 12L18 7L10 2Z" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
-      <path d="M5 10V16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
-      <path d="M15 10V16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
-      <path d="M5 16C5 16 7 18 10 18C13 18 15 16 15 16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <path d="M11 3L3 8L11 13L19 8L11 3Z" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+      <path d="M6 11V17M16 11V17M6 17C6 17 8 19 11 19C14 19 16 17 16 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
     </svg>
   ),
-  Community: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <circle cx="10" cy="6" r="3" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
-      <path d="M4 18C4 14.7 6.7 12 10 12C13.3 12 16 14.7 16 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-      <circle cx="3.5" cy="9" r="2" stroke="currentColor" strokeWidth="1.4"/>
-      <circle cx="16.5" cy="9" r="2" stroke="currentColor" strokeWidth="1.4"/>
-      <path d="M1 17C1 15.3 2.6 14 4.5 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      <path d="M19 17C19 15.3 17.4 14 15.5 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-    </svg>
-  ),
-  Profile: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <circle cx="10" cy="7" r="4" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7"/>
-      <path d="M3 18C3 14.7 6.1 12 10 12C13.9 12 17 14.7 17 18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+  Leaderboard: ({ active }) => (
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <rect x="2" y="13" width="4" height="7" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
+      <rect x="9" y="9" width="4" height="11" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
+      <rect x="16" y="5" width="4" height="15" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
     </svg>
   ),
   Progress: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <rect x="2" y="12" width="3" height="6" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="8.5" y="8" width="3" height="10" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="15" y="4" width="3" height="14" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5"/>
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.6" fill="none"/>
+      <path d="M11 7V11L14 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
     </svg>
   ),
-  Exam: ({ active }) => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <rect x="3" y="2" width="14" height="16" rx="2" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
-      <path d="M7 7H13M7 10H13M7 13H10" stroke={active ? '#fff' : 'currentColor'} strokeWidth="1.5" strokeLinecap="round"/>
+  Profile: ({ active }) => (
+    <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="7" r="3" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6"/>
+      <path d="M5 20C5 16.7 7.7 14 11 14C14.3 14 17 16.7 17 20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/>
+    </svg>
+  ),
+  Exam: () => (
+    <svg width="18" height="18" viewBox="0 0 22 22" fill="none">
+      <rect x="3" y="2" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.6" fill="none"/>
+      <path d="M7 7H15M7 11H15M7 15H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
 }
 
 const DESKTOP_NAV = [
-  { href: '/student/dashboard',  label: 'Home',      icon: 'Home',      accent: '#0b1330', section: 'MAIN' },
-  { href: '/student/practice',   label: 'Practise',  icon: 'Practise',  accent: '#9b7ae0', section: 'MAIN' },
-  { href: '/student/learn',      label: 'Learn',     icon: 'Learn',     accent: '#5cb8ea', section: 'MAIN' },
-  { href: '/student/community',  label: 'Community', icon: 'Community', accent: '#6cce8e', section: 'MAIN' },
-  { href: '/student/progress',   label: 'Progress',  icon: 'Progress',  accent: '#f59e0b', section: 'MAIN' },
-  { href: '/student/profile',    label: 'Profile',   icon: 'Profile',   accent: '#0b1330', section: 'PROFILE' },
+  { href: '/student/dashboard',    label: 'Home',        icon: 'Home',        accent: '#18B7F2', section: 'MAIN' },
+  { href: '/student/practice',     label: 'Practise',    icon: 'Practise',    accent: '#9b7ae0', section: 'MAIN' },
+  { href: '/student/learn',        label: 'Learn',       icon: 'Learn',       accent: '#4ade80', section: 'MAIN' },
+  { href: '/student/community',    label: 'Leaderboard', icon: 'Leaderboard', accent: '#FFB800', section: 'MAIN' },
+  { href: '/student/progress',     label: 'Progress',    icon: 'Progress',    accent: '#FF6A00', section: 'MAIN' },
+  { href: '/student/profile',      label: 'Profile',     icon: 'Profile',     accent: '#18B7F2', section: 'PROFILE' },
 ]
 
-const FOCUSED_ROUTES = [
-  '/student/practice/session',
-  '/student/exam/session',
-]
+const FOCUSED_ROUTES = ['/student/practice/session', '/student/exam/session']
 
 function isFocusedRoute(pathname) {
   if (!pathname) return false
@@ -89,109 +129,190 @@ function isFocusedRoute(pathname) {
   return false
 }
 
+// ── Sidebar nav link ──────────────────────────────────────────────────────────
 function SidebarLink({ href, label, icon, accent, isActive }) {
   const IconComp = Icons[icon]
   return (
     <Link href={href} style={{
-      display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px',
-      borderRadius: 13, textDecoration: 'none',
-      // FIX: no left outline/border bar — just background tint for active state
-      background: isActive ? `${accent}12` : 'transparent',
-      border: `1.5px solid ${isActive ? `${accent}22` : 'transparent'}`,
+      display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+      borderRadius: 11, textDecoration: 'none', fontFamily: 'inherit',
+      background: isActive ? `${accent}10` : 'transparent',
+      border: `1.5px solid ${isActive ? `${accent}30` : 'transparent'}`,
       transition: 'all .15s',
-      color: isActive ? accent : 'var(--text-sec)',
+      color: isActive ? accent : 'var(--text-tert)',
     }}>
-      {/* Removed left accent bar — clean active state */}
-      <span style={{ flexShrink: 0, lineHeight: 0 }}>
+      <span style={{ flexShrink: 0, lineHeight: 0, color: isActive ? accent : 'var(--text-tert)' }}>
         {IconComp && <IconComp active={isActive} />}
       </span>
-      <span style={{ fontSize: 13.5, fontWeight: isActive ? 800 : 600, color: isActive ? accent : 'var(--text-sec)', letterSpacing: isActive ? '-0.01em' : '0', transition: 'all .15s' }}>
-        {label}
-      </span>
+      <span style={{
+        fontSize: 13, fontWeight: isActive ? 800 : 600,
+        color: isActive ? accent : 'var(--text-tert)',
+        flex: 1,
+      }}>{label}</span>
       {isActive && (
-        <div style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: accent, flexShrink: 0 }} />
       )}
     </Link>
   )
 }
 
-// ── Leaderboard snapshot for right sidebar ────────────────────────────────────
-function LayoutLeaderboard({ myId }) {
+// ── Right sidebar: activity + leaderboard + target ────────────────────────────
+function LayoutRightAside({ myId, profile }) {
   const [board, setBoard] = useState([])
-  const medals = ['🥇', '🥈', '🥉']
   const { totalPoints: liveXP } = usePoints()
+  const medals = ['🥇', '🥈', '🥉']
 
   useEffect(() => {
-    function fetchBoard() {
-      fetch('/api/leaderboard/global?limit=5')
-        .then(r => r.json())
-        .then(data => setBoard(data.leaderboard ?? []))
-        .catch(() => {})
-    }
-    fetchBoard()
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchBoard() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    fetch('/api/leaderboard/global?limit=5')
+      .then(r => r.json()).then(d => setBoard(d.leaderboard ?? [])).catch(() => {})
+    const onVis = () => { if (document.visibilityState === 'visible') fetch('/api/leaderboard/global?limit=5').then(r=>r.json()).then(d=>setBoard(d.leaderboard??[])).catch(()=>{}) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  if (!board.length) return null
+  const now = new Date()
+  const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
+  const daysLeft = Math.max(0, Math.ceil((nextJune - now) / 86400000))
+
+  const cardStyle = {
+    background: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 14, overflow: 'hidden',
+  }
 
   return (
-    <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-      <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>This week</p>
-        <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#9b7ae0', textDecoration: 'none' }}>Full board →</Link>
-      </div>
-      <div style={{ padding: '4px 0 4px' }}>
-        {board.slice(0, 5).map((entry, i) => {
-          const isMe = entry.student_id === myId
-          const pts = isMe ? liveXP : (entry.points ?? 0)
-          return (
-            <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: isMe ? 'rgba(155,122,224,.07)' : 'transparent' }}>
-              <span style={{ fontSize: i < 3 ? 13 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 18, textAlign: 'center', flexShrink: 0 }}>
-                {i < 3 ? medals[i] : `${i + 1}`}
-              </span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {isMe ? 'You' : (entry.full_name?.split(' ')[0] ?? 'Student')}
-              </span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#ffc36b' : 'var(--text-tert)', flexShrink: 0 }}>
-                {pts.toLocaleString()}
-              </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* Class rank */}
+      {board.length > 0 && (
+        <div style={cardStyle}>
+          <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Class rank</p>
+            <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>Full board →</Link>
+          </div>
+          {board.slice(0, 5).map((entry, i) => {
+            const isMe = entry.student_id === myId
+            const pts = isMe ? liveXP : (entry.points ?? 0)
+            return (
+              <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', background: isMe ? 'rgba(24,183,242,.07)' : 'transparent' }}>
+                <span style={{ fontSize: i < 3 ? 12 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 18, textAlign: 'center', flexShrink: 0 }}>
+                  {i < 3 ? medals[i] : `${i + 1}`}
+                </span>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {isMe ? 'You' : (entry.full_name?.split(' ')[0] ?? 'Student')}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
+                  {pts.toLocaleString()}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Target */}
+      {(profile?.university_course || profile?.target_university) && (
+        <div style={{ ...cardStyle, padding: 13 }}>
+          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>Your target</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }}>🎯</span>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.3 }}>
+                {profile.university_course || 'Exam goal'}
+              </p>
+              {profile.target_university && (
+                <p style={{ fontSize: 10, color: '#18B7F2', marginTop: 1 }}>{profile.target_university}</p>
+              )}
             </div>
-          )
-        })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <p style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-prim)', lineHeight: 1 }}>{daysLeft}</p>
+            <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>days left</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Header XP + Streak pill ───────────────────────────────────────────────────
+// Uses mounted gate to prevent hydration mismatch — server and client render
+// identical placeholder until after first paint, then swap in live values.
+function HeaderPills({ streak }) {
+  const { totalPoints } = usePoints()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  const formattedXP = totalPoints >= 1000
+    ? `${(totalPoints / 1000).toFixed(1)}k`
+    : String(totalPoints)
+
+  // Before mount: render stable placeholder (no streak pill, 0 XP shown)
+  // This matches server render exactly → no hydration mismatch
+  if (!mounted) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '4px 10px', borderRadius: 999,
+          background: 'rgba(255,184,0,.12)', border: '1.5px solid rgba(255,184,0,.28)',
+          fontSize: 11, fontWeight: 800, color: 'var(--gold)', opacity: 0,
+        }}>
+          <span>✦</span> 0 XP
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {streak >= 3 && (
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '4px 9px', borderRadius: 999,
+          background: 'rgba(255,106,0,.12)', border: '1.5px solid rgba(255,106,0,.28)',
+          fontSize: 11, fontWeight: 800, color: '#FF6A00',
+        }}>
+          <span style={{ animation: 'exl-flame 1.8s ease-in-out infinite', display: 'inline-block' }}>🔥</span>
+          {streak}
+        </div>
+      )}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 10px', borderRadius: 999,
+        background: 'rgba(255,184,0,.12)', border: '1.5px solid rgba(255,184,0,.28)',
+        fontSize: 11, fontWeight: 800, color: 'var(--gold)',
+      }}>
+        <span>✦</span> {formattedXP} XP
       </div>
     </div>
   )
 }
 
+// ── Main layout ───────────────────────────────────────────────────────────────
 export default function StudentLayoutClient({ children, profile }) {
   const pathname = usePathname()
   const focused  = isFocusedRoute(pathname)
-  const [mockLabel, setMockLabel] = useState('WAEC')
+  const { userId } = useUser()
+
+  const [liveStreak, setLiveStreak] = useState(profile?.streak_days ?? 0)
+  const [mockLabel,  setMockLabel]  = useState('WAEC')
+
   useEffect(() => {
     const t = setInterval(() => setMockLabel(l => l === 'WAEC' ? 'JAMB' : 'WAEC'), 3500)
     return () => clearInterval(t)
   }, [])
 
-  const [liveStreak, setLiveStreak] = useState(profile?.streak_days ?? 0)
   useEffect(() => {
     async function fetchStreak() {
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
-        const { data: streakRow } = await supabase
-          .from('student_streaks')
-          .select('current_streak')
-          .eq('student_id', user.id)
-          .maybeSingle()
-        if (streakRow?.current_streak != null) {
-          setLiveStreak(streakRow.current_streak)
-        } else {
-          const { data: prof } = await supabase
-            .from('profiles').select('streak_days').eq('id', user.id).single()
-          if (prof?.streak_days) setLiveStreak(prof.streak_days)
+        const { data: s } = await supabase.from('student_streaks').select('current_streak').eq('student_id', user.id).maybeSingle()
+        if (s?.current_streak != null) setLiveStreak(s.current_streak)
+        else {
+          const { data: p } = await supabase.from('profiles').select('streak_days').eq('id', user.id).single()
+          if (p?.streak_days) setLiveStreak(p.streak_days)
         }
       } catch {}
     }
@@ -201,51 +322,53 @@ export default function StudentLayoutClient({ children, profile }) {
   if (focused) return <>{children}</>
 
   const activeHref = DESKTOP_NAV.find(({ href }) =>
-    pathname === href ||
-    (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
+    pathname === href || (href !== '/student/dashboard' && pathname.startsWith(href + '/'))
   )?.href ?? ''
 
   const mainNav    = DESKTOP_NAV.filter(n => n.section === 'MAIN')
   const profileNav = DESKTOP_NAV.filter(n => n.section === 'PROFILE')
 
-  // Profile initial avatar (first letter of name or email)
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : profile?.email?.[0]?.toUpperCase() ?? '?'
+
+  // Show right aside on these pages
+  const showAside = ['/student/dashboard', '/student/community', '/student/progress'].some(p =>
+    pathname === p || pathname.startsWith(p + '/')
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
 
       {/* ── Header ── */}
       <header style={{
-        position: 'sticky', top: 0, zIndex: 40, height: 56,
+        position: 'sticky', top: 0, zIndex: 40, height: 54,
         background: 'var(--nav-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '1px solid var(--border)',
+        borderBottom: '1px solid var(--nav-border)',
         display: 'flex', alignItems: 'center',
       }}>
-        <div style={{ width: '100%', maxWidth: 1440, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, textDecoration: 'none' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: '#0b1330', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 0 #05070f', flexShrink: 0, fontSize: 13, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', fontFamily: 'inherit' }}>
-              E
-            </div>
+        <div style={{ width: '100%', maxWidth: 900, margin: '0 auto', padding: '0 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+
+          <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, textDecoration: 'none' }}>
+            <EXLLogo size={30} />
             <div style={{ lineHeight: 1 }}>
-              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.03em' }}>Exam</span>
-              <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-tert)', letterSpacing: '-0.02em' }}>Prep</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.03em' }}>Exam</span>
+              <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-tert)', letterSpacing: '-0.02em' }}>Prep</span>
             </div>
           </Link>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <HeaderXPPill points={profile?.total_points ?? 0} streak={liveStreak} />
+            <HeaderPills streak={liveStreak} />
             <DarkModeToggle />
-            {/* ── Profile button in header — always shows person icon ── */}
             <Link href="/student/profile" style={{
-              width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+              width: 32, height: 32, borderRadius: 9, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: activeHref === '/student/profile' ? '#0b1330' : 'var(--bg-subtle)',
-              border: `1.5px solid ${activeHref === '/student/profile' ? '#0b1330' : 'var(--border)'}`,
+              background: activeHref === '/student/profile'
+                ? 'linear-gradient(135deg,#18B7F2,#062A78)'
+                : 'var(--bg-subtle)',
+              border: `1.5px solid ${activeHref === '/student/profile' ? 'rgba(24,183,242,.3)' : 'var(--border)'}`,
               color: activeHref === '/student/profile' ? '#fff' : 'var(--text-sec)',
-              textDecoration: 'none',
-              transition: 'all .15s',
-              overflow: 'hidden',
+              textDecoration: 'none', overflow: 'hidden',
             }}>
               {initials && initials !== '?' ? (
                 <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{initials}</span>
@@ -261,55 +384,63 @@ export default function StudentLayoutClient({ children, profile }) {
       </header>
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', padding: '0 20px', gap: 0 }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', padding: '0 18px', gap: 0 }}>
 
-        {/* ── Desktop left sidebar ── */}
-        <aside style={{ width: 260, flexShrink: 0, paddingTop: 24, paddingRight: 20 }} className="hidden lg:block">
-          <nav style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* ── Left sidebar (desktop) ── */}
+        <aside style={{ width: 220, flexShrink: 0, paddingTop: 20, paddingRight: 16 }} className="hidden lg:block">
+          <nav style={{ position: 'sticky', top: 72, display: 'flex', flexDirection: 'column', gap: 2 }}>
 
-            {/* Main nav */}
-            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', padding: '0 12px', marginBottom: 6 }}>Navigation</p>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', padding: '0 11px', marginBottom: 6 }}>Main</p>
+
             {mainNav.map(({ href, label, icon, accent }) => (
               <SidebarLink key={href} href={href} label={label} icon={icon} accent={accent} isActive={href === activeHref} />
             ))}
 
-            {/* Exam shortcut */}
+            {/* Mock exam shortcut */}
             <Link href="/student/exam" style={{
-              display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px',
-              borderRadius: 13, textDecoration: 'none',
-              background: pathname.startsWith('/student/exam') ? 'rgba(245,185,66,.12)' : 'transparent',
-              border: `1.5px solid ${pathname.startsWith('/student/exam') ? 'rgba(245,185,66,.22)' : 'transparent'}`,
-              transition: 'all .15s', marginTop: 2,
+              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+              borderRadius: 11, textDecoration: 'none', marginTop: 2,
+              background: pathname.startsWith('/student/exam') ? 'rgba(255,184,0,.1)' : 'transparent',
+              border: `1.5px solid ${pathname.startsWith('/student/exam') ? 'rgba(255,184,0,.28)' : 'transparent'}`,
+              transition: 'all .15s',
             }}>
-              <span style={{ lineHeight: 0, color: pathname.startsWith('/student/exam') ? '#d97706' : 'var(--text-sec)', flexShrink: 0 }}>
-                <Icons.Exam active={pathname.startsWith('/student/exam')} />
+              <span style={{ lineHeight: 0, color: pathname.startsWith('/student/exam') ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
+                <Icons.Exam />
               </span>
-              <span style={{ fontSize: 13.5, fontWeight: pathname.startsWith('/student/exam') ? 800 : 600, color: pathname.startsWith('/student/exam') ? '#d97706' : 'var(--text-sec)' }}>
+              <span style={{ fontSize: 13, fontWeight: pathname.startsWith('/student/exam') ? 800 : 600, color: pathname.startsWith('/student/exam') ? '#FFB800' : 'var(--text-tert)', flex: 1 }}>
                 Mock Exam
               </span>
-              <span style={{ marginLeft: 'auto', fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.07em', padding: '2px 6px', borderRadius: 5, background: 'rgba(245,185,66,.15)', color: '#d97706', flexShrink: 0, minWidth: 34, textAlign: 'center' }}>{mockLabel}</span>
+              <span style={{
+                fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em',
+                padding: '2px 6px', borderRadius: 5,
+                background: 'rgba(255,184,0,.14)', color: '#FFB800',
+                flexShrink: 0,
+              }}>{mockLabel}</span>
             </Link>
 
             {/* Divider */}
-            <div style={{ height: 1, background: 'var(--border)', margin: '14px 8px' }} />
+            <div style={{ height: 1, background: 'var(--border)', margin: '12px 6px' }} />
 
-            {/* Profile — stays in sidebar too */}
             {profileNav.map(({ href, label, icon, accent }) => (
               <SidebarLink key={href} href={href} label={label} icon={icon} accent={accent} isActive={href === activeHref} />
             ))}
 
-            {/* Streak mini-card */}
-            <div style={{ marginTop: 20, borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px 14px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            {/* Streak card — amber glow */}
+            <div style={{
+              marginTop: 20, borderRadius: 14, padding: 13,
+              background: 'rgba(255,184,0,.07)',
+              border: '1.5px solid rgba(255,184,0,.18)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Your streak</p>
-                <span style={{ fontSize: 14 }}>🔥</span>
+                <span style={{ animation: 'exl-flame 1.8s ease-in-out infinite', display: 'inline-block' }}>🔥</span>
               </div>
-              <p style={{ fontSize: 26, fontWeight: 900, color: '#f59e0b', lineHeight: 1, letterSpacing: '-0.03em' }}>
+              <p style={{ fontSize: 28, fontWeight: 900, color: '#FF6A00', lineHeight: 1, letterSpacing: '-0.03em' }}>
                 {liveStreak}
               </p>
-              <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 2 }}>days in a row</p>
-              <div style={{ height: 4, background: 'var(--bg-inset)', borderRadius: 99, overflow: 'hidden', marginTop: 10 }}>
-                <div style={{ height: '100%', width: `${Math.min(100, (liveStreak / 30) * 100)}%`, background: '#f59e0b', borderRadius: 99 }} />
+              <p style={{ fontSize: 9.5, color: 'var(--text-tert)', marginTop: 2 }}>days in a row</p>
+              <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginTop: 10 }}>
+                <div style={{ height: '100%', width: `${Math.min(100, (liveStreak / 30) * 100)}%`, background: '#FF6A00', borderRadius: 99 }} />
               </div>
             </div>
           </nav>
@@ -320,17 +451,17 @@ export default function StudentLayoutClient({ children, profile }) {
           {children}
         </div>
 
-        {/* ── Right sidebar: leaderboard snapshot (desktop, non-dashboard pages) ── */}
-        {!pathname.startsWith('/student/dashboard') && (
-          <aside style={{ width: 220, flexShrink: 0, paddingTop: 20, paddingLeft: 16 }} className="hidden xl:block">
-            <div style={{ position: 'sticky', top: 80 }}>
-              <LayoutLeaderboard myId={profile?.id} />
+        {/* ── Right aside (desktop xl+, selected pages) ── */}
+        {showAside && (
+          <aside style={{ width: 200, flexShrink: 0, paddingTop: 20, paddingLeft: 14 }} className="hidden xl:block">
+            <div style={{ position: 'sticky', top: 72 }}>
+              <LayoutRightAside myId={profile?.id} profile={profile} />
             </div>
           </aside>
         )}
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* ── Mobile bottom nav ── */}
       <div className="lg:hidden">
         <BottomNavWrapper />
       </div>

@@ -315,6 +315,21 @@ export default function ExamResultsPage() {
 
     setSummary(buildSummary(parsed))
 
+    // Save to localStorage history for the exam page history section
+    try {
+      const examType = parsed.config?.examType ?? parsed.examType ?? 'WAEC'
+      const subjects = Array.isArray(parsed.config?.subjects) ? parsed.config.subjects : (parsed.subjects ?? [])
+      const results  = Array.isArray(parsed.results) ? parsed.results : []
+      const correct  = results.filter(r => r.isCorrect).length
+      const total    = results.length
+      const pct      = total > 0 ? Math.round((correct / total) * 100) : 0
+      const entry    = { pct, correct, total, subjects, date: new Date().toISOString() }
+      const key      = `exam_history_${examType}`
+      const existing = JSON.parse(localStorage.getItem(key) ?? '[]')
+      existing.push(entry)
+      localStorage.setItem(key, JSON.stringify(existing.slice(-10))) // keep last 10
+    } catch {}
+
     if (parsed.results && Array.isArray(parsed.results)) {
       setAllQuestions(parsed.results)
       const aMap = {}

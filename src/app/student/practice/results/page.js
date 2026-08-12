@@ -4,7 +4,7 @@
 //   + Review mode: after results, student can review each question with correct answers
 //   + Narrower content width consistent with session page
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
@@ -64,21 +64,27 @@ function buildSummary(parsed) {
   return { topics, subjects: bySubject, totalCorrect, totalAnswered, overallPct }
 }
 
-// ── Score ring ────────────────────────────────────────────────────────────────
-function ScoreRing({ pct, size = 120 }) {
-  const r = size * 0.38; const circ = 2 * Math.PI * r
+// ── Score ring — EXL Blue ────────────────────────────────────────────────────
+function ScoreRing({ pct, correct, total, size = 128 }) {
+  const stroke = 10
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
   const [dash, setDash] = useState(0)
-  useEffect(() => { const t = setTimeout(() => setDash((pct / 100) * circ), 100); return () => clearTimeout(t) }, [pct, circ])
-  const col = pct >= 75 ? '#16a34a' : pct >= 50 ? '#ca8a04' : '#dc2626'
+  useEffect(() => { const t = setTimeout(() => setDash((pct / 100) * circ), 120); return () => clearTimeout(t) }, [pct, circ])
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-inset)" strokeWidth="9" />
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth="9"
-        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      style={{ filter: 'drop-shadow(0 0 10px #1264E588)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1264E5" strokeWidth={stroke}
+        strokeLinecap="round" strokeDasharray={`${dash} ${circ}`}
         transform={`rotate(-90 ${size/2} ${size/2})`}
-        style={{ transition: 'stroke-dasharray 1.4s cubic-bezier(.4,0,.2,1)', filter: `drop-shadow(0 0 6px ${col}55)` }} />
-      <text x={size/2} y={size/2 - 5} textAnchor="middle" style={{ fontSize: size*0.22, fontWeight: 900, fill: 'var(--text-prim)', fontFamily: 'inherit' }}>{pct}%</text>
-      <text x={size/2} y={size/2 + 12} textAnchor="middle" style={{ fontSize: size*0.095, fill: 'var(--text-tert)', fontFamily: 'inherit' }}>score</text>
+        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(.34,1.56,.64,1)' }}/>
+      <text x={size/2} y={size/2 - 6} textAnchor="middle"
+        style={{ fontSize: size*0.21, fontWeight: 900, fill: 'var(--text-prim)', fontFamily: 'inherit' }}>
+        {correct !== undefined ? `${correct}/${total}` : `${pct}%`}
+      </text>
+      <text x={size/2} y={size/2 + 11} textAnchor="middle"
+        style={{ fontSize: size*0.085, fill: 'var(--text-tert)', fontFamily: 'inherit' }}>correct</text>
     </svg>
   )
 }
@@ -257,8 +263,8 @@ function ReviewMode({ questions, answerMap, onClose }) {
       <div style={{ flexShrink: 0, padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', gap: 8, maxWidth: 620, width: '100%', margin: '0 auto' }}>
         <button onClick={() => { setIdx(i => Math.max(0, i - 1)); setShowWhyModal(false) }} disabled={idx === 0} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 700, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1 }}>← Previous</button>
         {idx < questions.length - 1
-          ? <button onClick={() => { setIdx(i => i + 1); setShowWhyModal(false) }} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#0b1330', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>Next →</button>
-          : <button onClick={onClose} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#0b1330', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>Done ✓</button>
+          ? <button onClick={() => { setIdx(i => i + 1); setShowWhyModal(false) }} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#1264E5', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #0a3fa0' }}>Next →</button>
+          : <button onClick={onClose} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#1264E5', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #0a3fa0' }}>Done ✓</button>
         }
       </div>
 
@@ -333,7 +339,7 @@ function ReviewExplModal({ question, selectedKey, accent, onClose, onNext, isLas
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 700, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)', cursor: 'pointer' }}>Close</button>
-          <button onClick={onNext} style={{ flex: 2, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#0b1330', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #05070f' }}>{isLast ? 'Done ✓' : 'Next question →'}</button>
+          <button onClick={onNext} style={{ flex: 2, padding: '13px 0', borderRadius: 14, fontSize: 13, fontWeight: 800, background: '#1264E5', border: 'none', color: '#fff', cursor: 'pointer', boxShadow: '0 4px 0 #0a3fa0' }}>{isLast ? 'Done ✓' : 'Next question →'}</button>
         </div>
       </div>
     </div>
@@ -397,7 +403,7 @@ export default function PracticeResultsPage() {
 
   if (!summary) return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#0b1330', animation: 'spin .7s linear infinite' }} />
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#1264E5', animation: 'spin .7s linear infinite' }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
@@ -406,13 +412,55 @@ export default function PracticeResultsPage() {
   const xp          = saveResult?.points_awarded ?? Math.min(50, 5 + summary.totalCorrect * 2)
   const subjectList = Object.values(summary.subjects)
   const sessionType = isStudy ? 'Study' : 'Practice'
+  const isGreatScore = summary.overallPct >= 70
+
+  // Confetti particles — only spawned once on mount when score ≥ 70%
+  const [confettiPieces, setConfettiPieces] = useState([])
+  useEffect(() => {
+    if (!isGreatScore) return
+    const COLORS = ['#ff8fab','#9b7ae0','#fbbf24','#6cce8e','#5cb8ea','#f87171']
+    const pieces = Array.from({ length: 48 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      color: COLORS[i % COLORS.length],
+      width: 6 + Math.random() * 6,
+      height: 6 + Math.random() * 6,
+      delay: Math.random() * 0.8,
+      duration: 1.6 + Math.random() * 1.8,
+    }))
+    setConfettiPieces(pieces)
+    const t = setTimeout(() => setConfettiPieces([]), 4000)
+    return () => clearTimeout(t)
+  }, [isGreatScore]) // eslint-disable-line
 
   return (
     <>
       <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', paddingBottom: 48 }}>
         <div style={{ maxWidth: 620, margin: '0 auto', padding: '0 16px' }}>
 
-          {/* ── Header ── */}
+          {/* ── Confetti overlay ── */}
+        {confettiPieces.length > 0 && (
+          <>
+            <style>{`
+              @keyframes confettiFall {
+                0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+              }
+            `}</style>
+            <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 50 }}>
+              {confettiPieces.map(p => (
+                <div key={p.id} style={{
+                  position: 'absolute', top: 0, left: p.left,
+                  width: p.width, height: p.height, borderRadius: 2,
+                  background: p.color,
+                  animation: `confettiFall ${p.duration}s ${p.delay}s linear forwards`,
+                }} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── Header ── */}
           <div style={{ padding: '20px 0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)' }}>{sessionType} complete</p>
@@ -421,35 +469,50 @@ export default function PracticeResultsPage() {
             {saving && <span style={{ fontSize: 11, color: 'var(--text-tert)', fontWeight: 600 }}>Saving…</span>}
           </div>
 
-          {/* ── Score hero ── */}
-          <div style={{ borderRadius: 24, overflow: 'hidden', background: 'var(--bg-card)', border: '1px solid var(--border)', marginBottom: 14 }}>
-            <div style={{ padding: '24px 20px', display: 'flex', gap: 20, alignItems: 'center', background: isDark ? 'rgba(255,255,255,.02)' : '#fff' }}>
-              <div style={{ flexShrink: 0 }}>
-                <ScoreRing pct={summary.overallPct} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 24, marginBottom: 6 }}>{msg.icon}</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.5, marginBottom: 12 }}>{msg.text}</p>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, background: 'rgba(245,185,66,.12)', border: '1px solid rgba(245,185,66,.3)' }}>
-                  <span style={{ fontSize: 14 }}>✦</span>
-                  <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--gold)' }}>+{xp} XP earned</span>
-                </div>
-              </div>
+          {/* ── Score hero — centred ring + celebration ── */}
+          <div style={{ textAlign: 'center', marginBottom: 20, animation: 'exl-slide-up .4s ease' }}>
+            <div style={{ display: 'inline-block', marginBottom: 14, animation: 'exl-bounce-in .5s ease' }}>
+              <ScoreRing pct={summary.overallPct} correct={summary.totalCorrect} total={summary.totalAnswered} />
             </div>
-            {/* Stats strip */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid var(--border)' }}>
-              {[
-                { val: summary.totalCorrect,                         lbl: 'Correct',  col: '#16a34a' },
-                { val: summary.totalAnswered - summary.totalCorrect, lbl: 'Incorrect', col: '#dc2626' },
-                { val: summary.totalAnswered,                        lbl: 'Total',     col: 'var(--text-prim)' },
-              ].map(({ val, lbl, col }, i) => (
-                <div key={lbl} style={{ padding: '12px 0', textAlign: 'center', borderRight: i < 2 ? '1px solid var(--border)' : 'none' }}>
-                  <p style={{ fontSize: 22, fontWeight: 900, color: col, lineHeight: 1, marginBottom: 3 }}>{val}</p>
-                  <p style={{ fontSize: 10, color: 'var(--text-tert)', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 700 }}>{lbl}</p>
+            <p style={{ fontSize: 21, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em', marginBottom: 4 }}>
+              {isGreatScore ? 'Nice work! 🎉' : msg.icon + ' ' + (summary.overallPct >= 40 ? 'Keep going!' : 'Every session counts')}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-tert)', marginBottom: 16 }}>
+              {summary.topics[0]?.name ?? 'Practice session'}
+            </p>
+
+            {/* XP + streak pills */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 0, animation: 'exl-bounce-in .5s .1s ease both' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 13px', borderRadius: 999, background: 'rgba(255,184,0,.12)', border: '1.5px solid rgba(255,184,0,.28)' }}>
+                <span>✦</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#FFB800' }}>+{xp} XP earned</span>
+              </div>
+              {summary.overallPct >= 60 && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 13px', borderRadius: 999, background: 'rgba(255,106,0,.12)', border: '1.5px solid rgba(255,106,0,.28)', animation: 'exl-bounce-in .5s .15s ease both' }}>
+                  <span style={{ animation: 'exl-flame 1.8s ease-in-out infinite', display: 'inline-block' }}>🔥</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#FF6A00' }}>Streak alive!</span>
                 </div>
-              ))}
+              )}
             </div>
           </div>
+
+          {/* ── Mastery hook card ── */}
+          {summary.overallPct < 90 && (
+            <div style={{ padding: 14, background: 'var(--active-bg)', border: '1.5px solid var(--active-border)', borderRadius: 14, marginBottom: 12, animation: 'exl-slide-up .4s .2s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-sec)' }}>
+                  ⚡ {summary.topics[0]?.subjectName ?? 'Overall'} — {summary.overallPct}% this session
+                </p>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#18B7F2' }}>
+                  {summary.overallPct < 70 ? 'Push to 70%!' : 'Almost 90%!'}
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 99, overflow: 'hidden', background: 'var(--border)' }}>
+                <div style={{ height: '100%', width: `${summary.overallPct}%`, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', borderRadius: 99, transition: 'width .8s cubic-bezier(.34,1.56,.64,1)' }} />
+              </div>
+              <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 5 }}>One more quick session pushes your mastery up.</p>
+            </div>
+          )}
 
           {/* ── Review banner ── */}
           {allQuestions.length > 0 && (
@@ -466,7 +529,22 @@ export default function PracticeResultsPage() {
             </button>
           )}
 
-          {/* ── Topic mastery ── */}
+          {/* ── Zara reaction ── */}
+          <div style={{ padding: '11px 13px', background: 'rgba(18,100,229,.08)', border: '1.5px solid rgba(18,100,229,.22)', borderRadius: 14, display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, animation: 'exl-slide-up .4s .35s ease both' }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>
+              {summary.overallPct >= 80 ? '🌟' : summary.overallPct >= 60 ? '💪' : '📚'}
+            </span>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-sec)', lineHeight: 1.5 }}>
+              {summary.overallPct >= 80
+                ? `${summary.totalCorrect}/${summary.totalAnswered} correct — strong session! Go again to lock in that mastery.`
+                : summary.overallPct >= 60
+                ? `${summary.totalCorrect}/${summary.totalAnswered} correct — you're building. One more Quick 5 pushes you higher.`
+                : `${summary.totalCorrect}/${summary.totalAnswered} correct — every session teaches you something. Keep going.`
+              }
+            </p>
+          </div>
+
+          {/* ── Topic mastery ── */}          {/* ── Topic mastery ── */}
           {summary.topics.length > 0 && (
             <div style={{ borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: 14 }}>
               <div style={{ padding: '14px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -508,34 +586,60 @@ export default function PracticeResultsPage() {
             </div>
           )}
 
-          {/* ── CTAs ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 32 }}>
-            <Link href="/student/progress"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '15px 0', background: '#0b1330', color: '#fff', borderRadius: 16, fontSize: 15, fontWeight: 800, textDecoration: 'none', boxShadow: '0 5px 0 #05070f', letterSpacing: '-0.01em' }}>
-              View full progress →
+          {/* ── THE HOOK: Go again — gold button, most prominent ── */}
+          {!isGuest && (
+            <div style={{ padding: 16, background: 'rgba(255,184,0,.07)', border: '1.5px solid rgba(255,184,0,.18)', borderRadius: 18, marginBottom: 10, textAlign: 'center', animation: 'exl-slide-up .4s .3s ease both' }}>
+              <p style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-prim)', marginBottom: 4 }}>
+                {summary.overallPct >= 80 ? 'Smash 90% next round 🔥' : 'Push your mastery higher ⚡'}
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-tert)', marginBottom: 14 }}>
+                Another Quick 5. Same topic. 3 minutes.
+              </p>
+              <Link href="/student/practice"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 0', background: 'linear-gradient(135deg,#FFB800,#FF6A00)', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 900, textDecoration: 'none', boxShadow: '0 5px 0 #b85000, 0 8px 20px rgba(255,106,0,.25)', letterSpacing: '-0.015em', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent)', backgroundSize: '200% 100%', animation: 'exl-shimmer 2.5s infinite', pointerEvents: 'none' }} />
+                Go again — Quick 5 ⚡
+              </Link>
+            </div>
+          )}
+
+          {/* ── Secondary CTAs ── */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <Link href="/student/practice"
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0', background: 'var(--bg-card)', color: 'var(--text-sec)', borderRadius: 13, fontSize: 12, fontWeight: 700, textDecoration: 'none', border: '1px solid var(--border)' }}>
+              Try another topic →
             </Link>
-            {isGuest && (
-              <div style={{ background: '#0b1330', borderRadius: 20, padding: '24px 20px', marginBottom: 8 }}>
-                <p style={{ fontSize: 22, textAlign: 'center', marginBottom: 10 }}>🔓</p>
-                <p style={{ fontSize: 17, fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: 6, letterSpacing: '-0.02em' }}>Save your progress</p>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,.65)', lineHeight: 1.5, textAlign: 'center', marginBottom: 16 }}>
-                  Create a free account to track your topic mastery, see what to work on, and get a personalised study plan.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <a href="/signup" style={{ display: 'block', padding: '14px 0', borderRadius: 13, background: '#fbbf24', color: '#0b1330', fontSize: 15, fontWeight: 900, textAlign: 'center', textDecoration: 'none', boxShadow: '0 4px 0 #d97706' }}>
-                    Create free account →
-                  </a>
-                  <a href="/login" style={{ display: 'block', padding: '12px 0', borderRadius: 13, background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.8)', fontSize: 14, fontWeight: 700, textAlign: 'center', textDecoration: 'none', border: '1px solid rgba(255,255,255,.12)' }}>
-                    Log in to existing account
-                  </a>
-                </div>
-              </div>
-            )}
-            <Link href={isGuest ? '/practice' : '/student/practice/setup'}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 0', background: 'var(--bg-card)', color: 'var(--text-sec)', borderRadius: 16, fontSize: 14, fontWeight: 700, textDecoration: 'none', border: '1px solid var(--border)' }}>
-              {isGuest ? 'Practice again (free)' : 'Practice again'}
+            <Link href="/student/dashboard"
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0', background: 'var(--bg-card)', color: 'var(--text-sec)', borderRadius: 13, fontSize: 12, fontWeight: 700, textDecoration: 'none', border: '1px solid var(--border)' }}>
+              Back home
             </Link>
           </div>
+
+          {/* ── View progress CTA ── */}
+          <div style={{ paddingBottom: 32 }}>
+            <Link href="/student/progress"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 0', background: '#1264E5', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 5px 0 #0a3fa0', letterSpacing: '-0.01em' }}>
+              View full progress →
+            </Link>
+          </div>
+
+          {isGuest && (
+            <div style={{ background: '#062A78', borderRadius: 20, padding: '24px 20px', marginBottom: 32 }}>
+              <p style={{ fontSize: 22, textAlign: 'center', marginBottom: 10 }}>🔓</p>
+              <p style={{ fontSize: 17, fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: 6, letterSpacing: '-0.02em' }}>Save your progress</p>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', lineHeight: 1.5, textAlign: 'center', marginBottom: 16 }}>
+                Create a free account to track your mastery, get a personalised study plan, and see where to go next.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <a href="/signup" style={{ display: 'block', padding: '14px 0', borderRadius: 13, background: '#FFB800', color: '#062A78', fontSize: 15, fontWeight: 900, textAlign: 'center', textDecoration: 'none', boxShadow: '0 4px 0 #d97706' }}>
+                  Create free account →
+                </a>
+                <a href="/login" style={{ display: 'block', padding: '12px 0', borderRadius: 13, background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.7)', fontSize: 14, fontWeight: 700, textAlign: 'center', textDecoration: 'none', border: '1px solid rgba(255,255,255,.12)' }}>
+                  Log in to existing account
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

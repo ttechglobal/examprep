@@ -4,6 +4,7 @@
 // merged subject scores across exams, show-fewer default with expand.
 
 import { useState, useEffect } from 'react'
+import { ProgressPageSkeleton } from '@/components/ui/Skeletons'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { resolveSubjectColors } from '@/lib/subjectTheme'
@@ -11,6 +12,7 @@ import { useIsDark } from '@/lib/useIsDark'
 import { usePoints } from '@/contexts/PointsContext'
 import CoachBanner from '@/components/ui/CoachBanner'
 import Link from 'next/link'
+import { useUser } from '@/contexts/UserContext'
 
 function masteryTier(pct) {
   if (pct >= 80) return { label: 'Strong',     color: '#16a34a' }
@@ -211,37 +213,33 @@ export default function ProgressPage() {
   const router   = useRouter()
   const isDark   = useIsDark()
   const supabase = createClient()
-  const { totalPoints } = usePoints()
+  const { totalPoints: displayXP } = usePoints()
+  const { userId } = useUser()
 
   const [profile,    setProfile]    = useState(null)
   const [mastery,    setMastery]    = useState([])
   const [sessions,   setSessions]   = useState({})
   const [loading,    setLoading]    = useState(true)
-  const [activeExam, setActiveExam] = useState(null) // set from profile
+  const [activeExam, setActiveExam] = useState(null)
   const [showAll,    setShowAll]    = useState(false)
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+    if (userId) load(userId)
+  }, [userId]) // eslint-disable-line
 
-      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d.toISOString() })()
+  async function load(uid) {
+      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 14); d.setHours(0,0,0,0); return d.toISOString() })()
       const [{ data: prof }, { data: rows }, { data: attemptRows }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('profiles').select('*').eq('id', uid).single(),
         supabase.from('student_topic_mastery')
           .select('topic_id, score, attempt_count, topics(id, name, subject_id, subjects(id, name, exam_type))')
-          .eq('student_id', user.id)
+          .eq('student_id', uid)
           .order('score', { ascending: true }),
         supabase.from('question_attempts')
           .select('created_at, topic_id, is_correct')
-          .eq('student_id', user.id)
+          .eq('student_id', uid)
           .gte('created_at', weekStart),
       ])
-      // practice_sessions may not exist — fetch separately to avoid 404 polluting Promise.all
-      const sessRows = await supabase
-        .from('practice_sessions').select('completed_at')
-        .eq('student_id', user.id).gte('completed_at', weekStart)
-        .then(r => r.data ?? []).catch(() => [])
 
       setProfile(prof)
       const examType = prof?.exam_type ?? 'WAEC'
@@ -273,14 +271,9 @@ export default function ProgressPage() {
       }
       setMastery(masteryData)
 
-      // Activity — prefer practice_sessions; fall back to question_attempts
+      // Activity — derive sessions from question_attempts (group into sessions by 30-min gaps)
       const byDate = {}
-      if (sessRows?.length > 0) {
-        for (const s of sessRows) {
-          const day = s.completed_at?.slice(0, 10)
-          if (day) byDate[day] = (byDate[day] ?? 0) + 1
-        }
-      } else if (attemptRows?.length > 0) {
+      if (attemptRows?.length > 0) {
         let lastTs = null
         for (const a of [...attemptRows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))) {
           if (!a.created_at) continue
@@ -292,16 +285,9 @@ export default function ProgressPage() {
       }
       setSessions(byDate)
       setLoading(false)
-    }
-    load()
-  }, []) // eslint-disable-line
+  }
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#f59e0b', animation: 'spin .7s linear infinite' }} />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if (loading) return <ProgressPageSkeleton />
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -350,7 +336,6 @@ export default function ProgressPage() {
   const strongTopics = mastery.filter(m => (m.score ?? 0) >= 80).length
   const weakTopics   = mastery.filter(m => (m.score ?? 0) < 40).length
   const avgMastery   = totalTopics > 0 ? Math.round(mastery.reduce((s, m) => s + (m.score ?? 0), 0) / totalTopics) : 0
-  const displayXP    = totalPoints > 0 ? totalPoints : (profile?.total_points ?? 0)
   const totalSessions = Object.values(sessions).reduce((a, b) => a + b, 0)
   const streakDays   = profile?.streak_days ?? 0
 
@@ -364,10 +349,8 @@ export default function ProgressPage() {
 
       {/* ── Header ── */}
       <div style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 4 }}>
-          {activeExam} · Your progress
-        </p>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Progress 📈</h1>
+        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>Your journey</p>
+        <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Progress</h1>
       </div>
 
       {/* ── Coach banner ── */}
@@ -379,40 +362,49 @@ export default function ProgressPage() {
         />
       </div>
 
-      {/* ── Summary stat cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
+      {/* ── Stat tiles — matches prototype exactly ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
         {[
-          { val: `${avgMastery}%`, lbl: 'Avg mastery',    col: avgMastery >= 60 ? '#16a34a' : '#dc2626' },
-          { val: totalSessions,   lbl: 'Sessions (2 wks)', col: totalSessions > 0 ? '#9b7ae0' : 'var(--text-tert)' },
-          { val: strongTopics,    lbl: 'Strong topics',    col: '#16a34a' },
-          { val: weakTopics,      lbl: 'Need work',        col: weakTopics > 0 ? '#dc2626' : '#16a34a' },
-        ].map(({ val, lbl, col }) => (
-          <div key={lbl} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '16px' }}>
-            <p style={{ fontSize: 26, fontWeight: 900, color: col, lineHeight: 1, marginBottom: 4 }}>{val}</p>
-            <p style={{ fontSize: 11, color: 'var(--text-tert)', fontWeight: 600 }}>{lbl}</p>
+          { val: displayXP >= 1000 ? `${(displayXP/1000).toFixed(1)}k` : String(displayXP), lbl: 'Total XP',    col: '#FFB800', bg: 'rgba(255,184,0,.1)',     bd: 'rgba(255,184,0,.2)' },
+          { val: String(totalSessions),                                                        lbl: 'Sessions',   col: '#18B7F2', bg: 'rgba(24,183,242,.08)',   bd: 'rgba(24,183,242,.2)' },
+          { val: `${avgMastery}%`,                                                             lbl: 'Avg mastery',col: avgMastery >= 70 ? '#4ade80' : avgMastery >= 40 ? '#FFB800' : '#f87171', bg: 'rgba(74,222,128,.07)', bd: 'rgba(74,222,128,.2)' },
+        ].map(({ val, lbl, col, bg, bd }) => (
+          <div key={lbl} style={{ padding: '13px 8px', borderRadius: 14, background: bg, border: `1.5px solid ${bd}`, textAlign: 'center' }}>
+            <p style={{ fontSize: 20, fontWeight: 900, color: col, lineHeight: 1, marginBottom: 3 }}>{val}</p>
+            <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text-tert)' }}>{lbl}</p>
           </div>
         ))}
       </div>
 
-      {/* ── XP card — reads from same source as header ── */}
-      <div style={{ background: 'linear-gradient(135deg,#0b1330 0%,#1a2c6e 100%)', borderRadius: 20, padding: '20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 15, background: 'rgba(245,185,66,.2)', border: '1px solid rgba(245,185,66,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>✦</div>
-        <div>
-          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(255,255,255,.4)', marginBottom: 2 }}>Total XP</p>
-          <p style={{ fontSize: 28, fontWeight: 900, color: '#f5b942', lineHeight: 1, letterSpacing: '-0.03em', marginBottom: 2 }}>{displayXP.toLocaleString()}</p>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>Same XP shown in your header</p>
-        </div>
-      </div>
-
       {/* ── Activity chart ── */}
       <ActivityChart sessions={sessions} />
+
+      {/* ── Recent badges ── */}
+      {streakDays > 0 || totalSessions > 0 ? (
+        <div style={{ marginBottom: 14 }}>
+          <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Recent badges</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              streakDays >= 5  ? { e: '🔥', l: 'On Fire',      d: `${streakDays}-day streak`, c: '#FF6A00' } : null,
+              totalSessions > 10 ? { e: '⚡', l: 'Active',     d: `${totalSessions} sessions`, c: '#18B7F2' } : null,
+              avgMastery >= 50 ? { e: '🎯', l: 'On Target',    d: `${avgMastery}% avg`,       c: '#4ade80' } : null,
+            ].filter(Boolean).slice(0,3).map((b, i) => (
+              <div key={i} style={{ flex: 1, padding: '10px 8px', borderRadius: 12, background: `${b.c}0a`, border: `1px solid ${b.c}22`, textAlign: 'center' }}>
+                <p style={{ fontSize: 18, marginBottom: 3 }}>{b.e}</p>
+                <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-prim)' }}>{b.l}</p>
+                <p style={{ fontSize: 9, color: 'var(--text-tert)', marginTop: 1 }}>{b.d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Subject mastery ── */}
       {filteredSubjects.length > 0 ? (
         <>
           {/* Section header + exam tabs */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <p style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)' }}>Subject mastery</p>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>Subject mastery</p>
             {tabs.length > 1 && (
               <div style={{ display: 'flex', gap: 4, background: 'var(--bg-subtle)', borderRadius: 10, padding: 3 }}>
                 {tabs.map(tab => (
@@ -457,7 +449,7 @@ export default function ProgressPage() {
           <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
           <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6 }}>No mastery data yet</p>
           <p style={{ fontSize: 13, color: 'var(--text-tert)', marginBottom: 20, lineHeight: 1.5 }}>Complete a practice session to start tracking your topic mastery.</p>
-          <Link href="/student/practice/setup" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 20px', background: '#0b1330', color: '#fff', borderRadius: 13, fontSize: 13, fontWeight: 800, textDecoration: 'none', boxShadow: '0 4px 0 #05070f' }}>
+          <Link href="/student/practice/setup" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 20px', background: '#1264E5', color: '#fff', borderRadius: 13, fontSize: 13, fontWeight: 800, textDecoration: 'none', boxShadow: '0 4px 0 #0a3fa0' }}>
             Start practising →
           </Link>
         </div>
