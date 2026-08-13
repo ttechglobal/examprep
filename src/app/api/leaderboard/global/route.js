@@ -19,12 +19,11 @@ export async function GET(request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // Always fetch all profiles with XP so we can build an all-time fallback
+  // Fetch all profiles that have total_points set (any amount including 0 if they've practised)
   const { data: allProfiles } = await service
     .from('profiles')
     .select('id, full_name, state, total_points')
     .not('total_points', 'is', null)
-    .gt('total_points', 0)
     .order('total_points', { ascending: false })
     .limit(limit + 10)
 
@@ -68,12 +67,9 @@ export async function GET(request) {
     periodTotals[r.student_id] = (periodTotals[r.student_id] ?? 0) + (r.points ?? 0)
   }
 
-  // If no period activity at all, fall back to all-time total_points
+  // If no period activity, fall back to all-time total_points so national board is never empty
   if (!Object.keys(periodTotals).length) {
     const { ranked, myEntry } = buildFromProfiles(allProfiles)
-    if (!ranked.length) {
-      return NextResponse.json({ leaderboard: [], my_rank: null, my_entry: null, total_count: 0, period })
-    }
     const res = NextResponse.json({
       leaderboard: ranked.slice(0, limit),
       surround:    [],
@@ -81,6 +77,7 @@ export async function GET(request) {
       my_entry:    myEntry ?? null,
       total_count: ranked.length,
       period,
+      using_total: true,
     })
     res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
     return res

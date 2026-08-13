@@ -401,23 +401,11 @@ export default function PracticeResultsPage() {
       .catch(() => setSaving(false))
   }, [router, setTotalPoints])
 
-  if (!summary) return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#1264E5', animation: 'spin .7s linear infinite' }} />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
-
-  const msg         = scoreMsg(summary.overallPct)
-  const xp          = saveResult?.points_awarded ?? Math.min(50, 5 + summary.totalCorrect * 2)
-  const subjectList = Object.values(summary.subjects)
-  const sessionType = isStudy ? 'Study' : 'Practice'
-  const isGreatScore = summary.overallPct >= 70
-
-  // Confetti particles — only spawned once on mount when score ≥ 70%
+  // Confetti particles — must be declared before any early return (Rules of Hooks)
   const [confettiPieces, setConfettiPieces] = useState([])
+
   useEffect(() => {
-    if (!isGreatScore) return
+    if (!summary || summary.overallPct < 70) return
     const COLORS = ['#ff8fab','#9b7ae0','#fbbf24','#6cce8e','#5cb8ea','#f87171']
     const pieces = Array.from({ length: 48 }, (_, i) => ({
       id: i,
@@ -431,7 +419,20 @@ export default function PracticeResultsPage() {
     setConfettiPieces(pieces)
     const t = setTimeout(() => setConfettiPieces([]), 4000)
     return () => clearTimeout(t)
-  }, [isGreatScore]) // eslint-disable-line
+  }, [summary?.overallPct]) // eslint-disable-line
+
+  if (!summary) return (
+    <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border)', borderTopColor: '#1264E5', animation: 'spin .7s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+
+  const msg         = scoreMsg(summary.overallPct)
+  const xp          = saveResult?.points_awarded ?? Math.min(50, 5 + summary.totalCorrect * 2)
+  const subjectList = Object.values(summary.subjects)
+  const sessionType = isStudy ? 'Study' : 'Practice'
+  const isGreatScore = summary.overallPct >= 70
 
   return (
     <>

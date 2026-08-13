@@ -302,6 +302,83 @@ function BatchHistory({ subjectId, examType }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// ── Year coverage register ────────────────────────────────────────────────────
+function YearCoverage({ subjectId, examType }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!subjectId) return
+    setLoading(true)
+    const p = new URLSearchParams({ subjectId })
+    if (examType && examType !== 'ALL') p.set('examType', examType)
+    fetch(`/api/admin/questions/coverage-years?${p}`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [subjectId, examType])
+
+  if (loading) return <div className="flex justify-center py-12"><Spinner /></div>
+  if (!data) return <p className="text-center text-gray-400 text-sm py-10">Could not load year data.</p>
+
+  const { years = [], totalYears, totalQuestions } = data
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+      {/* Summary */}
+      <div className="flex items-center gap-6 flex-wrap">
+        <div>
+          <p className="text-2xl font-black text-gray-900 tabular-nums">{totalYears}</p>
+          <p className="text-xs text-gray-400">years with questions</p>
+        </div>
+        <div>
+          <p className="text-2xl font-black text-indigo-700 tabular-nums">{totalQuestions.toLocaleString()}</p>
+          <p className="text-xs text-gray-400">total questions</p>
+        </div>
+        <div>
+          <p className="text-2xl font-black text-red-500 tabular-nums">{years.length - totalYears}</p>
+          <p className="text-xs text-gray-400">years missing</p>
+        </div>
+        <div className="ml-auto">
+          <Link
+            href="/admin/questions/import"
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors"
+          >
+            ⬆ Import missing years →
+          </Link>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-[11px] text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500 inline-block" /> 20+ questions</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-300 inline-block" /> 10–19</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400 inline-block" /> 1–9</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200 inline-block" /> None</span>
+      </div>
+
+      {/* Year grid */}
+      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+        {years.map(({ year, count, has }) => {
+          const bg = count >= 20 ? 'bg-green-500 text-white' :
+                     count >= 10 ? 'bg-green-300 text-green-900' :
+                     count >= 1  ? 'bg-amber-400 text-amber-900' :
+                                   'bg-gray-100 text-gray-400 border border-gray-200'
+          return (
+            <div key={year} className={`rounded-xl p-2 text-center ${bg}`}>
+              <p className="text-xs font-black">{year}</p>
+              <p className="text-[10px] font-medium mt-0.5">
+                {has ? `${count}q` : '—'}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function PastQuestionsPage() {
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
@@ -448,6 +525,7 @@ export default function PastQuestionsPage() {
         {[
           { id: 'questions', label: `📝 Questions (${total.toLocaleString()})` },
           { id: 'coverage',  label: '📊 Topic coverage' },
+          { id: 'years',     label: '📅 Year coverage' },
           { id: 'history',   label: '📋 Upload history' },
         ].map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
@@ -554,6 +632,10 @@ export default function PastQuestionsPage() {
       {/* ── HISTORY TAB ───────────────────────────────────────────────── */}
       {activeTab === 'history' && (
         <BatchHistory subjectId={subjectId} examType={examType !== 'ALL' ? examType : ''} />
+      )}
+
+      {activeTab === 'years' && (
+        <YearCoverage subjectId={subjectId} examType={examType} />
       )}
 
       {selected && (

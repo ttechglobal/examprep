@@ -1,7 +1,5 @@
-// src/app/layout.js — REPLACE ENTIRE FILE
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
-import { ThemeProvider } from '@/contexts/ThemeContext'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -30,11 +28,8 @@ export default function RootLayout({ children }) {
           })();
         ` }} />
       </head>
-      {/* bg-base and text-primary now work via CSS variables in globals.css */}
       <body className="font-jakarta antialiased bg-base text-primary">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        {children}
       </body>
     </html>
   )

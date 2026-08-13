@@ -113,26 +113,28 @@ function SubjectBtn({ name, selected, onClick, disabled, locked }) {
   )
 }
 
-// ── Step dots ─────────────────────────────────────────────────────────────────
+// ── Step pills ────────────────────────────────────────────────────────────────
 function StepDots({ total, current }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
       {Array.from({ length: total }).map((_, i) => (
         <div key={i} style={{
           borderRadius: 99, transition: 'all .25s',
-          width: i === current ? 18 : 6, height: 5,
-          background: i === current ? '#9b7ae0' : i < current ? 'rgba(155,122,224,.4)' : 'var(--bg-inset)',
+          width: i === current ? 18 : 5, height: 5,
+          background: i === current ? '#1264E5' : i < current ? 'rgba(18,100,229,.35)' : 'var(--border)',
         }} />
       ))}
     </div>
   )
 }
 
-// ── 3D press CTA ──────────────────────────────────────────────────────────────
+// ── 3D press CTA — matches app button style ───────────────────────────────────
 function CtaButton({ onClick, disabled, children, variant = 'primary' }) {
   const [p, setP] = useState(false)
-  const bg     = variant === 'primary' ? '#0b1330' : 'var(--bg-subtle)'
-  const shadow = variant === 'primary' ? '0 5px 0 #05070f' : '0 3px 0 var(--bg-inset)'
+  const bg     = variant === 'primary' ? '#1264E5' : 'var(--bg-subtle)'
+  const shadow = variant === 'primary'
+    ? (p ? '0 2px 0 #0a3fa0' : '0 5px 0 #0a3fa0, 0 8px 20px rgba(18,100,229,.25)')
+    : '0 3px 0 var(--border)'
   const col    = variant === 'primary' ? '#fff' : 'var(--text-sec)'
   return (
     <button
@@ -141,14 +143,18 @@ function CtaButton({ onClick, disabled, children, variant = 'primary' }) {
       onTouchStart={() => setP(true)} onTouchEnd={() => setP(false)}
       style={{
         width: '100%', padding: '14px 0', borderRadius: 14,
-        fontSize: 14, fontWeight: 800, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: 14, fontWeight: 900, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
         background: bg, color: col, opacity: disabled ? 0.4 : 1,
-        boxShadow: p && !disabled ? (variant === 'primary' ? '0 2px 0 #05070f' : 'none') : shadow,
+        boxShadow: shadow,
         transform: p && !disabled ? 'translateY(3px)' : '',
         transition: 'transform .1s, box-shadow .1s',
-        letterSpacing: '-0.01em',
+        letterSpacing: '-0.015em', fontFamily: 'inherit',
+        position: 'relative', overflow: 'hidden',
       }}
     >
+      {variant === 'primary' && !disabled && (
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.13),transparent)', backgroundSize: '200% 100%', animation: 'shimmer 2.5s infinite', pointerEvents: 'none' }} />
+      )}
       {children}
     </button>
   )
@@ -311,30 +317,44 @@ export default function GoalModal({ profile, onClose, onSave }) {
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 300,
-        background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      }}
-    >
-      {/* Sheet — max-width 512px, centred, bottom-sheet on mobile */}
+    <>
+      <style>{`
+        @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+        @keyframes goal-slide{from{transform:translateY(100%)}to{transform:translateY(0)}}
+        @keyframes goal-fade{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+        .goal-sheet{animation:goal-slide .28s cubic-bezier(.32,0,.67,0)}
+        .goal-handle{display:flex}
+        @media(min-width:768px){
+          .goal-backdrop{align-items:center!important}
+          .goal-sheet{border-radius:22px!important;border:1px solid var(--border)!important;max-width:540px!important;animation:goal-fade .22s ease!important}
+          .goal-handle{display:none!important}
+        }
+      `}</style>
       <div
+        className="goal-backdrop"
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 300,
+          background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        }}
+      >
+      <div
+        className="goal-sheet"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 512,
           background: 'var(--bg-card)',
           borderRadius: '26px 26px 0 0',
           borderTop: '1px solid var(--border)',
-          maxHeight: '92dvh',
+          maxHeight: '94dvh',
           display: 'flex', flexDirection: 'column',
-          boxShadow: '0 -24px 64px rgba(0,0,0,.35)',
+          boxShadow: '0 -24px 64px rgba(0,0,0,.4)',
         }}
       >
         {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 0', flexShrink: 0 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--bg-inset)' }} />
+        <div className="goal-handle" style={{ justifyContent: 'center', padding: '12px 0 0', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
         </div>
 
         {/* Header */}
@@ -596,6 +616,7 @@ export default function GoalModal({ profile, onClose, onSave }) {
 
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

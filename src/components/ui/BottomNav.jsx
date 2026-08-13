@@ -1,8 +1,7 @@
 'use client'
 // src/components/ui/BottomNav.jsx — EXL Game Feel
-// 5-item nav: Home / Practise / Learn / Leaderboard / Profile
-// Active: EXL Cyan #18B7F2 with colour-specific accent per tab
-// Animated dot indicator at top of active item
+// 5-item nav: Home / Practise / Learn / Leaderboard / Progress
+// Active: colour-specific accent per tab, animated dot indicator at top
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -24,9 +23,9 @@ const ICONS = {
     active: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="13" width="4" height="7" rx="1" fill="currentColor"/><rect x="9" y="9" width="4" height="11" rx="1" fill="currentColor"/><rect x="16" y="5" width="4" height="15" rx="1" fill="currentColor"/></svg>),
     inactive: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="13" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="9" y="9" width="4" height="11" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="16" y="5" width="4" height="15" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>),
   },
-  Profile: {
-    active: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="7" r="3" fill="currentColor"/><path d="M5 20C5 16.7 7.7 14 11 14C14.3 14 17 16.7 17 20" fill="currentColor" opacity=".8"/></svg>),
-    inactive: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" fill="none"/><path d="M5 20C5 16.7 7.7 14 11 14C14.3 14 17 16.7 17 20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/></svg>),
+  Progress: {
+    active: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" fill="currentColor" opacity=".15" stroke="currentColor" strokeWidth="1.5"/><path d="M11 7V11L14 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>),
+    inactive: (<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.6" fill="none"/><path d="M11 7V11L14 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>),
   },
 }
 
@@ -35,7 +34,7 @@ const NAV = [
   { href: '/student/practice',  label: 'Practise',    key: 'Practise',    accent: '#9b7ae0' },
   { href: '/student/learn',     label: 'Learn',       key: 'Learn',       accent: '#4ade80' },
   { href: '/student/community', label: 'Leaderboard', key: 'Leaderboard', accent: '#FFB800' },
-  { href: '/student/profile',   label: 'Profile',     key: 'Profile',     accent: '#18B7F2' },
+  { href: '/student/progress',  label: 'Progress',    key: 'Progress',    accent: '#FF6A00' },
 ]
 
 export default function BottomNav() {

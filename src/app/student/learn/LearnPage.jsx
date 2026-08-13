@@ -29,66 +29,44 @@ const getIcon = n => SUBJECT_ICONS[n] ?? SUBJECT_ICONS.default
 
 const EXL_SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'Further Mathematics']
 
-// ── EXL Learning World card ───────────────────────────────────────────────────
-function EXLWorldCard({ studentSubjects }) {
+// ── EXL Learning World card — matches prototype exactly ───────────────────────
+// Simple, clean: icon + title + desc + open button. No feature pills, no expansion.
+function EXLWorldCard() {
   const [open, setOpen] = useState(false)
-  const covered = studentSubjects.filter(s => EXL_SUBJECTS.includes(s))
-  if (covered.length === 0) return null
 
   return (
     <>
-      <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(155,122,224,.25)' }}>
-        <div style={{ background: 'linear-gradient(145deg,#071B49 0%,#1a1060 55%,#0b0d20 100%)', padding: '18px 16px', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', inset: 0, opacity: .04, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle,#fff 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(155,122,224,.15)', border: '1px solid rgba(155,122,224,.3)', borderRadius: 999, padding: '4px 10px', marginBottom: 10 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#9b7ae0' }} />
-              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#9b7ae0' }}>EXL Learning World</span>
+      <div style={{ borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(145deg,#071B49 0%,#1a1060 55%,#0b0d20 100%)', border: '1px solid rgba(155,122,224,.35)', padding: 20, position: 'relative' }}>
+        <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(155,122,224,.1)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(155,122,224,.2)', border: '1px solid rgba(155,122,224,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📖</div>
+            <div>
+              <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(196,181,253,.6)', marginBottom: 2 }}>Study platform</p>
+              <p style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>EXL Learning World</p>
             </div>
-            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: 6 }}>
-              Learn {covered.join(', ')} interactively
-            </h3>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', lineHeight: 1.6, marginBottom: 14 }}>
-              For topics you're struggling with, EXL lets you interact with the concepts — not just read about them.
-            </p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-              {covered.map(s => (
-                <span key={s} style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', color: 'rgba(255,255,255,.7)' }}>
-                  {getIcon(s)} {s}
-                </span>
-              ))}
-            </div>
-            <button
-              onClick={() => setOpen(true)}
-              style={{ width: '100%', padding: '13px 0', borderRadius: 13, background: '#9b7ae0', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', letterSpacing: '-0.01em', boxShadow: '0 5px 0 #6d4ac0', transition: 'transform .1s' }}
-              onMouseDown={e => e.currentTarget.style.transform = 'translateY(3px)'}
-              onMouseUp={e => e.currentTarget.style.transform = ''}
-              onTouchStart={e => e.currentTarget.style.transform = 'translateY(3px)'}
-              onTouchEnd={e => e.currentTarget.style.transform = ''}
-            >
-              Open EXL Learning World →
-            </button>
           </div>
-        </div>
-        <div style={{ background: 'var(--bg-card)', padding: '9px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 14 }}>
-          {['Interactive lessons', 'Step-by-step', 'Science & Maths'].map(f => (
-            <span key={f} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tert)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#9b7ae0' }}>✓</span> {f}
-            </span>
-          ))}
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', lineHeight: 1.55, marginBottom: 14 }}>
+            Interactive lessons, video walkthroughs and step-by-step material — all in one place.
+          </p>
+          <button
+            onClick={() => setOpen(true)}
+            style={{ width: '100%', padding: '12px 0', borderRadius: 13, background: 'rgba(155,122,224,.3)', boxShadow: '0 4px 0 rgba(109,74,192,.6)', border: '1px solid rgba(155,122,224,.5)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', letterSpacing: '-0.01em', fontFamily: 'inherit' }}
+            onMouseDown={e => e.currentTarget.style.transform = 'translateY(3px)'}
+            onMouseUp={e => e.currentTarget.style.transform = ''}
+            onTouchStart={e => e.currentTarget.style.transform = 'translateY(3px)'}
+            onTouchEnd={e => e.currentTarget.style.transform = ''}
+          >
+            Open EXL Learning World →
+          </button>
         </div>
       </div>
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000', display: 'flex', flexDirection: 'column' }}>
           <div style={{ background: '#1264E5', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b7ae0' }} />
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>EXL Learning World</span>
-            </div>
-            <button onClick={() => setOpen(false)} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              Close ✕
-            </button>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>EXL Learning World</span>
+            <button onClick={() => setOpen(false)} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Close ✕</button>
           </div>
           <iframe src="https://exlgames.vercel.app/" style={{ flex: 1, border: 'none', width: '100%' }} title="EXL Learning World" allow="fullscreen" />
         </div>
@@ -311,15 +289,13 @@ export default function LearnPage() {
         </div>
       </div>
 
+      {/* Always show EXL card and coach banner */}
+      <CoachBanner emoji={coach.emoji} message={coach.message} />
+      <EXLWorldCard />
+
       {subjectData.length > 0 ? (
         <>
-          {/* ── 0. Coach banner ── */}
-          <CoachBanner emoji={coach.emoji} message={coach.message} />
-
-          {/* ── 1. EXL Learning World card — prototype puts this first ── */}
-          <EXLWorldCard studentSubjects={allSubjectNames} />
-
-          {/* ── 2. Focus areas — weak topics matching prototype style ── */}
+          {/* Focus areas — weak topics */}
           {allWeakTopics.length > 0 && (
             <div>
               <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Focus areas</span>
@@ -347,7 +323,7 @@ export default function LearnPage() {
             </div>
           )}
 
-          {/* ── 3. Subject mastery rows — clean list, no expand/collapse ── */}
+          {/* Subject mastery */}
           <div>
             <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Subject mastery</span>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
@@ -373,19 +349,16 @@ export default function LearnPage() {
           </div>
         </>
       ) : (
-        /* ── Empty state ── */
-        <div style={{ borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '28px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>📚</div>
-          <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6, letterSpacing: '-0.01em' }}>No subjects yet</p>
-          <p style={{ fontSize: 12, color: 'var(--text-sec)', lineHeight: 1.6, marginBottom: 20 }}>
-            Set your exam and subjects to see your topic progress here.
-          </p>
-          <button
-            onClick={() => setShowGoalModal(true)}
-            style={{ padding: '13px 24px', borderRadius: 13, background: '#1264E5', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 5px 0 #0a3fa0' }}
-          >
-            Set up my subjects →
-          </button>
+        /* No learning path yet — soft prompt, not a hard gate */
+        <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(18,100,229,.07)', border: '1px solid rgba(18,100,229,.18)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 22, flexShrink: 0 }}>🎯</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 2 }}>Take the diagnostic to see your progress</p>
+            <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>We'll track your mastery by topic as you practice.</p>
+          </div>
+          <Link href="/diagnostic" style={{ padding: '8px 12px', borderRadius: 9, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>
+            Start →
+          </Link>
         </div>
       )}
 

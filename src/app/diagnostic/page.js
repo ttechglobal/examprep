@@ -135,7 +135,10 @@ function DiagnosticSetup() {
         </Link>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isSignedIn
-            ? <Link href="/student/dashboard" style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.55)', textDecoration: 'none', padding: '7px 12px' }}>Dashboard →</Link>
+            ? <>
+                <Link href="/student/dashboard" style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.4)', textDecoration: 'none', padding: '7px 12px' }}>Skip →</Link>
+                <Link href="/student/dashboard" style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.55)', textDecoration: 'none', padding: '7px 12px' }}>Dashboard →</Link>
+              </>
             : <>
                 <Link href="/login" style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.5)', textDecoration: 'none', padding: '7px 12px' }}>Log in</Link>
                 <Link href="/signup" style={{ fontSize: 13, fontWeight: 800, color: '#fff', textDecoration: 'none', padding: '7px 16px', borderRadius: 10, background: '#1264E5', boxShadow: '0 3px 0 #0a3fa0' }}>Sign up</Link>
@@ -226,6 +229,11 @@ function DiagnosticSetup() {
             <button className="start-btn" onClick={handleStart} disabled={!examType || !selectedSubject}>
               {selectedSubject ? `Start ${selectedSubject} diagnostic →` : 'Select a subject to start →'}
             </button>
+            {isSignedIn && (
+              <Link href="/student/dashboard" style={{ display: 'block', textAlign: 'center', marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,.35)', textDecoration: 'none' }}>
+                Skip for now — go to dashboard →
+              </Link>
+            )}
           </div>
         </div>
 

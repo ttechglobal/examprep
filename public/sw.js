@@ -1,102 +1,175 @@
-// public/sw.js
-// ─────────────────────────────────────────────────────────────────────────────
-// ExamPrep Service Worker
-//
-// Strategy:
-//   - App shell (JS, CSS, fonts): Cache-first
-//   - API routes /api/offline/*: Network-first (these feed IndexedDB)
-//   - All other API routes: Network-only (no caching — data must be fresh)
-//   - Navigation (HTML pages): Network-first with offline fallback
-//
-// NOTE: Question data is NOT cached by the service worker.
-//       It lives in IndexedDB managed by offlineSync.js.
-//       The SW's job is just to keep the app *shell* working offline
-//       so the JS that reads IndexedDB can actually load.
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * ExamPrep Service Worker
+ * Strategy: Cache-first for all static assets (app shell)
+ * Network-first with cache fallback for API/dynamic content
+ */
 
-const CACHE_VERSION   = 'examprep-v1'
-const OFFLINE_FALLBACK = '/offline'
+const CACHE_NAME = 'examprep-v1';
+const OFFLINE_URL = '/index.html';
 
-// App shell assets to pre-cache on install
-const PRECACHE_ASSETS = [
-  '/',
-  '/offline',
+// All assets that make up the app shell — cached on install
+const APP_SHELL = [
+  '/index.html',
   '/manifest.json',
-]
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+];
 
-// ── Install ───────────────────────────────────────────────────────────────────
-self.addEventListener('install', (event) => {
+// ── Install: pre-cache app shell ──────────────────────────────────────────────
+self.addEventListener('install', event => {
+  console.log('[SW] Installing ExamPrep v1');
   event.waitUntil(
-    caches.open(CACHE_VERSION)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
-  )
-})
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('[SW] Pre-caching app shell');
+      return cache.addAll(APP_SHELL);
+    }).then(() => {
+      // Activate immediately without waiting for old SW to die
+      return self.skipWaiting();
+    })
+  );
+});
 
-// ── Activate ──────────────────────────────────────────────────────────────────
-self.addEventListener('activate', (event) => {
+// ── Activate: clean up old caches ────────────────────────────────────────────
+self.addEventListener('activate', event => {
+  console.log('[SW] Activating ExamPrep v1');
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(key => key !== CACHE_VERSION)
-          .map(key => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  )
-})
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames
+          .filter(name => name !== CACHE_NAME)
+          .map(name => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
+      );
+    }).then(() => {
+      // Take control of all open clients immediately
+      return self.clients.claim();
+    })
+  );
+});
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
-self.addEventListener('fetch', (event) => {
-  const { request } = event
-  const url = new URL(request.url)
+// ── Fetch: serve from cache, fall back to network ────────────────────────────
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return
+  // Skip non-GET requests and cross-origin requests (except Google Fonts)
+  if (request.method !== 'GET') return;
 
-  // Skip Supabase API calls — always network
-  if (url.hostname.includes('supabase')) return
-
-  // Skip chrome-extension and other non-http(s) schemes
-  if (!url.protocol.startsWith('http')) return
-
-  // API routes — network only (except /api/offline/*)
-  if (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/offline/')) {
-    // Just let it pass through — no caching
-    return
+  // Google Fonts — cache on first use (stale-while-revalidate)
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    event.respondWith(staleWhileRevalidate(request, 'examprep-fonts-v1'));
+    return;
   }
 
-  // Navigation requests — network first, offline fallback
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          // Cache the fresh navigation response
-          const clone = response.clone()
-          caches.open(CACHE_VERSION).then(cache => cache.put(request, clone))
-          return response
-        })
-        .catch(() =>
-          caches.match(request)
-            .then(cached => cached ?? caches.match(OFFLINE_FALLBACK))
-        )
-    )
-    return
-  }
+  // Skip non-same-origin requests entirely
+  if (url.origin !== location.origin) return;
 
-  // Static assets — cache first, network fallback
-  event.respondWith(
-    caches.match(request)
-      .then(cached => {
-        if (cached) return cached
-        return fetch(request).then(response => {
-          if (!response || response.status !== 200 || response.type === 'opaque') {
-            return response
-          }
-          const clone = response.clone()
-          caches.open(CACHE_VERSION).then(cache => cache.put(request, clone))
-          return response
-        })
-      })
-  )
-})
+  // App shell: cache-first
+  event.respondWith(cacheFirst(request));
+});
+
+// ── Cache strategies ──────────────────────────────────────────────────────────
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) {
+    // Serve from cache; revalidate in background
+    refreshCache(request);
+    return cached;
+  }
+  // Not in cache — fetch and store
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    // Truly offline and not cached — return app shell as fallback
+    const fallback = await caches.match(OFFLINE_URL);
+    return fallback || new Response('ExamPrep is offline. Please try again when connected.', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const networkFetch = fetch(request).then(response => {
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  }).catch(() => null);
+
+  return cached || (await networkFetch) || new Response('', { status: 503 });
+}
+
+function refreshCache(request) {
+  // Fire-and-forget background revalidation
+  fetch(request).then(response => {
+    if (response.ok) {
+      caches.open(CACHE_NAME).then(cache => cache.put(request, response));
+    }
+  }).catch(() => {});
+}
+
+// ── Background sync: queue offline study actions ─────────────────────────────
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-progress') {
+    event.waitUntil(syncStudyProgress());
+  }
+});
+
+async function syncStudyProgress() {
+  // When the real backend is wired up, this will flush any
+  // locally-stored study sessions to the server
+  console.log('[SW] Background sync: study progress');
+}
+
+// ── Push notifications ───────────────────────────────────────────────────────
+self.addEventListener('push', event => {
+  if (!event.data) return;
+
+  let data;
+  try { data = event.data.json(); }
+  catch { data = { title: 'ExamPrep', body: event.data.text() }; }
+
+  const options = {
+    body: data.body || 'Time to study! Keep your streak alive. 🔥',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-72x72.png',
+    tag: 'examprep-reminder',
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: { url: data.url || '/index.html' },
+    actions: [
+      { action: 'study', title: '▶ Start Quick 5' },
+      { action: 'later', title: 'Later' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'ExamPrep', options)
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  if (event.action === 'later') return;
+
+  const url = event.notification.data?.url || '/index.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      // Focus existing tab if open
+      for (const client of windowClients) {
+        if (client.url === url && 'focus' in client) return client.focus();
+      }
+      // Otherwise open a new tab
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});

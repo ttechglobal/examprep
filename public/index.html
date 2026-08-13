@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ExamPrep">
+<meta name="application-name" content="ExamPrep">
+<meta name="theme-color" content="#062A78">
+<meta name="description" content="Prepare for WAEC and JAMB with personalised practice, lessons, and exam simulations. Works offline.">
+<meta name="format-detection" content="telephone=no">
+<title>ExamPrep — WAEC &amp; JAMB Prep</title>
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json">
+
+<!-- Apple Touch Icons -->
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152x152.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192x192.png">
+
+<!-- Favicon -->
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/icon-72x72.png">
+
+<!-- Apple splash screens (portrait) -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#0a0c14;min-height:100vh;overflow-x:hidden;overflow-y:hidden}
+
+/* ── Shell ── */
+#app-shell{width:100vw;min-height:100vh;display:flex;flex-direction:column;align-items:center;background:#0a0c14}
+.logo-mark{width:26px;height:26px;background:#062A78;border-radius:7px;box-shadow:0 3px 0 #020c20;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
+.logo-a1{position:absolute;top:-5px;right:-6px;background:#FFB800;border-radius:3px;font-size:6px;font-weight:900;color:#062A78;padding:1px 3px;line-height:1.4}
+#root{width:100%;display:flex;justify-content:center;flex:1}
+
+/* ── Light / Dark token variables ── */
+:root{
+  --bg:#0a0c14; --bg2:rgba(255,255,255,.03); --bg3:rgba(255,255,255,.06);
+  --card:rgba(255,255,255,.04); --card2:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.07); --border2:rgba(255,255,255,.12);
+  --prim:#ffffff; --sec:rgba(255,255,255,.7); --tert:rgba(255,255,255,.35);
+  --inset:rgba(255,255,255,.06);
+  --xp-track:rgba(255,255,255,.08);
+  --star-col:#fff;
+  --shadow:0 2px 0 rgba(0,0,0,.6);
+  --coach-bg:rgba(18,100,229,.1); --coach-bd:rgba(18,100,229,.25);
+  --quest-bg:linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%);
+  --quest-bd:rgba(24,183,242,.2);
+  --week-done:rgba(24,183,242,.15); --week-done-bd:rgba(24,183,242,.3);
+  --week-today:#1264E5; --week-today-bd:#1264E5;
+  --week-empty:rgba(255,255,255,.04); --week-empty-bd:rgba(255,255,255,.08);
+  --subj-card:rgba(255,255,255,.03); --subj-bd:rgba(255,255,255,.07);
+  --settings-bg:rgba(255,255,255,.03);
+  --nav-bg:rgba(6,10,20,.95); --nav-bd:rgba(255,255,255,.07);
+  --profile-hero:linear-gradient(155deg,#050b1a 0%,#062A78 45%,#1a1060 100%);
+  --profile-hero-bd:rgba(24,183,242,.15);
+  --stat-div:rgba(255,255,255,.07);
+  --sidebar-bg:rgba(255,255,255,.03); --sidebar-bd:rgba(255,255,255,.07);
+  --desk-header-bg:rgba(6,10,20,.95); --desk-header-bd:rgba(255,255,255,.07);
+  --right-card:rgba(255,255,255,.03);
+}
+.light{
+  --bg:#f0f4ff; --bg2:#ffffff; --bg3:#e8eeff;
+  --card:#ffffff; --card2:#f5f7ff;
+  --border:#dde4f5; --border2:#c4cfed;
+  --prim:#071B49; --sec:#3a4870; --tert:#7a8aaa;
+  --inset:#e4eaf8;
+  --xp-track:#dde4f5;
+  --star-col:#062A78;
+  --shadow:0 2px 0 rgba(10,30,80,.15);
+  --coach-bg:rgba(18,100,229,.06); --coach-bd:rgba(18,100,229,.18);
+  --quest-bg:linear-gradient(145deg,#062A78 0%,#0c3a94 50%,#1264E5 100%);
+  --quest-bd:rgba(24,183,242,.3);
+  --week-done:rgba(18,100,229,.1); --week-done-bd:rgba(18,100,229,.25);
+  --week-today:#1264E5; --week-today-bd:#1264E5;
+  --week-empty:#f0f4ff; --week-empty-bd:#dde4f5;
+  --subj-card:#ffffff; --subj-bd:#dde4f5;
+  --settings-bg:#ffffff;
+  --nav-bg:rgba(248,251,255,.97); --nav-bd:#dde4f5;
+  --profile-hero:linear-gradient(155deg,#062A78 0%,#1264E5 55%,#18B7F2 100%);
+  --profile-hero-bd:rgba(18,100,229,.3);
+  --stat-div:rgba(255,255,255,.18);
+  --sidebar-bg:#ffffff; --sidebar-bd:#dde4f5;
+  --desk-header-bg:rgba(248,251,255,.97); --desk-header-bd:#dde4f5;
+  --right-card:#ffffff;
+}
+
+/* ── Phone ── */
+.phone{width:100%;min-height:100vh;border-radius:0;overflow:hidden;position:relative;display:flex;flex-direction:column;flex-shrink:0}
+.phone.light{}
+.phone-notch{display:none}
+
+.scr{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.scroll{flex:1;overflow-y:auto;padding-bottom:84px}
+.scroll::-webkit-scrollbar{display:none}
+
+/* ── Bottom nav ── */
+.bnav{position:absolute;bottom:0;left:0;right:0;height:70px;display:flex;align-items:center;padding:0 6px 10px;z-index:20;background:var(--nav-bg);border-top:1px solid var(--nav-bd);backdrop-filter:blur(20px)}
+.bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 0;cursor:pointer;border:none;background:none;transition:all .18s;position:relative;color:var(--tert)}
+.bni-label{font-size:9px;font-weight:700;letter-spacing:.01em;color:var(--tert)}
+.bni.on .bni-label,.bni.on{color:var(--accent-col,#18B7F2)}
+.bni-dot{position:absolute;top:4px;width:16px;height:2.5px;border-radius:2px;opacity:0;transition:all .2s;background:var(--accent-col,#18B7F2)}
+.bni.on .bni-dot{opacity:1}
+.bni.on .bni-icon{transform:translateY(-1px) scale(1.06)}
+.bni-icon{transition:transform .18s}
+
+/* ── Desktop ── */
+.desktop{width:100%;min-height:100vh;border-radius:0;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.light .desktop{}
+.desk-header{height:52px;display:flex;align-items:center;padding:0 18px;gap:10px;flex-shrink:0;background:var(--desk-header-bg);border-bottom:1px solid var(--desk-header-bd);backdrop-filter:blur(20px);position:relative;z-index:10}
+.desk-body{flex:1;display:flex;overflow:hidden;min-height:608px}
+.desk-sidebar{width:220px;flex-shrink:0;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar-bg);border-right:1px solid var(--sidebar-bd)}
+.desk-sidebar::-webkit-scrollbar{display:none}
+.desk-content{flex:1;overflow-y:auto;padding:20px 20px;display:flex;gap:16px;align-items:flex-start}
+.desk-content::-webkit-scrollbar{display:none}
+.desk-main{flex:1;display:flex;flex-direction:column;gap:14px;min-width:0}
+.desk-aside{width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:10px}
+
+/* ── Sidebar nav link ── */
+.snl{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:11px;cursor:pointer;text-decoration:none;transition:all .15s;border:1.5px solid transparent;color:var(--tert);background:transparent;font-family:inherit;text-align:left;width:100%}
+.snl.on{border-color:rgba(24,183,242,.25);background:rgba(24,183,242,.1);color:#18B7F2}
+.light .snl.on{border-color:rgba(18,100,229,.2);background:rgba(18,100,229,.07);color:#1264E5}
+
+/* ── Shared atoms ── */
+.press-btn{border:none;cursor:pointer;font-weight:900;font-size:14px;border-radius:14px;width:100%;padding:14px;color:#fff;letter-spacing:-.015em;transition:transform .1s,box-shadow .1s;font-family:inherit;position:relative;overflow:hidden}
+.press-btn.primary{background:#1264E5;box-shadow:0 5px 0 #0a3fa0,0 8px 20px rgba(18,100,229,.3)}
+.press-btn.primary:active{transform:translateY(3px);box-shadow:0 2px 0 #0a3fa0}
+.press-btn.gold{background:linear-gradient(135deg,#FFB800,#FF6A00);box-shadow:0 5px 0 #b85000,0 8px 20px rgba(255,106,0,.25)}
+.press-btn.gold:active{transform:translateY(3px);box-shadow:0 2px 0 #b85000}
+.press-btn.ghost{background:var(--bg2);box-shadow:none;border:1px solid var(--border2);color:var(--sec)}
+.btn-shimmer{position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.13) 50%,transparent 100%);background-size:200% 100%;animation:shimmer 2.5s infinite}
+
+.xp-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;background:rgba(255,184,0,.12);border:1.5px solid rgba(255,184,0,.28);font-size:11px;font-weight:800;color:#FFB800}
+.light .xp-pill{background:rgba(255,184,0,.1);border-color:rgba(255,140,0,.3);color:#d97706}
+.streak-badge{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:999px;background:rgba(255,106,0,.12);border:1.5px solid rgba(255,106,0,.28);font-size:11px;font-weight:800;color:#FF6A00}
+.light .streak-badge{background:rgba(255,106,0,.08);border-color:rgba(255,106,0,.22);color:#c2410c}
+.streak-flame{display:inline-block;animation:flame-flicker 1.8s ease-in-out infinite}
+
+.section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:8px;display:block}
+.xp-bar-track{height:5px;border-radius:99px;background:var(--xp-track);overflow:hidden}
+.xp-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#18B7F2,#1264E5);transition:width .8s cubic-bezier(.34,1.56,.64,1)}
+.dark-card{background:var(--card);border:1px solid var(--border);border-radius:16px}
+.quest-card{border-radius:20px;overflow:hidden;position:relative;cursor:pointer;transition:transform .15s}
+.quest-card:active{transform:scale(.98)}
+
+/* ── Stars ── */
+.stars-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.star{position:absolute;border-radius:50%;background:var(--star-col)}
+
+/* ── Animations ── */
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes flame-flicker{0%,100%{transform:scaleY(1) skewX(0)}33%{transform:scaleY(1.06) skewX(-2deg)}66%{transform:scaleY(.97) skewX(1deg)}}
+@keyframes star-twinkle{0%,100%{opacity:.1;transform:scale(1)}50%{opacity:.45;transform:scale(1.3)}}
+@keyframes slide-up{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes bounce-in{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes glow-pulse{0%,100%{box-shadow:0 0 10px rgba(18,100,229,.2)}50%{box-shadow:0 0 24px rgba(18,100,229,.45)}}
+@keyframes xp-pop{0%{transform:scale(1)}40%{transform:scale(1.18)}100%{transform:scale(1)}}
+.xp-pill.popping{animation:xp-pop .3s ease}
+
+/* ── PWA Install Banner ── */
+#pwa-install-bar{display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:12px 16px;background:linear-gradient(135deg,#062A78,#1264E5);border-top:1px solid rgba(24,183,242,.3);backdrop-filter:blur(20px);flex-direction:row;align-items:center;gap:10px;box-shadow:0 -4px 20px rgba(0,0,0,.4)}
+#pwa-install-bar.show{display:flex}
+#pwa-install-bar .pwa-icon{width:36px;height:36px;border-radius:10px;overflow:hidden;flex-shrink:0}
+#pwa-install-bar .pwa-icon img{width:100%;height:100%}
+#pwa-install-bar .pwa-text{flex:1;min-width:0}
+#pwa-install-bar .pwa-title{font-size:12px;font-weight:800;color:#fff;line-height:1.2}
+#pwa-install-bar .pwa-sub{font-size:10px;color:rgba(255,255,255,.55);margin-top:1px}
+#pwa-install-bar .pwa-install-btn{padding:8px 16px;border-radius:9px;background:#FFB800;color:#062A78;font-size:11px;font-weight:900;border:none;cursor:pointer;white-space:nowrap;font-family:inherit;box-shadow:0 3px 0 #b85000;transition:transform .1s}
+#pwa-install-bar .pwa-install-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #b85000}
+#pwa-install-bar .pwa-dismiss{padding:8px;border-radius:8px;background:transparent;color:rgba(255,255,255,.4);font-size:18px;border:none;cursor:pointer;line-height:1;flex-shrink:0}
+/* Safe area support for phones with notches */
+body{padding-bottom:env(safe-area-inset-bottom)}
+.bnav{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+
+</style>
+</head>
+<body>
+
+<!-- PWA Install Banner -->
+<div id="pwa-install-bar">
+  <div class="pwa-icon"><img src="icons/icon-192x192.png" alt="ExamPrep"></div>
+  <div class="pwa-text">
+    <div class="pwa-title">Add ExamPrep to your home screen</div>
+    <div class="pwa-sub">Study offline · Works without internet</div>
+  </div>
+  <button class="pwa-install-btn" onclick="triggerPWAInstall()">Install</button>
+  <button class="pwa-dismiss" onclick="dismissInstallBar()" aria-label="Dismiss">✕</button>
+</div>
+
+<div id="app-shell">
+<div id="root"></div>
+</div>
+
+<script>
+let MODE = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+let VIEW = window.innerWidth >= 768 ? 'desktop' : 'mobile'
+let CUR = 'home'
+
+// Respect system dark mode changes
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+  MODE = e.matches ? 'light' : 'dark'
+  applyCSSVars()
+  render()
+})
+// Respond to window resize for desktop/mobile switch
+window.addEventListener('resize', () => {
+  const newView = window.innerWidth >= 768 ? 'desktop' : 'mobile'
+  if (newView !== VIEW) { VIEW = newView; render() }
+})
+
+const SUBJECTS = [
+  { name:'Physics',   icon:'⚡', color:'#18B7F2', pct:72 },
+  { name:'Chemistry', icon:'⚗️', color:'#9b7ae0', pct:45 },
+  { name:'Biology',   icon:'🧬', color:'#4ade80', pct:58 },
+  { name:'Maths',     icon:'📐', color:'#FFB800', pct:31 },
+]
+const WEAK = [
+  { name:'Waves & Sound',     subject:'Physics',   color:'#18B7F2', icon:'⚡', pct:28 },
+  { name:'Organic Chemistry', subject:'Chemistry', color:'#9b7ae0', icon:'⚗️', pct:19 },
+]
+
+// ── Token helpers ─────────────────────────────────────────────────────────────
+const T = {
+  isLight: () => MODE === 'light',
+  pct:  p => p>=70 ? (MODE==='light'?'#059669':'#4ade80') : p>=40 ? '#FFB800' : (MODE==='light'?'#dc2626':'#f87171'),
+}
+
+// ── Shared builders ───────────────────────────────────────────────────────────
+function stars(n=16) {
+  let s=''
+  for(let i=0;i<n;i++){
+    const x=Math.random()*100,y=Math.random()*100,sz=Math.random()*1.6+.5
+    const delay=Math.random()*4,dur=2+Math.random()*3
+    s+=`<div class="star" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;opacity:.12;animation:star-twinkle ${dur}s ${delay}s ease-in-out infinite"></div>`
+  }
+  return `<div class="stars-bg">${s}</div>`
+}
+
+function ring(pct,size=96,stroke=8,color='#1264E5',glow=false){
+  const r=(size-stroke)/2,circ=2*Math.PI*r,dash=(pct/100)*circ
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="${glow?`filter:drop-shadow(0 0 8px ${color}88)`:''}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--xp-track)" stroke-width="${stroke}"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+      stroke-linecap="round" stroke-dasharray="${dash} ${circ}" transform="rotate(-90 ${size/2} ${size/2})"/>
+  </svg>`
+}
+
+function zaraMsg(msg) {
+  return `<div style="padding:11px 13px;background:var(--coach-bg);border:1.5px solid var(--coach-bd);border-radius:14px;display:flex;gap:10px;align-items:flex-start">
+    <div style="width:34px;height:34px;border-radius:10px;overflow:hidden;flex-shrink:0">
+      <svg width="34" height="34" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="20" fill="#062A78"/><rect x="17" y="25" width="6" height="5" rx="2" fill="#C68642"/><path d="M9 36C9 31 13.5 28 20 28C26.5 28 31 31 31 36" fill="#1a3a8f"/><circle cx="20" cy="20" r="8.5" fill="#C68642"/><path d="M11.5 19C11.5 13.2 15.3 10 20 10C24.7 10 28.5 13.2 28.5 19" fill="#1a0a00"/><ellipse cx="17" cy="20" rx="1.4" ry="1.5" fill="#1a0a00"/><ellipse cx="23" cy="20" rx="1.4" ry="1.5" fill="#1a0a00"/><circle cx="17.5" cy="19.4" r=".5" fill="white"/><circle cx="23.5" cy="19.4" r=".5" fill="white"/><path d="M17 23.5C17 23.5 18.5 25 20 25C21.5 25 23 23.5 23 23.5" stroke="#7a3f00" stroke-width="1" stroke-linecap="round" fill="none"/></svg>
+    </div>
+    <div style="flex:1">
+      <p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#18B7F2;margin-bottom:2px">Zara · Study buddy</p>
+      <p style="font-size:12px;font-weight:500;color:var(--sec);line-height:1.5">${msg}</p>
+    </div>
+  </div>`
+}
+
+function xpBar(pct){ return `<div class="xp-bar-track"><div class="xp-bar-fill" style="width:${pct}%"></div></div>` }
+
+function subjCard(s,i,total){
+  return `<div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:${i<total-1?'1px solid var(--border)':'none'}">
+    <div style="width:36px;height:36px;border-radius:10px;background:${s.color}18;border:1px solid ${s.color}22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${s.icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:700;color:var(--prim)">${s.name}</span>
+        <span style="font-size:12px;font-weight:900;color:${T.pct(s.pct)}">${s.pct}%</span>
+      </div>
+      ${xpBar(s.pct)}
+    </div>
+  </div>`
+}
+
+function questCard(compact=false){
+  const days=['Mo','Tu','We','Th','Fr','Sa','Su']
+  const dots = days.map((d,i)=>{
+    const done=i<5,today=i===1
+    let bg=`var(--week-empty)`,bd=`var(--week-empty-bd)`,col=`var(--tert)`,txt=d[0]
+    if(today){bg=`var(--week-today)`;bd=`var(--week-today-bd)`;col='#fff';txt='●'}
+    else if(done){bg=`var(--week-done)`;bd=`var(--week-done-bd)`;col='#18B7F2';txt='✓'}
+    return `<div style="width:${compact?24:26}px;height:${compact?24:26}px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:${compact?8:9}px;font-weight:800;background:${bg};border:1px solid ${bd};color:${col}">${txt}</div>`
+  }).join('')
+  if(compact) return `<div style="border-radius:16px;overflow:hidden;cursor:pointer;background:var(--quest-bg);border:1px solid var(--quest-bd);padding:14px;animation:glow-pulse 3s ease-in-out infinite" onclick="go('practice')">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="position:relative;flex-shrink:0">${ring(0,60,6,'#1264E5',true)}<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><p style="font-size:13px;font-weight:900;color:#fff;line-height:1">0</p><p style="font-size:7px;color:rgba(255,255,255,.4);font-weight:700">/5</p></div></div>
+      <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><p style="font-size:14px;font-weight:900;color:#fff">Quick 5</p><span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;background:rgba(255,184,0,.15);border:1px solid rgba(255,184,0,.25);color:#FFB800">+50 XP</span></div><p style="font-size:11px;color:rgba(255,255,255,.45)">Physics · Waves & Sound · ~4 min</p></div>
+    </div>
+    <div style="margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:4px;align-items:center">${dots}<div style="margin-left:auto;display:flex;align-items:center;gap:3px"><span class="streak-flame">🔥</span><span style="font-size:10px;font-weight:800;color:#FF6A00">5 days</span></div></div>
+  </div>`
+
+  return `<div class="quest-card" onclick="go('practice')" style="background:var(--quest-bg);border:1px solid var(--quest-bd);padding:18px;animation:glow-pulse 3s ease-in-out infinite">
+    <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(24,183,242,.18) 0%,transparent 70%);pointer-events:none"></div>
+    <div style="display:flex;align-items:center;gap:14px;position:relative;z-index:1">
+      <div style="position:relative;flex-shrink:0">${ring(0,72,7,'#1264E5',true)}<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><p style="font-size:16px;font-weight:900;color:#fff;line-height:1">0</p><p style="font-size:8px;color:rgba(255,255,255,.4);font-weight:700">/ 5</p></div></div>
+      <div style="flex:1"><div style="display:flex;align-items:center;gap:7px;margin-bottom:4px"><p style="font-size:15px;font-weight:900;color:#fff">Quick 5</p><span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;background:rgba(255,184,0,.15);border:1px solid rgba(255,184,0,.25);color:#FFB800">+50 XP</span></div><p style="font-size:11px;color:rgba(255,255,255,.45);margin-bottom:12px">Waves & Sound · Physics · ~4 min</p>
+        <button class="press-btn primary" style="padding:11px;font-size:13px" onclick="go('practice')"><div class="btn-shimmer"></div>Start today's quest →</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:5px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);position:relative;z-index:1;align-items:center">${dots}<div style="margin-left:auto;display:flex;align-items:center;gap:3px"><span class="streak-flame">🔥</span><span style="font-size:10px;font-weight:800;color:#FF6A00">5 days</span></div></div>
+  </div>`
+}
+
+// ── MOBILE SCREENS ─────────────────────────────────────────────────────────────
+function mHome(){return `
+  <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden">${stars(20)}
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 65% 8%,rgba(18,100,229,.13) 0%,transparent 60%),radial-gradient(ellipse at 15% 75%,rgba(24,183,242,.07) 0%,transparent 50%)"></div>
+  </div>
+  <div style="padding:18px 18px 0;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1">
+    <div><p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">Tuesday morning</p>
+    <p style="font-size:17px;font-weight:900;color:var(--prim);letter-spacing:-.025em">Good morning, Chidi ⚡</p></div>
+    <div style="display:flex;align-items:center;gap:7px"><div class="streak-badge"><span class="streak-flame">🔥</span> 5</div><div class="xp-pill">✦ 2.4k XP</div></div>
+  </div>
+  <div class="scroll" style="padding:14px 18px 0;position:relative;z-index:1">
+    ${zaraMsg('Just 5 questions today keeps your streak alive. Physics is calling — want to go?')}
+    <div style="margin-top:14px;margin-bottom:14px"><span class="section-label">Daily quest</span>${questCard()}</div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><span class="section-label" style="margin:0">Your subjects</span><button onclick="go('learn')" style="font-size:10px;font-weight:700;color:#18B7F2;background:none;border:none;cursor:pointer">All →</button></div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0 14px">${SUBJECTS.map((s,i)=>subjCard(s,i,SUBJECTS.length)).join('')}</div>
+    </div>
+    <div style="margin-bottom:14px"><span class="section-label">Level up faster</span>
+      ${WEAK.map(w=>`<div onclick="go('practice')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--card);border:1px solid ${w.color}22;border-radius:13px;cursor:pointer;margin-bottom:7px">
+        <div style="width:34px;height:34px;border-radius:10px;background:${w.color}14;border:1px solid ${w.color}22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${w.icon}</div>
+        <div style="flex:1"><p style="font-size:12.5px;font-weight:700;color:var(--prim)">${w.name}</p><p style="font-size:10px;color:var(--tert);margin-top:1px">${w.subject} · ${w.pct}% mastered</p></div>
+        <button style="font-size:10px;font-weight:800;color:${w.color};background:${w.color}12;border:1px solid ${w.color}25;padding:5px 10px;border-radius:8px;cursor:pointer">Quick 5 →</button>
+      </div>`).join('')}
+    </div>
+    <div style="padding:13px 14px;background:rgba(255,184,0,.07);border:1px solid rgba(255,184,0,${T.isLight()?'.2':'.14'});border-radius:14px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:20px">🎯</span>
+      <div style="flex:1"><p style="font-size:12px;font-weight:700;color:var(--prim)">Medicine · UNILAG</p><p style="font-size:10px;color:var(--tert);margin-top:1px">JAMB · 280/400 target</p></div>
+      <div style="text-align:right"><p style="font-size:22px;font-weight:900;color:#FFB800;line-height:1">142</p><p style="font-size:9px;color:var(--tert)">days left</p></div>
+    </div>
+  </div>`}
+
+function mPractice(){return `
+  <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(18,100,229,.14) 0%,transparent 55%)"></div>
+  </div>
+  <div style="padding:16px 18px 0;position:relative;z-index:1">
+    <p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">Let's go</p>
+    <h1 style="font-size:17px;font-weight:900;color:var(--prim);letter-spacing:-.025em;margin-bottom:14px">Choose your quest</h1>
+  </div>
+  <div class="scroll" style="padding:0 18px;position:relative;z-index:1">
+    ${zaraMsg('Waves & Sound is your weak spot. 5 questions = +25 XP. Takes 3 minutes.')}
+    <div style="margin-top:14px;display:flex;gap:0;background:var(--bg3);border-radius:13px;padding:4px;margin-bottom:14px;border:1px solid var(--border2)">
+      <button style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;border:none;cursor:pointer;font-family:inherit;background:#1264E5;color:#fff;box-shadow:0 2px 8px rgba(18,100,229,.4)">WAEC</button>
+      <button style="flex:1;padding:9px;border-radius:10px;font-size:13px;font-weight:800;border:none;cursor:pointer;font-family:inherit;background:transparent;color:var(--tert)">JAMB</button>
+    </div>
+    <span class="section-label">Recommended quest</span>
+    <div style="margin-bottom:12px;border-radius:18px;overflow:hidden;cursor:pointer;background:var(--quest-bg);border:1.5px solid var(--quest-bd);padding:15px;animation:glow-pulse 3s ease-in-out infinite">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:40px;height:40px;border-radius:12px;background:rgba(24,183,242,.15);border:1px solid rgba(24,183,242,.3);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">⚡</div>
+        <div style="flex:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><p style="font-size:14px;font-weight:900;color:#fff">Quick 5</p><span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;background:rgba(255,184,0,.15);color:#FFB800;border:1px solid rgba(255,184,0,.25)">+50 XP</span><span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;background:rgba(24,183,242,.15);color:#18B7F2;border:1px solid rgba(24,183,242,.25)">~4 min</span></div><p style="font-size:11px;color:rgba(255,255,255,.4)">Waves & Sound · Physics</p></div>
+      </div>
+      <button class="press-btn primary" style="padding:12px;font-size:13px" onclick="go('results')"><div class="btn-shimmer"></div>▶ Start Quick 5</button>
+    </div>
+    <span class="section-label">Or choose differently</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      ${[{icon:'🎯',l:'Weak areas',d:'Lowest scores first',c:'#f87171',xp:'+40 XP'},{icon:'🌀',l:'Mixed',d:'All topics',c:'#18B7F2',xp:'+35 XP'},{icon:'⏱️',l:'Speed round',d:'Race the clock',c:'#4ade80',xp:'+60 XP'},{icon:'📝',l:'Mock exam',d:'Full simulation',c:'#FFB800',xp:'+200 XP'}].map(m=>`
+      <button style="display:flex;flex-direction:column;padding:13px;border-radius:14px;border:1px solid ${m.c}22;background:${m.c}08;cursor:pointer;text-align:left;font-family:inherit">
+        <div style="width:30px;height:30px;border-radius:9px;background:${m.c}18;border:1px solid ${m.c}25;display:flex;align-items:center;justify-content:center;font-size:14px;margin-bottom:7px">${m.icon}</div>
+        <p style="font-size:12px;font-weight:800;color:var(--prim);margin-bottom:2px">${m.l}</p>
+        <p style="font-size:10px;color:var(--tert);margin-bottom:6px">${m.d}</p>
+        <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:999px;background:rgba(255,184,0,.1);color:#FFB800;border:1px solid rgba(255,184,0,.2)">${m.xp}</span>
+      </button>`).join('')}
+    </div>
+    <span class="section-label">Subject</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+      ${SUBJECTS.map((s,i)=>`<button style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:13px;border:1.5px solid ${i===0?s.color+'45':'var(--border)'};background:${i===0?s.color+'10':'var(--card)'};cursor:pointer;font-family:inherit">
+        <div style="width:27px;height:27px;border-radius:8px;background:${s.color}18;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${s.icon}</div>
+        <div style="flex:1;text-align:left;min-width:0"><p style="font-size:11px;font-weight:700;color:${i===0?s.color:'var(--prim)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</p><p style="font-size:9px;color:var(--tert)">${s.pct}%</p></div>
+        ${i===0?`<div style="width:13px;height:13px;border-radius:50%;background:${s.color};display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="7" height="7" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg></div>`:''}
+      </button>`).join('')}
+    </div>
+  </div>`}
+
+function mLearn(){return `
+  <div style="position:absolute;inset:0;pointer-events:none"><div style="position:absolute;inset:0;background:radial-gradient(ellipse at 80% 20%,rgba(155,122,224,.08) 0%,transparent 55%)"></div></div>
+  <div style="padding:16px 18px 0;position:relative;z-index:1">
+    <p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">Curriculum</p>
+    <h1 style="font-size:17px;font-weight:900;color:var(--prim);letter-spacing:-.025em;margin-bottom:14px">Learn</h1>
+  </div>
+  <div class="scroll" style="padding:0 18px;position:relative;z-index:1">
+    ${zaraMsg('Your weakest topic is Waves & Sound — 28% mastered. Study it in EXL, then practice 5 questions.')}
+    <div style="margin-top:14px;margin-bottom:14px;border-radius:18px;overflow:hidden;background:linear-gradient(145deg,#071B49 0%,#1a1060 55%,#0b0d20 100%);border:1px solid rgba(155,122,224,.35);padding:20px;position:relative">
+      <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(155,122,224,.1);pointer-events:none"></div>
+      <div style="position:relative;z-index:1">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:40px;height:40px;border-radius:12px;background:rgba(155,122,224,.2);border:1px solid rgba(155,122,224,.4);display:flex;align-items:center;justify-content:center;font-size:20px">📖</div>
+          <div><p style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:rgba(196,181,253,.6);margin-bottom:2px">Study platform</p><p style="font-size:15px;font-weight:900;color:#fff">EXL Learning World</p></div>
+        </div>
+        <p style="font-size:11.5px;color:rgba(255,255,255,.45);line-height:1.55;margin-bottom:14px">Interactive lessons, video walkthroughs and step-by-step material — all in one place.</p>
+        <button class="press-btn" style="background:rgba(155,122,224,.3);box-shadow:0 4px 0 rgba(109,74,192,.6);border:1px solid rgba(155,122,224,.5);color:#fff;padding:12px;font-size:13px">Open EXL Learning World →</button>
+      </div>
+    </div>
+    <span class="section-label">Focus areas</span>
+    ${WEAK.map(w=>`<div style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--card);border:1.5px solid ${w.color}25;border-radius:13px;margin-bottom:8px;cursor:pointer">
+      <div style="width:36px;height:36px;border-radius:10px;background:${w.color}14;border:1px solid ${w.color}22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${w.icon}</div>
+      <div style="flex:1"><p style="font-size:13px;font-weight:700;color:var(--prim)">${w.name}</p><p style="font-size:11px;color:var(--tert);margin-top:1px">${w.subject} · ${w.pct}% mastered</p><div style="margin-top:4px">${xpBar(w.pct)}</div></div>
+      <button style="font-size:11px;font-weight:800;color:${w.color};background:${w.color}12;border:1px solid ${w.color}25;padding:5px 10px;border-radius:8px;cursor:pointer;flex-shrink:0">Study →</button>
+    </div>`).join('')}
+    <span class="section-label" style="margin-top:6px">Subject mastery</span>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0 14px">${SUBJECTS.map((s,i)=>subjCard(s,i,SUBJECTS.length)).join('')}</div>
+  </div>`}
+
+function mLeaderboard(){
+  const podium=[
+    {rank:2,init:'A',name:'Amaka',pts:'1,856',bg:'linear-gradient(135deg,#0ea5e9,#818cf8)',h:52,medal:'🥈'},
+    {rank:1,init:'C',name:'Chidi',pts:'2,340',bg:'linear-gradient(135deg,#18B7F2,#1264E5)',h:74,medal:'🥇',me:true},
+    {rank:3,init:'T',name:'Temi',pts:'1,620',bg:'linear-gradient(135deg,#4ade80,#22c55e)',h:38,medal:'🥉'},
+  ]
+  const rows=[{r:'4',i:'O',n:'Ola',p:'1,245'},{r:'5',i:'E',n:'Emeka',p:'1,102'},{r:'—',i:'C',n:'You',p:'2,340',me:true}]
+  return `
+  <div style="position:absolute;inset:0;pointer-events:none">${stars(14)}</div>
+  <div style="padding:16px 18px 0;position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between">
+    <div><p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">This week</p>
+    <h1 style="font-size:17px;font-weight:900;color:var(--prim);letter-spacing:-.025em">Leaderboard</h1></div>
+    <div style="padding:5px 11px;border-radius:999px;background:rgba(255,184,0,.1);border:1px solid rgba(255,184,0,.25);margin-top:4px">
+      <span style="font-size:10px;font-weight:800;color:#FFB800">🏫 Kings College</span>
+    </div>
+  </div>
+  <div class="scroll" style="padding:14px 18px 0;position:relative;z-index:1">
+    ${zaraMsg('Amaka is only 484 XP behind you — 10 more questions keeps your lead!')}
+    <div style="display:flex;gap:6px;margin:12px 0">
+      ${['Class','School','National'].map((t,i)=>`<button style="padding:5px 13px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid ${i===0?'rgba(24,183,242,.4)':'var(--border)'};background:${i===0?'rgba(24,183,242,.12)':'transparent'};color:${i===0?'#18B7F2':'var(--tert)'}">${t}</button>`).join('')}
+    </div>
+    <!-- Podium -->
+    <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;margin-bottom:16px;padding-top:8px">
+      ${podium.map(p=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">
+        ${p.rank===1?`<svg width="22" height="16" viewBox="0 0 24 18" fill="none"><path d="M2 14L5 5L10 10L12 3L14 10L19 5L22 14H2Z" fill="#FFB800" stroke="#FF6A00" stroke-width="1" stroke-linejoin="round"/><rect x="2" y="14" width="20" height="3" rx="1.5" fill="#FF6A00"/></svg>`:`<div style="height:18px"></div>`}
+        <div style="width:${p.rank===1?48:40}px;height:${p.rank===1?48:40}px;border-radius:50%;background:${p.bg};display:flex;align-items:center;justify-content:center;font-size:${p.rank===1?16:13}px;font-weight:900;color:#fff;border:${p.me?'2px solid rgba(24,183,242,.5)':'none'}">${p.init}</div>
+        <p style="font-size:${p.rank===1?11:10}px;font-weight:${p.rank===1?900:700};color:${p.me?'#18B7F2':'var(--prim)'};text-align:center">${p.name}</p>
+        <p style="font-size:10px;font-weight:700;color:${p.rank===1?'#FFB800':'var(--tert)'};text-align:center">${p.pts}</p>
+        <div style="width:100%;height:${p.h}px;background:${p.rank===1?'rgba(255,184,0,.1)':p.rank===2?'rgba(14,165,233,.1)':'rgba(74,222,128,.1)'};border:1px solid ${p.rank===1?'rgba(255,184,0,.25)':p.rank===2?'rgba(14,165,233,.2)':'rgba(74,222,128,.2)'};border-radius:6px 6px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:7px;font-size:${p.rank===1?19:15}px">${p.medal}</div>
+      </div>`).join('')}
+    </div>
+    <!-- Rows -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:14px">
+      ${rows.map((r,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:${r.me?'rgba(24,183,242,.07)':'transparent'};border-bottom:${i<rows.length-1?'1px solid var(--border)':'none'}">
+        <span style="font-size:12px;font-weight:800;color:var(--tert);min-width:18px;text-align:center">${r.r}</span>
+        <div style="width:30px;height:30px;border-radius:50%;background:${r.me?'linear-gradient(135deg,#18B7F2,#1264E5)':'rgba(255,255,255,.08)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${r.me?'#fff':'var(--sec)'};flex-shrink:0">${r.i}</div>
+        <span style="flex:1;font-size:13px;font-weight:${r.me?800:500};color:${r.me?'#18B7F2':'var(--prim)'}">${r.n}</span>
+        <span style="font-size:11px;font-weight:700;color:${r.me?'#FFB800':'var(--tert)'}">${r.p} XP</span>
+      </div>`).join('')}
+    </div>
+    <!-- Weekly challenge -->
+    <span class="section-label">Weekly challenge</span>
+    <div style="background:linear-gradient(155deg,#0d0d1a 0%,#1a0d2e 100%);border:1px solid rgba(155,122,224,.28);border-radius:15px;padding:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,184,0,.12);border:1px solid rgba(255,184,0,.25);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">⚡</div>
+        <div style="flex:1"><p style="font-size:13px;font-weight:800;color:#fff">Science Sprint</p><p style="font-size:11px;color:rgba(255,255,255,.4)">Answer 50 questions this week</p></div>
+        <div style="padding:4px 9px;border-radius:999px;background:rgba(255,184,0,.1);border:1px solid rgba(255,184,0,.25)"><span style="font-size:11px;font-weight:700;color:#FFB800">3d left</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="position:relative;width:46px;height:46px;flex-shrink:0">${ring(60,46,5,'#9b7ae0')}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font-size:9px;font-weight:900;color:#9b7ae0">60%</span></div></div>
+        <div><p style="font-size:13px;font-weight:700;color:#fff">30 / 50 questions</p><p style="font-size:11px;color:rgba(255,255,255,.35);margin-top:2px">20 more to claim 500 XP</p></div>
+      </div>
+    </div>
+  </div>`}
+
+function mResults(){return `
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 25%,rgba(18,100,229,.18) 0%,transparent 60%);pointer-events:none"></div>
+  ${stars(28)}
+  <div class="scroll" style="padding:24px 18px;position:relative;z-index:1">
+    <div style="text-align:center;margin-bottom:22px;animation:slide-up .4s ease">
+      <div style="position:relative;display:inline-block;margin-bottom:14px;animation:bounce-in .5s ease">${ring(80,128,10,'#1264E5',true)}<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><p style="font-size:32px;font-weight:900;color:var(--prim);line-height:1">4/5</p><p style="font-size:10px;color:var(--tert);font-weight:700">correct</p></div></div>
+      <p style="font-size:21px;font-weight:900;color:var(--prim);letter-spacing:-.025em;margin-bottom:4px">80% — Nice! 🎉</p>
+      <p style="font-size:13px;color:var(--tert);margin-bottom:14px">Waves & Sound · Physics</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <div style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;background:rgba(255,184,0,.12);border:1.5px solid rgba(255,184,0,.28);animation:bounce-in .5s .1s ease both"><span>✦</span><span style="font-size:12px;font-weight:800;color:#FFB800">+50 XP earned</span></div>
+        <div style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;background:rgba(255,106,0,.12);border:1.5px solid rgba(255,106,0,.28);animation:bounce-in .5s .15s ease both"><span class="streak-flame">🔥</span><span style="font-size:12px;font-weight:800;color:#FF6A00">6-day streak!</span></div>
+      </div>
+    </div>
+    <!-- Level up hook -->
+    <div style="padding:14px;background:var(--coach-bg);border:1.5px solid var(--coach-bd);border-radius:14px;margin-bottom:12px;animation:slide-up .4s .2s ease both">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <p style="font-size:11px;font-weight:700;color:var(--sec)">⚡ Physics — 72% mastery</p>
+        <span style="font-size:10px;font-weight:800;color:#18B7F2">Almost 80%!</span>
+      </div>
+      ${xpBar(72)}
+      <p style="font-size:10px;color:var(--tert);margin-top:5px">One more quick session gets you to 80%. Strong territory.</p>
+    </div>
+    <!-- THE HOOK -->
+    <div style="padding:16px;background:rgba(255,184,0,.07);border:1.5px solid rgba(255,184,0,${T.isLight()?'.2':'.16'});border-radius:18px;margin-bottom:10px;text-align:center;animation:slide-up .4s .3s ease both">
+      <p style="font-size:15px;font-weight:900;color:var(--prim);margin-bottom:4px">Want to push to 80%? ⚡</p>
+      <p style="font-size:12px;color:var(--tert);margin-bottom:14px">Another Quick 5. Same topic. 3 minutes.</p>
+      <button class="press-btn gold" onclick="go('practice')"><div class="btn-shimmer"></div>Go again — Quick 5 ⚡</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button onclick="go('practice')" style="flex:1;padding:12px;border-radius:13px;background:var(--card);border:1px solid var(--border);color:var(--sec);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Try Chemistry →</button>
+      <button onclick="go('home')" style="flex:1;padding:12px;border-radius:13px;background:var(--card);border:1px solid var(--border);color:var(--sec);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Back home</button>
+    </div>
+    ${zaraMsg('80% on Waves & Sound! One more round and you crack 80%. You\'ve got this, Chidi.')}
+  </div>`}
+
+function mProgress(){
+  const activity=[2,1,0,3,2,0,0],days=['Mo','Tu','We','Th','Fr','Sa','Su'],max=3
+  return `
+  <div style="position:absolute;inset:0;pointer-events:none"><div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 10%,rgba(255,184,0,.06) 0%,transparent 55%)"></div></div>
+  <div style="padding:16px 18px 0;position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between">
+    <div><p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">Your journey</p><h1 style="font-size:17px;font-weight:900;color:var(--prim);letter-spacing:-.025em">Progress</h1></div>
+    <div style="display:flex;gap:7px"><div class="streak-badge"><span class="streak-flame">🔥</span> 5</div><div class="xp-pill">✦ 2.4k</div></div>
+  </div>
+  <div class="scroll" style="padding:14px 18px 0;position:relative;z-index:1">
+    ${zaraMsg('You\'re up 12% this week. One more session today unlocks the Consistent badge!')}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0">
+      ${[{v:'2.4k',l:'Total XP',c:'#FFB800',bg:'rgba(255,184,0,.1)',bd:'rgba(255,184,0,.2)'},{v:'142',l:'Sessions',c:'#18B7F2',bg:'rgba(24,183,242,.08)',bd:'rgba(24,183,242,.2)'},{v:'58%',l:'Avg mastery',c:'#4ade80',bg:'rgba(74,222,128,.07)',bd:'rgba(74,222,128,.2)'}].map(t=>`<div style="padding:13px 8px;border-radius:14px;background:${t.bg};border:1.5px solid ${t.bd};text-align:center"><p style="font-size:20px;font-weight:900;color:${t.c};line-height:1;margin-bottom:3px">${t.v}</p><p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tert)">${t.l}</p></div>`).join('')}
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:14px">
+      <div style="padding:11px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><p style="font-size:13px;font-weight:800;color:var(--prim)">Practice activity</p><div style="display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.22)"><span class="streak-flame">🔥</span><span style="font-size:10px;font-weight:800;color:#FF6A00">5d streak</span></div></div>
+      <div style="padding:13px 14px"><div style="display:flex;align-items:flex-end;gap:5px;height:52px">${activity.map((v,i)=>{const h=v===0?3:Math.max(9,Math.round((v/max)*42));const col=i===4?'#1264E5':v>0?'rgba(24,183,242,.5)':'var(--inset)';const fut=i>4;return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:${fut?3:h}px;border-radius:3px 3px 2px 2px;background:${fut?'var(--inset)':col}"></div><span style="font-size:8px;font-weight:${i===4?700:400};color:${i===4?'#1264E5':'var(--tert)'}">${days[i]}</span></div>`}).join('')}</div></div>
+    </div>
+    <span class="section-label">Subject mastery</span>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0 14px">${SUBJECTS.map((s,i)=>subjCard(s,i,SUBJECTS.length)).join('')}</div>
+  </div>`}
+
+function mProfile(){return `
+  <div style="position:absolute;inset:0;pointer-events:none">${stars(14)}</div>
+  <div class="scroll" style="padding:20px 18px;position:relative;z-index:1">
+    ${zaraMsg('5-day streak — your longest yet! Keep it alive with one Quick 5 today. 💪')}
+    <div style="border-radius:20px;overflow:hidden;background:var(--profile-hero);border:1px solid var(--profile-hero-bd);position:relative;margin:14px 0">
+      <div style="position:absolute;inset:0;opacity:.04;background-image:radial-gradient(circle,#fff 1px,transparent 1px);background-size:18px 18px;pointer-events:none"></div>
+      <div style="padding:22px 18px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:1">
+        <div style="width:68px;height:68px;border-radius:18px;background:linear-gradient(135deg,#18B7F2,#062A78);border:2.5px solid rgba(24,183,242,.4);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff;box-shadow:0 8px 24px rgba(18,100,229,.4);margin-bottom:10px">C</div>
+        <p style="font-size:19px;font-weight:900;color:#fff;letter-spacing:-.02em;margin-bottom:3px">Chidi Okafor</p>
+        <p style="font-size:11px;color:rgba(255,255,255,.45)">JAMB · SS3 · Kings College Lagos</p>
+        <div style="display:flex;gap:8px;margin-top:10px"><div class="streak-badge"><span class="streak-flame">🔥</span> 5 days</div><div class="xp-pill">✦ 2,400 XP</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid rgba(255,255,255,.1)">
+        ${[{v:'5 🔥',l:'Streak'},{v:'4,200',l:'Questions'},{v:'58%',l:'Accuracy'}].map((s,i)=>`<div style="padding:12px 6px;text-align:center;border-right:${i<2?'1px solid rgba(255,255,255,.1)':'none'}"><p style="font-size:18px;font-weight:900;color:#fff;line-height:1">${s.v}</p><p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.07em;margin-top:3px">${s.l}</p></div>`).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      ${[['🎯','Goal','Medicine · UNILAG'],['📋','Exam','JAMB 2025'],['📅','Days left','142 days'],['🏫','School','Kings College']].map(([icon,lbl,val])=>`<div style="padding:12px;border-radius:13px;background:var(--card);border:1px solid var(--border)"><p style="font-size:16px;margin-bottom:4px">${icon}</p><p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--tert);margin-bottom:2px">${lbl}</p><p style="font-size:11px;font-weight:700;color:var(--prim);line-height:1.3">${val}</p></div>`).join('')}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${[['🌙','Dark mode'],['🔔','Notifications'],['👨‍👩‍👧','Parent report'],['🏫','My class'],['📤','Share app']].map(([icon,lbl])=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:13px;background:var(--card);border:1px solid var(--border);cursor:pointer"><span style="font-size:16px">${icon}</span><span style="flex:1;font-size:13px;font-weight:600;color:var(--prim)">${lbl}</span><span style="color:var(--tert);font-size:18px">›</span></div>`).join('')}
+      <button style="margin-top:4px;width:100%;padding:12px;border-radius:12px;border:1px solid rgba(220,38,38,.25);background:rgba(220,38,38,.07);color:#f87171;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Sign out</button>
+    </div>
+  </div>`}
+
+// ── DESKTOP SCREENS ───────────────────────────────────────────────────────────
+const SIDEBAR = [
+  {id:'home',emoji:'🏠',label:'Home',color:'#18B7F2'},
+  {id:'practice',emoji:'▶️',label:'Practise',color:'#9b7ae0'},
+  {id:'learn',emoji:'📖',label:'Learn',color:'#4ade80'},
+  {id:'leaderboard',emoji:'🏆',label:'Leaderboard',color:'#FFB800'},
+  {id:'progress',emoji:'📊',label:'Progress',color:'#FF6A00'},
+  null,
+  {id:'profile',emoji:'👤',label:'Profile',color:'#18B7F2'},
+]
+
+function deskHeader(){
+  return `<header class="desk-header">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="logo-mark"><svg width="14" height="14" viewBox="0 0 512 512" fill="none"><path d="M292 105C235 103 167 118 137 153C112 182 122 208 155 215C185 221 222 210 263 196L226 236C185 253 139 274 131 307C122 344 165 363 208 354C250 345 292 323 331 298L302 353C267 379 210 406 155 403C98 400 64 369 76 325C86 286 120 262 165 241C124 247 83 239 69 210C52 175 81 136 121 116C164 94 226 83 292 86Z" fill="url(#bl2)"/><path d="M98 94L202 48L306 94L202 139Z" fill="#062A78"/><path d="M123 91L202 57L281 91L202 123Z" fill="#1264E5"/><path d="M61 335C123 401 272 427 383 365C430 339 451 309 444 287" stroke="#FFB800" stroke-width="42" stroke-linecap="round" fill="none"/><defs><linearGradient id="bl2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#18B7F2"/><stop offset=".5" stop-color="#1264E5"/><stop offset="1" stop-color="#062A78"/></linearGradient></defs></svg><div class="logo-a1">A1</div></div>
+      <span style="font-size:14px;font-weight:900;color:var(--prim);letter-spacing:-.03em">Exam<span style="font-weight:400;color:var(--tert)">Prep</span></span>
+    </div>
+    <div style="flex:1"></div>
+    <div class="streak-badge"><span class="streak-flame">🔥</span> 5</div>
+    <div class="xp-pill">✦ 2.4k XP</div>
+    <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+    <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#18B7F2,#062A78);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;cursor:pointer">C</div>
+  </header>`
+}
+
+function deskSidebar(){
+  return `<nav class="desk-sidebar">
+    ${SIDEBAR.map(s=>{
+      if(!s) return `<div style="height:1px;background:var(--border);margin:8px 4px"></div>`
+      const on=s.id===CUR
+      return `<button class="snl ${on?'on':''}" onclick="go('${s.id}')" style="${on?`color:${s.color};border-color:${s.color}28;background:${s.color}0f`:''};font-size:13px;font-weight:${on?800:600}">
+        <span style="font-size:15px;flex-shrink:0">${s.emoji}</span>
+        <span style="flex:1">${s.label}</span>
+        ${on?`<div style="width:6px;height:6px;border-radius:50%;background:${s.color};flex-shrink:0"></div>`:''}
+      </button>`
+    }).join('')}
+    <!-- Streak card -->
+    <div style="margin-top:auto;padding:13px;border-radius:13px;background:rgba(255,184,0,.07);border:1.5px solid rgba(255,184,0,${T.isLight()?'.2':'.15'})">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><p style="font-size:11px;font-weight:800;color:var(--prim)">Your streak</p><span class="streak-flame">🔥</span></div>
+      <p style="font-size:26px;font-weight:900;color:#FF6A00;line-height:1;letter-spacing:-.03em">5</p>
+      <p style="font-size:9.5px;color:var(--tert);margin-top:2px">days in a row</p>
+      <div style="height:3px;background:var(--xp-track);border-radius:99px;overflow:hidden;margin-top:9px"><div style="height:100%;width:16%;background:#FF6A00;border-radius:99px"></div></div>
+    </div>
+  </nav>`
+}
+
+function deskRightAside(){
+  const activity=[2,1,0,3,2,0,0],days=['M','T','W','T','F','S','S'],max=3
+  const lb=[{r:'🥇',n:'You',p:'2,340',me:true},{r:'🥈',n:'Amaka',p:'1,856'},{r:'🥉',n:'Temi',p:'1,620'},{r:'4',n:'Ola',p:'1,245'},{r:'5',n:'Emeka',p:'1,102'}]
+  const course='Medicine · UNILAG',uni='UNILAG',now=new Date(),nextJune=new Date(now.getMonth()>=5?now.getFullYear()+1:now.getFullYear(),5,1),days2=Math.ceil((nextJune-now)/86400000)
+  return `
+    <div style="background:var(--right-card);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+      <div style="padding:10px 13px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><p style="font-size:11px;font-weight:800;color:var(--prim)">Activity</p><span style="font-size:10px;font-weight:700;color:#FF6A00">🔥 5d</span></div>
+      <div style="padding:11px 13px"><div style="display:flex;align-items:flex-end;gap:4px;height:40px">${activity.map((v,i)=>{const h=v===0?2:Math.max(6,Math.round((v/max)*32));const col=i===4?'#1264E5':v>0?'rgba(24,183,242,.5)':'var(--inset)';return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:${h}px;border-radius:3px 3px 1px 1px;background:${col}"></div><span style="font-size:7px;color:${i===4?'#1264E5':'var(--tert)'};font-weight:${i===4?700:400}">${days[i]}</span></div>`}).join('')}</div></div>
+    </div>
+    <div style="background:var(--right-card);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+      <div style="padding:10px 13px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><p style="font-size:11px;font-weight:800;color:var(--prim)">Class rank</p><button onclick="go('leaderboard')" style="font-size:10px;font-weight:700;color:#18B7F2;background:none;border:none;cursor:pointer">Full board →</button></div>
+      ${lb.map(r=>`<div style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:${r.me?'rgba(24,183,242,.07)':'transparent'}">
+        <span style="font-size:${r.r.length>1?'10':'12'}px;font-weight:800;color:var(--tert);min-width:16px;text-align:center">${r.r}</span>
+        <span style="flex:1;font-size:12px;font-weight:${r.me?800:500};color:${r.me?'#18B7F2':'var(--prim)'}">${r.n}</span>
+        <span style="font-size:10px;font-weight:700;color:${r.me?'#FFB800':'var(--tert)'}">${r.p}</span>
+      </div>`).join('')}
+    </div>
+    <div style="background:var(--right-card);border:1px solid var(--border);border-radius:14px;padding:13px">
+      <p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--tert);margin-bottom:8px">Your target</p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">🎯</span><div><p style="font-size:12px;font-weight:700;color:var(--prim);line-height:1.3">${course}</p><p style="font-size:10px;color:#18B7F2;margin-top:1px">JAMB · 280/400 target</p></div></div>
+      <div style="display:flex;align-items:baseline;gap:5px"><p style="font-size:26px;font-weight:900;color:var(--prim);line-height:1">${days2}</p><p style="font-size:10px;color:var(--tert)">days left</p></div>
+    </div>`
+}
+
+function deskHome(){
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div><p style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--tert);margin-bottom:3px">Tuesday morning</p>
+      <p style="font-size:19px;font-weight:900;color:var(--prim);letter-spacing:-.025em">Good morning, Chidi ⚡</p></div>
+    </div>
+    ${zaraMsg('Just 5 questions today keeps your streak alive. Physics is calling — want to go?')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+      <div>
+        <span class="section-label">Daily quest</span>
+        ${questCard(true)}
+      </div>
+      <div>
+        <span class="section-label">Level up faster</span>
+        ${WEAK.map(w=>`<div onclick="go('practice')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--card);border:1px solid ${w.color}22;border-radius:13px;cursor:pointer;margin-bottom:8px">
+          <div style="width:34px;height:34px;border-radius:10px;background:${w.color}14;border:1px solid ${w.color}22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${w.icon}</div>
+          <div style="flex:1;min-width:0"><p style="font-size:12px;font-weight:700;color:var(--prim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${w.name}</p><p style="font-size:10px;color:var(--tert);margin-top:1px">${w.subject} · ${w.pct}%</p></div>
+          <button style="font-size:10px;font-weight:800;color:${w.color};background:${w.color}12;border:1px solid ${w.color}25;padding:4px 9px;border-radius:8px;cursor:pointer;flex-shrink:0">Quick 5 →</button>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><span class="section-label" style="margin:0">Your subjects</span><button onclick="go('learn')" style="font-size:10px;font-weight:700;color:#18B7F2;background:none;border:none;cursor:pointer">All →</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${SUBJECTS.map(s=>`<div style="display:flex;align-items:center;gap:10px;padding:13px;background:var(--card);border:1px solid var(--border);border-radius:14px">
+          <div style="width:36px;height:36px;border-radius:10px;background:${s.color}18;border:1px solid ${s.color}22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${s.icon}</div>
+          <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:700;color:var(--prim)">${s.name}</span><span style="font-size:12px;font-weight:900;color:${T.pct(s.pct)}">${s.pct}%</span></div>${xpBar(s.pct)}</div>
+        </div>`).join('')}
+      </div>
+    </div>`
+}
+
+function deskGeneric(id){
+  const fn={practice:mPractice,learn:mLearn,leaderboard:mLeaderboard,results:mResults,progress:mProgress,profile:mProfile}[id]
+  return `<div style="max-width:560px">${fn?fn():''}</div>`
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function render(){
+  const root = document.getElementById('root')
+  const isLight = MODE === 'light'
+
+  if(VIEW === 'mobile'){
+    const fn = {home:mHome,practice:mPractice,learn:mLearn,leaderboard:mLeaderboard,results:mResults,progress:mProgress,profile:mProfile}[CUR] ?? mHome
+    root.innerHTML = `<div class="phone ${isLight?'light':''}">${isLight?'':''}
+      <div class="phone-notch"></div>
+      <div class="scr ${isLight?'light':''}" style="background:var(--bg)">${fn()}</div>
+      ${buildMobileNav()}
+    </div>`
+    if(isLight) root.querySelector('.phone').classList.add('light')
+  } else {
+    const showAside = ['home','progress','leaderboard'].includes(CUR)
+    const mainContent = CUR==='home' ? deskHome() : deskGeneric(CUR)
+    root.innerHTML = `<div class="desktop ${isLight?'light':''}">
+      ${deskHeader()}
+      <div class="desk-body">
+        ${deskSidebar()}
+        <div class="desk-content">
+          <div class="desk-main">${mainContent}</div>
+          ${showAside?`<div class="desk-aside">${deskRightAside()}</div>`:''}
+        </div>
+      </div>
+    </div>`
+  }
+
+  // Apply light class to body for CSS vars
+  if(isLight) document.documentElement.style.setProperty('--applied','light')
+  document.getElementById('root').querySelectorAll('.light,.dark').forEach(el=>{
+    if(isLight) el.classList.add('light')
+  })
+}
+
+function buildMobileNav(){
+  const NAV=[
+    {id:'home',l:'Home',svg:`<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M3 10L11 3L19 10V19H14.5V14H7.5V19H3V10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>`,c:'#18B7F2'},
+    {id:'practice',l:'Practise',svg:`<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M9 8L15 11L9 14V8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>`,c:'#9b7ae0'},
+    {id:'learn',l:'Learn',svg:`<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M11 3L3 8L11 13L19 8L11 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/><path d="M6 11V17M16 11V17M6 17C6 17 8 19 11 19C14 19 16 17 16 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>`,c:'#4ade80'},
+    {id:'leaderboard',l:'Leaderboard',svg:`<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><rect x="2" y="13" width="4" height="7" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/><rect x="9" y="9" width="4" height="11" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/><rect x="16" y="5" width="4" height="15" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`,c:'#FFB800'},
+    {id:'profile',l:'Profile',svg:`<svg width="20" height="20" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="7" r="3" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M5 20C5 16.7 7.7 14 11 14C14.3 14 17 16.7 17 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>`,c:'#18B7F2'},
+  ]
+  return `<nav class="bnav">${NAV.map(n=>{
+    const on=n.id===CUR
+    return `<button class="bni ${on?'on':''}" onclick="go('${n.id}')" style="${on?`--accent-col:${n.c};color:${n.c}`:''};color:${on?n.c:'var(--tert)'}">
+      <div class="bni-dot" style="background:${n.c}"></div>
+      <div class="bni-icon">${n.svg}</div>
+      <span class="bni-label" style="color:${on?n.c:'var(--tert)'}">${n.l}</span>
+    </button>`
+  }).join('')}</nav>`
+}
+
+function go(id){
+  CUR = id
+  document.querySelectorAll('.bni').forEach(p=>{
+    p.classList.toggle('on', p.textContent===m[id])
+  })
+  render()
+}
+
+
+
+// Apply CSS vars based on mode
+function applyCSSVars(){
+  const r = document.documentElement
+  if(MODE === 'light'){
+    r.style.cssText = `
+      --bg:#f0f4ff;--bg2:#ffffff;--bg3:#e8eeff;--card:#ffffff;--card2:#f5f7ff;
+      --border:#dde4f5;--border2:#c4cfed;--prim:#071B49;--sec:#3a4870;--tert:#7a8aaa;
+      --inset:#e4eaf8;--xp-track:#dde4f5;--star-col:#062A78;
+      --coach-bg:rgba(18,100,229,.06);--coach-bd:rgba(18,100,229,.18);
+      --quest-bg:linear-gradient(145deg,#062A78 0%,#0c3a94 50%,#1264E5 100%);
+      --quest-bd:rgba(24,183,242,.3);
+      --week-done:rgba(18,100,229,.1);--week-done-bd:rgba(18,100,229,.25);
+      --week-today:#1264E5;--week-today-bd:#1264E5;
+      --week-empty:#f0f4ff;--week-empty-bd:#dde4f5;
+      --subj-card:#ffffff;--subj-bd:#dde4f5;
+      --nav-bg:rgba(248,251,255,.97);--nav-bd:#dde4f5;
+      --profile-hero:linear-gradient(155deg,#062A78 0%,#1264E5 55%,#18B7F2 100%);
+      --profile-hero-bd:rgba(18,100,229,.3);
+      --sidebar-bg:#ffffff;--sidebar-bd:#dde4f5;
+      --desk-header-bg:rgba(248,251,255,.97);--desk-header-bd:#dde4f5;
+      --right-card:#ffffff;`
+  } else {
+    r.style.cssText = `
+      --bg:#0a0c14;--bg2:rgba(255,255,255,.03);--bg3:rgba(255,255,255,.06);
+      --card:rgba(255,255,255,.04);--card2:rgba(255,255,255,.07);
+      --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+      --prim:#ffffff;--sec:rgba(255,255,255,.7);--tert:rgba(255,255,255,.35);
+      --inset:rgba(255,255,255,.06);--xp-track:rgba(255,255,255,.08);--star-col:#fff;
+      --coach-bg:rgba(18,100,229,.1);--coach-bd:rgba(18,100,229,.25);
+      --quest-bg:linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%);
+      --quest-bd:rgba(24,183,242,.2);
+      --week-done:rgba(24,183,242,.15);--week-done-bd:rgba(24,183,242,.3);
+      --week-today:#1264E5;--week-today-bd:#1264E5;
+      --week-empty:rgba(255,255,255,.04);--week-empty-bd:rgba(255,255,255,.08);
+      --nav-bg:rgba(6,10,20,.95);--nav-bd:rgba(255,255,255,.07);
+      --profile-hero:linear-gradient(155deg,#050b1a 0%,#062A78 45%,#1a1060 100%);
+      --profile-hero-bd:rgba(24,183,242,.15);
+      --sidebar-bg:rgba(255,255,255,.03);--sidebar-bd:rgba(255,255,255,.07);
+      --desk-header-bg:rgba(6,10,20,.95);--desk-header-bd:rgba(255,255,255,.07);
+      --right-card:rgba(255,255,255,.03);`
+  }
+}
+
+
+applyCSSVars()
+render()
+</script>
+
+<script>
+// ── Service Worker Registration ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => {
+        console.log('[ExamPrep] SW registered:', reg.scope);
+        // Check for updates every time the app opens
+        reg.update();
+      })
+      .catch(err => console.warn('[ExamPrep] SW registration failed:', err));
+  });
+}
+
+// ── PWA Install Prompt ──────────────────────────────────────────────────────
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show the install bar unless user dismissed it before
+  if (!localStorage.getItem('pwa-dismissed')) {
+    document.getElementById('pwa-install-bar').classList.add('show');
+  }
+});
+
+function triggerPWAInstall() {
+  if (!deferredPrompt) {
+    // Fallback: show instructions
+    alert('To install ExamPrep:\n\nAndroid: tap the menu (⋮) → "Add to Home Screen"\niPhone: tap Share (□↑) → "Add to Home Screen"');
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(choice => {
+    if (choice.outcome === 'accepted') {
+      console.log('[ExamPrep] PWA installed');
+      document.getElementById('pwa-install-bar').classList.remove('show');
+    }
+    deferredPrompt = null;
+  });
+}
+
+function dismissInstallBar() {
+  document.getElementById('pwa-install-bar').classList.remove('show');
+  localStorage.setItem('pwa-dismissed', '1');
+}
+
+// Hide install bar once the app is installed
+window.addEventListener('appinstalled', () => {
+  document.getElementById('pwa-install-bar').classList.remove('show');
+  deferredPrompt = null;
+  console.log('[ExamPrep] App installed successfully');
+});
+
+// ── Offline / Online status indicator ──────────────────────────────────────
+function updateOnlineStatus() {
+  const offline = !navigator.onLine;
+  let banner = document.getElementById('offline-banner');
+  if (offline) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;padding:6px 14px;background:#FF6A00;color:#fff;font-size:11px;font-weight:700;text-align:center;letter-spacing:.02em';
+      banner.textContent = '📵 You are offline — studying from cached content';
+      document.body.appendChild(banner);
+    }
+  } else {
+    if (banner) banner.remove();
+  }
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// ── Handle deep-link hash on launch (shortcuts) ─────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const hash = location.hash.replace('#', '');
+  const validScreens = ['home','practice','learn','leaderboard','results','progress','profile'];
+  if (hash && validScreens.includes(hash)) {
+    // Defer slightly to let the app render first
+    setTimeout(() => { if (typeof go === 'function') go(hash); }, 100);
+  }
+});
+</script>
+
+</body>
+</html>

@@ -153,7 +153,7 @@ export default function ProfilePage() {
 
     const [{ data: prof }, { data: paths }, { data: prog }, { data: attempts }, { data: streak }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', uid).single(),
-      supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name, exam_type)').eq('student_id', uid),
+      supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name)').eq('student_id', uid),
       supabase.from('lesson_progress').select('subtopic_id, completed').eq('student_id', uid),
       supabase.from('question_attempts').select('is_correct').eq('student_id', uid).gte('created_at', ninetyDaysAgo),
       supabase.from('student_streaks').select('current_streak').eq('student_id', uid).maybeSingle(),
@@ -268,19 +268,20 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ── 2×2 info grid — matches prototype ── */}
+      {/* ── 2×2 info grid — all tappable to edit ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {[
-          { icon: '🎯', lbl: 'Goal',      val: profile?.university_course || 'Not set' },
-          { icon: '📋', lbl: 'Exam',      val: examLabel(examType) + (new Date().getFullYear() + 1 ? ` ${new Date().getFullYear() + 1}` : '') },
+          { icon: '🎯', lbl: 'Goal',      val: profile?.university_course || 'Tap to set' },
+          { icon: '📋', lbl: 'Exam',      val: examLabel(examType) + ` ${new Date().getFullYear() + 1}` },
           { icon: '📅', lbl: 'Days left', val: `${daysToExam} days` },
           { icon: '🏫', lbl: 'School',    val: profile?.school_name || 'Not connected' },
         ].map(({ icon, lbl, val }) => (
-          <div key={lbl} style={{ padding: 12, borderRadius: 13, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <button key={lbl} onClick={() => setShowGoalModal(true)}
+            style={{ padding: 12, borderRadius: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .12s' }}>
             <p style={{ fontSize: 16, marginBottom: 4 }}>{icon}</p>
             <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 2 }}>{lbl}</p>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</p>
-          </div>
+          </button>
         ))}
       </div>
 

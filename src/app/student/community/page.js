@@ -270,49 +270,73 @@ function MyRankCard({ rank, total, pts, ptsChange, label, gradient, border, icon
   )
 }
 
-// ── Podium — 2nd left, 1st centre, 3rd right ─────────────────────────────────
+// ── Podium — matches prototype exactly ───────────────────────────────────────
+// 2nd left / 1st centre / 3rd right
+// Each slot: crown (1st only) → avatar circle → name → score → rectangular bar
+// Bar heights: 1st=86px, 2nd=60px, 3rd=44px — proportional like the prototype
 function Podium({ entries, userId }) {
   if (!entries || entries.length < 3) return null
+
   const slots = [
-    { e: entries[1], rank: 2, medal: '🥈', h: 52, sz: 44, border: '#c0c0c0', bg: 'rgba(192,192,192,.1)',  label: '2ND' },
-    { e: entries[0], rank: 1, medal: '🥇', h: 76, sz: 54, border: '#ffd700', bg: 'rgba(255,215,0,.12)',   label: '1ST', crown: '👑' },
-    { e: entries[2], rank: 3, medal: '🥉', h: 38, sz: 40, border: '#cd7f32', bg: 'rgba(205,127,50,.1)',   label: '3RD' },
+    { e: entries[1], rank: 2, medal: '🥈', barH: 52, sz: 40, barBg: 'rgba(14,165,233,.1)',   barBd: 'rgba(14,165,233,.2)',   nameSz: 10 },
+    { e: entries[0], rank: 1, medal: '🥇', barH: 76, sz: 48, barBg: 'rgba(255,184,0,.1)',    barBd: 'rgba(255,184,0,.25)',   nameSz: 11, crown: true },
+    { e: entries[2], rank: 3, medal: '🥉', barH: 38, sz: 36, barBg: 'rgba(74,222,128,.08)', barBd: 'rgba(74,222,128,.18)',  nameSz: 10 },
   ]
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, padding: '16px 12px 0' }}>
-      {slots.map(({ e, rank, medal, h, sz, border, bg, label, crown }, i) => {
-        if (!e) return <div key={i} style={{ flex: 1 }} />
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10, padding: '12px 12px 0' }}>
+      {slots.map(({ e, rank, medal, barH, sz, barBg, barBd, nameSz, crown }) => {
+        if (!e) return <div key={rank} style={{ flex: 1 }} />
         const isMe    = e.student_id === userId
+        const name    = isMe ? 'You' : (e.first_name ?? e.full_name ?? '?').split(' ')[0]
         const initial = (e.first_name ?? e.full_name ?? '?')[0].toUpperCase()
-        const avBg    = isMe ? '#9b7ae0' : avColor(e.first_name ?? e.full_name)
+        const avBg    = isMe
+          ? 'linear-gradient(135deg,#18B7F2,#1264E5)'
+          : rank === 1 ? 'linear-gradient(135deg,#FFB800,#FF6A00)'
+          : rank === 2 ? 'linear-gradient(135deg,#0ea5e9,#818cf8)'
+          : 'linear-gradient(135deg,#4ade80,#22c55e)'
+
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 1 }}>
-            {/* SVG crown for 1st place, invisible spacer for others */}
-            {rank === 1 ? (
-              <svg width="24" height="18" viewBox="0 0 24 18" fill="none" style={{ marginBottom: 2 }}>
-                <path d="M2 14L5 5L10 10L12 3L14 10L19 5L22 14H2Z" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" strokeLinejoin="round"/>
-                <rect x="2" y="14" width="20" height="3" rx="1.5" fill="#f59e0b"/>
-                <circle cx="2" cy="5" r="1.5" fill="#fbbf24"/>
-                <circle cx="12" cy="3" r="1.5" fill="#fbbf24"/>
-                <circle cx="22" cy="5" r="1.5" fill="#fbbf24"/>
+          <div key={rank} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flex: 1 }}>
+            {/* Crown SVG for 1st, invisible spacer for others */}
+            {crown ? (
+              <svg width="22" height="16" viewBox="0 0 24 18" fill="none" style={{ marginBottom: 2 }}>
+                <path d="M2 14L5 5L10 10L12 3L14 10L19 5L22 14H2Z" fill="#FFB800" stroke="#FF6A00" strokeWidth="1" strokeLinejoin="round"/>
+                <rect x="2" y="14" width="20" height="3" rx="1.5" fill="#FF6A00"/>
               </svg>
             ) : (
-              <div style={{ height: 20, marginBottom: 2 }} />
+              <div style={{ height: 20 }} />
             )}
-            {/* Rank label */}
-            <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.06em', color: rank === 1 ? '#fbbf24' : 'var(--text-tert)' }}>{label}</p>
+
             {/* Avatar */}
-            <div style={{ width: sz, height: sz, borderRadius: '50%', background: avBg, border: `2px solid ${isMe ? 'rgba(155,122,224,.5)' : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(sz * 0.38), fontWeight: 900, color: '#fff', boxShadow: rank === 1 ? `0 0 0 3px ${border}40` : 'none' }}>
-              {isMe ? 'YOU' : initial}
+            <div style={{
+              width: sz, height: sz, borderRadius: '50%', background: avBg,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: Math.round(sz * 0.35), fontWeight: 900, color: '#fff',
+              border: isMe ? '2px solid rgba(24,183,242,.5)' : 'none',
+              boxShadow: rank === 1 ? '0 0 0 3px rgba(255,184,0,.25)' : 'none',
+            }}>
+              {initial}
             </div>
-            <p style={{ fontSize: rank === 1 ? 12 : 10, fontWeight: rank === 1 ? 900 : 700, color: isMe ? '#9b7ae0' : 'var(--text-prim)', textAlign: 'center', lineHeight: 1.2, marginTop: 2 }}>
-              {isMe ? 'You' : (e.first_name ?? e.full_name ?? '—')}
+
+            {/* Name */}
+            <p style={{ fontSize: nameSz, fontWeight: rank === 1 ? 900 : 700, color: isMe ? '#18B7F2' : 'var(--text-prim)', textAlign: 'center', lineHeight: 1.2, marginTop: 2 }}>
+              {name}
             </p>
-            <p style={{ fontSize: 10, fontWeight: 700, color: rank === 1 ? '#fbbf24' : 'var(--text-tert)', textAlign: 'center' }}>
-              {e.points?.toLocaleString()}
+
+            {/* Score */}
+            <p style={{ fontSize: 10, fontWeight: 700, color: rank === 1 ? '#FFB800' : 'var(--text-tert)', textAlign: 'center' }}>
+              {(e.points ?? 0).toLocaleString()}
             </p>
-            {/* Bar — top border for 1st place emphasis */}
-            <div style={{ width: '100%', borderRadius: '8px 8px 0 0', height: h, background: bg, border: rank === 1 ? `1px solid ${border}30` : 'none', borderBottom: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 8 }}>
+
+            {/* Rectangular bar — the key prototype element */}
+            <div style={{
+              width: '100%', height: barH,
+              background: barBg, border: `1px solid ${barBd}`,
+              borderRadius: '6px 6px 0 0', borderBottom: 'none',
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+              paddingTop: 8,
+            }}>
               <span style={{ fontSize: rank === 1 ? 20 : rank === 2 ? 16 : 14 }}>{medal}</span>
             </div>
           </div>
@@ -325,40 +349,43 @@ function Podium({ entries, userId }) {
 // ── Leaderboard row ───────────────────────────────────────────────────────────
 function LbRow({ entry, rank, userId }) {
   const isMe    = entry.student_id === userId
-  const name    = entry.first_name ?? entry.full_name ?? '?'
-  const initial = name[0].toUpperCase()
-  const avBg    = isMe ? '#9b7ae0' : avColor(name)
-  const sub     = entry.state || (
-    entry.using_total ? 'Total XP' :
-    (entry.points_change != null && entry.points_change > 0 ? `+${entry.points_change} this week` : null)
-  )
+  const name    = isMe ? 'You' : (entry.first_name ?? entry.full_name ?? '?').split(' ')[0]
+  const initial = (entry.first_name ?? entry.full_name ?? '?')[0].toUpperCase()
   const medal   = rankMedal(rank)
+  const avBg    = isMe
+    ? 'linear-gradient(135deg,#18B7F2,#1264E5)'
+    : avColor(entry.first_name ?? entry.full_name)
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14,
-      background: isMe ? 'rgba(155,122,224,.08)' : 'transparent',
-      border: `1px solid ${isMe ? 'rgba(155,122,224,.3)' : 'var(--border)'}`,
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px',
+      background: isMe ? 'rgba(24,183,242,.07)' : 'transparent',
+      borderBottom: '1px solid var(--border)',
     }}>
-      <div style={{ width: 26, textAlign: 'center', flexShrink: 0 }}>
-        {medal ? <span style={{ fontSize: 16 }}>{medal}</span> : <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tert)' }}>#{rank}</span>}
-      </div>
+      {/* Rank */}
+      <span style={{ fontSize: medal ? 16 : 12, fontWeight: 800, color: 'var(--text-tert)', minWidth: 22, textAlign: 'center', flexShrink: 0 }}>
+        {medal ?? `${rank}`}
+      </span>
+
+      {/* Avatar */}
       <div style={{
-        width: 34, height: 34, borderRadius: '50%',
-        background: isMe ? 'linear-gradient(135deg,#9b7ae0,#5cb8ea)' : avBg,
+        width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+        background: isMe ? avBg : avColor(entry.first_name ?? entry.full_name),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontWeight: 800, color: '#fff', flexShrink: 0,
-        border: isMe ? '2px solid rgba(155,122,224,.4)' : 'none',
+        fontSize: 12, fontWeight: 800, color: '#fff',
+        border: isMe ? '1.5px solid rgba(24,183,242,.4)' : 'none',
       }}>
         {initial}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: isMe ? 800 : 600, color: isMe ? '#9b7ae0' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {isMe ? `You` : name}
-        </p>
-        {sub && <p style={{ fontSize: 10, color: 'var(--text-tert)' }}>{sub}</p>}
-      </div>
-      <span style={{ fontSize: 13, fontWeight: 900, color: isMe ? '#ffc36b' : 'var(--text-prim)', flexShrink: 0 }}>
-        {entry.points?.toLocaleString()}
+
+      {/* Name */}
+      <span style={{ flex: 1, fontSize: 13, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {name}
+      </span>
+
+      {/* Score */}
+      <span style={{ fontSize: 11, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
+        {(entry.points ?? 0).toLocaleString()} XP
       </span>
     </div>
   )
@@ -367,36 +394,45 @@ function LbRow({ entry, rank, userId }) {
 // ── Full leaderboard card: podium + rows ──────────────────────────────────────
 function LeaderboardCard({ entries, userId, title, headerRight, emptyMsg }) {
   if (!entries?.length) return (
-    <Widget>
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
       <div style={{ padding: '28px 20px', textAlign: 'center' }}>
         <p style={{ fontSize: 32, marginBottom: 10 }}>🏁</p>
         <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 6 }}>{emptyMsg ?? 'No activity yet'}</p>
-        <p style={{ fontSize: 11, color: 'var(--text-sec)', lineHeight: 1.6 }}>Complete practice questions to earn points and climb the board!</p>
+        <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.6 }}>Complete practice questions to earn points and climb the board!</p>
       </div>
-    </Widget>
+    </div>
   )
 
   const showPodium = entries.length >= 3
   const top3       = entries.slice(0, 3)
-  // Always show all rows — podium takes top 3 visually, rows show everyone ranked
-  const rowEntries = showPodium ? entries.slice(0, Math.min(entries.length, 10)) : entries
+  const rowEntries = entries.slice(0, Math.min(entries.length, 10))
   const myIdx      = entries.findIndex(e => e.student_id === userId)
   const myEntry    = myIdx >= 0 ? entries[myIdx] : null
 
   return (
-    <Widget header={<><SectionLabel>{title}</SectionLabel>{headerRight}</>}>
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>{title}</p>
+        {headerRight}
+      </div>
+
+      {/* Podium */}
       {showPodium && <Podium entries={top3} userId={userId} />}
-      <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 2 }}>All students</p>
+
+      {/* Row list */}
+      <div style={{ borderTop: showPodium ? '1px solid var(--border)' : 'none' }}>
         {rowEntries.map((e, i) => <LbRow key={e.student_id} entry={e} rank={i + 1} userId={userId} />)}
         {myEntry && myIdx >= 10 && (
           <>
-            <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', padding: '4px 0' }}>· · ·</p>
+            <div style={{ padding: '4px 13px', textAlign: 'center', fontSize: 10, color: 'var(--text-tert)' }}>· · ·</div>
             <LbRow entry={myEntry} rank={myIdx + 1} userId={userId} />
           </>
         )}
+        {/* Remove last row's border */}
+        <div style={{ height: 4 }} />
       </div>
-    </Widget>
+    </div>
   )
 }
 
@@ -569,81 +605,51 @@ function ClassTab({ userId, profile, liveXP = 0 }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function SchoolTab({ userId, profile, liveXP = 0 }) {
   const [leaderboard, setLeaderboard] = useState([])
-  const [cohortData,  setCohortData]  = useState(null)
-  const [myRank,      setMyRank]      = useState(null)
   const [loading,     setLoading]     = useState(true)
-  const [scope,       setScope]       = useState('cohort')
-  const [periods,     setPeriods]     = useState([])
-  const [selectedPeriod, setSelectedPeriod] = useState(null)
-  const [showPicker,  setShowPicker]  = useState(false)
   const [showInvite,  setShowInvite]  = useState(false)
-  const [showJoin,    setShowJoin]    = useState(false)
-  const [challenge,   setChallenge]   = useState(null)
-  const [monthlyChallenge, setMonthlyChallenge] = useState(null)
+  const [cohortName,  setCohortName]  = useState('Your class')
+  const [inviteCode,  setInviteCode]  = useState('')
 
-  const load = useCallback(async (s = scope, period = null) => {
-    setLoading(true)
-    const params = new URLSearchParams({ scope: s })
-    if (period) { params.set('period_start', period.start); params.set('period_end', period.end) }
-    const [lbRes, pRes, chalRes] = await Promise.all([
-      fetch(`/api/leaderboard/cohort?${params}`),
-      fetch('/api/leaderboard/periods'),
-      fetch('/api/challenges?scope=school'),
-    ])
-    const [lb, p, chal] = await Promise.all([lbRes.json(), pRes.json(), chalRes.json()])
-    setLeaderboard(lb.leaderboard ?? [])
-    setCohortData(lb.cohort ?? null)
-    setMyRank(lb.my_rank ?? null)
-    setPeriods(p.past ?? [])
-    setChallenge(chal.active ?? null)
-    setMonthlyChallenge(chal.monthly ?? null)
-    setLoading(false)
-  }, [scope])
-
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (!profile?.cohort_id) { setLoading(false); return }
+    const params = new URLSearchParams({ cohort_id: profile.cohort_id, scope: 'cohort' })
+    fetch(`/api/leaderboard/cohort?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        const lb = data.leaderboard ?? data.cohort ?? []
+        const enriched = lb.map(e => e.student_id === userId ? { ...e, points: Math.max(e.points ?? 0, liveXP) } : e)
+        setLeaderboard(enriched)
+        if (data.cohort?.name) setCohortName(data.cohort.name)
+        if (data.cohort?.invite_code) setInviteCode(data.cohort.invite_code)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [profile?.cohort_id, userId, liveXP]) // eslint-disable-line
 
   if (loading) return <TabSkeleton />
 
   if (!profile?.cohort_id) return (
-    <JoinState icon="🏫" title="Connect to your school" accent="#34d399"
-      desc="Ask your teacher for the school invite code and join your school's leaderboard."
-      cta="Enter school code" secondaryCta="My school isn't on ExamPrep yet"
-      showJoin={showJoin} onJoin={() => setShowJoin(true)} onCancel={() => setShowJoin(false)}
-      onJoined={() => window.location.reload()} joinType="school"
-      onSecondary={() => {}} />
+    <div style={{ borderRadius: 18, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '28px 20px', textAlign: 'center' }}>
+      <p style={{ fontSize: 32, marginBottom: 10 }}>🏫</p>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 6 }}>Not connected to a class yet</p>
+      <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.6 }}>Ask your teacher for an invite code to see your class leaderboard.</p>
+    </div>
   )
-
-  const schoolName = cohortData?.schools?.name ?? 'Your school'
-  const myEntry    = leaderboard.find(e => e.student_id === userId)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {showInvite && cohortData && <InviteSheet code={cohortData.invite_code} name={`${schoolName} · ${cohortData.name}`} type="school" onClose={() => setShowInvite(false)} />}
-      {showPicker && <PeriodPicker periods={periods} selected={selectedPeriod} onSelect={p => { setSelectedPeriod(p); load(scope, p) }} onClose={() => setShowPicker(false)} />}
-
-      <MyRankCard rank={myRank} total={leaderboard.length || undefined} pts={myEntry?.points} ptsChange={myEntry?.points_change}
-        liveXP={liveXP}
-        label={`${schoolName} · ${scope === 'cohort' ? 'My cohort' : 'Whole school'}`}
-        gradient="linear-gradient(155deg,#052e16 0%,#064e3b 100%)" border="rgba(52,211,153,.3)" icon="🏫" />
-
-      <SchoolBadge name={schoolName} onShare={() => setShowInvite(true)} />
-
-      {/* Cohort / whole school toggle */}
-      <div style={{ display: 'flex', gap: 3, background: 'var(--bg-subtle)', borderRadius: 12, padding: 3 }}>
-        {[['cohort','My cohort'],['school','Whole school']].map(([val, lbl]) => (
-          <button key={val} onClick={() => { setScope(val); setSelectedPeriod(null); load(val, null) }}
-            style={{ flex: 1, padding: '9px 4px', borderRadius: 10, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer', transition: 'all .15s', background: scope === val ? 'var(--bg-card)' : 'transparent', color: scope === val ? 'var(--text-prim)' : 'var(--text-tert)' }}>
-            {lbl}
+      {showInvite && <InviteSheet code={inviteCode} name={cohortName} type="school" onClose={() => setShowInvite(false)} />}
+      <LeaderboardCard
+        entries={leaderboard}
+        userId={userId}
+        title={cohortName}
+        headerRight={
+          <button onClick={() => setShowInvite(true)} style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(24,183,242,.1)', border: '1px solid rgba(24,183,242,.25)', fontSize: 9, fontWeight: 700, color: '#18B7F2', cursor: 'pointer' }}>
+            Invite +
           </button>
-        ))}
-      </div>
-
-      <ChallengeCard challenge={challenge} type="weekly" />
-      <ChallengeCard challenge={monthlyChallenge} type="monthly" />
-
-      <LeaderboardCard entries={leaderboard} userId={userId} title="School leaderboard"
-        headerRight={<button onClick={() => setShowPicker(true)} style={{ padding: '3px 8px', borderRadius: 999, border: '1.5px solid var(--border)', background: 'var(--bg-subtle)', fontSize: 9, fontWeight: 700, color: 'var(--text-sec)', cursor: 'pointer' }}>This week ▾</button>}
-        emptyMsg="No school activity yet" />
+        }
+        emptyMsg="No class activity yet — start practising!"
+      />
     </div>
   )
 }

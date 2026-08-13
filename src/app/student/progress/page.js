@@ -228,25 +228,47 @@ export default function ProgressPage() {
   }, [userId]) // eslint-disable-line
 
   async function load(uid) {
-      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 14); d.setHours(0,0,0,0); return d.toISOString() })()
-      const [{ data: prof }, { data: rows }, { data: attemptRows }] = await Promise.all([
+      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0,0,0,0); return d.toISOString() })()
+      const [{ data: prof }, { data: masteryFlat }, { data: attemptRows }, { data: allSubjects }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', uid).single(),
+        // No join on student_topic_mastery — the FK to topics isn't exposed via PostgREST
         supabase.from('student_topic_mastery')
-          .select('topic_id, score, attempt_count, topics(id, name, subject_id, subjects(id, name, exam_type))')
+          .select('topic_id, score, attempt_count')
           .eq('student_id', uid)
           .order('score', { ascending: true }),
         supabase.from('question_attempts')
-          .select('created_at, topic_id, is_correct')
+          .select('created_at, is_correct')
           .eq('student_id', uid)
           .gte('created_at', weekStart),
+        supabase.from('subjects').select('id, name'),
       ])
+
+      // Fetch topic data separately using the topic IDs we have
+      const topicIds = (masteryFlat ?? []).map(r => r.topic_id).filter(Boolean)
+      const { data: topicRows } = topicIds.length > 0
+        ? await supabase.from('topics').select('id, name, subject_id').in('id', topicIds)
+        : { data: [] }
+
+      // Build lookup maps
+      const topicMap = {}
+      for (const t of topicRows ?? []) topicMap[t.id] = t
+      const subjectNameMap = {}
+      for (const s of allSubjects ?? []) subjectNameMap[s.id] = s.name
 
       setProfile(prof)
       const examType = prof?.exam_type ?? 'WAEC'
       setActiveExam(examType === 'JAMB' ? 'JAMB' : 'WAEC')
 
-      // Mastery — use student_topic_mastery; fall back to question_attempts
-      let masteryData = (rows ?? []).filter(r => r.topics)
+      // Enrich mastery rows with topic + subject data from our separate fetches
+      let masteryData = (masteryFlat ?? [])
+        .map(row => {
+          const topic = topicMap[row.topic_id]
+          if (!topic) return null
+          const subjectName = subjectNameMap[topic.subject_id]
+          if (!subjectName) return null
+          return { ...row, topics: { ...topic, subjectName } }
+        })
+        .filter(Boolean)
       if (masteryData.length === 0 && attemptRows?.length > 0) {
         const byTopic = {}
         for (const a of attemptRows) {
@@ -255,18 +277,20 @@ export default function ProgressPage() {
           byTopic[a.topic_id].total++
           if (a.is_correct) byTopic[a.topic_id].correct++
         }
-        const topicIds = Object.keys(byTopic)
-        if (topicIds.length > 0) {
-          const { data: topicRows } = await supabase
-            .from('topics').select('id, name, subject_id, subjects(id, name, exam_type)').in('id', topicIds)
-          const topicMap = {}
-          for (const t of topicRows ?? []) topicMap[t.id] = t
-          masteryData = topicIds.map(tid => ({
-            topic_id: tid,
-            score: Math.round((byTopic[tid].correct / byTopic[tid].total) * 100),
-            attempt_count: byTopic[tid].total,
-            topics: topicMap[tid] ?? null,
-          })).filter(m => m.topics)
+        const fallbackTopicIds = Object.keys(byTopic)
+        if (fallbackTopicIds.length > 0) {
+          const { data: fallbackTopics } = await supabase
+            .from('topics').select('id, name, subject_id').in('id', fallbackTopicIds)
+          for (const t of fallbackTopics ?? []) {
+            const subjectName = subjectNameMap[t.subject_id]
+            if (!subjectName) continue
+            masteryData.push({
+              topic_id: t.id,
+              score: Math.round((byTopic[t.id].correct / byTopic[t.id].total) * 100),
+              attempt_count: byTopic[t.id].total,
+              topics: { ...t, subjectName },
+            })
+          }
         }
       }
       setMastery(masteryData)
@@ -294,12 +318,13 @@ export default function ProgressPage() {
   // Build subject map: subjectName → { examType, topics[] }
   // Keep WAEC and JAMB versions of the same subject separate for the tab view
   // but merge topic scores (averaged) in the card itself
+  const profileExamType = profile?.exam_type ?? 'WAEC'
   const subjectMap = {}
   for (const row of mastery) {
-    if (!row.topics?.subjects) continue
-    const sub = row.topics.subjects
-    const key = `${sub.name}::${sub.exam_type ?? 'WAEC'}`
-    if (!subjectMap[key]) subjectMap[key] = { name: sub.name, examType: sub.exam_type ?? 'WAEC', topics: [] }
+    if (!row.topics?.subjectName) continue
+    const subName = row.topics.subjectName
+    const key = subName
+    if (!subjectMap[key]) subjectMap[key] = { name: subName, examType: profileExamType, topics: [] }
     subjectMap[key].topics.push({
       name:     row.topics.name,
       score:    Math.round(row.score ?? 0),

@@ -447,24 +447,17 @@ function QuickModes({ router, onTimed, onWeak }) {
   )
 }
 
-// ── Empty / no-path state ─────────────────────────────────────────────────────
-function NoPathState({ profile, onEdit }) {
+// ── Soft diagnostic nudge — shown when no learning path, but NOT a blocker ────
+function DiagnosticNudge({ profile, onEdit }) {
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: '28px 20px', textAlign: 'center' }}>
-      <span style={{ fontSize: 40, display: 'block', marginBottom: 16 }}>📝</span>
-      <p style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 8, letterSpacing: '-0.01em' }}>
-        Get your personalised practice path
-      </p>
-      <p style={{ fontSize: 13, color: 'var(--text-sec)', lineHeight: 1.6, marginBottom: 20 }}>
-        Answer a few diagnostic questions and we'll build a study path around your weak areas.
-      </p>
-      {!profile?.goals_set && (
-        <button onClick={onEdit} style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: '#F5B942', color: '#0b1330', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', marginBottom: 10, boxShadow: '0 4px 0 #c4922e' }}>
-          Set your goals first →
-        </button>
-      )}
-      <Link href="/diagnostic" style={{ display: 'block', padding: '14px 0', borderRadius: 14, background: '#1264E5', color: '#fff', fontSize: 14, fontWeight: 700, boxShadow: '0 5px 0 #0a3fa0', textAlign: 'center', textDecoration: 'none' }}>
-        Take the diagnostic →
+    <div style={{ background: 'rgba(18,100,229,.08)', border: '1px solid rgba(18,100,229,.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ fontSize: 22, flexShrink: 0 }}>🎯</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 2 }}>Get a personalised path</p>
+        <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>Take a quick diagnostic and we'll focus your practice on weak areas.</p>
+      </div>
+      <Link href="/diagnostic" style={{ padding: '8px 13px', borderRadius: 10, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        Start →
       </Link>
     </div>
   )
@@ -475,16 +468,16 @@ function NoPathState({ profile, onEdit }) {
 function SidebarActivity({ sessionDays, streak = 0 }) {
   const isDark = useIsDark()
   const today = new Date()
-  const dayOfWeek = (today.getDay() + 6) % 7  // Mon=0 … Sun=6
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - dayOfWeek)
-  monday.setHours(0, 0, 0, 0)
-  const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-  const days = DAY_LABELS.map((label, i) => {
-    const d = new Date(monday); d.setDate(monday.getDate() + i)
-    const key = d.toISOString().slice(0, 10)
-    const isFuture = i > dayOfWeek
-    return { key, label, count: isFuture ? 0 : (sessionDays[key] ?? 0), isToday: i === dayOfWeek, isFuture }
+
+  // Show last 7 days rolling (today + 6 days back) — always has data if you practiced recently
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(today.getDate() - (6 - i)) // oldest first
+    d.setHours(0, 0, 0, 0)
+    const key     = d.toISOString().slice(0, 10)
+    const isToday = i === 6
+    const label   = isToday ? 'T' : d.toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 1)
+    return { key, label, count: sessionDays[key] ?? 0, isToday }
   })
   const maxCount = Math.max(...days.map(d => d.count), 1)
 
@@ -498,11 +491,9 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 40 }}>
           {days.map((day, i) => {
             const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 32)) : 2
-            const col = day.isFuture
-              ? (isDark ? 'rgba(255,255,255,.04)' : '#f1f5f9')
-              : day.count > 0
-                ? (day.isToday ? '#1264E5' : isDark ? 'rgba(24,183,242,.5)' : '#5cb8ea')
-                : (isDark ? 'rgba(255,255,255,.07)' : '#e8eef8')
+            const col  = day.count > 0
+              ? (day.isToday ? '#1264E5' : isDark ? 'rgba(24,183,242,.5)' : '#5cb8ea')
+              : (isDark ? 'rgba(255,255,255,.07)' : '#e8eef8')
             return (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                 <div style={{ width: '100%', height: barH, borderRadius: '3px 3px 1px 1px', background: col }} />
@@ -521,25 +512,38 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
 function SidebarClassRank({ leaderboard, myId }) {
   const medals = ['🥇', '🥈', '🥉']
   const { totalPoints: liveXP } = usePoints()
-  if (!leaderboard.length) return null
+
+  if (!leaderboard.length) return (
+    <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</p>
+        <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>See all →</Link>
+      </div>
+      <div style={{ padding: '14px 13px', textAlign: 'center' }}>
+        <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Start practising to appear here!</p>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
       <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Class rank</p>
+        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</p>
         <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>Full board →</Link>
       </div>
       <div>
         {leaderboard.slice(0, 5).map((entry, i) => {
           const isMe = entry.student_id === myId
-          const pts = isMe ? liveXP : (entry.points ?? 0)
+          const pts  = isMe ? liveXP : (entry.points ?? 0)
+          // API returns first_name or full_name depending on source
+          const name = isMe ? 'You' : (entry.first_name ?? entry.full_name?.split(' ')[0] ?? 'Student')
           return (
             <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', background: isMe ? 'rgba(24,183,242,.07)' : 'transparent' }}>
               <span style={{ fontSize: i < 3 ? 12 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>
                 {i < 3 ? medals[i] : `${i + 1}`}
               </span>
               <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {isMe ? 'You' : (entry.full_name?.split(' ')[0] ?? 'Student')}
+                {name}
               </span>
               <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
                 {pts.toLocaleString()}
@@ -742,16 +746,17 @@ export default function DashboardPage() {
   async function load(uid) {
     const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d.toISOString() })()
     try {
-      const [{ data: prof }, { data: paths }, { data: mastery }, { data: streakRow }] = await Promise.all([
+      const [{ data: prof }, { data: paths }, { data: masteryFlat }, { data: streakRow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', uid).single(),
         supabase.from('student_learning_paths')
           .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
           .eq('student_id', uid),
+        // Flat select — no join, student_topic_mastery FK not exposed via PostgREST
         supabase.from('student_topic_mastery')
-          .select('topic_id, score, topics(id, name, subject_id, subjects(name))')
+          .select('topic_id, score')
           .eq('student_id', uid)
           .order('score', { ascending: true })
-          .limit(6),
+          .limit(50),
         supabase.from('student_streaks')
           .select('current_streak, last_active_date')
           .eq('student_id', uid)
@@ -760,8 +765,22 @@ export default function DashboardPage() {
 
       setProfile(prof)
 
+      // Fetch topic details separately
+      const mTopicIds = (masteryFlat ?? []).map(r => r.topic_id).filter(Boolean)
+      const { data: mTopics } = mTopicIds.length > 0
+        ? await supabase.from('topics').select('id, name, subject_id').in('id', mTopicIds)
+        : { data: [] }
+      const mTopicMap = {}
+      for (const t of mTopics ?? []) mTopicMap[t.id] = t
+
+      // Enrich mastery rows
+      const mastery = (masteryFlat ?? []).map(m => ({
+        ...m,
+        topics: mTopicMap[m.topic_id] ?? null,
+      })).filter(m => m.topics)
+
       const topicScoresBySubject = {}
-      for (const m of mastery ?? []) {
+      for (const m of mastery) {
         const sid = m.topics?.subject_id
         if (!sid) continue
         if (!topicScoresBySubject[sid]) topicScoresBySubject[sid] = []
@@ -780,33 +799,39 @@ export default function DashboardPage() {
       const weak = (mastery ?? [])
         .filter(m => m.topics && (m.score ?? 0) < 40)
         .slice(0, 3)
-        .map(m => ({
-          topicId:     m.topic_id,
-          topicName:   m.topics?.name ?? '',
-          subjectName: m.topics?.subjects?.name ?? '',
-          pct:         Math.round(m.score ?? 0),
-        }))
+        .map(m => {
+          const subjectPath = paths?.find(p => p.subject_id === m.topics?.subject_id)
+          return {
+            topicId:     m.topic_id,
+            topicName:   m.topics?.name ?? '',
+            subjectName: subjectPath?.subjects?.name ?? '',
+            pct:         Math.round(m.score ?? 0),
+          }
+        })
       setWeakTopics(weak)
 
       const streak = streakRow?.current_streak ?? prof?.streak_days ?? 0
       setRealStreak(streak)
 
       // Non-blocking secondaries — fire after state is set
+      const fourteenDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 14); d.setHours(0,0,0,0); return d.toISOString() })()
       supabase.from('question_attempts').select('created_at')
-        .eq('student_id', uid).gte('created_at', weekStart)
+        .eq('student_id', uid).gte('created_at', fourteenDaysAgo)
         .then(r => {
           const rows = r.data ?? []
           const byDate = {}
-          const sorted = [...rows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
-          let lastTs = null
-          for (const a of sorted) {
+          // Count attempts per day first (simpler and more reliable than 30-min session gaps)
+          for (const a of rows) {
             if (!a.created_at) continue
             const day = a.created_at.slice(0, 10)
-            const ts  = new Date(a.created_at).getTime()
-            if (!lastTs || ts - lastTs > 30 * 60 * 1000) byDate[day] = (byDate[day] ?? 0) + 1
-            lastTs = ts
+            byDate[day] = (byDate[day] ?? 0) + 1
           }
-          setSessionDays(byDate)
+          // Convert attempt counts to session counts (1 session per active day)
+          const sessionsByDay = {}
+          for (const [day, count] of Object.entries(byDate)) {
+            if (count > 0) sessionsByDay[day] = 1
+          }
+          setSessionDays(sessionsByDay)
         }).catch(() => {})
 
       fetch('/api/student/next-topic')
@@ -865,9 +890,7 @@ export default function DashboardPage() {
         {/* ── LEFT: main feed ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-          {hasPath ? (
-            <>
-              {/* ── 1. Greeting + pills ── */}
+          {/* ── 1. Greeting + pills ── */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div>
                   <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>{greeting.eyebrow}</p>
@@ -878,21 +901,20 @@ export default function DashboardPage() {
               {/* ── 2. Zara coach banner ── */}
               <CoachBanner emoji={coach.emoji} message={coach.message} />
 
+              {/* ── 2b. Soft diagnostic nudge (only when no path) ── */}
+              {!hasPath && <DiagnosticNudge profile={profile} onEdit={() => setShowGoalModal(true)} />}
+
               {/* ── 3. Daily Quest card ── */}
               <DailyQuestCard subjects={subjects} weakTopics={weakTopics} streak={realStreak} sessionDays={sessionDays} onStart={() => router.push('/student/practice')} />
 
               {/* ── 4. Level up faster (weak topics) ── */}
-              <NeedsAttention weakTopics={weakTopics} onPractise={t => openPractice(subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub)} />
+              {hasPath && <NeedsAttention weakTopics={weakTopics} onPractise={t => openPractice(subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub)} />}
 
               {/* ── 5. Subject mastery rows ── */}
-              <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />
+              {hasPath && <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />}
 
               {/* ── 6. Target strip ── */}
               <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
-            </>
-          ) : (
-            <NoPathState profile={profile} onEdit={() => setShowGoalModal(true)} />
-          )}
         </div>
 
         {/* ── RIGHT sidebar (desktop only) ── */}

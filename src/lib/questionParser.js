@@ -606,3 +606,181 @@ function stringSimilarity(a, b) {
 
   return Math.max(containment, jaccard)
 }
+
+// ── SdashAPI Enrichment Prompt ────────────────────────────────────────────────
+// buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topics)
+//
+// Generates a prompt the admin copies into Claude or ChatGPT.
+// Input:  raw SdashAPI question objects (already fetched, in JSON format)
+// Output: same questions re-enriched to ExamPrep schema with:
+//   - Better explanation (correct + workings[] + wrong_options)
+//   - Proper topic_title + subtopic_title from the curriculum
+//   - Difficulty classification
+//   - KaTeX math formatting
+//   - options keys normalised to uppercase A/B/C/D
+//
+// This mirrors buildQuestionPrompt() but SKIPS extraction (questions already exist).
+// The paste-back JSON is fed directly into parseQuestions() — same as the existing flow.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topics = []) {
+  const examContext = {
+    WAEC:  'Nigerian WAEC (West African Senior School Certificate Examination)',
+    JAMB:  'Nigerian JAMB/UTME (Joint Admissions and Matriculation Board)',
+    IGCSE: 'Cambridge IGCSE',
+  }
+  const ctx = examContext[examType] ?? examType
+
+  // Build a compact curriculum reference the AI can use for tagging
+  const curriculumLines = topics.flatMap(t =>
+    (t.subtopics ?? []).length
+      ? (t.subtopics ?? []).map(s => `  • ${t.name} → ${s.name}`)
+      : [`  • ${t.name}`]
+  )
+  const curriculumBlock = curriculumLines.length
+    ? curriculumLines.join('\n')
+    : '  (No curriculum loaded — use your knowledge of the subject)'
+
+  // Normalise SdashAPI questions to a clean input format for the prompt
+  const inputQuestions = rawQuestions.map((q, i) => ({
+    index:    i + 1,
+    year:     q.examyear ?? '',
+    question: q.question ?? '',
+    passage:  q.section  ?? null,
+    options: {
+      A: q.option?.a ?? q.option?.A ?? '',
+      B: q.option?.b ?? q.option?.B ?? '',
+      C: q.option?.c ?? q.option?.C ?? '',
+      D: q.option?.d ?? q.option?.D ?? '',
+      ...(q.option?.e || q.option?.E ? { E: q.option.e ?? q.option.E } : {}),
+    },
+    answer:   (q.answer ?? '').toUpperCase(),
+    solution: q.solution ?? null,
+    image:    q.image    ?? null,
+  }))
+
+  const inputJSON = JSON.stringify(inputQuestions, null, 2)
+
+  return `You are an expert ${ctx} teacher enriching past exam questions for a student learning app.
+
+Subject: ${subjectName}
+Exam: ${examType}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR TASK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Below is a JSON array of past exam questions already extracted.
+You do NOT need to re-extract them. The question_text, options, and answer are already correct.
+
+Your job is to:
+  1. Write a high-quality explanation for each question
+  2. Tag each question to the correct topic and subtopic
+  3. Classify difficulty
+  4. Fix any mathematical formatting (KaTeX)
+  5. Return the complete enriched JSON array
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRICULUM TREE (for topic tagging)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use ONLY topics and subtopics from this list. Match as closely as possible.
+If no subtopic fits precisely, use the closest parent topic and leave subtopic_title blank.
+
+${curriculumBlock}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1 — EXPLANATION (most important)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"correct" field: 1–2 sentences explaining WHY the correct answer is right.
+  Not just "A is correct because…" — explain the underlying concept.
+
+"workings" field:
+
+  FOR MATHS / SCIENCE / QUANTITATIVE (Mathematics, Physics, Chemistry, Further Maths, Economics calculations):
+    JSON array of strings. One calculation step per string.
+    GOOD: ["Given: u = 0, a = 10 m/s², t = 5s", "v = u + at", "v = 0 + (10)(5)", "v = 50 m/s ✓"]
+    BAD:  ["Substitute values and solve to get 50 m/s"]
+
+  FOR ENGLISH / LANGUAGE / ARTS (English, Literature, Government, History, Commerce etc.):
+    Do NOT write step-by-step workings — these have no calculation steps.
+    Write 1–2 plain sentences expanding on why the answer is correct.
+    Set "workings" to [] (empty array).
+
+"wrong_options": for EACH wrong option, write ONE sentence explaining the specific mistake.
+  Include ALL wrong options — the UI shows only the one the student picked.
+  e.g. { "B": "...", "C": "...", "D": "..." }
+
+If the existing solution field is thin or missing, write a full explanation from your knowledge.
+If the solution is already good, you may keep or improve it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — MATHEMATICAL FORMATTING (KaTeX)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Wrap ALL mathematical expressions in $...$
+
+FRACTIONS:       $\\frac{1}{x}$      NOT  1/x
+POWERS:          $x^2$, $a^{n+1}$   NOT  x^2 outside delimiters
+SQUARE ROOTS:    $\\sqrt{x}$         NOT  sqrt(x) or √x
+LOGARITHMS:      $\\log_{2} 8$       NOT  log_2(8)
+ALGEBRA:         $M = \\frac{3n}{2p^2}$
+GEOMETRY:        $\\Delta PQR$,  $\\angle ABC = 34^{\\circ}$
+NAIRA:           ₦500               NOT  \\N500 or \\text{N}500
+US DOLLARS:      $\\$500$
+SYMBOLS:         × → \\times   ÷ → \\div   ≤ → \\leq   ≥ → \\geq   π → \\pi
+
+Every math expression — no matter how short — goes inside $...$
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3 — DIFFICULTY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+easy   = direct recall or single-step substitution
+medium = 2–3 step reasoning or application
+hard   = multi-step, unfamiliar context, or synthesis
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT QUESTIONS (do not change question_text, options, or answer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${inputJSON}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RETURN FORMAT — JSON ARRAY ONLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY a valid JSON array. No markdown fences, no preamble, no explanation outside the JSON.
+
+[
+  {
+    "exam": "${examType}",
+    "subject": "${subjectName}",
+    "year": "",
+    "passage_text": null,
+    "question_text": "",
+    "has_image": false,
+    "image_description": "",
+    "options": {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": ""
+    },
+    "correct_answer": "A",
+    "explanation": {
+      "correct": "",
+      "workings": ["Step one", "Step two", "Answer"],
+      "wrong_options": {
+        "B": "one sentence explaining why B is wrong",
+        "C": "one sentence explaining why C is wrong",
+        "D": "one sentence explaining why D is wrong"
+      }
+    },
+    "topic_title": "",
+    "subtopic_title": "",
+    "difficulty": "medium"
+  }
+]`
+}
