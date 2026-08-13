@@ -27,6 +27,7 @@ const NAV = [
   { section: 'QUESTIONS', items: [
     { href: '/admin/dashboard',          label: 'Dashboard',        icon: '◼' },
     { href: '/admin/past-questions',     label: 'Past Questions',   icon: '🗃' },
+    { href: '/admin/coverage',           label: 'Year Coverage',    icon: '📅' },
     { href: '/admin/questions/import',   label: 'Import (SdashAPI)',icon: '⬆' },
     { href: '/admin/questions/upload',   label: 'Upload Questions', icon: '📤' },
     { href: '/admin/questions',          label: 'Question Bank',    icon: '🔍' },
@@ -47,34 +48,13 @@ const NAV = [
 // ── Logo mark — exact SVG from landing page ───────────────────────────────────
 function LogoMark({ size = 28 }) {
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <div style={{
-        width: size, height: size,
-        borderRadius: Math.round(size * 0.28),
-        background: NAVY,
-        boxShadow: `0 ${Math.round(size * 0.1)}px 0 #010a1f`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <svg width={size * 0.58} height={size * 0.58} viewBox="0 0 512 512" fill="none">
-          <path d="M292 105C235 103 167 118 137 153C112 182 122 208 155 215C185 221 222 210 263 196L226 236C185 253 139 274 131 307C122 344 165 363 208 354C250 345 292 323 331 298L302 353C267 379 210 406 155 403C98 400 64 369 76 325C86 286 120 262 165 241C124 247 83 239 69 210C52 175 81 136 121 116C164 94 226 83 292 86Z" fill="url(#slg)"/>
-          <path d="M98 94L202 48L306 94L202 139Z" fill={NAVY}/>
-          <path d="M123 91L202 57L281 91L202 123Z" fill={BLUE}/>
-          <path d="M61 335C123 401 272 427 383 365C430 339 451 309 444 287" stroke={GOLD} strokeWidth="44" strokeLinecap="round" fill="none"/>
-          <defs>
-            <linearGradient id="slg" x1="0" y1="0" x2="1" y2="1">
-              <stop stopColor={CYAN}/><stop offset=".5" stopColor={BLUE}/><stop offset="1" stopColor={NAVY}/>
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-      {/* A1 badge */}
-      <div style={{
-        position: 'absolute', top: -5, right: -7,
-        background: GOLD, borderRadius: 3,
-        fontSize: 6, fontWeight: 900, color: NAVY,
-        padding: '1px 3px', lineHeight: 1.4,
-      }}>A1</div>
-    </div>
+    <img
+      src="/images/examprep_logo.png"
+      alt="ExamPrep A1 logo"
+      width={size}
+      height={size}
+      style={{ flexShrink: 0, objectFit: 'contain', display: 'block' }}
+    />
   )
 }
 

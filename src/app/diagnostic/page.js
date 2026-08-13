@@ -34,15 +34,13 @@ const getColor = n => SUBJECT_COLORS[n] ?? SUBJECT_COLORS.default
 
 function LogoMark() {
   return (
-    <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
-      <div style={{ width: 28, height: 28, borderRadius: 8, background: '#062A78', boxShadow: '0 3px 0 #020c20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width="15" height="15" viewBox="0 0 512 512" fill="none">
-          <path d="M292 105C235 103 167 118 137 153C112 182 122 208 155 215C185 221 222 210 263 196L226 236C185 253 139 274 131 307C122 344 165 363 208 354C250 345 292 323 331 298L302 353C267 379 210 406 155 403C98 400 64 369 76 325C86 286 120 262 165 241C124 247 83 239 69 210C52 175 81 136 121 116C164 94 226 83 292 86Z" fill="url(#dlg)"/>
-          <defs><linearGradient id="dlg" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#18B7F2"/><stop offset=".5" stopColor="#1264E5"/><stop offset="1" stopColor="#062A78"/></linearGradient></defs>
-        </svg>
-      </div>
-      <div style={{ position: 'absolute', top: -5, right: -7, background: '#FFB800', borderRadius: 3, fontSize: 6, fontWeight: 900, color: '#062A78', padding: '1px 3px', lineHeight: 1.4 }}>A1</div>
-    </div>
+    <img
+      src="/images/examprep_logo.png"
+      alt="ExamPrep A1 logo"
+      width={28}
+      height={28}
+      style={{ flexShrink: 0, objectFit: 'contain', display: 'block' }}
+    />
   )
 }
 

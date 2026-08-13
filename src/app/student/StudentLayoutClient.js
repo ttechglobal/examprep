@@ -347,7 +347,7 @@ export default function StudentLayoutClient({ children, profile }) {
         borderBottom: '1px solid var(--nav-border)',
         display: 'flex', alignItems: 'center',
       }}>
-        <div style={{ width: '100%', maxWidth: 900, margin: '0 auto', padding: '0 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
 
           <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, textDecoration: 'none' }}>
             <EXLLogo size={30} />
@@ -384,7 +384,7 @@ export default function StudentLayoutClient({ children, profile }) {
       </header>
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', padding: '0 18px', gap: 0 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', padding: '0 24px', gap: 0 }}>
 
         {/* ── Left sidebar (desktop) ── */}
         <aside style={{ width: 220, flexShrink: 0, paddingTop: 20, paddingRight: 16 }} className="hidden lg:block">

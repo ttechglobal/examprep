@@ -11,7 +11,7 @@
 //   5. Save
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { buildSdashEnrichPrompt, parseQuestions, matchTopicSubtopic } from '@/lib/questionParser'
 
@@ -299,6 +299,7 @@ function YearRangePicker({ value, onChange }) {
 export default function SdashImportPage() {
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
+  const [subjectName,    setSubjectName]    = useState('')
   const [examType,       setExamType]       = useState('WAEC')
   const [year,           setYear]           = useState(String(new Date().getFullYear() - 1))
   const [mode,           setMode]           = useState('single')   // 'single' | 'range'
@@ -327,7 +328,25 @@ export default function SdashImportPage() {
   const years = []
   for (let y = currentYear; y >= 2001; y--) years.push(y)
 
-  // Load ExamPrep subjects
+  // ── Group subjects by name (Mathematics, not "Mathematics WAEC" + "Mathematics JAMB")
+  const groupedSubjects = useMemo(() => {
+    const map = {}
+    for (const s of subjects) {
+      if (!map[s.name]) map[s.name] = { name: s.name, exams: {} }
+      map[s.name].exams[s.exam_type] = s
+    }
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
+  }, [subjects])
+
+  // Auto-resolve subjectId when name or examType changes
+  useEffect(() => {
+    const group = groupedSubjects.find(g => g.name === subjectName)
+    if (!group) return
+    const row = group.exams[examType] ?? Object.values(group.exams)[0]
+    if (row?.id) setSubjectId(row.id)
+  }, [subjectName, examType, groupedSubjects])
+
+  // Load subjects
   useEffect(() => {
     fetch('/api/admin/subjects?active=true')
       .then(r => r.json())
@@ -335,6 +354,7 @@ export default function SdashImportPage() {
         const list = (Array.isArray(d) ? d : (d.subjects ?? []))
         setSubjects(list)
         if (list[0]) {
+          setSubjectName(list[0].name)
           setSubjectId(list[0].id)
           if (list[0].exam_type === 'JAMB') setExamType('JAMB')
         }
@@ -342,12 +362,16 @@ export default function SdashImportPage() {
       .catch(() => {})
   }, [])
 
-  // Auto-sync examType when subject selection changes
+  // Auto-sync examType from selected subject's available exams
   useEffect(() => {
-    if (!selectedSubject) return
-    const et = selectedSubject.exam_type
-    if (et === 'WAEC' || et === 'JAMB') setExamType(et)
-  }, [subjectId]) // eslint-disable-line react-hooks/exhaustive-deps
+    const group = groupedSubjects.find(g => g.name === subjectName)
+    if (!group) return
+    // If current examType doesn't exist for this subject, switch to what's available
+    if (!group.exams[examType]) {
+      const available = Object.keys(group.exams)[0]
+      if (available) setExamType(available)
+    }
+  }, [subjectName, groupedSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load curriculum tree for selected subject (used in enrichment prompt)
   useEffect(() => {
@@ -704,15 +728,17 @@ export default function SdashImportPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {/* Subject */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">ExamPrep Subject</label>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">Subject</label>
                   <select
-                    value={subjectId}
-                    onChange={e => { setSubjectId(e.target.value); setPreview([]); setImportResult(null) }}
+                    value={subjectName}
+                    onChange={e => { setSubjectName(e.target.value); setPreview([]); setImportResult(null) }}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   >
                     <option value="">Select subject…</option>
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} [{s.exam_type}]</option>
+                    {groupedSubjects.map(g => (
+                      <option key={g.name} value={g.name}>
+                        {g.name}{Object.keys(g.exams).length === 1 ? ` (${Object.keys(g.exams)[0]} only)` : ''}
+                      </option>
                     ))}
                   </select>
                   {selectedSubject && (
@@ -726,20 +752,24 @@ export default function SdashImportPage() {
                   )}
                 </div>
 
-                {/* Exam type */}
+                {/* Exam type — filtered to what this subject actually has */}
                 <div>
                   <label className="block text-xs font-bold text-gray-500 mb-1.5">Exam Type</label>
                   <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-                    {['WAEC', 'JAMB'].map(et => (
-                      <button key={et}
-                        onClick={() => { setExamType(et); setPreview([]); setImportResult(null) }}
-                        className={`flex-1 px-3 py-1.5 text-xs font-black rounded-lg transition-all ${
-                          examType === et ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >{et}</button>
-                    ))}
+                    {(() => {
+                      const group = groupedSubjects.find(g => g.name === subjectName)
+                      const available = group ? Object.keys(group.exams) : ['WAEC', 'JAMB']
+                      return ['WAEC', 'JAMB', 'IGCSE'].filter(et => available.includes(et)).map(et => (
+                        <button key={et}
+                          onClick={() => { setExamType(et); setPreview([]); setImportResult(null) }}
+                          className={`flex-1 px-3 py-1.5 text-xs font-black rounded-lg transition-all ${
+                            examType === et ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >{et}</button>
+                      ))
+                    })()}
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">Auto-set from subject</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Only shows exam types this subject has</p>
                 </div>
               </div>
 

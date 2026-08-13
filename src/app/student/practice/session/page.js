@@ -201,7 +201,7 @@ function ExplanationModal({ question, selectedKey, onClose, accent, onNext, isLa
 }
 
 // ── Desktop sidebar ───────────────────────────────────────────────────────────
-function DesktopSidebar({ config, questions, answers, index, secsLeft, totalSecs, accent, onJump, timerCol, isDark }) {
+function DesktopSidebar({ config, questions, answers, revealed = {}, index, secsLeft, totalSecs, accent, onJump, timerCol, isDark }) {
   const subjectName = config?.subjects?.[0] ?? ''
   const topicName   = config?.topicName ?? ''
   return (
@@ -227,11 +227,13 @@ function DesktopSidebar({ config, questions, answers, index, secsLeft, totalSecs
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
           {questions.map((q, i) => {
             const a = answers[q.id]
+            const isRev = revealed[q.id]
             const curr = i === index
             let bg = 'var(--bg-subtle)', bdr = '1px solid var(--border)', col = 'var(--text-tert)'
             if (curr) { bg = accent; bdr = `1px solid ${accent}`; col = '#fff' }
-            else if (a?.isCorrect) { bg = '#dcfce7'; bdr = '1px solid #86efac'; col = '#15803d' }
-            else if (a && !a.isCorrect) { bg = '#fee2e2'; bdr = '1px solid #fca5a5'; col = '#dc2626' }
+            else if (isRev && a?.isCorrect) { bg = '#dcfce7'; bdr = '1px solid #86efac'; col = '#15803d' }
+            else if (isRev && a && !a.isCorrect) { bg = '#fee2e2'; bdr = '1px solid #fca5a5'; col = '#dc2626' }
+            else if (a && !isRev) { bg = 'var(--bg-card)'; bdr = `1px solid ${accent}60`; col = accent }
             return (
               <button key={q.id} onClick={() => onJump(i)} title={`Q${i + 1}`} style={{
                 aspectRatio: '1', borderRadius: 8,
@@ -258,6 +260,7 @@ export default function PracticeSession() {
   const [config,    setConfig]   = useState(null)
   const [index,     setIndex]    = useState(0)
   const [answers,   setAnswers]  = useState({})
+  const [revealed,  setRevealed] = useState({}) // qId → true once user confirms
   const [secsLeft,  setSecs]     = useState(0)
   const [totalSecs, setTotal]    = useState(0)
   const [showModal, setShowModal] = useState(false)
@@ -335,11 +338,20 @@ export default function PracticeSession() {
 
   function handleAnswer(letter) {
     const q = questions[index]
-    if (!q || answersRef.current[q.id]) return
+    if (!q) return
+    // If already confirmed (revealed), lock it — no more changes
+    if (revealed[q.id]) return
     const isCorrect = letter === q.correct_answer
     const entry = { selected: letter, isCorrect }
+    // Update selection (but don't lock yet — user can still change)
     answersRef.current = { ...answersRef.current, [q.id]: entry }
     setAnswers(prev => ({ ...prev, [q.id]: entry }))
+  }
+
+  function confirmAnswer() {
+    const q = questions[index]
+    if (!q || !answers[q.id]) return
+    setRevealed(prev => ({ ...prev, [q.id]: true }))
   }
 
   function goNext() {
@@ -375,7 +387,7 @@ export default function PracticeSession() {
   const q            = questions[index]
   const ans          = q ? answers[q.id] : null
   const isStudyMode  = config?.answerMode === 'study'
-  const revealed     = !!ans && isStudyMode
+  const isRevealed   = q ? !!revealed[q.id] : false
   const correct      = q?.correct_answer
   const subjectName  = q?.subject_name ?? config?.subjects?.[0] ?? ''
   const topicName    = q?.topic_name   ?? config?.topicName     ?? ''
@@ -386,7 +398,7 @@ export default function PracticeSession() {
   const progress     = questions.length > 0 ? ((index + 1) / questions.length) * 100 : 0
   const timerCol     = totalSecs > 0 ? getTimerColor(secsLeft, totalSecs) : undefined
   const isLast       = index >= questions.length - 1
-  const correctCount = Object.values(answers).filter(a => a.isCorrect).length
+  const correctCount = Object.entries(answers).filter(([qId, a]) => revealed[qId] && a.isCorrect).length
   const pageBg       = isDark ? 'radial-gradient(ellipse 120% 60% at 60% 10%, #16102c 0%, #0c0d12 55%)' : 'var(--bg-base)'
 
   return (
@@ -412,7 +424,7 @@ export default function PracticeSession() {
 
         {/* ── Desktop sidebar ── */}
         <DesktopSidebar
-          config={config} questions={questions} answers={answers}
+          config={config} questions={questions} answers={answers} revealed={revealed}
           index={index} secsLeft={secsLeft} totalSecs={totalSecs}
           accent={accent} onJump={setIndex} timerCol={timerCol} isDark={isDark}
         />
@@ -447,11 +459,13 @@ export default function PracticeSession() {
           <div className="ps-mobile-strip" style={{ display: 'flex', gap: 5, padding: '8px 14px', overflowX: 'auto', flexShrink: 0, borderBottom: '1px solid var(--border)', background: 'var(--bg-card)' }}>
             {questions.map((qq, i) => {
               const a = answers[qq.id]
+              const isRev = revealed[qq.id]
               const curr = i === index
               let bg = 'var(--bg-subtle)', bdr = '1px solid var(--border)', col = 'var(--text-tert)'
               if (curr) { bg = accent; bdr = `1px solid ${accent}`; col = '#fff' }
-              else if (a?.isCorrect) { bg = '#dcfce7'; bdr = '1px solid #86efac'; col = '#15803d' }
-              else if (a && !a.isCorrect) { bg = '#fee2e2'; bdr = '1px solid #fca5a5'; col = '#dc2626' }
+              else if (isRev && a?.isCorrect) { bg = '#dcfce7'; bdr = '1px solid #86efac'; col = '#15803d' }
+              else if (isRev && a && !a.isCorrect) { bg = '#fee2e2'; bdr = '1px solid #fca5a5'; col = '#dc2626' }
+              else if (a && !isRev) { bg = 'var(--bg-card)'; bdr = `1px solid ${accent}60`; col = accent }
               return (
                 <button key={qq.id} onClick={() => setIndex(i)} style={{ width: 30, height: 30, borderRadius: 7, flexShrink: 0, fontSize: 10, fontWeight: 800, background: bg, border: bdr, color: col, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .1s' }}>
                   {i + 1}
@@ -527,20 +541,20 @@ export default function PracticeSession() {
                   let letterBg = isDark ? 'rgba(255,255,255,.07)' : '#f3f4f6'
                   let letterColor = isDark ? 'rgba(255,255,255,.4)' : '#6b7280'
                   let letterContent = letter
-                  if (revealed && isCorrectOpt) {
+                  if (isRevealed && isCorrectOpt) {
                     bg = isDark ? 'rgba(52,211,153,.1)' : '#f0fdf4'; border = '2px solid #86efac'
                     textColor = isDark ? '#34d399' : '#15803d'; letterBg = '#22c55e'; letterColor = '#fff'; letterContent = '✓'
-                  } else if (revealed && isPickedOpt && !isCorrectOpt) {
+                  } else if (isRevealed && isPickedOpt && !isCorrectOpt) {
                     bg = isDark ? 'rgba(248,113,113,.08)' : '#fef2f2'; border = '2px solid #fca5a5'
                     textColor = isDark ? '#f87171' : '#dc2626'; letterBg = '#ef4444'; letterColor = '#fff'; letterContent = '✗'
-                  } else if (!revealed && isPickedOpt) {
+                  } else if (!isRevealed && isPickedOpt) {
                     // Show selected state in practice mode
                     bg = isDark ? `${accent}18` : `${accent}10`; border = `2px solid ${accent}60`
                     textColor = isDark ? accent : accent; letterBg = accent; letterColor = '#fff'
                   }
                   return (
-                    <button key={letter} onClick={() => handleAnswer(letter)} disabled={revealed}
-                      style={{ padding: '13px 16px', borderRadius: 14, background: bg, border, display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', cursor: revealed ? 'default' : 'pointer', transition: 'background .12s, border-color .12s', width: '100%' }}>
+                    <button key={letter} onClick={() => handleAnswer(letter)} disabled={isRevealed}
+                      style={{ padding: '13px 16px', borderRadius: 14, background: bg, border, display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', cursor: isRevealed ? 'default' : 'pointer', transition: 'background .12s, border-color .12s', width: '100%' }}>
                       <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', background: letterBg, color: letterColor, transition: 'all .12s' }}>
                         {letterContent}
                       </span>
@@ -553,8 +567,8 @@ export default function PracticeSession() {
               </div>
             )}
 
-            {/* Inline feedback (study mode) */}
-            {revealed && q && (
+            {/* Inline feedback — only shown after answer is confirmed */}
+            {isRevealed && q && (
               <div style={{ borderRadius: 16, padding: '14px 18px 16px', flexShrink: 0, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff', background: ans.isCorrect ? '#22c55e' : '#ef4444' }}>
@@ -591,12 +605,17 @@ export default function PracticeSession() {
           <div style={{ flexShrink: 0, padding: '12px 24px', borderTop: '1px solid var(--border)', background: isDark ? 'rgba(12,13,18,.96)' : 'rgba(255,255,255,.96)', backdropFilter: 'blur(14px)' }}>
             <div className="ps-bottom-inner" style={{ display: 'flex', gap: 10 }}>
               <button onClick={goPrev} disabled={index === 0} style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--bg-subtle)', border: '1px solid var(--border)', fontSize: 18, fontWeight: 700, color: 'var(--text-sec)', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, flexShrink: 0, transition: 'opacity .15s' }}>←</button>
-              <PressBtn onClick={goNext} disabled={isStudyMode && !revealed && !ans} style={{ flex: 1, height: 52 }}>
-                {!ans && !isStudyMode ? 'Select an answer'
-                  : !revealed && isStudyMode ? 'Select an answer'
-                  : isLast ? 'Finish →'
-                  : 'Next →'}
-              </PressBtn>
+              {/* Study mode: confirm selection first, then next. Practice mode: go straight to next. */}
+              {isStudyMode && ans && !isRevealed
+                ? <PressBtn onClick={confirmAnswer} style={{ flex: 1, height: 52 }}>Check answer →</PressBtn>
+                : <PressBtn
+                    onClick={goNext}
+                    disabled={!ans}
+                    style={{ flex: 1, height: 52 }}
+                  >
+                    {!ans ? 'Select an answer' : isLast ? 'Finish →' : 'Next →'}
+                  </PressBtn>
+              }
             </div>
           </div>
         </div>

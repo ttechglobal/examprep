@@ -303,77 +303,161 @@ function BatchHistory({ subjectId, examType }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 // ── Year coverage register ────────────────────────────────────────────────────
-function YearCoverage({ subjectId, examType }) {
+function YearCoverage({ examType }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showAll, setShowAll] = useState(false)   // expand to show all subjects
 
   useEffect(() => {
-    if (!subjectId) return
     setLoading(true)
-    const p = new URLSearchParams({ subjectId })
-    if (examType && examType !== 'ALL') p.set('examType', examType)
-    fetch(`/api/admin/questions/coverage-years?${p}`)
+    setData(null)
+    const p = new URLSearchParams({ examType: examType === 'ALL' ? 'ALL' : examType })
+    fetch(`/api/admin/questions/coverage-matrix?${p}`)
       .then(r => r.json())
       .then(d => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [subjectId, examType])
+  }, [examType])
 
-  if (loading) return <div className="flex justify-center py-12"><Spinner /></div>
-  if (!data) return <p className="text-center text-gray-400 text-sm py-10">Could not load year data.</p>
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="flex flex-col items-center gap-3">
+        <Spinner />
+        <p className="text-sm text-gray-400">Loading coverage data…</p>
+      </div>
+    </div>
+  )
+  if (!data || !data.subjects?.length) return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center space-y-3">
+      <p className="text-gray-400 text-sm">No subjects found for {examType}.</p>
+      <Link href="/admin/subjects-manager" className="text-indigo-600 text-sm font-bold hover:underline">
+        Add subjects →
+      </Link>
+    </div>
+  )
 
-  const { years = [], totalYears, totalQuestions } = data
+  const { subjects, years, matrix } = data
+  const displaySubjects = showAll ? subjects : subjects.slice(0, 12)
+
+  // Summary stats
+  const totalQ    = subjects.reduce((a, s) => a + s.totalQuestions, 0)
+  const doneSubj  = subjects.filter(s => s.yearsCovered > 0).length
+  const missingQ  = subjects.filter(s => s.totalQuestions === 0).length
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
-      {/* Summary */}
-      <div className="flex items-center gap-6 flex-wrap">
-        <div>
-          <p className="text-2xl font-black text-gray-900 tabular-nums">{totalYears}</p>
-          <p className="text-xs text-gray-400">years with questions</p>
-        </div>
-        <div>
-          <p className="text-2xl font-black text-indigo-700 tabular-nums">{totalQuestions.toLocaleString()}</p>
-          <p className="text-xs text-gray-400">total questions</p>
-        </div>
-        <div>
-          <p className="text-2xl font-black text-red-500 tabular-nums">{years.length - totalYears}</p>
-          <p className="text-xs text-gray-400">years missing</p>
-        </div>
-        <div className="ml-auto">
-          <Link
-            href="/admin/questions/import"
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors"
-          >
-            ⬆ Import missing years →
-          </Link>
-        </div>
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total questions', value: totalQ.toLocaleString(), color: 'text-indigo-700' },
+          { label: 'Subjects with data', value: `${doneSubj} / ${subjects.length}`, color: 'text-green-700' },
+          { label: 'Subjects missing', value: missingQ, color: 'text-red-500' },
+          { label: 'Years tracked', value: years.length, color: 'text-gray-700' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-white border border-gray-200 rounded-2xl p-4">
+            <p className={`text-xl font-black tabular-nums ${color}`}>{value}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{label}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-[11px] text-gray-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500 inline-block" /> 20+ questions</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-300 inline-block" /> 10–19</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400 inline-block" /> 1–9</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200 inline-block" /> None</span>
+      {/* Import CTA */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">
+          Green = uploaded · Amber = partial · Grey = missing · Click any cell to import that year
+        </p>
+        <Link
+          href="/admin/questions/import"
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors"
+        >
+          ⬆ Import questions →
+        </Link>
       </div>
 
-      {/* Year grid */}
-      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-        {years.map(({ year, count, has }) => {
-          const bg = count >= 20 ? 'bg-green-500 text-white' :
-                     count >= 10 ? 'bg-green-300 text-green-900' :
-                     count >= 1  ? 'bg-amber-400 text-amber-900' :
-                                   'bg-gray-100 text-gray-400 border border-gray-200'
-          return (
-            <div key={year} className={`rounded-xl p-2 text-center ${bg}`}>
-              <p className="text-xs font-black">{year}</p>
-              <p className="text-[10px] font-medium mt-0.5">
-                {has ? `${count}q` : '—'}
-              </p>
-            </div>
-          )
-        })}
+      {/* The table */}
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                {/* Subject column */}
+                <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 font-black text-gray-600 whitespace-nowrap border-r border-gray-100 min-w-[160px]">
+                  Subject
+                </th>
+                {/* Total column */}
+                <th className="px-3 py-3 font-black text-gray-600 whitespace-nowrap text-center border-r border-gray-100 bg-gray-50">
+                  Total
+                </th>
+                {/* Year columns */}
+                {years.map(y => (
+                  <th key={y} className="px-2 py-3 font-bold text-gray-500 whitespace-nowrap text-center min-w-[44px]">
+                    {y}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {displaySubjects.map((s, i) => {
+                const counts = matrix[s.id] ?? {}
+                const rowTotal = s.totalQuestions
+                return (
+                  <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
+                    {/* Subject name */}
+                    <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-bold text-gray-800 whitespace-nowrap border-r border-gray-100" style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      {s.name}
+                      <span className="ml-1.5 text-[10px] font-medium text-gray-400">{s.exam_type}</span>
+                    </td>
+                    {/* Total */}
+                    <td className="px-3 py-2.5 text-center font-black border-r border-gray-100 whitespace-nowrap">
+                      <span className={rowTotal > 0 ? 'text-indigo-700' : 'text-gray-300'}>
+                        {rowTotal > 0 ? rowTotal.toLocaleString() : '—'}
+                      </span>
+                    </td>
+                    {/* Year cells */}
+                    {years.map(y => {
+                      const count = counts[y] ?? 0
+                      const bg = count >= 40 ? 'bg-green-500 text-white'
+                               : count >= 20 ? 'bg-green-400 text-white'
+                               : count >= 10 ? 'bg-green-200 text-green-800'
+                               : count >= 1  ? 'bg-amber-100 text-amber-800'
+                               : ''
+                      return (
+                        <td key={y} className="px-1 py-1.5 text-center">
+                          <Link
+                            href={`/admin/questions/import?subject=${encodeURIComponent(s.name)}&examType=${s.exam_type}&year=${y}`}
+                            title={count > 0 ? `${count} questions` : `Import ${s.name} ${s.exam_type} ${y}`}
+                            className={`flex items-center justify-center w-9 h-7 rounded-lg mx-auto text-[11px] font-bold transition-colors ${
+                              count > 0
+                                ? `${bg} hover:opacity-80`
+                                : 'text-gray-200 hover:bg-indigo-50 hover:text-indigo-500 border border-dashed border-gray-100 hover:border-indigo-300'
+                            }`}
+                          >
+                            {count > 0 ? count : '+'}
+                          </Link>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Show more */}
+        {subjects.length > 12 && (
+          <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              Showing {displaySubjects.length} of {subjects.length} subjects
+            </p>
+            <button
+              onClick={() => setShowAll(v => !v)}
+              className="text-xs font-bold text-indigo-600 hover:underline"
+            >
+              {showAll ? 'Show fewer ↑' : `Show all ${subjects.length} subjects ↓`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -382,6 +466,7 @@ function YearCoverage({ subjectId, examType }) {
 export default function PastQuestionsPage() {
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
+  const [subjectName,    setSubjectName]    = useState('')   // display name only
   const [examType,       setExamType]       = useState('WAEC')
   const [activeTab,      setActiveTab]      = useState('questions')
   const [questions,      setQuestions]      = useState([])
@@ -397,6 +482,24 @@ export default function PastQuestionsPage() {
   const [selected,       setSelected]       = useState(null)
   const [coreTopicIds,   setCoreTopicIds]   = useState(new Set())
 
+  // ── Group subjects by name so UI shows "Mathematics" not "Mathematics WAEC" + "Mathematics JAMB"
+  const groupedSubjects = useMemo(() => {
+    const map = {}
+    for (const s of subjects) {
+      if (!map[s.name]) map[s.name] = { name: s.name, exams: {} }
+      map[s.name].exams[s.exam_type] = s
+    }
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
+  }, [subjects])
+
+  // Resolve subjectId whenever name or examType changes
+  useEffect(() => {
+    const group = groupedSubjects.find(g => g.name === subjectName)
+    if (!group) return
+    const row = group.exams[examType] ?? Object.values(group.exams)[0]
+    if (row?.id) setSubjectId(row.id)
+  }, [subjectName, examType, groupedSubjects])
+
   // Load subjects
   useEffect(() => {
     fetch('/api/admin/subjects?active=true')
@@ -404,7 +507,10 @@ export default function PastQuestionsPage() {
       .then(d => {
         const list = (Array.isArray(d) ? d : (d.subjects ?? [])).filter(s => s.is_active !== false)
         setSubjects(list)
-        if (list[0]) setSubjectId(list[0].id)
+        if (list[0]) {
+          setSubjectName(list[0].name)
+          setSubjectId(list[0].id)
+        }
       })
       .catch(() => {})
   }, [])
@@ -498,9 +604,13 @@ export default function PastQuestionsPage() {
       <div className="flex items-end gap-4 flex-wrap">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs font-bold text-gray-500 mb-1.5">Subject</label>
-          <select value={subjectId} onChange={e => { setSubjectId(e.target.value); setPage(1) }}
+          <select value={subjectName} onChange={e => { setSubjectName(e.target.value); setPage(1) }}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {groupedSubjects.map(g => (
+              <option key={g.name} value={g.name}>
+                {g.name}{Object.keys(g.exams).length === 1 ? ` (${Object.keys(g.exams)[0]} only)` : ''}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -635,7 +745,7 @@ export default function PastQuestionsPage() {
       )}
 
       {activeTab === 'years' && (
-        <YearCoverage subjectId={subjectId} examType={examType} />
+        <YearCoverage examType={examType} />
       )}
 
       {selected && (

@@ -469,15 +469,22 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
   const isDark = useIsDark()
   const today = new Date()
 
-  // Show last 7 days rolling (today + 6 days back) — always has data if you practiced recently
+  // Always Mon–Sun of the current week
+  const dow = today.getDay() // 0=Sun, 1=Mon … 6=Sat
+  const daysSinceMon = (dow + 6) % 7
+  const thisMonday = new Date(today)
+  thisMonday.setDate(today.getDate() - daysSinceMon)
+  thisMonday.setHours(0, 0, 0, 0)
+  const todayKey = today.toISOString().slice(0, 10)
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today)
-    d.setDate(today.getDate() - (6 - i)) // oldest first
+    const d = new Date(thisMonday)
+    d.setDate(thisMonday.getDate() + i)
     d.setHours(0, 0, 0, 0)
-    const key     = d.toISOString().slice(0, 10)
-    const isToday = i === 6
-    const label   = isToday ? 'T' : d.toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 1)
-    return { key, label, count: sessionDays[key] ?? 0, isToday }
+    const key      = d.toISOString().slice(0, 10)
+    const isToday  = key === todayKey
+    const isFuture = d > today
+    return { key, label: DAY_LABELS[i], count: isFuture ? 0 : (sessionDays[key] ?? 0), isToday, isFuture }
   })
   const maxCount = Math.max(...days.map(d => d.count), 1)
 
@@ -491,13 +498,15 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 40 }}>
           {days.map((day, i) => {
             const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 32)) : 2
-            const col  = day.count > 0
+            const col  = day.isFuture
+              ? (isDark ? 'rgba(255,255,255,.03)' : '#f8fafc')
+              : day.count > 0
               ? (day.isToday ? '#1264E5' : isDark ? 'rgba(24,183,242,.5)' : '#5cb8ea')
               : (isDark ? 'rgba(255,255,255,.07)' : '#e8eef8')
             return (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                 <div style={{ width: '100%', height: barH, borderRadius: '3px 3px 1px 1px', background: col }} />
-                <span style={{ fontSize: 7, fontWeight: day.isToday ? 700 : 400, color: day.isToday ? '#1264E5' : 'var(--text-tert)', lineHeight: 1 }}>{day.label}</span>
+                <span style={{ fontSize: 7, fontWeight: day.isToday ? 700 : 400, color: day.isFuture ? (isDark ? 'rgba(255,255,255,.15)' : '#d1d5db') : day.isToday ? '#1264E5' : 'var(--text-tert)', lineHeight: 1 }}>{day.label.slice(0, 1)}</span>
               </div>
             )
           })}
@@ -509,9 +518,10 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
 
 // ── Right sidebar: Class rank snapshot ────────────────────────────────────────
 // Matches prototype: medal/rank + first name + XP, "you" row highlighted cyan
-function SidebarClassRank({ leaderboard, myId }) {
+function SidebarClassRank({ leaderboard, myId, scope = 'national' }) {
   const medals = ['🥇', '🥈', '🥉']
   const { totalPoints: liveXP } = usePoints()
+  const scopeLabel = scope === 'class' ? 'Class' : scope === 'school' ? 'School' : 'National'
 
   if (!leaderboard.length) return (
     <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -528,7 +538,10 @@ function SidebarClassRank({ leaderboard, myId }) {
   return (
     <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
       <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</p>
+          <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(24,183,242,.12)', color: '#18B7F2' }}>{scopeLabel}</span>
+        </div>
         <Link href="/student/community" style={{ fontSize: 10, fontWeight: 700, color: '#18B7F2', textDecoration: 'none' }}>Full board →</Link>
       </div>
       <div>
@@ -727,21 +740,41 @@ export default function DashboardPage() {
   const [sessionDays,   setSessionDays]   = useState({})
   const [realStreak,    setRealStreak]    = useState(0)
   const [leaderboard,   setLeaderboard]   = useState([])
+  const [lboardScope,   setLboardScope]   = useState('national') // 'class' | 'school' | 'national'
 
   useEffect(() => { if (userId) load(userId) }, [userId]) // eslint-disable-line
 
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        fetch('/api/leaderboard/global?limit=5')
-          .then(r => r.json())
-          .then(data => setLeaderboard(data.leaderboard ?? []))
-          .catch(() => {})
-      }
+      if (document.visibilityState === 'visible') fetchLeaderboard()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
+
+  // Cascade: class → school cohort → national
+  async function fetchLeaderboard() {
+    try {
+      // 1. Try class leaderboard
+      const classRes = await fetch('/api/leaderboard/class?limit=5').then(r => r.json()).catch(() => ({}))
+      if (classRes.leaderboard?.length) {
+        setLeaderboard(classRes.leaderboard.slice(0, 5))
+        setLboardScope('class')
+        return
+      }
+      // 2. Try school cohort leaderboard
+      const cohortRes = await fetch('/api/leaderboard/cohort?scope=school&limit=5').then(r => r.json()).catch(() => ({}))
+      if (cohortRes.leaderboard?.length) {
+        setLeaderboard(cohortRes.leaderboard.slice(0, 5))
+        setLboardScope('school')
+        return
+      }
+      // 3. Fall back to national
+      const globalRes = await fetch('/api/leaderboard/global?limit=5').then(r => r.json()).catch(() => ({}))
+      setLeaderboard(globalRes.leaderboard ?? [])
+      setLboardScope('national')
+    } catch { /* silent */ }
+  }
 
   async function load(uid) {
     const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d.toISOString() })()
@@ -839,10 +872,7 @@ export default function DashboardPage() {
         .then(data => setPlanItems(data.topics ?? {}))
         .catch(() => {})
 
-      fetch('/api/leaderboard/global?limit=5')
-        .then(r => r.json())
-        .then(data => setLeaderboard(data.leaderboard ?? []))
-        .catch(() => {})
+      fetchLeaderboard()
 
     } catch (err) {
       console.error('[dashboard load]', err?.message ?? err)
@@ -877,7 +907,7 @@ export default function DashboardPage() {
       {/* Two-column layout on desktop: main feed left, activity+leaderboard right */}
       <style>{`
         @media (min-width: 1024px) {
-          .dash-grid  { display: grid !important; grid-template-columns: 1fr 196px; gap: 20px; align-items: start; }
+          .dash-grid  { display: grid !important; grid-template-columns: 1fr 240px; gap: 24px; align-items: start; }
           .dash-right { display: flex !important; }
         }
         @media (max-width: 1023px) {
@@ -920,7 +950,7 @@ export default function DashboardPage() {
         {/* ── RIGHT sidebar (desktop only) ── */}
         <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
           <SidebarActivity sessionDays={sessionDays} streak={realStreak} />
-          <SidebarClassRank leaderboard={leaderboard} myId={profile?.id} />
+          <SidebarClassRank leaderboard={leaderboard} myId={profile?.id} scope={lboardScope} />
           <SidebarTarget profile={profile} onEdit={() => setShowGoalModal(true)} />
         </div>
 

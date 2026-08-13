@@ -9,8 +9,25 @@ const jakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata = {
-  title: 'ExamPrep',
+  title: 'ExamPrep A1',
   description: 'Prepare for WAEC and JAMB with confidence',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'ExamPrep',
+  },
+  icons: {
+    icon: '/images/examprep_logo.png',
+    apple: '/images/examprep_logo.png',
+  },
+}
+
+export const viewport = {
+  themeColor: '#062A78',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({ children }) {
@@ -26,6 +43,15 @@ export default function RootLayout({ children }) {
               if (dark) document.documentElement.classList.add('dark');
             } catch(e) {}
           })();
+        ` }} />
+        {/* Register service worker for PWA / offline support */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .catch(function(err) { console.warn('[SW] Registration failed:', err); });
+            });
+          }
         ` }} />
       </head>
       <body className="font-jakarta antialiased bg-base text-primary">

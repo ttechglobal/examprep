@@ -1,175 +1,139 @@
-/**
- * ExamPrep Service Worker
- * Strategy: Cache-first for all static assets (app shell)
- * Network-first with cache fallback for API/dynamic content
- */
+// ExamPrep Service Worker — v1
+// Strategy:
+//   • App shell (HTML pages, JS, CSS, fonts): Cache-first with network fallback
+//   • API calls: Network-first with cache fallback (stale data is better than nothing)
+//   • Images: Cache-first, long TTL
+//   • /offline: Always cached as fallback for failed navigations
 
-const CACHE_NAME = 'examprep-v1';
-const OFFLINE_URL = '/index.html';
+const CACHE_NAME   = 'examprep-v1'
+const API_CACHE    = 'examprep-api-v1'
+const IMAGE_CACHE  = 'examprep-img-v1'
 
-// All assets that make up the app shell — cached on install
-const APP_SHELL = [
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-];
+// App shell files to pre-cache on install
+const SHELL_URLS = [
+  '/',
+  '/offline',
+  '/student/dashboard',
+  '/student/practice',
+  '/student/learn',
+  '/student/progress',
+  '/images/examprep_logo.png',
+  '/images/zara_studybuddy.png',
+]
 
-// ── Install: pre-cache app shell ──────────────────────────────────────────────
+// ── Install: pre-cache shell ──────────────────────────────────────────────────
 self.addEventListener('install', event => {
-  console.log('[SW] Installing ExamPrep v1');
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('[SW] Pre-caching app shell');
-      return cache.addAll(APP_SHELL);
-    }).then(() => {
-      // Activate immediately without waiting for old SW to die
-      return self.skipWaiting();
-    })
-  );
-});
-
-// ── Activate: clean up old caches ────────────────────────────────────────────
-self.addEventListener('activate', event => {
-  console.log('[SW] Activating ExamPrep v1');
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames
-          .filter(name => name !== CACHE_NAME)
-          .map(name => {
-            console.log('[SW] Deleting old cache:', name);
-            return caches.delete(name);
+      // addAll fails if any request fails — use individual adds so one miss
+      // doesn't break the whole install
+      return Promise.allSettled(
+        SHELL_URLS.map(url =>
+          cache.add(url).catch(err => {
+            console.warn('[SW] Failed to pre-cache:', url, err)
           })
-      );
-    }).then(() => {
-      // Take control of all open clients immediately
-      return self.clients.claim();
-    })
-  );
-});
+        )
+      )
+    }).then(() => self.skipWaiting())
+  )
+})
 
-// ── Fetch: serve from cache, fall back to network ────────────────────────────
+// ── Activate: remove old caches ───────────────────────────────────────────────
+self.addEventListener('activate', event => {
+  const VALID = [CACHE_NAME, API_CACHE, IMAGE_CACHE]
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => !VALID.includes(k)).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  )
+})
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
+  const { request } = event
+  const url = new URL(request.url)
 
-  // Skip non-GET requests and cross-origin requests (except Google Fonts)
-  if (request.method !== 'GET') return;
+  // Only handle same-origin and GET requests
+  if (url.origin !== location.origin) return
+  if (request.method !== 'GET') return
 
-  // Google Fonts — cache on first use (stale-while-revalidate)
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(staleWhileRevalidate(request, 'examprep-fonts-v1'));
-    return;
+  // ── Images: cache-first ───────────────────────────────────────────────────
+  if (url.pathname.startsWith('/images/') || url.pathname.match(/\.(png|jpg|jpeg|webp|svg|ico|gif)$/)) {
+    event.respondWith(cacheFirst(request, IMAGE_CACHE))
+    return
   }
 
-  // Skip non-same-origin requests entirely
-  if (url.origin !== location.origin) return;
-
-  // App shell: cache-first
-  event.respondWith(cacheFirst(request));
-});
-
-// ── Cache strategies ──────────────────────────────────────────────────────────
-
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) {
-    // Serve from cache; revalidate in background
-    refreshCache(request);
-    return cached;
+  // ── Static assets (_next/static): cache-first, long-lived ────────────────
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(cacheFirst(request, CACHE_NAME))
+    return
   }
-  // Not in cache — fetch and store
+
+  // ── API calls: network-first, fall back to cache ──────────────────────────
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(networkFirst(request, API_CACHE))
+    return
+  }
+
+  // ── Navigation (HTML): network-first, fall back to cached page or /offline ─
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          // Cache successful navigations
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(async () => {
+          // Try the exact URL from cache
+          const cached = await caches.match(request)
+          if (cached) return cached
+          // Try the dashboard as shell fallback
+          const dashboard = await caches.match('/student/dashboard')
+          if (dashboard) return dashboard
+          // Last resort: offline page
+          return caches.match('/offline') ?? new Response('Offline', { status: 503 })
+        })
+    )
+    return
+  }
+
+  // ── Everything else: network-first ───────────────────────────────────────
+  event.respondWith(networkFirst(request, CACHE_NAME))
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function cacheFirst(request, cacheName) {
+  const cache  = await caches.open(cacheName)
+  const cached = await cache.match(request)
+  if (cached) return cached
   try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
-    }
-    return response;
+    const response = await fetch(request)
+    if (response.ok) cache.put(request, response.clone())
+    return response
   } catch {
-    // Truly offline and not cached — return app shell as fallback
-    const fallback = await caches.match(OFFLINE_URL);
-    return fallback || new Response('ExamPrep is offline. Please try again when connected.', {
+    return new Response('', { status: 503 })
+  }
+}
+
+async function networkFirst(request, cacheName, timeoutMs = 4000) {
+  const cache = await caches.open(cacheName)
+  try {
+    // Race the network against a timeout — on slow connections, return cache fast
+    const response = await Promise.race([
+      fetch(request),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+    ])
+    if (response.ok) cache.put(request, response.clone())
+    return response
+  } catch {
+    const cached = await cache.match(request)
+    return cached ?? new Response(JSON.stringify({ error: 'offline' }), {
       status: 503,
-      headers: { 'Content-Type': 'text/plain' }
-    });
-  }
-}
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const networkFetch = fetch(request).then(response => {
-    if (response.ok) cache.put(request, response.clone());
-    return response;
-  }).catch(() => null);
-
-  return cached || (await networkFetch) || new Response('', { status: 503 });
-}
-
-function refreshCache(request) {
-  // Fire-and-forget background revalidation
-  fetch(request).then(response => {
-    if (response.ok) {
-      caches.open(CACHE_NAME).then(cache => cache.put(request, response));
-    }
-  }).catch(() => {});
-}
-
-// ── Background sync: queue offline study actions ─────────────────────────────
-self.addEventListener('sync', event => {
-  if (event.tag === 'sync-progress') {
-    event.waitUntil(syncStudyProgress());
-  }
-});
-
-async function syncStudyProgress() {
-  // When the real backend is wired up, this will flush any
-  // locally-stored study sessions to the server
-  console.log('[SW] Background sync: study progress');
-}
-
-// ── Push notifications ───────────────────────────────────────────────────────
-self.addEventListener('push', event => {
-  if (!event.data) return;
-
-  let data;
-  try { data = event.data.json(); }
-  catch { data = { title: 'ExamPrep', body: event.data.text() }; }
-
-  const options = {
-    body: data.body || 'Time to study! Keep your streak alive. 🔥',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
-    tag: 'examprep-reminder',
-    renotify: true,
-    vibrate: [200, 100, 200],
-    data: { url: data.url || '/index.html' },
-    actions: [
-      { action: 'study', title: '▶ Start Quick 5' },
-      { action: 'later', title: 'Later' }
-    ]
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'ExamPrep', options)
-  );
-});
-
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  if (event.action === 'later') return;
-
-  const url = event.notification.data?.url || '/index.html';
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      // Focus existing tab if open
-      for (const client of windowClients) {
-        if (client.url === url && 'focus' in client) return client.focus();
-      }
-      // Otherwise open a new tab
-      if (clients.openWindow) return clients.openWindow(url);
+      headers: { 'Content-Type': 'application/json' },
     })
-  );
-});
+  }
+}

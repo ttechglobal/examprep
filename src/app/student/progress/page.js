@@ -228,7 +228,7 @@ export default function ProgressPage() {
   }, [userId]) // eslint-disable-line
 
   async function load(uid) {
-      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0,0,0,0); return d.toISOString() })()
+      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 90); d.setHours(0,0,0,0); return d.toISOString() })()
       const [{ data: prof }, { data: masteryFlat }, { data: attemptRows }, { data: allSubjects }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', uid).single(),
         // No join on student_topic_mastery — the FK to topics isn't exposed via PostgREST
@@ -237,7 +237,7 @@ export default function ProgressPage() {
           .eq('student_id', uid)
           .order('score', { ascending: true }),
         supabase.from('question_attempts')
-          .select('created_at, is_correct')
+          .select('created_at, is_correct, topic_id')
           .eq('student_id', uid)
           .gte('created_at', weekStart),
         supabase.from('subjects').select('id, name'),
@@ -295,17 +295,12 @@ export default function ProgressPage() {
       }
       setMastery(masteryData)
 
-      // Activity — derive sessions from question_attempts (group into sessions by 30-min gaps)
+      // Activity — 1 session per day that has any attempt (simple and reliable)
       const byDate = {}
-      if (attemptRows?.length > 0) {
-        let lastTs = null
-        for (const a of [...attemptRows].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))) {
-          if (!a.created_at) continue
-          const day = a.created_at.slice(0, 10)
-          const ts  = new Date(a.created_at).getTime()
-          if (!lastTs || ts - lastTs > 30 * 60 * 1000) byDate[day] = (byDate[day] ?? 0) + 1
-          lastTs = ts
-        }
+      for (const a of attemptRows ?? []) {
+        if (!a.created_at) continue
+        const day = a.created_at.slice(0, 10)
+        byDate[day] = 1
       }
       setSessions(byDate)
       setLoading(false)
