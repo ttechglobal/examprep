@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExamPrep — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #050D1F; color: #fff; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+    .logo { width: 64px; height: 64px; background: #1264E5; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 20px; box-shadow: 0 6px 0 #0a3fa0; }
+    h1 { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 8px; }
+    p { font-size: 14px; color: rgba(255,255,255,.5); line-height: 1.6; max-width: 300px; margin: 0 auto 24px; }
+    button { padding: 14px 28px; background: #1264E5; color: #fff; border: none; border-radius: 14px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 5px 0 #0a3fa0; font-family: inherit; }
+    button:active { transform: translateY(3px); box-shadow: 0 2px 0 #0a3fa0; }
+    .status { margin-top: 16px; font-size: 12px; color: rgba(255,255,255,.3); }
+  </style>
+</head>
+<body>
+  <div class="logo">📚</div>
+  <h1>You're offline</h1>
+  <p>Visit your dashboard or practice page while connected and ExamPrep will save them for offline use.</p>
+  <button onclick="window.location.reload()">Try again</button>
+  <p class="status" id="status"></p>
+  <script>
+    window.addEventListener('online', () => { document.getElementById('status').textContent = 'Connection restored — reloading…'; setTimeout(() => window.location.href = '/student/dashboard', 1000) })
+    if (navigator.onLine) window.location.href = '/student/dashboard'
+  </script>
+</body>
+</html>

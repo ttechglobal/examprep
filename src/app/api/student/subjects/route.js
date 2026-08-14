@@ -1,7 +1,17 @@
-// src/app/api/student/subjects/route.js — v3
-// Simplified: reads directly from profiles.subjects (string array)
-// cross-referenced against the subjects table. No dependency on
-// student_learning_paths which may not exist or have RLS issues.
+// src/app/api/student/subjects/route.js — v6
+// Supports separate WAEC and JAMB subject lists per student.
+// DB schema: profiles table should have two columns:
+//   subjects_waec  text[]   (WAEC subject names)
+//   subjects_jamb  text[]   (JAMB subject names)
+//
+// Migration to run in Supabase SQL editor:
+//   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subjects_waec text[] DEFAULT '{}';
+//   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subjects_jamb text[] DEFAULT '{}';
+//   -- Back-fill existing students: copy their current subjects into both columns
+//   UPDATE profiles SET subjects_waec = subjects, subjects_jamb = subjects WHERE subjects IS NOT NULL AND array_length(subjects,1) > 0;
+//
+// Falls back to legacy `profiles.subjects` if subjects_waec/subjects_jamb are empty,
+// so existing students are not affected before migration runs.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -28,41 +38,38 @@ export async function GET(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const db = svc()
+  const url = new URL(request.url)
+  const examParam = url.searchParams.get('exam') // 'WAEC' | 'JAMB' | null
 
-  // Read profile.subjects directly — this is the source of truth
   const { data: profile } = await db
     .from('profiles')
-    .select('subjects, exam_type')
+    .select('subjects, subjects_waec, subjects_jamb, exam_type')
     .eq('id', user.id)
     .single()
 
-  const subjectNames = profile?.subjects ?? []
+  const profileExam = profile?.exam_type ?? 'WAEC'
+  const examType    = examParam ?? (profileExam === 'BOTH' ? 'WAEC' : profileExam)
 
-  if (!subjectNames.length) {
-    return NextResponse.json([])
+  // Pick the right list: prefer the exam-specific column, fall back to legacy subjects
+  let subjectNames = []
+  if (examType === 'WAEC') {
+    subjectNames = profile?.subjects_waec?.length ? profile.subjects_waec : (profile?.subjects ?? [])
+  } else {
+    subjectNames = profile?.subjects_jamb?.length ? profile.subjects_jamb : (profile?.subjects ?? [])
   }
 
-  // Look up subjects in DB to get IDs and metadata
+  if (!subjectNames.length) return NextResponse.json([])
+
   const { data: subjectRows } = await db
     .from('subjects')
     .select('id, name, slug, exam_type, is_active')
     .in('name', subjectNames)
+    .eq('exam_type', examType)
+    .eq('is_active', true)
 
-  // For any name not found in DB, create a stub so UI still shows it
-  const foundNames = new Set((subjectRows ?? []).map(s => s.name))
-  const stubs = subjectNames
-    .filter(name => !foundNames.has(name))
-    .map((name, i) => ({
-      id: `stub-${i}`, name,
-      slug: name.toLowerCase().replace(/\s+/g, '-'),
-      exam_type: profile?.exam_type ?? 'WAEC',
-      is_active: true,
-    }))
+  const allRows = subjectRows ?? []
 
-  const allRows = [...(subjectRows ?? []), ...stubs]
-
-  // Get question counts
-  const realIds = (subjectRows ?? []).map(s => s.id)
+  const realIds = allRows.map(s => s.id)
   let countMap = {}
   if (realIds.length) {
     const { data: counts } = await db
@@ -70,17 +77,39 @@ export async function GET(request) {
     ;(counts ?? []).forEach(q => { countMap[q.subject_id] = (countMap[q.subject_id] ?? 0) + 1 })
   }
 
-  const result = allRows
-    .filter(s => s.is_active !== false)
-    .map(s => ({
-      id:             s.id,
-      name:           s.name,
-      slug:           s.slug,
-      exam_type:      s.exam_type,
-      emoji:          SUBJECT_ICONS[s.name] ?? '📝',
-      question_count: countMap[s.id] ?? 0,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const nameOrder = {}
+  subjectNames.forEach((name, i) => { nameOrder[name] = i })
 
-  return NextResponse.json(result)
+  return NextResponse.json(
+    allRows
+      .map(s => ({
+        id: s.id, name: s.name, slug: s.slug, exam_type: s.exam_type,
+        emoji: SUBJECT_ICONS[s.name] ?? '📝',
+        question_count: countMap[s.id] ?? 0,
+      }))
+      .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99))
+  )
+}
+
+// PATCH — update the student's subject list for a specific exam
+// Body: { exam: 'WAEC' | 'JAMB', subjects: ['Chemistry', 'Physics', ...] }
+export async function PATCH(request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { exam, subjects } = await request.json()
+  if (!['WAEC', 'JAMB'].includes(exam)) {
+    return NextResponse.json({ error: 'exam must be WAEC or JAMB' }, { status: 400 })
+  }
+  if (!Array.isArray(subjects)) {
+    return NextResponse.json({ error: 'subjects must be an array' }, { status: 400 })
+  }
+
+  const db = svc()
+  const col = exam === 'WAEC' ? 'subjects_waec' : 'subjects_jamb'
+  const { error } = await db.from('profiles').update({ [col]: subjects }).eq('id', user.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, exam, subjects })
 }

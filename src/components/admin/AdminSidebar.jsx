@@ -36,6 +36,7 @@ const NAV = [
     { href: '/admin/subjects-manager',   label: 'Subjects',         icon: '📑' },
     { href: '/admin/curriculum',         label: 'Topic Tree',       icon: '🌿' },
     { href: '/admin/core-topics',        label: 'Core Topics',      icon: '⭐' },
+    { href: '/admin/flashcards',         label: 'Flashcards & Formulas', icon: '🃏' },
   ]},
   { section: 'PLATFORM', items: [
     { href: '/admin/users',              label: 'Students',         icon: '👤' },

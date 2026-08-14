@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
-import { buildSdashEnrichPrompt, parseQuestions, matchTopicSubtopic } from '@/lib/questionParser'
+import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic } from '@/lib/questionParser'
 
 // ── Sdash slug map: ExamPrep subject name → SdashAPI slug ────────────────────
 // Covers every ExamPrep subject name variant. Lookup is case-insensitive.
@@ -382,11 +382,12 @@ export default function SdashImportPage() {
       .catch(() => setTopics([]))
   }, [subjectId])
 
-  const selectedSubject = subjects.find(s => s.id === subjectId)
-  const sdashSlug = selectedSubject
-    ? slugForSubject(baseSubjectName(selectedSubject.name))
-    : null
-  const sdashType = SDASH_TYPE_MAP[examType] ?? 'wassce'
+  const selectedSubject = useMemo(() => subjects.find(s => s.id === subjectId), [subjects, subjectId])
+  const sdashSlug = useMemo(() => {
+    if (!selectedSubject) return null
+    return slugForSubject(baseSubjectName(selectedSubject.name))
+  }, [selectedSubject])
+  const sdashType = useMemo(() => SDASH_TYPE_MAP[examType] ?? 'wassce', [examType])
 
   const canImport = subjectId && sdashSlug && year
 
@@ -443,11 +444,27 @@ export default function SdashImportPage() {
   // ── Parse the AI paste-back ────────────────────────────────────────────────
   function handleParsePaste() {
     setParseError(null)
-    const result = parseQuestions(pasteText)
+    // Parse the lean enrichment response (index + explanation + tags only)
+    const result = parseEnrichment(pasteText)
     if (!result.valid) {
       setParseError(result.errors.join('\n'))
       return
     }
+    // Merge enrichment delta onto the original fetched questions
+    const merged = mergeSdashEnrichment(
+      fetchedQuestions,
+      result.enrichments,
+      examType,
+      selectedSubject?.name ?? 'Unknown Subject'
+    )
+    // Auto-match topics against loaded curriculum
+    const enriched = merged.map(q => {
+      const match = matchTopicSubtopic(q, topics)
+      return { ...q, _topicMatch: match }
+    })
+    setParsedQuestions(enriched)
+    setEnrichStep(4)
+  }
     // Auto-run topic matching against curriculum
     const enriched = result.questions.map(q => {
       const match = matchTopicSubtopic(q, topics)
@@ -1157,4 +1174,3 @@ export default function SdashImportPage() {
       )}
     </div>
   )
-}

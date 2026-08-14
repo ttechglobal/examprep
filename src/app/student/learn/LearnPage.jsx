@@ -293,72 +293,51 @@ export default function LearnPage() {
       <CoachBanner emoji={coach.emoji} message={coach.message} />
       <EXLWorldCard />
 
-      {subjectData.length > 0 ? (
-        <>
-          {/* Focus areas — weak topics */}
-          {allWeakTopics.length > 0 && (
-            <div>
-              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Focus areas</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {allWeakTopics.map(t => {
-                  const accentMap = { 'Physics': '#18B7F2', 'Chemistry': '#9b7ae0', 'Biology': '#4ade80', 'Mathematics': '#FFB800', 'Further Mathematics': '#FFB800' }
-                  const color = accentMap[t.subjectName] ?? '#9b7ae0'
-                  return (
-                    <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: 'var(--bg-card)', border: `1.5px solid ${color}25`, borderRadius: 13 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}14`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{getIcon(t.subjectName)}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-                        <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 1 }}>{t.subjectName} · {t.pct}% mastered</p>
-                        <div style={{ marginTop: 4, height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(t.pct, 2)}%` }} />
-                        </div>
-                      </div>
-                      <Link href="/student/practice" style={{ fontSize: 11, fontWeight: 800, color, background: `${color}12`, border: `1px solid ${color}25`, padding: '5px 10px', borderRadius: 8, textDecoration: 'none', flexShrink: 0 }}>
-                        Study →
-                      </Link>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Subject mastery */}
+      {/* Flashcards + Formulas entry cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <button onClick={() => router.push('/student/flashcards')}
+          style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',padding:'14px',borderRadius:16,background:'var(--bg-card)',border:'1.5px solid rgba(155,122,224,.3)',cursor:'pointer',textAlign:'left',fontFamily:'inherit',gap:8,transition:'all .12s' }}>
+          <div style={{ width:38,height:38,borderRadius:11,background:'rgba(155,122,224,.15)',border:'1px solid rgba(155,122,224,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18 }}>🃏</div>
           <div>
-            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Subject mastery</span>
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '0 14px' }}>
-              {subjectData.map((sub, i) => {
-                const colors   = resolveSubjectColors(sub.name, isDark)
-                const pctColor = sub.pct >= 70 ? '#4ade80' : sub.pct >= 40 ? '#FFB800' : '#f87171'
-                return (
-                  <div key={sub.name} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderBottom: i < subjectData.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: colors.bg, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{getIcon(sub.name)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{sub.name}</span>
-                        <span style={{ fontSize: 12, fontWeight: 900, color: pctColor }}>{sub.pct}%</span>
-                      </div>
-                      <div style={{ height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(sub.pct, 2)}%` }} />
-                      </div>
+            <p style={{ fontSize:13,fontWeight:800,color:'var(--text-prim)',marginBottom:2 }}>Flashcards</p>
+            <p style={{ fontSize:10,color:'var(--text-tert)',lineHeight:1.4 }}>Flip & learn key concepts by topic</p>
+          </div>
+        </button>
+        <button onClick={() => router.push('/student/formulas')}
+          style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',padding:'14px',borderRadius:16,background:'var(--bg-card)',border:'1.5px solid rgba(255,184,0,.3)',cursor:'pointer',textAlign:'left',fontFamily:'inherit',gap:8,transition:'all .12s' }}>
+          <div style={{ width:38,height:38,borderRadius:11,background:'rgba(255,184,0,.12)',border:'1px solid rgba(255,184,0,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18 }}>🧮</div>
+          <div>
+            <p style={{ fontSize:13,fontWeight:800,color:'var(--text-prim)',marginBottom:2 }}>Key Formulas</p>
+            <p style={{ fontSize:10,color:'var(--text-tert)',lineHeight:1.4 }}>Reference sheets for Maths, Physics & more</p>
+          </div>
+        </button>
+      </div>
+
+      {/* Focus areas — weak topics — shown whenever there's mastery data */}
+      {allWeakTopics.length > 0 && (
+        <div>
+          <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Focus areas</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {allWeakTopics.map(t => {
+              const accentMap = { 'Physics': '#18B7F2', 'Chemistry': '#9b7ae0', 'Biology': '#4ade80', 'Mathematics': '#FFB800', 'Further Mathematics': '#FFB800' }
+              const color = accentMap[t.subjectName] ?? '#9b7ae0'
+              return (
+                <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: 'var(--bg-card)', border: `1.5px solid ${color}25`, borderRadius: 13 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}14`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{getIcon(t.subjectName)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 1 }}>{t.subjectName} · {t.pct}% mastered</p>
+                    <div style={{ marginTop: 4, height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(t.pct, 2)}%` }} />
                     </div>
                   </div>
-                )
-              })}
-            </div>
+                  <Link href="/student/practice" style={{ fontSize: 11, fontWeight: 800, color, background: `${color}12`, border: `1px solid ${color}25`, padding: '5px 10px', borderRadius: 8, textDecoration: 'none', flexShrink: 0 }}>
+                    Practise →
+                  </Link>
+                </div>
+              )
+            })}
           </div>
-        </>
-      ) : (
-        /* No learning path yet — soft prompt, not a hard gate */
-        <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(18,100,229,.07)', border: '1px solid rgba(18,100,229,.18)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 22, flexShrink: 0 }}>🎯</span>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 2 }}>Take the diagnostic to see your progress</p>
-            <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>We'll track your mastery by topic as you practice.</p>
-          </div>
-          <Link href="/diagnostic" style={{ padding: '8px 12px', borderRadius: 9, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>
-            Start →
-          </Link>
         </div>
       )}
 

@@ -336,59 +336,74 @@ function NeedsAttention({ weakTopics, onPractise }) {
   )
 }
 
-// ── "Your target" strip ───────────────────────────────────────────────────────
-// Prototype: icon box + key/value rows + big days-left number on the right
+// ── "Your target" strip ─────────────────────────────────────────────────────
 function TargetStrip({ profile, onEdit }) {
   const course     = profile?.university_course?.trim() ?? ''
-  const university = profile?.target_university?.trim()  ?? ''
+  const university = profile?.target_university?.trim() ?? ''
+  const profession = profile?.desired_profession?.trim() ?? ''
   const examType   = profile?.exam_type ?? 'WAEC'
   const jambTotal  = profile?.jamb_total_target ?? 0
-  const hasAny     = course || university
+  const waecGrades = profile?.waec_target_grades ?? {}
+  const hasAny     = course || university || profession
 
-  // Calculate days until next June (WAEC/JAMB exam period)
   const now      = new Date()
   const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
   const daysLeft = Math.max(0, Math.ceil((nextJune - now) / 86400000))
 
+  // Build exam label — never show "BOTH"
+  const examLabels = examType === 'BOTH' ? ['WAEC', 'JAMB']
+    : examType === 'JAMB' ? ['JAMB'] : ['WAEC']
+
+  // Build score summary line
+  const scoreLine = (() => {
+    const parts = []
+    if ((examType === 'WAEC' || examType === 'BOTH') && Object.keys(waecGrades).length > 0) {
+      const grades = Object.values(waecGrades)
+      const as = grades.filter(g => g === 'A1').length
+      const bs = grades.filter(g => g === 'B2' || g === 'B3').length
+      const cs = grades.filter(g => ['C4','C5','C6'].includes(g)).length
+      const summary = [as>0?`${as} A${as!==1?'s':''}`:null, bs>0?`${bs} B${bs!==1?'s':''}`:null, cs>0?`${cs} C${cs!==1?'s':''}`:null].filter(Boolean).join(', ')
+      if (summary) parts.push(`WAEC: ${summary}`)
+    }
+    if ((examType === 'JAMB' || examType === 'BOTH') && jambTotal > 0) {
+      parts.push(`JAMB: ${jambTotal}/400`)
+    }
+    return parts.join(' · ')
+  })()
+
   if (!hasAny) {
     return (
-      <button onClick={onEdit} style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 16px', borderRadius: 14,
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        cursor: 'pointer', textAlign: 'left',
-      }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎯</div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 2 }}>Set your exam target</p>
-          <p style={{ fontSize: 11, color: 'var(--text-sec)' }}>University, course, JAMB score goal</p>
+      <button onClick={onEdit} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:14, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer', textAlign:'left', fontFamily:'inherit' }}>
+        <div style={{ width:36, height:36, borderRadius:10, background:'var(--bg-subtle)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>🎯</div>
+        <div style={{ flex:1 }}>
+          <p style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)', marginBottom:2 }}>Set your exam target</p>
+          <p style={{ fontSize:11, color:'var(--text-sec)' }}>{examLabels.join(' & ')} — course, score, profession</p>
         </div>
-        <span style={{ color: 'var(--text-tert)', fontSize: 16 }}>›</span>
+        <span style={{ color:'var(--text-tert)', fontSize:16 }}>›</span>
       </button>
     )
   }
 
-  const goalLine = course
-    ? (university ? `${course} — ${university.replace('University of ', '').replace('University', 'Uni')}` : course)
-    : university
+  const headline = course || profession || university
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '13px 14px', borderRadius: 14,
-      background: 'rgba(255,184,0,.07)', border: '1px solid rgba(255,184,0,.18)',
-    }}>
-      <span style={{ fontSize: 20, flexShrink: 0 }}>🎯</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goalLine}</p>
-        <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>
-          {examType}{jambTotal > 0 ? ` · ${jambTotal}/400 target` : ''}
-        </p>
+    <div style={{ padding:'13px 14px', borderRadius:14, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.18)' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+        <span style={{ fontSize:20, flexShrink:0, marginTop:1 }}>🎯</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', gap:5, marginBottom:4, flexWrap:'wrap' }}>
+            {examLabels.map(e => (
+              <span key={e} style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background: e==='JAMB'?'rgba(155,122,224,.15)':'rgba(34,197,94,.12)', color: e==='JAMB'?'#9b7ae0':'#22c55e', border:`1px solid ${e==='JAMB'?'rgba(155,122,224,.25)':'rgba(34,197,94,.2)'}` }}>{e}</span>
+            ))}
+          </div>
+          <p style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:scoreLine?2:0 }}>{headline}</p>
+          {scoreLine && <p style={{ fontSize:10, color:'var(--text-tert)' }}>{scoreLine}</p>}
+        </div>
+        <button onClick={onEdit} style={{ textAlign:'right', flexShrink:0, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>
+          <p style={{ fontSize:20, fontWeight:900, color:'#FFB800', lineHeight:1 }}>{daysLeft}</p>
+          <p style={{ fontSize:9, color:'var(--text-tert)' }}>days left</p>
+        </button>
       </div>
-      <button onClick={onEdit} style={{ textAlign: 'right', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
-        <p style={{ fontSize: 22, fontWeight: 900, color: '#FFB800', lineHeight: 1 }}>{daysLeft}</p>
-        <p style={{ fontSize: 9, color: 'var(--text-tert)' }}>days left</p>
-      </button>
     </div>
   )
 }
@@ -621,6 +636,32 @@ function SidebarTarget({ profile, onEdit }) {
   )
 }
 
+// ── Downloads button — simple nav row ────────────────────────────────────────
+function DownloadsCard() {
+  const router = useRouter()
+  return (
+    <button
+      onClick={() => router.push('/student/downloads')}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '13px 16px', borderRadius: 14,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+        transition: 'border-color .15s',
+      }}
+    >
+      <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(18,100,229,.1)', border: '1px solid rgba(18,100,229,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>
+        📥
+      </div>
+      <div style={{ flex: 1 }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 1 }}>Download past questions</p>
+        <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Practise offline — no internet needed</p>
+      </div>
+      <span style={{ fontSize: 16, color: 'var(--text-tert)', flexShrink: 0 }}>›</span>
+    </button>
+  )
+}
+
 // ── Daily Quest card — the hero game-feel component ───────────────────────────
 // Progress ring (0/5), streak dots Mon–Sun, +50 XP reward, EXL Blue CTA
 function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) {
@@ -654,7 +695,7 @@ function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) 
         background: 'linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%)',
         border: '1px solid rgba(24,183,242,.2)',
         animation: 'exl-glow-pulse 3s ease-in-out infinite',
-        padding: 18,
+        padding: '22px 18px',
       }} onClick={onStart}>
 
         {/* Glow orb */}
@@ -935,20 +976,17 @@ export default function DashboardPage() {
               {!hasPath && <DiagnosticNudge profile={profile} onEdit={() => setShowGoalModal(true)} />}
 
               {/* ── 3. Daily Quest card ── */}
-              <DailyQuestCard subjects={subjects} weakTopics={weakTopics} streak={realStreak} sessionDays={sessionDays} onStart={() => router.push('/student/practice')} />
+              <DailyQuestCard subjects={subjects} weakTopics={weakTopics} streak={realStreak} sessionDays={sessionDays} onStart={() => setPracticeModal(firstSub ?? { id: null, name: '' })} />
 
-              {/* ── 4. Level up faster (weak topics) ── */}
-              {hasPath && <NeedsAttention weakTopics={weakTopics} onPractise={t => openPractice(subjects.find(s => s.subjects?.name === t.subjectName) ?? firstSub)} />}
+              {/* ── 4. Downloads card ── */}
+              <DownloadsCard />
 
-              {/* ── 5. Subject mastery rows ── */}
-              {hasPath && <SubjectsList subjects={subjects} onSeeAll={() => router.push('/student/learn')} />}
-
-              {/* ── 6. Target strip ── */}
+              {/* ── 5. Target strip ── */}
               <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
         </div>
 
         {/* ── RIGHT sidebar (desktop only) ── */}
-        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
+        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
           <SidebarActivity sessionDays={sessionDays} streak={realStreak} />
           <SidebarClassRank leaderboard={leaderboard} myId={profile?.id} scope={lboardScope} />
           <SidebarTarget profile={profile} onEdit={() => setShowGoalModal(true)} />
@@ -960,6 +998,7 @@ export default function DashboardPage() {
       {showGoalModal && (
         <Suspense fallback={null}>
           <GoalModal
+            key={profile?.id ?? 'goal'}
             profile={profile}
             onClose={() => setShowGoalModal(false)}
             onSave={updated => { setProfile(prev => ({ ...prev, ...updated })); setShowGoalModal(false) }}

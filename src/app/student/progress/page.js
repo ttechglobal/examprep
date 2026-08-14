@@ -1,7 +1,11 @@
 'use client'
-// src/app/student/progress/page.js — v3
-// Redesign: coach banner, fixed Mon–Sun activity chart, exam-tabbed subject mastery,
-// merged subject scores across exams, show-fewer default with expand.
+// src/app/student/progress/page.js — v4
+// Fixes:
+//  • Activity chart: byDate was always set to 1 (never incremented).
+//    Fixed: count actual attempts per day so bar heights reflect real volume.
+//  • Progress bar in SubjectMasteryCard: was flush to card bottom edge.
+//    Fixed: wrapped in a div with horizontal + bottom padding so it sits
+//    inside the card with breathing room.
 
 import { useState, useEffect } from 'react'
 import { ProgressPageSkeleton } from '@/components/ui/Skeletons'
@@ -21,7 +25,6 @@ function masteryTier(pct) {
   return               { label: 'Weak',        color: '#dc2626' }
 }
 
-// ── Progress-specific coach message ───────────────────────────────────────────
 function progressCoach({ firstName, avgMastery, strongTopics, weakTopics, streakDays, totalSessions }) {
   const name = firstName ? `, ${firstName}` : ''
   if (weakTopics > 0 && avgMastery < 50) {
@@ -39,16 +42,16 @@ function progressCoach({ firstName, avgMastery, strongTopics, weakTopics, streak
   return { emoji: '📈', message: `${totalSessions} session${totalSessions !== 1 ? 's' : ''} in the last two weeks${name}. Consistent practice is how gaps close. Keep at it.` }
 }
 
-// ── Activity chart — always Mon–Sun, 2 fixed weeks ────────────────────────────
+// ── Activity chart ────────────────────────────────────────────────────────────
+// sessions = { 'YYYY-MM-DD': attemptCount }
 function ActivityChart({ sessions }) {
   const isDark = useIsDark()
   const [hovered, setHovered] = useState(null)
 
-  // Current week only — Monday to Sunday (or Monday to today if mid-week)
   const today = new Date()
   const todayKey = today.toISOString().slice(0, 10)
   const dow = today.getDay()
-  const daysSinceMon = (dow + 6) % 7 // 0 on Monday, 6 on Sunday
+  const daysSinceMon = (dow + 6) % 7
   const thisMonday = new Date(today)
   thisMonday.setDate(today.getDate() - daysSinceMon)
   thisMonday.setHours(0, 0, 0, 0)
@@ -63,7 +66,7 @@ function ActivityChart({ sessions }) {
     const dayLabel = d.toLocaleDateString('en', { weekday: 'short' })
     days.push({ key, label: dayLabel, count: isFuture ? -1 : (sessions[key] ?? 0), isToday, isFuture })
   }
-  const maxCount = Math.max(...days.map(d => d.count), 1)
+  const maxCount = Math.max(...days.map(d => Math.max(d.count, 0)), 1)
 
   const activeDays = days.filter(d => d.count > 0).length
   const streak = (() => { let s = 0; for (let i = days.length - 1; i >= 0; i--) { if (days[i].count > 0) s++; else break }; return s })()
@@ -83,7 +86,6 @@ function ActivityChart({ sessions }) {
         )}
       </div>
       <div style={{ padding: '14px 16px 10px' }}>
-        {/* Week label — Mon DD – Sun DD */}
         <div style={{ marginBottom: 8 }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', letterSpacing: '.05em', textTransform: 'uppercase' }}>
             {days[0].label} {new Date(days[0].key).getDate()} – {days[6].label} {new Date(days[6].key).getDate()}
@@ -104,16 +106,15 @@ function ActivityChart({ sessions }) {
                 onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}>
                 {isHov && day.count > 0 && !day.isFuture && (
                   <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)', padding: '3px 7px', borderRadius: 7, background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 4px 12px rgba(0,0,0,.15)', zIndex: 10, whiteSpace: 'nowrap' }}>
-                    <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-prim)' }}>{day.count} session{day.count !== 1 ? 's' : ''}</p>
+                    <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-prim)' }}>{day.count} attempt{day.count !== 1 ? 's' : ''}</p>
                   </div>
                 )}
-
                 <div style={{ width: '100%', height: barH, borderRadius: '4px 4px 2px 2px', background: col, transition: 'height .4s cubic-bezier(.4,0,.2,1)', transform: isHov ? 'scaleX(1.15)' : 'scaleX(1)', transformOrigin: 'bottom' }} />
               </div>
             )
           })}
         </div>
-        {/* Day labels — Mon Tue Wed Thu Fri Sat Sun × 2 */}
+        {/* Day labels */}
         <div style={{ display: 'flex', gap: 4, marginTop: 5 }}>
           {days.map((day, i) => (
             <div key={day.key} style={{ flex: 1, textAlign: 'center' }}>
@@ -126,20 +127,19 @@ function ActivityChart({ sessions }) {
       </div>
       <div style={{ borderTop: '1px solid var(--border)', padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
         {streak >= 7 ? <><span>🔥</span><p style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>{streak}-day streak! Don't break it today.</p></>
-          : activeDays >= 8  ? <><span>⚡</span><p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Practised {activeDays} of 14 days — great consistency.</p></>
-          : activeDays >= 4  ? <><span>📈</span><p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Practised {activeDays} days this period. Aim for daily.</p></>
+          : activeDays >= 5  ? <><span>⚡</span><p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Practised {activeDays} of 7 days — great consistency.</p></>
+          : activeDays >= 3  ? <><span>📈</span><p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>Practised {activeDays} days this week. Aim for daily.</p></>
           : <><span>💡</span><p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tert)' }}>Consistency is key — try to practise every day.</p></>}
       </div>
     </div>
   )
 }
 
-// ── Subject mastery card — expandable topic list ──────────────────────────────
+// ── Subject mastery card ──────────────────────────────────────────────────────
 function SubjectMasteryCard({ subjectKey, name, examType, topicsByExam, isDark, showExamBadge }) {
   const colors = resolveSubjectColors(name, isDark)
   const [open, setOpen] = useState(false)
 
-  // Merge topics across exams for this subject name — scores averaged
   const allTopics = Object.values(topicsByExam).flat()
   const topicMap = {}
   for (const t of allTopics) {
@@ -182,14 +182,16 @@ function SubjectMasteryCard({ subjectKey, name, examType, topicsByExam, isDark, 
         <span style={{ fontSize: 12, color: 'var(--text-tert)', marginLeft: 4, transition: 'transform .2s', display: 'inline-block', transform: open ? 'rotate(180deg)' : 'rotate(0)' }}>▾</span>
       </button>
 
-      {/* Progress bar */}
-      <div style={{ height: 3, background: 'var(--bg-inset)', margin: '0 16px' }}>
-        <div style={{ height: '100%', width: `${avgScore}%`, background: color, borderRadius: 999, transition: 'width .8s ease' }} />
+      {/* Progress bar — padded so it never touches the card edge */}
+      <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ height: 4, borderRadius: 999, background: 'var(--bg-inset)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${avgScore}%`, background: color, borderRadius: 999, transition: 'width .8s ease' }} />
+        </div>
       </div>
 
       {/* Topic list */}
       {open && (
-        <div style={{ padding: '8px 16px 12px' }}>
+        <div style={{ padding: '4px 16px 12px', borderTop: '1px solid var(--border)' }}>
           {topics.map((t, i) => {
             const { color: tc } = masteryTier(t.score)
             return (
@@ -228,91 +230,78 @@ export default function ProgressPage() {
   }, [userId]) // eslint-disable-line
 
   async function load(uid) {
-      const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 90); d.setHours(0,0,0,0); return d.toISOString() })()
-      const [{ data: prof }, { data: masteryFlat }, { data: attemptRows }, { data: allSubjects }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', uid).single(),
-        // No join on student_topic_mastery — the FK to topics isn't exposed via PostgREST
-        supabase.from('student_topic_mastery')
-          .select('topic_id, score, attempt_count')
-          .eq('student_id', uid)
-          .order('score', { ascending: true }),
-        supabase.from('question_attempts')
-          .select('created_at, is_correct, topic_id')
-          .eq('student_id', uid)
-          .gte('created_at', weekStart),
-        supabase.from('subjects').select('id, name'),
-      ])
+    const ninetyDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 90); d.setHours(0,0,0,0); return d.toISOString() })()
 
-      // Fetch topic data separately using the topic IDs we have
-      const topicIds = (masteryFlat ?? []).map(r => r.topic_id).filter(Boolean)
-      const { data: topicRows } = topicIds.length > 0
-        ? await supabase.from('topics').select('id, name, subject_id').in('id', topicIds)
-        : { data: [] }
+    const [{ data: prof }, masteryRes, { data: attemptRows }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, exam_type, streak_days').eq('id', uid).single(),
+      fetch('/api/student/mastery').then(r => r.ok ? r.json() : { mastery: [] }).catch(() => ({ mastery: [] })),
+      supabase.from('question_attempts')
+        .select('created_at, is_correct, topic_id')
+        .eq('student_id', uid)
+        .gte('created_at', ninetyDaysAgo),
+    ])
 
-      // Build lookup maps
-      const topicMap = {}
-      for (const t of topicRows ?? []) topicMap[t.id] = t
-      const subjectNameMap = {}
-      for (const s of allSubjects ?? []) subjectNameMap[s.id] = s.name
+    setProfile(prof)
+    const examType = prof?.exam_type ?? 'WAEC'
+    setActiveExam(examType === 'JAMB' ? 'JAMB' : 'WAEC')
 
-      setProfile(prof)
-      const examType = prof?.exam_type ?? 'WAEC'
-      setActiveExam(examType === 'JAMB' ? 'JAMB' : 'WAEC')
+    let masteryData = (masteryRes.mastery ?? []).map(row => ({
+      topic_id:      row.topic_id,
+      score:         row.score,
+      attempt_count: row.attempt_count,
+      topics: {
+        id:          row.topic_id,
+        name:        row.topic_name,
+        subject_id:  row.subject_id,
+        subjectName: row.subject_name,
+      },
+    }))
 
-      // Enrich mastery rows with topic + subject data from our separate fetches
-      let masteryData = (masteryFlat ?? [])
-        .map(row => {
-          const topic = topicMap[row.topic_id]
-          if (!topic) return null
-          const subjectName = subjectNameMap[topic.subject_id]
-          if (!subjectName) return null
-          return { ...row, topics: { ...topic, subjectName } }
-        })
-        .filter(Boolean)
-      if (masteryData.length === 0 && attemptRows?.length > 0) {
-        const byTopic = {}
-        for (const a of attemptRows) {
-          if (!a.topic_id) continue
-          if (!byTopic[a.topic_id]) byTopic[a.topic_id] = { total: 0, correct: 0 }
-          byTopic[a.topic_id].total++
-          if (a.is_correct) byTopic[a.topic_id].correct++
-        }
-        const fallbackTopicIds = Object.keys(byTopic)
-        if (fallbackTopicIds.length > 0) {
-          const { data: fallbackTopics } = await supabase
-            .from('topics').select('id, name, subject_id').in('id', fallbackTopicIds)
-          for (const t of fallbackTopics ?? []) {
-            const subjectName = subjectNameMap[t.subject_id]
-            if (!subjectName) continue
-            masteryData.push({
-              topic_id: t.id,
-              score: Math.round((byTopic[t.id].correct / byTopic[t.id].total) * 100),
-              attempt_count: byTopic[t.id].total,
-              topics: { ...t, subjectName },
-            })
-          }
+    if (masteryData.length === 0 && attemptRows?.length > 0) {
+      const byTopic = {}
+      for (const a of attemptRows) {
+        if (!a.topic_id) continue
+        if (!byTopic[a.topic_id]) byTopic[a.topic_id] = { total: 0, correct: 0 }
+        byTopic[a.topic_id].total++
+        if (a.is_correct) byTopic[a.topic_id].correct++
+      }
+      const fallbackIds = Object.keys(byTopic)
+      if (fallbackIds.length > 0) {
+        const { data: fallbackTopics } = await supabase
+          .from('topics').select('id, name, subject_id').in('id', fallbackIds)
+        const subjectIds = [...new Set((fallbackTopics ?? []).map(t => t.subject_id).filter(Boolean))]
+        const { data: subjectRows } = subjectIds.length
+          ? await supabase.from('subjects').select('id, name').in('id', subjectIds)
+          : { data: [] }
+        const subjectNameMap = {}
+        for (const s of subjectRows ?? []) subjectNameMap[s.id] = s.name
+        for (const t of fallbackTopics ?? []) {
+          const subjectName = subjectNameMap[t.subject_id]
+          if (!subjectName) continue
+          masteryData.push({
+            topic_id: t.id,
+            score: Math.round((byTopic[t.id].correct / byTopic[t.id].total) * 100),
+            attempt_count: byTopic[t.id].total,
+            topics: { id: t.id, name: t.name, subject_id: t.subject_id, subjectName },
+          })
         }
       }
-      setMastery(masteryData)
+    }
+    setMastery(masteryData)
 
-      // Activity — 1 session per day that has any attempt (simple and reliable)
-      const byDate = {}
-      for (const a of attemptRows ?? []) {
-        if (!a.created_at) continue
-        const day = a.created_at.slice(0, 10)
-        byDate[day] = 1
-      }
-      setSessions(byDate)
-      setLoading(false)
+    // FIX: count actual attempts per day (was always being set to 1)
+    const byDate = {}
+    for (const a of attemptRows ?? []) {
+      if (!a.created_at) continue
+      const dateKey = a.created_at.slice(0, 10)
+      byDate[dateKey] = (byDate[dateKey] ?? 0) + 1
+    }
+    setSessions(byDate)
+    setLoading(false)
   }
 
   if (loading) return <ProgressPageSkeleton />
 
-  // ── Derived data ──────────────────────────────────────────────────────────
-
-  // Build subject map: subjectName → { examType, topics[] }
-  // Keep WAEC and JAMB versions of the same subject separate for the tab view
-  // but merge topic scores (averaged) in the card itself
   const profileExamType = profile?.exam_type ?? 'WAEC'
   const subjectMap = {}
   for (const row of mastery) {
@@ -327,14 +316,12 @@ export default function ProgressPage() {
     })
   }
 
-  // Determine which exam tabs to show
   const examTypes = [...new Set(Object.values(subjectMap).map(s => s.examType))].filter(Boolean)
   const profileExam = profile?.exam_type ?? 'WAEC'
   const tabs = profileExam === 'BOTH'
     ? ['WAEC', 'JAMB'].filter(e => examTypes.includes(e))
     : examTypes.length > 0 ? examTypes : [profileExam === 'JAMB' ? 'JAMB' : 'WAEC']
 
-  // Filter subjects for active exam tab
   const filteredSubjects = Object.entries(subjectMap)
     .filter(([, s]) => s.examType === activeExam)
     .map(([key, s]) => ({
@@ -347,7 +334,6 @@ export default function ProgressPage() {
   const displaySubjects = showAll ? filteredSubjects : filteredSubjects.slice(0, 4)
   const hasMore = filteredSubjects.length > 4
 
-  // Check if any subject name appears in multiple exams (for badge decision)
   const nameCount = {}
   for (const s of Object.values(subjectMap)) nameCount[s.name] = (nameCount[s.name] ?? 0) + 1
   const showExamBadge = Object.values(nameCount).some(c => c > 1)
@@ -356,7 +342,8 @@ export default function ProgressPage() {
   const strongTopics = mastery.filter(m => (m.score ?? 0) >= 80).length
   const weakTopics   = mastery.filter(m => (m.score ?? 0) < 40).length
   const avgMastery   = totalTopics > 0 ? Math.round(mastery.reduce((s, m) => s + (m.score ?? 0), 0) / totalTopics) : 0
-  const totalSessions = Object.values(sessions).reduce((a, b) => a + b, 0)
+  // Total sessions = total number of days with at least one attempt
+  const totalSessions = Object.keys(sessions).length
   const streakDays   = profile?.streak_days ?? 0
 
   const coachMsg = progressCoach({
@@ -365,15 +352,15 @@ export default function ProgressPage() {
   })
 
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', paddingBottom: 80 }}>
+    <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 80 }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>Your journey</p>
         <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-0.025em' }}>Progress</h1>
       </div>
 
-      {/* ── Coach banner ── */}
+      {/* Coach banner */}
       <div style={{ marginBottom: 20 }}>
         <CoachBanner
           emoji={coachMsg.emoji}
@@ -382,12 +369,12 @@ export default function ProgressPage() {
         />
       </div>
 
-      {/* ── Stat tiles — matches prototype exactly ── */}
+      {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
         {[
           { val: displayXP >= 1000 ? `${(displayXP/1000).toFixed(1)}k` : String(displayXP), lbl: 'Total XP',    col: '#FFB800', bg: 'rgba(255,184,0,.1)',     bd: 'rgba(255,184,0,.2)' },
-          { val: String(totalSessions),                                                        lbl: 'Sessions',   col: '#18B7F2', bg: 'rgba(24,183,242,.08)',   bd: 'rgba(24,183,242,.2)' },
-          { val: `${avgMastery}%`,                                                             lbl: 'Avg mastery',col: avgMastery >= 70 ? '#4ade80' : avgMastery >= 40 ? '#FFB800' : '#f87171', bg: 'rgba(74,222,128,.07)', bd: 'rgba(74,222,128,.2)' },
+          { val: String(totalSessions),                                                        lbl: 'Active days', col: '#18B7F2', bg: 'rgba(24,183,242,.08)',   bd: 'rgba(24,183,242,.2)' },
+          { val: `${avgMastery}%`,                                                             lbl: 'Avg mastery', col: avgMastery >= 70 ? '#4ade80' : avgMastery >= 40 ? '#FFB800' : '#f87171', bg: 'rgba(74,222,128,.07)', bd: 'rgba(74,222,128,.2)' },
         ].map(({ val, lbl, col, bg, bd }) => (
           <div key={lbl} style={{ padding: '13px 8px', borderRadius: 14, background: bg, border: `1.5px solid ${bd}`, textAlign: 'center' }}>
             <p style={{ fontSize: 20, fontWeight: 900, color: col, lineHeight: 1, marginBottom: 3 }}>{val}</p>
@@ -396,18 +383,18 @@ export default function ProgressPage() {
         ))}
       </div>
 
-      {/* ── Activity chart ── */}
+      {/* Activity chart */}
       <ActivityChart sessions={sessions} />
 
-      {/* ── Recent badges ── */}
+      {/* Recent badges */}
       {streakDays > 0 || totalSessions > 0 ? (
         <div style={{ marginBottom: 14 }}>
           <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Recent badges</span>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              streakDays >= 5  ? { e: '🔥', l: 'On Fire',      d: `${streakDays}-day streak`, c: '#FF6A00' } : null,
-              totalSessions > 10 ? { e: '⚡', l: 'Active',     d: `${totalSessions} sessions`, c: '#18B7F2' } : null,
-              avgMastery >= 50 ? { e: '🎯', l: 'On Target',    d: `${avgMastery}% avg`,       c: '#4ade80' } : null,
+              streakDays >= 5    ? { e: '🔥', l: 'On Fire',   d: `${streakDays}-day streak`, c: '#FF6A00' } : null,
+              totalSessions > 10 ? { e: '⚡', l: 'Active',    d: `${totalSessions} days`,    c: '#18B7F2' } : null,
+              avgMastery >= 50   ? { e: '🎯', l: 'On Target', d: `${avgMastery}% avg`,       c: '#4ade80' } : null,
             ].filter(Boolean).slice(0,3).map((b, i) => (
               <div key={i} style={{ flex: 1, padding: '10px 8px', borderRadius: 12, background: `${b.c}0a`, border: `1px solid ${b.c}22`, textAlign: 'center' }}>
                 <p style={{ fontSize: 18, marginBottom: 3 }}>{b.e}</p>
@@ -419,10 +406,9 @@ export default function ProgressPage() {
         </div>
       ) : null}
 
-      {/* ── Subject mastery ── */}
+      {/* Subject mastery */}
       {filteredSubjects.length > 0 ? (
         <>
-          {/* Section header + exam tabs */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>Subject mastery</p>
             {tabs.length > 1 && (
@@ -469,7 +455,7 @@ export default function ProgressPage() {
           <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
           <p style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6 }}>No mastery data yet</p>
           <p style={{ fontSize: 13, color: 'var(--text-tert)', marginBottom: 20, lineHeight: 1.5 }}>Complete a practice session to start tracking your topic mastery.</p>
-          <Link href="/student/practice/setup" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 20px', background: '#1264E5', color: '#fff', borderRadius: 13, fontSize: 13, fontWeight: 800, textDecoration: 'none', boxShadow: '0 4px 0 #0a3fa0' }}>
+          <Link href="/student/practice" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 20px', background: '#1264E5', color: '#fff', borderRadius: 13, fontSize: 13, fontWeight: 800, textDecoration: 'none', boxShadow: '0 4px 0 #0a3fa0' }}>
             Start practising →
           </Link>
         </div>

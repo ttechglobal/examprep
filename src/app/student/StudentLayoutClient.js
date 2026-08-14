@@ -31,36 +31,16 @@ import DarkModeToggle from '@/components/ui/DarkModeToggle'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
-// ── EXL Logo mark ─────────────────────────────────────────────────────────────
+// ── App logo ──────────────────────────────────────────────────────────────────
 function EXLLogo({ size = 30 }) {
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <div style={{
-        width: size, height: size, borderRadius: Math.round(size * 0.28),
-        background: '#062A78', boxShadow: `0 ${Math.round(size * 0.1)}px 0 #020c20`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-      }}>
-        <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 512 512" fill="none">
-          <path d="M292 105C235 103 167 118 137 153C112 182 122 208 155 215C185 221 222 210 263 196L226 236C185 253 139 274 131 307C122 344 165 363 208 354C250 345 292 323 331 298L302 353C267 379 210 406 155 403C98 400 64 369 76 325C86 286 120 262 165 241C124 247 83 239 69 210C52 175 81 136 121 116C164 94 226 83 292 86Z" fill="url(#exlG)"/>
-          <path d="M98 94L202 48L306 94L202 139Z" fill="#062A78"/>
-          <path d="M123 91L202 57L281 91L202 123Z" fill="#1264E5"/>
-          <path d="M61 335C123 401 272 427 383 365C430 339 451 309 444 287" stroke="#FFB800" strokeWidth="44" strokeLinecap="round" fill="none"/>
-          <defs>
-            <linearGradient id="exlG" x1="0" y1="0" x2="1" y2="1">
-              <stop stopColor="#18B7F2"/>
-              <stop offset=".5" stopColor="#1264E5"/>
-              <stop offset="1" stopColor="#062A78"/>
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-      <div style={{
-        position: 'absolute', top: -5, right: -7,
-        background: '#FFB800', borderRadius: 4,
-        fontSize: 6, fontWeight: 900, color: '#062A78',
-        padding: '1px 4px', lineHeight: 1.4, letterSpacing: '-.01em',
-      }}>A1</div>
-    </div>
+    <img
+      src="/images/examprep_logo.png"
+      alt="ExamPrep A1"
+      width={size}
+      height={size}
+      style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
+    />
   )
 }
 
@@ -347,7 +327,7 @@ export default function StudentLayoutClient({ children, profile }) {
         borderBottom: '1px solid var(--nav-border)',
         display: 'flex', alignItems: 'center',
       }}>
-        <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ width: '100%', maxWidth: 900, margin: '0 auto', padding: '0 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
 
           <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, textDecoration: 'none' }}>
             <EXLLogo size={30} />
@@ -384,7 +364,7 @@ export default function StudentLayoutClient({ children, profile }) {
       </header>
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', padding: '0 24px', gap: 0 }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', padding: '0 18px', gap: 0 }}>
 
         {/* ── Left sidebar (desktop) ── */}
         <aside style={{ width: 220, flexShrink: 0, paddingTop: 20, paddingRight: 16 }} className="hidden lg:block">

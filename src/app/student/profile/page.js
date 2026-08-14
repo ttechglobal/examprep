@@ -268,6 +268,33 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* ── My subjects — prominently editable ── */}
+      <div style={{ borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>📚</span>
+            <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)' }}>My subjects</p>
+          </div>
+          <button onClick={() => setShowGoalModal(true)}
+            style={{ fontSize: 11, fontWeight: 800, color: '#1264E5', background: 'rgba(18,100,229,.1)', border: '1px solid rgba(18,100,229,.2)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+            Edit ✏️
+          </button>
+        </div>
+        <div style={{ padding: '10px 16px 12px' }}>
+          {profile?.subjects?.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(profile.subjects ?? []).map(s => (
+                <span key={s} style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-sec)' }}>{s}</span>
+              ))}
+            </div>
+          ) : (
+            <button onClick={() => setShowGoalModal(true)} style={{ fontSize: 12, color: 'var(--text-tert)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+              Tap Edit to add your subjects →
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* ── 2×2 info grid — all tappable to edit ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {[
@@ -288,6 +315,7 @@ export default function ProfilePage() {
       {/* ── Settings rows — matches prototype ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {[
+          { icon: '📥', lbl: 'Downloads',     sub: 'Offline past questions', href: '/student/downloads' },
           { icon: '🌙', lbl: 'Dark mode',       sub: '',                             onClick: () => setShowEditSheet(v => !v) },
           { icon: '🔔', lbl: 'Notifications',   sub: '',                             onClick: () => {} },
           { icon: '👨‍👩‍👧', lbl: 'Parent report', sub: 'Weekly email',                onClick: () => {} },
@@ -315,7 +343,7 @@ export default function ProfilePage() {
 
       {/* Goal modal */}
       {showGoalModal && profile && (
-        <GoalModal profile={profile} onClose={() => setShowGoalModal(false)} onSave={updated => { setProfile(updated); setShowGoalModal(false) }} />
+        <GoalModal key={profile.id} profile={profile} onClose={() => setShowGoalModal(false)} onSave={updated => { setProfile(updated); setShowGoalModal(false) }} />
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
