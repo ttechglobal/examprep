@@ -1,24 +1,15 @@
 'use client'
-// src/app/student/dashboard/page.js — v6
+// src/app/student/dashboard/page.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
-// Full redesign matching the Focus prototype exactly.
-//
-// LAYOUT (top to bottom, matching prototype):
-//   1. Greeting — eyebrow (day + time of day) + big hero line with first name
-//   2. "Next best move" hero card — ambient SVG + violet pill tag + subject
-//      name large + topic line + freq/time badges + 3D navy CTA
-//   3. Carousel dots — centred, one per subject, active = coloured pill
-//   4. "Your subjects" — icon + name + 3px progress bar + coloured %
-//   5. "Needs attention" — red-dot items, weakest topics first
-//   6. "Your target" — icon box + goal + countdown days number
-//
-// DESIGN DECISIONS:
-//   • Greeting is personal and time-aware — student sees themselves here
-//   • Hero card is the single strongest action — one tap = practise
-//   • Subjects are compact and scannable — not cards, just rows
-//   • Needs attention is motivational, not alarming — "here's where to go next"
-//   • Target strip is always anchored at the bottom — reminds why they're here
-//   • Zero Tailwind dynamic classes, zero --indigo vars
+// CHANGES vs v6:
+//  • "Start today's quest" now opens PracticeSetupModal inline (was navigating
+//    to /student/practice/setup which doesn't exist / lost context)
+//  • PracticeSetupModal on dashboard now receives exam, onExamChange,
+//    loadingSubjects props — previously missing, causing broken switcher
+//  • Dashboard has its own subject cache + fetchSubjectsForExam so the modal
+//    can switch WAEC/JAMB without navigating away
+//  • dash-grid right column 240px → 300px to use extra space from layout change
+//  • openPractice helper removed — setPracticeModal(sub) is the one true way
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback, memo, Suspense, lazy } from 'react'
@@ -82,7 +73,7 @@ function getGreeting(firstName) {
   return            { eyebrow, hero: `One more topic${name} 🌙` }
 }
 
-// ── Ambient SVG — constellation nodes, matches prototype exactly ──────────────
+// ── Ambient SVG ───────────────────────────────────────────────────────────────
 function AmbientNodes({ n1, n2 }) {
   return (
     <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.07 }} xmlns="http://www.w3.org/2000/svg">
@@ -108,7 +99,7 @@ function AmbientNodes({ n1, n2 }) {
   )
 }
 
-// ── 3D press button — EXL Blue ────────────────────────────────────────────────
+// ── 3D press button ───────────────────────────────────────────────────────────
 function PressBtn({ onClick, children, style = {} }) {
   const [p, setP] = useState(false)
   return (
@@ -132,20 +123,17 @@ function PressBtn({ onClick, children, style = {} }) {
   )
 }
 
-// ── Hero card — "Next best move" ──────────────────────────────────────────────
+// ── Hero card ─────────────────────────────────────────────────────────────────
 const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark }) {
   const cfg         = getCfg(sub?.subjects?.name ?? '')
   const subjectName = sub?.subjects?.name ?? 'Subject'
   const topicName   = planItem?.topicName ?? null
   const isCore      = planItem?.isCore    ?? false
-
-  // Both modes use the dark ambient card — light mode just has a stronger shadow
   const bg = cfg.cardBg
 
   return (
     <div style={{
-      borderRadius: 20,
-      overflow: 'hidden',
+      borderRadius: 20, overflow: 'hidden',
       border: `1px solid ${cfg.accent}${isDark ? '30' : '22'}`,
       boxShadow: isDark
         ? `0 24px 56px rgba(0,0,0,.6), inset 0 1px 0 ${cfg.accent}18`
@@ -153,49 +141,23 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
     }}>
       <div style={{ background: bg, padding: '20px 20px 20px', position: 'relative', overflow: 'hidden', minHeight: 248, display: 'flex', flexDirection: 'column' }}>
         <AmbientNodes n1={cfg.n1} n2={cfg.n2} />
-
-        {/* Subject pill */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '3px 10px 3px 7px', borderRadius: 999,
-          background: `${cfg.accent}18`,
-          border: `1px solid ${cfg.accent}30`,
-          fontSize: 9, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase',
-          color: cfg.accent,
-          alignSelf: 'flex-start', marginBottom: 14, position: 'relative', zIndex: 1,
-        }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px 3px 7px', borderRadius: 999, background: `${cfg.accent}18`, border: `1px solid ${cfg.accent}30`, fontSize: 9, fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase', color: cfg.accent, alignSelf: 'flex-start', marginBottom: 14, position: 'relative', zIndex: 1 }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
           {subjectName}
         </div>
-
-        {/* Flex spacer — pushes content to lower half of card */}
         <div style={{ flex: 1, minHeight: 8 }} />
-
-        {/* Subject name — large, white, Space-Grotesk-style */}
-        <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 3, position: 'relative', zIndex: 1 }}>
-          {subjectName}
-        </p>
-
-        {/* Topic line — only when there's a real topic */}
+        <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 3, position: 'relative', zIndex: 1 }}>{subjectName}</p>
         {topicName && (
           <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.45)', marginBottom: 6, position: 'relative', zIndex: 1 }}>
             Topic: <strong style={{ color: `${cfg.accent}cc`, fontWeight: 600 }}>{topicName}</strong>
           </p>
         )}
-
-        {/* Badges row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
           {isCore && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(245,185,66,.1)', color: '#F5B942', fontSize: 10, fontWeight: 700 }}>
-              🔥 High frequency
-            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(245,185,66,.1)', color: '#F5B942', fontSize: 10, fontWeight: 700 }}>🔥 High frequency</span>
           )}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.5)', fontSize: 10, fontWeight: 700 }}>
-            10 questions · ~14 min
-          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.5)', fontSize: 10, fontWeight: 700 }}>10 questions · ~14 min</span>
         </div>
-
-        {/* CTA */}
         <PressBtn onClick={() => onStartPractice(sub)} style={{ width: '100%', padding: '14px 0', borderRadius: 14, position: 'relative', zIndex: 1 }}>
           Practise now →
         </PressBtn>
@@ -204,11 +166,10 @@ const HeroCard = memo(function HeroCard({ sub, planItem, onStartPractice, isDark
   )
 })
 
-// ── Carousel with dots ────────────────────────────────────────────────────────
+// ── Carousel ──────────────────────────────────────────────────────────────────
 function SubjectCarousel({ subjects, planItems, onStartPractice, isDark }) {
-  const [idx, setIdx]   = useState(0)
-  const startX          = useRef(null)
-
+  const [idx, setIdx] = useState(0)
+  const startX = useRef(null)
   const sub      = subjects[idx]
   const planItem = planItems?.[sub?.subject_id] ?? null
 
@@ -226,17 +187,14 @@ function SubjectCarousel({ subjects, planItems, onStartPractice, isDark }) {
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ userSelect: 'none' }}>
         <HeroCard sub={sub} planItem={planItem} onStartPractice={onStartPractice} isDark={isDark} />
       </div>
-
       {subjects.length > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 12 }}>
           {subjects.map((s, i) => {
             const c = getCfg(s?.subjects?.name ?? '')
             const active = i === idx
             return (
-              <button key={i} onClick={() => setIdx(i)}
-                aria-label={`Switch to ${s?.subjects?.name}`}
-                style={{ width: active ? 18 : 5, height: 5, borderRadius: active ? 3 : '50%', background: active ? c.accent : 'rgba(128,128,128,.22)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.22s' }}
-              />
+              <button key={i} onClick={() => setIdx(i)} aria-label={`Switch to ${s?.subjects?.name}`}
+                style={{ width: active ? 18 : 5, height: 5, borderRadius: active ? 3 : '50%', background: active ? c.accent : 'rgba(128,128,128,.22)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.22s' }} />
             )
           })}
         </div>
@@ -245,8 +203,7 @@ function SubjectCarousel({ subjects, planItems, onStartPractice, isDark }) {
   )
 }
 
-// ── "Your subjects" list ──────────────────────────────────────────────────────
-// Prototype: icon box + name + 3px bar track + coloured % number
+// ── Subject row ───────────────────────────────────────────────────────────────
 function SubjectRow({ sub, isLast }) {
   const name = sub.subjects?.name ?? ''
   const cfg  = getCfg(name)
@@ -254,23 +211,15 @@ function SubjectRow({ sub, isLast }) {
   const pctColor = pct >= 70 ? '#4ade80' : pct >= 40 ? '#FFB800' : '#f87171'
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 11,
-      padding: '11px 0',
-      borderBottom: isLast ? 'none' : '1px solid var(--border)',
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
-        background: `${cfg.accent}18`, border: `1px solid ${cfg.accent}22`,
-      }}>{cfg.icon}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
+      <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, background: `${cfg.accent}18`, border: `1px solid ${cfg.accent}22` }}>{cfg.icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{name}</span>
           <span style={{ fontSize: 12, fontWeight: 900, color: pctColor, flexShrink: 0, marginLeft: 8 }}>{pct}%</span>
         </div>
         <div style={{ height: 5, borderRadius: 99, overflow: 'hidden', background: 'var(--border)' }}>
-          <div style={{ height: '100%', borderRadius: 99, background: `linear-gradient(90deg,#18B7F2,#1264E5)`, width: `${Math.max(pct, 2)}%`, transition: 'width .8s cubic-bezier(.34,1.56,.64,1)' }} />
+          <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#18B7F2,#1264E5)', width: `${Math.max(pct, 2)}%`, transition: 'width .8s cubic-bezier(.34,1.56,.64,1)' }} />
         </div>
       </div>
     </div>
@@ -293,10 +242,9 @@ function SubjectsList({ subjects, onSeeAll }) {
   )
 }
 
-// ── "Level up faster" — Quick 5 weak topic cards ─────────────────────────────
+// ── Needs attention ───────────────────────────────────────────────────────────
 function NeedsAttention({ weakTopics, onPractise }) {
   if (!weakTopics.length) return null
-
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -307,27 +255,13 @@ function NeedsAttention({ weakTopics, onPractise }) {
         {weakTopics.map((t, i) => {
           const cfg = SUBJECT_CFG[t.subjectName] ?? SUBJECT_CFG.default
           return (
-            <div key={i} onClick={() => onPractise(t)} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '11px 13px', borderRadius: 13,
-              background: 'var(--bg-card)', border: `1px solid ${cfg.accent}22`,
-              cursor: 'pointer',
-            }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                background: `${cfg.accent}14`, border: `1px solid ${cfg.accent}22`,
-              }}>{cfg.icon}</div>
+            <div key={i} onClick={() => onPractise(t)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', borderRadius: 13, background: 'var(--bg-card)', border: `1px solid ${cfg.accent}22`, cursor: 'pointer' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, background: `${cfg.accent}14`, border: `1px solid ${cfg.accent}22` }}>{cfg.icon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.topicName}</p>
                 <p style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 1 }}>{t.subjectName} · {t.pct}% mastered</p>
               </div>
-              <button onClick={e => { e.stopPropagation(); onPractise(t) }} style={{
-                fontSize: 10, fontWeight: 800, color: cfg.accent,
-                background: `${cfg.accent}12`, border: `1px solid ${cfg.accent}25`,
-                padding: '5px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
-                fontFamily: 'inherit',
-              }}>Quick 5 →</button>
+              <button onClick={e => { e.stopPropagation(); onPractise(t) }} style={{ fontSize: 10, fontWeight: 800, color: cfg.accent, background: `${cfg.accent}12`, border: `1px solid ${cfg.accent}25`, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>Quick 5 →</button>
             </div>
           )
         })}
@@ -336,7 +270,7 @@ function NeedsAttention({ weakTopics, onPractise }) {
   )
 }
 
-// ── "Your target" strip ─────────────────────────────────────────────────────
+// ── Target strip ──────────────────────────────────────────────────────────────
 function TargetStrip({ profile, onEdit }) {
   const course     = profile?.university_course?.trim() ?? ''
   const university = profile?.target_university?.trim() ?? ''
@@ -350,11 +284,8 @@ function TargetStrip({ profile, onEdit }) {
   const nextJune = new Date(now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear(), 5, 1)
   const daysLeft = Math.max(0, Math.ceil((nextJune - now) / 86400000))
 
-  // Build exam label — never show "BOTH"
-  const examLabels = examType === 'BOTH' ? ['WAEC', 'JAMB']
-    : examType === 'JAMB' ? ['JAMB'] : ['WAEC']
+  const examLabels = examType === 'BOTH' ? ['WAEC', 'JAMB'] : examType === 'JAMB' ? ['JAMB'] : ['WAEC']
 
-  // Build score summary line
   const scoreLine = (() => {
     const parts = []
     if ((examType === 'WAEC' || examType === 'BOTH') && Object.keys(waecGrades).length > 0) {
@@ -385,7 +316,6 @@ function TargetStrip({ profile, onEdit }) {
   }
 
   const headline = course || profession || university
-
   return (
     <div style={{ padding:'13px 14px', borderRadius:14, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.18)' }}>
       <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
@@ -408,52 +338,21 @@ function TargetStrip({ profile, onEdit }) {
   )
 }
 
-// ── "Or practise differently" quick mode grid — v2 ────────────────────────────
-// Each mode has a distinct colored icon background so they're scannable at a glance.
+// ── Quick modes ───────────────────────────────────────────────────────────────
 function QuickModes({ router, onTimed, onWeak }) {
   const MODES = [
-    {
-      emoji: '⏱️', label: 'Timed',
-      iconBg: 'rgba(155,122,224,.15)', iconBorder: 'rgba(155,122,224,.25)',
-      onClick: onTimed,
-    },
-    {
-      emoji: '📝', label: 'Mock Exam',
-      iconBg: 'rgba(11,19,48,.6)',    iconBorder: 'rgba(255,255,255,.15)',
-      onClick: () => router.push('/student/exam'),
-    },
-    {
-      emoji: '🎯', label: 'Weak Topics',
-      iconBg: 'rgba(232,80,80,.12)',  iconBorder: 'rgba(232,80,80,.22)',
-      onClick: onWeak,
-    },
-    {
-      emoji: '📚', label: 'Learn',
-      iconBg: 'rgba(92,184,234,.12)', iconBorder: 'rgba(92,184,234,.22)',
-      onClick: () => router.push('/student/learn'),
-    },
+    { emoji: '⏱️', label: 'Timed',     iconBg: 'rgba(155,122,224,.15)', iconBorder: 'rgba(155,122,224,.25)', onClick: onTimed },
+    { emoji: '📝', label: 'Mock Exam', iconBg: 'rgba(11,19,48,.6)',    iconBorder: 'rgba(255,255,255,.15)', onClick: () => router.push('/student/exam') },
+    { emoji: '🎯', label: 'Weak Topics',iconBg: 'rgba(232,80,80,.12)', iconBorder: 'rgba(232,80,80,.22)',  onClick: onWeak },
+    { emoji: '📚', label: 'Learn',      iconBg: 'rgba(92,184,234,.12)',iconBorder: 'rgba(92,184,234,.22)', onClick: () => router.push('/student/learn') },
   ]
   return (
     <div>
-      <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 10 }}>
-        Or practise differently
-      </p>
+      <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--text-tert)', marginBottom: 10 }}>Or practise differently</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {MODES.map(m => (
-          <button key={m.label} onClick={m.onClick} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
-            padding: '14px 6px', borderRadius: 16,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            cursor: 'pointer', transition: 'border-color .18s',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 12,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, lineHeight: 1,
-              background: m.iconBg, border: `1px solid ${m.iconBorder}`,
-            }}>
-              {m.emoji}
-            </div>
+          <button key={m.label} onClick={m.onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '14px 6px', borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', cursor: 'pointer', transition: 'border-color .18s' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1, background: m.iconBg, border: `1px solid ${m.iconBorder}` }}>{m.emoji}</div>
             <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tert)', textAlign: 'center', lineHeight: 1.3 }}>{m.label}</span>
           </button>
         ))}
@@ -462,7 +361,7 @@ function QuickModes({ router, onTimed, onWeak }) {
   )
 }
 
-// ── Soft diagnostic nudge — shown when no learning path, but NOT a blocker ────
+// ── Diagnostic nudge ──────────────────────────────────────────────────────────
 function DiagnosticNudge({ profile, onEdit }) {
   return (
     <div style={{ background: 'rgba(18,100,229,.08)', border: '1px solid rgba(18,100,229,.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -471,21 +370,16 @@ function DiagnosticNudge({ profile, onEdit }) {
         <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 2 }}>Get a personalised path</p>
         <p style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>Take a quick diagnostic and we'll focus your practice on weak areas.</p>
       </div>
-      <Link href="/diagnostic" style={{ padding: '8px 13px', borderRadius: 10, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
-        Start →
-      </Link>
+      <Link href="/diagnostic" style={{ padding: '8px 13px', borderRadius: 10, background: '#1264E5', color: '#fff', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>Start →</Link>
     </div>
   )
 }
 
-// ── Right sidebar: Activity chart ─────────────────────────────────────────────
-// Matches prototype exactly: small bar chart Mon–Sun + streak label
+// ── Sidebar: Activity ─────────────────────────────────────────────────────────
 function SidebarActivity({ sessionDays, streak = 0 }) {
   const isDark = useIsDark()
   const today = new Date()
-
-  // Always Mon–Sun of the current week
-  const dow = today.getDay() // 0=Sun, 1=Mon … 6=Sat
+  const dow = today.getDay()
   const daysSinceMon = (dow + 6) % 7
   const thisMonday = new Date(today)
   thisMonday.setDate(today.getDate() - daysSinceMon)
@@ -496,8 +390,8 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
     const d = new Date(thisMonday)
     d.setDate(thisMonday.getDate() + i)
     d.setHours(0, 0, 0, 0)
-    const key      = d.toISOString().slice(0, 10)
-    const isToday  = key === todayKey
+    const key = d.toISOString().slice(0, 10)
+    const isToday = key === todayKey
     const isFuture = d > today
     return { key, label: DAY_LABELS[i], count: isFuture ? 0 : (sessionDays[key] ?? 0), isToday, isFuture }
   })
@@ -513,7 +407,7 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 40 }}>
           {days.map((day, i) => {
             const barH = day.count > 0 ? Math.max(6, Math.round((day.count / maxCount) * 32)) : 2
-            const col  = day.isFuture
+            const col = day.isFuture
               ? (isDark ? 'rgba(255,255,255,.03)' : '#f8fafc')
               : day.count > 0
               ? (day.isToday ? '#1264E5' : isDark ? 'rgba(24,183,242,.5)' : '#5cb8ea')
@@ -531,8 +425,7 @@ function SidebarActivity({ sessionDays, streak = 0 }) {
   )
 }
 
-// ── Right sidebar: Class rank snapshot ────────────────────────────────────────
-// Matches prototype: medal/rank + first name + XP, "you" row highlighted cyan
+// ── Sidebar: Class rank ───────────────────────────────────────────────────────
 function SidebarClassRank({ leaderboard, myId, scope = 'national' }) {
   const medals = ['🥇', '🥈', '🥉']
   const { totalPoints: liveXP } = usePoints()
@@ -563,19 +456,12 @@ function SidebarClassRank({ leaderboard, myId, scope = 'national' }) {
         {leaderboard.slice(0, 5).map((entry, i) => {
           const isMe = entry.student_id === myId
           const pts  = isMe ? liveXP : (entry.points ?? 0)
-          // API returns first_name or full_name depending on source
           const name = isMe ? 'You' : (entry.first_name ?? entry.full_name?.split(' ')[0] ?? 'Student')
           return (
             <div key={entry.student_id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', background: isMe ? 'rgba(24,183,242,.07)' : 'transparent' }}>
-              <span style={{ fontSize: i < 3 ? 12 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>
-                {i < 3 ? medals[i] : `${i + 1}`}
-              </span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {name}
-              </span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>
-                {pts.toLocaleString()}
-              </span>
+              <span style={{ fontSize: i < 3 ? 12 : 10, fontWeight: 800, color: 'var(--text-tert)', minWidth: 16, textAlign: 'center', flexShrink: 0 }}>{i < 3 ? medals[i] : `${i + 1}`}</span>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 500, color: isMe ? '#18B7F2' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: isMe ? '#FFB800' : 'var(--text-tert)', flexShrink: 0 }}>{pts.toLocaleString()}</span>
             </div>
           )
         })}
@@ -584,8 +470,7 @@ function SidebarClassRank({ leaderboard, myId, scope = 'national' }) {
   )
 }
 
-// ── Right sidebar: Target card ────────────────────────────────────────────────
-// Matches prototype: goal name + days-left big number
+// ── Sidebar: Target ───────────────────────────────────────────────────────────
 function SidebarTarget({ profile, onEdit }) {
   const course     = profile?.university_course?.trim() ?? ''
   const university = profile?.target_university?.trim()  ?? ''
@@ -599,12 +484,7 @@ function SidebarTarget({ profile, onEdit }) {
 
   if (!hasAny) {
     return (
-      <button onClick={onEdit} style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-        padding: '13px', borderRadius: 14,
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        cursor: 'pointer', textAlign: 'left',
-      }}>
+      <button onClick={onEdit} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px', borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left' }}>
         <span style={{ fontSize: 18 }}>🎯</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-prim)' }}>Set your target</p>
@@ -636,23 +516,12 @@ function SidebarTarget({ profile, onEdit }) {
   )
 }
 
-// ── Downloads button — simple nav row ────────────────────────────────────────
+// ── Downloads card ────────────────────────────────────────────────────────────
 function DownloadsCard() {
   const router = useRouter()
   return (
-    <button
-      onClick={() => router.push('/student/downloads')}
-      style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-        padding: '13px 16px', borderRadius: 14,
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-        transition: 'border-color .15s',
-      }}
-    >
-      <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(18,100,229,.1)', border: '1px solid rgba(18,100,229,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>
-        📥
-      </div>
+    <button onClick={() => router.push('/student/downloads')} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 14, background: 'var(--bg-card)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', transition: 'border-color .15s' }}>
+      <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(18,100,229,.1)', border: '1px solid rgba(18,100,229,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📥</div>
       <div style={{ flex: 1 }}>
         <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 1 }}>Download past questions</p>
         <p style={{ fontSize: 11, color: 'var(--text-tert)' }}>Practise offline — no internet needed</p>
@@ -662,12 +531,9 @@ function DownloadsCard() {
   )
 }
 
-// ── Daily Quest card — the hero game-feel component ───────────────────────────
-// Progress ring (0/5), streak dots Mon–Sun, +50 XP reward, EXL Blue CTA
-function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) {
+// ── Daily Quest card ──────────────────────────────────────────────────────────
+function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, todayCount = 0, onStart }) {
   const [pressed, setPressed] = useState(false)
-
-  // Build weekly dot state from sessionDays
   const days  = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
   const today = new Date()
   const weekDots = days.map((label, i) => {
@@ -675,7 +541,7 @@ function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) 
     d.setDate(today.getDate() - ((today.getDay() + 6) % 7) + i)
     const key = d.toISOString().slice(0, 10)
     const isToday = i === ((today.getDay() + 6) % 7)
-    const done = !!sessionDays[key] || (isToday && Object.keys(sessionDays).length > 0)
+    const done = !!sessionDays[key] || (isToday && todayCount > 0)
     return { label, isToday, done }
   })
 
@@ -683,41 +549,27 @@ function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) 
     ? `${weakTopics[0].topicName} · ${weakTopics[0].subjectName}`
     : subjects[0]?.subjects?.name ?? 'Your next topic'
 
-  // Ring SVG — 0/5 empty (ready for today)
   const ringSize = 72, stroke = 7, r = (ringSize - stroke) / 2
   const circ = 2 * Math.PI * r
 
   return (
     <div>
       <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', display: 'block', marginBottom: 8 }}>Daily quest</span>
-      <div style={{
-        borderRadius: 20, overflow: 'hidden', position: 'relative', cursor: 'pointer',
-        background: 'linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%)',
-        border: '1px solid rgba(24,183,242,.2)',
-        animation: 'exl-glow-pulse 3s ease-in-out infinite',
-        padding: '22px 18px',
-      }} onClick={onStart}>
-
-        {/* Glow orb */}
+      <div style={{ borderRadius: 20, overflow: 'hidden', position: 'relative', cursor: 'pointer', background: 'linear-gradient(145deg,#071B49 0%,#0c2460 50%,#062A78 100%)', border: '1px solid rgba(24,183,242,.2)', animation: 'exl-glow-pulse 3s ease-in-out infinite', padding: '22px 18px' }} onClick={onStart}>
         <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'radial-gradient(circle,rgba(24,183,242,.18) 0%,transparent 70%)', pointerEvents: 'none' }} />
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
-          {/* Progress ring */}
           <div style={{ position: 'relative', flexShrink: 0, width: ringSize, height: ringSize }}>
-            <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}
-              style={{ filter: 'drop-shadow(0 0 8px #1264E588)' }}>
+            <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} style={{ filter: 'drop-shadow(0 0 8px #1264E588)' }}>
               <circle cx={ringSize/2} cy={ringSize/2} r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth={stroke}/>
               <circle cx={ringSize/2} cy={ringSize/2} r={r} fill="none" stroke="#1264E5" strokeWidth={stroke}
-                strokeLinecap="round" strokeDasharray={`0 ${circ}`}
+                strokeLinecap="round" strokeDasharray={`${Math.min(todayCount, 5) / 5 * circ} ${circ}`}
                 transform={`rotate(-90 ${ringSize/2} ${ringSize/2})`}/>
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <p style={{ fontSize: 18, fontWeight: 900, color: '#fff', lineHeight: 1 }}>0</p>
+              <p style={{ fontSize: 18, fontWeight: 900, color: '#fff', lineHeight: 1 }}>{Math.min(todayCount, 5)}</p>
               <p style={{ fontSize: 8, color: 'rgba(255,255,255,.4)', fontWeight: 700 }}>/ 5</p>
             </div>
           </div>
-
-          {/* Content */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
               <p style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '-.01em' }}>Quick 5</p>
@@ -730,21 +582,12 @@ function DailyQuestCard({ subjects, weakTopics, streak, sessionDays, onStart }) 
               onMouseDown={() => setPressed(true)} onMouseUp={() => setPressed(false)} onMouseLeave={() => setPressed(false)}
               onTouchStart={() => setPressed(true)} onTouchEnd={() => setPressed(false)}
               onClick={e => { e.stopPropagation(); onStart() }}
-              style={{
-                width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
-                background: '#1264E5', color: '#fff', fontSize: 13, fontWeight: 900, letterSpacing: '-.015em',
-                transform: pressed ? 'translateY(2px)' : '',
-                boxShadow: pressed ? '0 2px 0 #0a3fa0' : '0 4px 0 #0a3fa0, 0 6px 16px rgba(18,100,229,.35)',
-                transition: 'transform .1s, box-shadow .1s',
-                position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
-              }}>
+              style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', background: '#1264E5', color: '#fff', fontSize: 13, fontWeight: 900, letterSpacing: '-.015em', transform: pressed ? 'translateY(2px)' : '', boxShadow: pressed ? '0 2px 0 #0a3fa0' : '0 4px 0 #0a3fa0, 0 6px 16px rgba(18,100,229,.35)', transition: 'transform .1s, box-shadow .1s', position: 'relative', overflow: 'hidden', fontFamily: 'inherit' }}>
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)', backgroundSize: '200% 100%', animation: 'exl-shimmer 2.5s infinite', pointerEvents: 'none' }} />
               Start today's quest →
             </button>
           </div>
         </div>
-
-        {/* Weekly streak dots */}
         <div style={{ display: 'flex', gap: 5, marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.06)', position: 'relative', zIndex: 1, alignItems: 'center' }}>
           {weekDots.map(({ label, isToday, done }, i) => {
             let bg = 'rgba(255,255,255,.04)', bd = 'rgba(255,255,255,.08)', col = 'rgba(255,255,255,.2)', txt = label[0]
@@ -771,50 +614,76 @@ export default function DashboardPage() {
   const isDark   = useIsDark()
   const { userId } = useUser()
 
-  const [loading,       setLoading]       = useState(true)
-  const [profile,       setProfile]       = useState(null)
-  const [subjects,      setSubjects]      = useState([])
-  const [weakTopics,    setWeakTopics]    = useState([])
-  const [planItems,     setPlanItems]     = useState({})
-  const [showGoalModal, setShowGoalModal] = useState(false)
-  const [practiceModal, setPracticeModal] = useState(null)
-  const [sessionDays,   setSessionDays]   = useState({})
-  const [realStreak,    setRealStreak]    = useState(0)
-  const [leaderboard,   setLeaderboard]   = useState([])
-  const [lboardScope,   setLboardScope]   = useState('national') // 'class' | 'school' | 'national'
+  const [loading,         setLoading]         = useState(true)
+  const [profile,         setProfile]         = useState(null)
+  const [subjects,        setSubjects]        = useState([])
+  const [weakTopics,      setWeakTopics]      = useState([])
+  const [planItems,       setPlanItems]       = useState({})
+  const [showGoalModal,   setShowGoalModal]   = useState(false)
+  const [practiceModal,   setPracticeModal]   = useState(null) // null | { id, name }
+  const [sessionDays,     setSessionDays]     = useState({})
+  const [todayQuestCount, setTodayQuestCount] = useState(0)
+  const [realStreak,      setRealStreak]      = useState(0)
+  const [leaderboard,     setLeaderboard]     = useState([])
+  const [lboardScope,     setLboardScope]     = useState('national')
+
+  // Dashboard-level subject cache + exam state for the practice modal
+  const subjectCache       = useRef({})
+  const [modalExam,        setModalExam]        = useState('WAEC')
+  const [modalSubjects,    setModalSubjects]    = useState([])
+  const [loadingModalSubs, setLoadingModalSubs] = useState(false)
 
   useEffect(() => { if (userId) load(userId) }, [userId]) // eslint-disable-line
 
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') fetchLeaderboard()
-    }
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchLeaderboard() }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  // Cascade: class → school cohort → national
+  // Fetch subjects for the practice modal's exam switcher
+  async function fetchModalSubjects(examTab) {
+    if (subjectCache.current[examTab]) {
+      setModalSubjects(subjectCache.current[examTab])
+      return
+    }
+    setLoadingModalSubs(true)
+    try {
+      const res = await fetch(`/api/student/subjects?exam=${examTab}`)
+      const data = res.ok ? await res.json() : []
+      const subs = (data ?? []).map(s => ({ id: s.id, name: s.name }))
+      subjectCache.current[examTab] = subs
+      setModalSubjects(subs)
+    } catch {
+      setModalSubjects([])
+    } finally {
+      setLoadingModalSubs(false)
+    }
+  }
+
+  function handleModalExamChange(newExam) {
+    setModalExam(newExam)
+    fetchModalSubjects(newExam)
+  }
+
+  // When practice modal opens, load subjects for the student's primary exam
+  function openPracticeModal(sub) {
+    const examTab = profile?.exam_type === 'JAMB' ? 'JAMB' : 'WAEC'
+    setModalExam(examTab)
+    setPracticeModal(sub)
+    fetchModalSubjects(examTab)
+  }
+
   async function fetchLeaderboard() {
     try {
-      // 1. Try class leaderboard
       const classRes = await fetch('/api/leaderboard/class?limit=5').then(r => r.json()).catch(() => ({}))
-      if (classRes.leaderboard?.length) {
-        setLeaderboard(classRes.leaderboard.slice(0, 5))
-        setLboardScope('class')
-        return
-      }
-      // 2. Try school cohort leaderboard
+      if (classRes.leaderboard?.length) { setLeaderboard(classRes.leaderboard.slice(0, 5)); setLboardScope('class'); return }
       const cohortRes = await fetch('/api/leaderboard/cohort?scope=school&limit=5').then(r => r.json()).catch(() => ({}))
-      if (cohortRes.leaderboard?.length) {
-        setLeaderboard(cohortRes.leaderboard.slice(0, 5))
-        setLboardScope('school')
-        return
-      }
-      // 3. Fall back to national
+      if (cohortRes.leaderboard?.length) { setLeaderboard(cohortRes.leaderboard.slice(0, 5)); setLboardScope('school'); return }
       const globalRes = await fetch('/api/leaderboard/global?limit=5').then(r => r.json()).catch(() => ({}))
       setLeaderboard(globalRes.leaderboard ?? [])
       setLboardScope('national')
-    } catch { /* silent */ }
+    } catch {}
   }
 
   async function load(uid) {
@@ -822,24 +691,13 @@ export default function DashboardPage() {
     try {
       const [{ data: prof }, { data: paths }, { data: masteryFlat }, { data: streakRow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', uid).single(),
-        supabase.from('student_learning_paths')
-          .select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)')
-          .eq('student_id', uid),
-        // Flat select — no join, student_topic_mastery FK not exposed via PostgREST
-        supabase.from('student_topic_mastery')
-          .select('topic_id, score')
-          .eq('student_id', uid)
-          .order('score', { ascending: true })
-          .limit(50),
-        supabase.from('student_streaks')
-          .select('current_streak, last_active_date')
-          .eq('student_id', uid)
-          .maybeSingle(),
+        supabase.from('student_learning_paths').select('subject_id, ordered_subtopic_ids, subjects(id, name, slug, exam_type)').eq('student_id', uid),
+        supabase.from('student_topic_mastery').select('topic_id, score').eq('student_id', uid).order('score', { ascending: true }).limit(50),
+        supabase.from('student_streaks').select('current_streak, last_active_date').eq('student_id', uid).maybeSingle(),
       ])
 
       setProfile(prof)
 
-      // Fetch topic details separately
       const mTopicIds = (masteryFlat ?? []).map(r => r.topic_id).filter(Boolean)
       const { data: mTopics } = mTopicIds.length > 0
         ? await supabase.from('topics').select('id, name, subject_id').in('id', mTopicIds)
@@ -847,11 +705,7 @@ export default function DashboardPage() {
       const mTopicMap = {}
       for (const t of mTopics ?? []) mTopicMap[t.id] = t
 
-      // Enrich mastery rows
-      const mastery = (masteryFlat ?? []).map(m => ({
-        ...m,
-        topics: mTopicMap[m.topic_id] ?? null,
-      })).filter(m => m.topics)
+      const mastery = (masteryFlat ?? []).map(m => ({ ...m, topics: mTopicMap[m.topic_id] ?? null })).filter(m => m.topics)
 
       const topicScoresBySubject = {}
       for (const m of mastery) {
@@ -862,71 +716,61 @@ export default function DashboardPage() {
       }
 
       const enriched = (paths ?? []).map(path => {
-        const scores = topicScoresBySubject[path.subject_id] ?? []
-        const pct = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
-        const total = (path.ordered_subtopic_ids ?? []).length
+        const scores    = topicScoresBySubject[path.subject_id] ?? []
+        const pct       = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
+        const total     = (path.ordered_subtopic_ids ?? []).length
         const completed = scores.filter(s => s >= 50).length
         return { subject_id: path.subject_id, subjects: path.subjects, total, completed, pct }
       })
       setSubjects(enriched)
 
-      const weak = (mastery ?? [])
-        .filter(m => m.topics && (m.score ?? 0) < 40)
-        .slice(0, 3)
-        .map(m => {
-          const subjectPath = paths?.find(p => p.subject_id === m.topics?.subject_id)
-          return {
-            topicId:     m.topic_id,
-            topicName:   m.topics?.name ?? '',
-            subjectName: subjectPath?.subjects?.name ?? '',
-            pct:         Math.round(m.score ?? 0),
-          }
-        })
+      const weak = (mastery ?? []).filter(m => m.topics && (m.score ?? 0) < 40).slice(0, 3).map(m => {
+        const subjectPath = paths?.find(p => p.subject_id === m.topics?.subject_id)
+        return { topicId: m.topic_id, topicName: m.topics?.name ?? '', subjectName: subjectPath?.subjects?.name ?? '', pct: Math.round(m.score ?? 0) }
+      })
       setWeakTopics(weak)
 
       const streak = streakRow?.current_streak ?? prof?.streak_days ?? 0
       setRealStreak(streak)
 
-      // Non-blocking secondaries — fire after state is set
-      const fourteenDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 14); d.setHours(0,0,0,0); return d.toISOString() })()
-      supabase.from('question_attempts').select('created_at')
-        .eq('student_id', uid).gte('created_at', fourteenDaysAgo)
-        .then(r => {
-          const rows = r.data ?? []
-          const byDate = {}
-          // Count attempts per day first (simpler and more reliable than 30-min session gaps)
-          for (const a of rows) {
-            if (!a.created_at) continue
-            const day = a.created_at.slice(0, 10)
-            byDate[day] = (byDate[day] ?? 0) + 1
-          }
-          // Convert attempt counts to session counts (1 session per active day)
-          const sessionsByDay = {}
-          for (const [day, count] of Object.entries(byDate)) {
-            if (count > 0) sessionsByDay[day] = 1
-          }
-          setSessionDays(sessionsByDay)
-        }).catch(() => {})
+      // Set initial modal exam to match profile
+      const examTab = prof?.exam_type === 'JAMB' ? 'JAMB' : 'WAEC'
+      setModalExam(examTab)
 
-      fetch('/api/student/next-topic')
-        .then(r => r.json())
-        .then(data => setPlanItems(data.topics ?? {}))
-        .catch(() => {})
+      const fourteenDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 14); d.setHours(0,0,0,0); return d.toISOString() })()
+      supabase.from('question_attempts').select('created_at').eq('student_id', uid).gte('created_at', fourteenDaysAgo).then(r => {
+        const rows = r.data ?? []
+        const byDate = {}
+        for (const a of rows) {
+          if (!a.created_at) continue
+          const day = a.created_at.slice(0, 10)
+          byDate[day] = (byDate[day] ?? 0) + 1
+        }
+        const sessionsByDay = {}
+        for (const [day, count] of Object.entries(byDate)) {
+          if (count > 0) sessionsByDay[day] = 1
+        }
+        setSessionDays(sessionsByDay)
+        const todayStr = new Date().toISOString().slice(0, 10)
+        setTodayQuestCount(byDate[todayStr] ?? 0)
+      }).catch(() => {})
+
+      fetch('/api/student/next-topic').then(r => r.json()).then(data => setPlanItems(data.topics ?? {})).catch(() => {})
 
       fetchLeaderboard()
-
     } catch (err) {
       console.error('[dashboard load]', err?.message ?? err)
     } finally {
       setLoading(false)
     }
   }
+
   if (loading) return <DashboardSkeleton />
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? ''
-  const greeting  = getGreeting(firstName)
-  const hasPath   = subjects.length > 0
-  const firstSub  = subjects[0] ? { id: subjects[0].subject_id, name: subjects[0].subjects?.name ?? '' } : null
+  const firstName  = profile?.full_name?.split(' ')[0] ?? ''
+  const greeting   = getGreeting(firstName)
+  const hasPath    = subjects.length > 0
+  const firstSub   = subjects[0] ? { id: subjects[0].subject_id, name: subjects[0].subjects?.name ?? '' } : null
   const streakDays = profile?.streak_days ?? 0
 
   const coach = homeCoach({
@@ -939,16 +783,21 @@ export default function DashboardPage() {
     todayQs:     profile?.today_questions ?? 0,
   })
 
-  function openPractice(sub, quickMode) {
-    router.push('/student/practice/setup')
-  }
+  // Flat subject list for the modal (from learning paths)
+  const flatSubjectsForModal = subjects.map(s => ({ id: s.subject_id, name: s.subjects?.name ?? '' }))
+
+  // Use modalSubjects if loaded (per-exam filtered), otherwise fall back to flat list
+  const modalSubjectList = modalSubjects.length > 0 ? modalSubjects : flatSubjectsForModal
 
   return (
     <>
       {/* Two-column layout on desktop: main feed left, activity+leaderboard right */}
       <style>{`
+        @keyframes exl-shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+        @keyframes exl-glow-pulse{0%,100%{box-shadow:0 0 0 0 rgba(24,183,242,0)}50%{box-shadow:0 0 20px 4px rgba(24,183,242,.12)}}
+        @keyframes exl-flame{0%,100%{transform:scale(1) rotate(-3deg)}50%{transform:scale(1.15) rotate(3deg)}}
         @media (min-width: 1024px) {
-          .dash-grid  { display: grid !important; grid-template-columns: 1fr 240px; gap: 24px; align-items: start; }
+          .dash-grid  { display: grid !important; grid-template-columns: 1fr 300px; gap: 28px; align-items: start; }
           .dash-right { display: flex !important; }
         }
         @media (max-width: 1023px) {
@@ -961,32 +810,39 @@ export default function DashboardPage() {
         {/* ── LEFT: main feed ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-          {/* ── 1. Greeting + pills ── */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div>
-                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>{greeting.eyebrow}</p>
-                  <p style={{ fontSize: 17, fontWeight: 900, letterSpacing: '-0.025em', color: 'var(--text-prim)', lineHeight: 1.2 }}>{greeting.hero}</p>
-                </div>
-              </div>
+          {/* 1. Greeting */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)', marginBottom: 3 }}>{greeting.eyebrow}</p>
+              <p style={{ fontSize: 17, fontWeight: 900, letterSpacing: '-0.025em', color: 'var(--text-prim)', lineHeight: 1.2 }}>{greeting.hero}</p>
+            </div>
+          </div>
 
-              {/* ── 2. Zara coach banner ── */}
-              <CoachBanner emoji={coach.emoji} message={coach.message} />
+          {/* 2. Coach banner */}
+          <CoachBanner emoji={coach.emoji} message={coach.message} />
 
-              {/* ── 2b. Soft diagnostic nudge (only when no path) ── */}
-              {!hasPath && <DiagnosticNudge profile={profile} onEdit={() => setShowGoalModal(true)} />}
+          {/* 2b. Diagnostic nudge */}
+          {!hasPath && <DiagnosticNudge profile={profile} onEdit={() => setShowGoalModal(true)} />}
 
-              {/* ── 3. Daily Quest card ── */}
-              <DailyQuestCard subjects={subjects} weakTopics={weakTopics} streak={realStreak} sessionDays={sessionDays} onStart={() => setPracticeModal(firstSub ?? { id: null, name: '' })} />
+          {/* 3. Daily Quest card — onStart opens modal inline */}
+          <DailyQuestCard
+            subjects={subjects}
+            weakTopics={weakTopics}
+            streak={realStreak}
+            sessionDays={sessionDays}
+            todayCount={todayQuestCount}
+            onStart={() => openPracticeModal(firstSub ?? { id: null, name: '' })}
+          />
 
-              {/* ── 4. Downloads card ── */}
-              <DownloadsCard />
+          {/* 4. Downloads card */}
+          <DownloadsCard />
 
-              {/* ── 5. Target strip ── */}
-              <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
+          {/* 5. Target strip */}
+          <TargetStrip profile={profile} onEdit={() => setShowGoalModal(true)} />
         </div>
 
         {/* ── RIGHT sidebar (desktop only) ── */}
-        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto' }}>
+        <div className="dash-right" style={{ display: 'none', flexDirection: 'column', gap: 10, paddingTop: 6, position: 'sticky', top: 80, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
           <SidebarActivity sessionDays={sessionDays} streak={realStreak} />
           <SidebarClassRank leaderboard={leaderboard} myId={profile?.id} scope={lboardScope} />
           <SidebarTarget profile={profile} onEdit={() => setShowGoalModal(true)} />
@@ -1001,25 +857,35 @@ export default function DashboardPage() {
             key={profile?.id ?? 'goal'}
             profile={profile}
             onClose={() => setShowGoalModal(false)}
-            onSave={updated => { setProfile(prev => ({ ...prev, ...updated })); setShowGoalModal(false) }}
+            onSave={updated => {
+              setProfile(prev => ({ ...prev, ...updated }))
+              setShowGoalModal(false)
+              // Clear subject cache so modal gets fresh data after goal change
+              subjectCache.current = {}
+              setModalSubjects([])
+            }}
           />
         </Suspense>
       )}
 
-      {/* Practice setup modal */}
+      {/* Practice setup modal — launched from "Start today's quest" */}
       {practiceModal && (
         <PracticeSetupModal
-          initialSubject={practiceModal}
-          subjects={subjects.map(s => ({ id: s.subject_id, name: s.subjects?.name ?? '' }))}
-          nextTopics={planItems}
+          subjects={modalSubjectList}
+          loadingSubjects={loadingModalSubs}
+          exam={modalExam}
+          onExamChange={handleModalExamChange}
           profile={profile}
+          initialMode="quick5"
           onClose={() => setPracticeModal(null)}
           onStart={({ subject, type, count, answerMode, topic, duration }) => {
             const config = {
               subjects:     [subject.name],
               subject_id:   subject.id,
-              examType:     profile?.exam_type ?? 'WAEC',
-              count, mode: type, answerMode,
+              examType:     modalExam,
+              count,
+              mode:         type,
+              answerMode,
               topicName:    topic?.topicName   ?? null,
               topic_id:     topic?.topicId     ?? null,
               isCore:       topic?.isCore      ?? false,

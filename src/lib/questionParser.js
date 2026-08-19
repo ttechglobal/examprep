@@ -412,36 +412,7 @@ Return ONLY valid JSON:
 }
 
 // ── Parser + validator ────────────────────────────────────────────────────────
-
-// ── Helper: escape literal control chars only inside JSON string values ────────
-function escapeControlsInsideStrings(text) {
-  let result = ''
-  let inString = false
-  let i = 0
-  while (i < text.length) {
-    const ch = text[i]
-    if (inString) {
-      if (ch === '\\') {
-        result += ch; i++
-        if (i < text.length) { result += text[i]; i++ }
-        continue
-      }
-      if (ch === '"') { inString = false; result += ch; i++; continue }
-      if (ch === '\n') { result += '\\n'; i++; continue }
-      if (ch === '\r') { result += '\\r'; i++; continue }
-      if (ch === '\t') { result += '\\t'; i++; continue }
-      result += ch
-    } else {
-      if (ch === '"') inString = true
-      result += ch
-    }
-    i++
-  }
-  return result
-}
-
 export function parseQuestions(rawText) {
-  // ── Step 1: strip markdown fences ─────────────────────────────────────────
   let cleaned = rawText
     .trim()
     .replace(/^```json\s*/i, '')
@@ -449,34 +420,29 @@ export function parseQuestions(rawText) {
     .replace(/```\s*$/i, '')
     .trim()
 
-  // ── Step 2: normalise Unicode punctuation ──────────────────────────────────
-  cleaned = cleaned
-    .replace(/[\u2018\u2019\u02BC]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\u2013|\u2014/g, '-')
-    .replace(/\u2026/g, '...')
-    .replace(/\u00A0/g, ' ')
+  // Fix unescaped control characters inside JSON strings
+  cleaned = cleaned.replace(
+    /"((?:[^"\\]|\\.)*)"/g,
+    match => match
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t')
+  )
 
-  // ── Step 3: strip illegal control characters ──────────────────────────────
-  cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-
-  // ── Step 4: escape unescaped newlines/tabs inside string values ───────────
-  cleaned = escapeControlsInsideStrings(cleaned)
-
-  // ── Step 5: trailing-comma repair ─────────────────────────────────────────
-  cleaned = cleaned.replace(/,\s*([}\]])/g, '$1')
-
-  // ── Step 6: parse ─────────────────────────────────────────────────────────
   let parsed
   try {
     parsed = JSON.parse(cleaned)
   } catch (err) {
     try {
-      parsed = JSON.parse(cleaned.replace(/\r?\n/g, ' ').replace(/\s{2,}/g, ' '))
+      const aggressive = cleaned
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        .replace(/,\s*([}\]])/g, '$1')
+      parsed = JSON.parse(aggressive)
     } catch (err2) {
       return { valid: false, errors: [`Invalid JSON: ${err2.message}`], questions: [] }
     }
   }
+
   if (!Array.isArray(parsed)) {
     return { valid: false, errors: ['Response must be a JSON array of questions'], questions: [] }
   }
@@ -642,122 +608,188 @@ function stringSimilarity(a, b) {
 }
 
 // ── SdashAPI Enrichment Prompt ────────────────────────────────────────────────
-// buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topics)
+// ─────────────────────────────────────────────────────────────────────────────
+// buildSdashEnrichPrompt
 //
-// LEAN prompt — asks AI only for the enrichment delta:
-//   { index, explanation, topic_title, subtopic_title, difficulty }
+// Generates a LEAN prompt the admin copies into Claude/Gemini.
 //
-// The original question data (question_text, options, answer etc.) stays in
-// fetchedQuestions on the client. mergeSdashEnrichment() joins them back.
+// What the AI receives:
+//   - Each question's text + original solution (as reference, not to copy)
+//   - The curriculum topic list (names only — short numbered list)
 //
-// This keeps the prompt small (no full JSON input, no full JSON output schema)
-// and dramatically reduces the chance of malformed output.
+// What the AI returns (small JSON — enrichment delta only):
+//   [{ index, explanation: { correct, workings[], wrong_options:{} }, topic_title, subtopic_title, difficulty }]
+//
+// The original question data (text, options, answer) stays in fetchedQuestions
+// on the client. mergeSdashEnrichment() joins them together before save.
+//
+// Keeping the output small prevents the AI truncating mid-array and avoids the
+// parse errors we were getting when we asked it to echo back the full question.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── SdashAPI Enrichment Prompt ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// buildSdashEnrichPrompt — v2 (Claude-optimised, mastery-first)
+//
+// KEY CHANGES FROM v1:
+//   • Explanation style rewritten for simple English that a smart 12-year-old
+//     can follow — not dumbed-down, but plain and direct
+//   • "correct" field: first VERIFIES the answer is correct with a brief
+//     reason, then explains the underlying concept in 1–3 sentences
+//   • "concept" field added: one-line core concept the question is testing
+//   • Wrong options explanations name the specific misconception, not just
+//     "this is wrong" — crucial for exam prep
+//   • Maths/science workings: each step labelled (Given, Formula, Substitute,
+//     Solve, Check) so students can follow the logic, not just copy numbers
+//   • Tone: direct, warm, encouraging — like a smart older sibling explaining
+//     something, not a textbook
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topics = []) {
   const examContext = {
-    WAEC:  'Nigerian WAEC (West African Senior School Certificate Examination)',
+    WAEC:  'Nigerian WAEC (West African Examinations Council)',
     JAMB:  'Nigerian JAMB/UTME (Joint Admissions and Matriculation Board)',
     IGCSE: 'Cambridge IGCSE',
   }
   const ctx = examContext[examType] ?? examType
 
-  // Compact curriculum list — topic names only (no subtopics in prompt)
-  // Admin page handles subtopic matching locally via matchTopicSubtopic()
   const topicList = topics.length
     ? topics.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    : '(No curriculum loaded — use your knowledge of the subject)'
-
-  // Minimal question summaries for the AI — index + question text only
-  // We do NOT send options/answer/solution in — keeps token count low
-  const questionLines = rawQuestions.map((q, i) =>
-    `[${i + 1}] ${(q.question ?? '').trim().slice(0, 200)}`
-  ).join('\n\n')
+    : '(curriculum not yet loaded — suggest the most accurate topic name you know)'
 
   const isMathSci = /physics|chemistry|mathematics|further math|biology|economics/i.test(subjectName)
+  const isLanguage = /english|literature|yoruba|igbo|hausa/i.test(subjectName)
 
-  return `You are an expert ${ctx} teacher. Your job is to enrich past exam questions for a student learning app.
+  const questionLines = rawQuestions.map((q, i) => {
+    const opts = typeof q.options === 'object' && !Array.isArray(q.options)
+      ? Object.entries(q.options).map(([k, v]) => `   ${k}. ${v}`).join('\n')
+      : ''
+    const answer = q.answer ? `\n   ✓ Correct answer: ${q.answer}` : ''
+    const sol = q.solution ? `\n   Original solution hint: ${q.solution.trim().slice(0, 200)}` : ''
+    return `[${i + 1}] (${q.examyear ?? '?'}) ${(q.question ?? '').trim()}\n${opts}${answer}${sol}`
+  }).join('\n\n')
 
-Subject: ${subjectName}
-Exam: ${examType}
+  const mathSciWorkingsGuide = `
+"workings": Array of step-by-step strings. Each step must be a complete, readable line — not just a formula.
+Label your steps: "Given:", "Formula:", "Substitute:", "Solve:", "Answer:"
+GOOD EXAMPLE (Physics — velocity):
+  ["Given: initial velocity u = 0, acceleration a = 10 m/s², time t = 5s",
+   "Formula: v = u + at",
+   "Substitute: v = 0 + (10 × 5)",
+   "Solve: v = 50 m/s ✓"]
+BAD EXAMPLE:
+  ["Use v = u + at", "Get 50"]
+For pure recall questions with no calculation: use []`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TASK
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const nonMathWorkingsGuide = `
+"workings": Always [] for this subject — no calculation steps needed.
+Put any extra clarification in the "correct" field instead.`
 
-For each numbered question below, return ONLY:
-  • A clear explanation (why the correct answer is right)
-  • Step-by-step workings (for ${isMathSci ? 'calculation questions' : 'reasoning questions'})
-  • Why each wrong option is wrong (one sentence each)
-  • The correct topic from the list below
-  • Difficulty: easy / medium / hard
+  return `You are helping Nigerian secondary school students prepare for ${ctx} — ${subjectName}.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOPIC LIST (pick the closest match)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your job is to write clear, student-friendly explanations for each question below.
+You have been given the correct answer and an original solution hint. Use these to stay accurate, but write your own explanation in simple, plain English.
 
+═══════════════════════════════════════
+EXPLANATION QUALITY STANDARDS
+═══════════════════════════════════════
+
+Your explanations must meet these three standards:
+
+1. VERIFY FIRST
+   Start the "correct" field by confirming which answer is right and why — one sentence.
+   Then explain the concept behind it — 1 to 2 more sentences.
+   Total: 2–3 sentences maximum for "correct". No padding.
+
+2. PLAIN ENGLISH — EXPLAIN LIKE A SMART 12-YEAR-OLD WOULD UNDERSTAND
+   Avoid textbook language. Say "speed increases" not "velocity is augmented."
+   If a concept needs a real-world comparison to click, use one.
+   No long paragraphs. Short sentences. Every word earns its place.
+   GOOD: "The correct answer is B — osmosis. Water moves from a dilute solution
+         to a concentrated one through a semi-permeable membrane. Think of it like
+         water being 'pulled in' to balance things out."
+   BAD:  "The correct option is B because osmosis is a process by which solvent
+         molecules pass through a semipermeable membrane from a less concentrated
+         solution to a more concentrated one."
+
+3. NAME THE MISCONCEPTION IN WRONG OPTIONS
+   For each wrong option, explain the SPECIFIC mistake a student makes when they pick it.
+   Don't just say "this is incorrect." Say WHY a student might think it's right, and what's wrong with that thinking.
+   GOOD: "D — diffusion. Students confuse this with osmosis. Diffusion is about particles moving,
+         not specifically water through a membrane."
+   BAD:  "D is wrong because diffusion is different from osmosis."
+
+"concept" field: One short line naming the core idea being tested.
+   e.g. "Osmosis vs diffusion", "Newton's second law", "Subject-verb agreement"
+   This appears as a label above the explanation in the app.
+
+${isMathSci ? mathSciWorkingsGuide : nonMathWorkingsGuide}
+
+MATHS FORMATTING
+Wrap expressions in $…$: $v = u + at$, $\\frac{1}{2}mv^2$, $\\sqrt{x+1}$
+Use ₦ directly for Naira. Symbols: × → \\times, ÷ → \\div, π → \\pi, ≠ → \\neq
+
+DIFFICULTY GUIDE
+easy   — direct recall, one-step, straightforward
+medium — requires understanding, 2–3 steps, some reasoning
+hard   — multi-step, tricky wording, requires deep understanding
+
+TOPIC TAGGING
+Pick the single closest topic from this numbered list:
 ${topicList}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MATH FORMATTING (KaTeX)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Wrap all maths in $...$  e.g. $v = u + at$, $\\frac{1}{2}mv^2$, $\\sqrt{x}$
-Use ₦ directly for Naira — never \\N or \\text{N}
-Symbols: × → \\times   ÷ → \\div   ≤ → \\leq   ≥ → \\geq   π → \\pi
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════════
 QUESTIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════════
 
 ${questionLines}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RETURN FORMAT — JSON ARRAY ONLY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Return ONLY a valid JSON array, one object per question, in the same order.
-No markdown fences. No text outside the array.
+═══════════════════════════════════════
+OUTPUT — JSON ARRAY ONLY
+═══════════════════════════════════════
+Return ONLY a valid JSON array. No markdown, no text before or after the array.
+One object per question, in the same order as the questions above.
 
 [
   {
     "index": 1,
-    "topic_title": "topic name from the list above",
-    "subtopic_title": "more specific subtopic if you know it, or empty string",
+    "topic_title": "exact topic name from the list above",
+    "subtopic_title": "specific subtopic if you know it, or empty string",
     "difficulty": "easy",
     "explanation": {
-      "correct": "1-2 sentences explaining why the correct answer is right",
-      "workings": ["Step 1", "Step 2", "Answer"],
+      "concept": "One-line core concept being tested",
+      "correct": "Verify the answer in one sentence. Then explain the concept in 1–2 more sentences. Plain English, no padding.",
+      "workings": ["Step 1 — labelled", "Step 2 — labelled", "Answer ✓"],
       "wrong_options": {
-        "B": "one sentence why B is wrong",
-        "C": "one sentence why C is wrong",
-        "D": "one sentence why D is wrong"
+        "B": "Name the specific misconception — why a student picks this and what's wrong with that thinking",
+        "C": "Same — name the specific mistake",
+        "D": "Same — name the specific mistake"
       }
     }
   }
 ]`
 }
 
-// mergeSdashEnrichment(fetchedQuestions, enrichmentArray)
 //
-// Called after the AI paste-back is parsed.
-// Merges the AI enrichment delta onto the original fetched question data.
-// This is what actually goes into parseQuestions for validation + save.
+// Merges the AI's enrichment delta onto the original SdashAPI question data.
+// Called in the import page after parseEnrichment() validates the paste-back.
+// The merged result goes straight into the Tag Review UI (same as upload flow).
 // ─────────────────────────────────────────────────────────────────────────────
-export function mergeSdashEnrichment(fetchedQuestions, enrichmentArray, examType, subjectName) {
+export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, subjectName) {
+  // Build index → enrichment map (AI returns 1-based index)
   const byIndex = {}
-  for (const e of enrichmentArray) {
-    if (e.index != null) byIndex[e.index] = e
+  for (const e of (enrichments ?? [])) {
+    if (e.index != null) byIndex[Number(e.index)] = e
   }
 
   return fetchedQuestions.map((q, i) => {
-    const enrichment = byIndex[i + 1] ?? {}
+    const e = byIndex[i + 1] ?? {}
     return {
       exam:          examType,
       subject:       subjectName,
       year:          q.examyear ?? '',
       passage_text:  q.section  ?? null,
-      question_text: q.question ?? '',
+      question_text: (q.question ?? '').trim(),
       has_image:     !!(q.image),
       image_description: '',
       options: {
@@ -768,24 +800,49 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichmentArray, examType
         ...(q.option?.e || q.option?.E ? { E: q.option.e ?? q.option.E } : {}),
       },
       correct_answer: (q.answer ?? '').toUpperCase(),
-      explanation:    enrichment.explanation ?? {
-        correct: '',
+      explanation: e.explanation ?? {
+        correct: q.solution?.trim() ?? '',
         workings: [],
         wrong_options: {},
       },
-      topic_title:    enrichment.topic_title    ?? '',
-      subtopic_title: enrichment.subtopic_title ?? '',
-      difficulty:     enrichment.difficulty     ?? 'medium',
+      topic_title:    e.topic_title    ?? '',
+      subtopic_title: e.subtopic_title ?? '',
+      difficulty:     e.difficulty     ?? 'medium',
     }
   })
 }
 
-// parseEnrichment(rawText)
-//
-// Parses the lean AI enrichment response (index + explanation + tags only).
-// Same cleaning pipeline as parseQuestions but validates the enrichment shape.
 // ─────────────────────────────────────────────────────────────────────────────
+// parseEnrichment
+//
+// Parses the lean AI enrichment response.
+// Same cleaning pipeline as parseQuestions, validates enrichment shape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Internal helper — escape literal newlines/tabs only inside JSON string values
+function _escapeControlsInsideStrings(text) {
+  let out = ''
+  let inStr = false
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (inStr) {
+      if (ch === '\\') { out += ch + (text[i+1] ?? ''); i += 2; continue }
+      if (ch === '"')  { inStr = false; out += ch; i++; continue }
+      if (ch === '\n') { out += '\\n'; i++; continue }
+      if (ch === '\r') { out += '\\r'; i++; continue }
+      if (ch === '\t') { out += '\\t'; i++; continue }
+    } else {
+      if (ch === '"') inStr = true
+    }
+    out += ch; i++
+  }
+  return out
+}
+
 export function parseEnrichment(rawText) {
+  if (!rawText?.trim()) return { valid: false, errors: ['No content pasted'], enrichments: [] }
+
   let cleaned = rawText
     .trim()
     .replace(/^```json\s*/i, '')
@@ -793,7 +850,7 @@ export function parseEnrichment(rawText) {
     .replace(/```\s*$/i, '')
     .trim()
 
-  // Normalise Unicode punctuation
+  // Normalise Unicode punctuation AI models commonly emit
   cleaned = cleaned
     .replace(/[\u2018\u2019\u02BC]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
@@ -801,8 +858,13 @@ export function parseEnrichment(rawText) {
     .replace(/\u2026/g, '...')
     .replace(/\u00A0/g, ' ')
 
+  // Strip illegal control characters
   cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-  cleaned = escapeControlsInsideStrings(cleaned)
+
+  // Escape unescaped newlines/tabs inside string values only
+  cleaned = _escapeControlsInsideStrings(cleaned)
+
+  // Trailing comma repair
   cleaned = cleaned.replace(/,\s*([}\]])/g, '$1')
 
   let parsed
@@ -817,20 +879,18 @@ export function parseEnrichment(rawText) {
   }
 
   if (!Array.isArray(parsed)) {
-    return { valid: false, errors: ['Expected a JSON array'], enrichments: [] }
+    return { valid: false, errors: ['Expected a JSON array — make sure the AI returned [...]'], enrichments: [] }
+  }
+  if (parsed.length === 0) {
+    return { valid: false, errors: ['Array is empty'], enrichments: [] }
   }
 
   const errors = []
   parsed.forEach((e, i) => {
-    if (e.index == null) errors.push(`Item ${i + 1}: missing index`)
-    if (!e.topic_title)  errors.push(`Item ${i + 1}: missing topic_title`)
-    if (!e.difficulty)   errors.push(`Item ${i + 1}: missing difficulty`)
-    if (!e.explanation?.correct) errors.push(`Item ${i + 1}: missing explanation.correct`)
+    const n = e.index ?? i + 1
+    if (!e.explanation?.correct?.trim()) errors.push(`Question ${n}: explanation.correct is empty`)
+    if (!e.topic_title?.trim())          errors.push(`Question ${n}: topic_title is missing`)
+    if (!['easy','medium','hard'].includes(e.difficulty)) errors.push(`Question ${n}: difficulty must be easy / medium / hard`)
   })
 
-  return {
-    valid: errors.length === 0,
-    errors,
-    enrichments: parsed,
-  }
-}
+  return { valid: errors.length === 0, errors, enrichments: parsed }}

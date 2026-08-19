@@ -1,13 +1,7 @@
 'use client'
 // src/app/admin/questions/page.js
-//
-// CHANGES:
-// - Question Bank tab now defaults to source=ai_generated (AI-generated questions only)
-// - Past Questions tab added — shows source=past_paper questions with year filter
-// - Source is made explicit in filters so the two types are clearly separated
-// - Coverage and History tabs unchanged
 
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, memo, useRef } from 'react'
 import Link from 'next/link'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -33,9 +27,398 @@ function Spinner({ size = 'md' }) {
   return <div className={`${sz} border-indigo-500 border-t-transparent rounded-full animate-spin`} />
 }
 
+// ── Student-facing explanation renderer ───────────────────────────────────────
+function ExplanationPreview({ explanation, options, correctAnswer, question }) {
+  const [picked, setPicked] = useState(null)
+  const expl = typeof explanation === 'string' ? null : explanation
+  const plainText = typeof explanation === 'string' ? explanation : explanation?.correct ?? null
+
+  return (
+    <div className="space-y-3">
+      {/* Question text */}
+      <p className="text-sm font-medium text-gray-800 leading-relaxed">{question}</p>
+
+      {/* Options — interactive */}
+      <div className="space-y-1.5">
+        {Object.entries(options ?? {}).map(([k, v]) => {
+          let cls = 'flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm border cursor-pointer transition-colors'
+          if (picked) {
+            if (k === picked && k === correctAnswer)  cls += ' bg-green-50 border-green-300 text-green-800'
+            else if (k === picked)                    cls += ' bg-red-50 border-red-300 text-red-800'
+            else if (k === correctAnswer)             cls += ' bg-green-50 border-green-200 text-green-700 opacity-70'
+            else                                      cls += ' bg-gray-50 border-gray-100 text-gray-500'
+          } else {
+            cls += ' bg-gray-50 border-gray-100 text-gray-700 hover:bg-indigo-50 hover:border-indigo-200'
+          }
+          return (
+            <div key={k} className={cls} onClick={() => !picked && setPicked(k)}>
+              <span className="font-black text-xs w-5 flex-shrink-0 mt-0.5">{k}.</span>
+              <span className="leading-relaxed flex-1">{v}</span>
+              {picked && k === correctAnswer && <span className="text-green-600 text-xs font-black flex-shrink-0 ml-auto">✓</span>}
+              {picked && k === picked && k !== correctAnswer && <span className="text-red-500 text-xs font-black flex-shrink-0 ml-auto">✗</span>}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Reset */}
+      {picked && (
+        <button onClick={() => setPicked(null)}
+          className="text-xs text-gray-400 hover:text-gray-600 underline">
+          Reset answer
+        </button>
+      )}
+
+      {/* Result banner */}
+      {picked && (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border ${
+          picked === correctAnswer
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          {picked === correctAnswer ? '✓ Correct!' : `✗ Wrong — the answer is ${correctAnswer}`}
+        </div>
+      )}
+
+      {/* Explanation sections — only shown after answering */}
+      {picked && expl && (
+        <div className="space-y-2 pt-1">
+          {/* Concept */}
+          {expl.concept && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
+              <span className="text-indigo-500 text-base flex-shrink-0">💡</span>
+              <p className="text-xs text-indigo-800 font-medium leading-relaxed">{expl.concept}</p>
+            </div>
+          )}
+
+          {/* Why picked option is wrong */}
+          {picked !== correctAnswer && expl.wrong_options?.[picked] && (
+            <div className="px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">Why {picked} is wrong</p>
+              <p className="text-xs text-amber-900 leading-relaxed">{expl.wrong_options[picked]}</p>
+            </div>
+          )}
+
+          {/* Correct explanation */}
+          {expl.correct && (
+            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">
+                {picked === correctAnswer ? "Why you're right" : `Why ${correctAnswer} is correct`}
+              </p>
+              <p className="text-xs text-gray-800 leading-relaxed">{expl.correct}</p>
+            </div>
+          )}
+
+          {/* Workings */}
+          {expl.workings?.length > 0 && (
+            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-2">Workings</p>
+              <div className="space-y-1.5">
+                {expl.workings.map((step, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">{i+1}</span>
+                    <span className="text-xs font-mono text-gray-700 leading-relaxed">{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Other wrong options */}
+          {expl.wrong_options && (
+            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-2">Why other options are wrong</p>
+              <div className="space-y-2">
+                {Object.entries(expl.wrong_options)
+                  .filter(([k]) => k !== correctAnswer)
+                  .map(([k, reason]) => (
+                    <div key={k} className={`flex items-start gap-2 px-2 py-1.5 rounded-lg ${k === picked ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                      <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-black flex items-center justify-center flex-shrink-0">{k}</span>
+                      <span className="text-xs text-gray-700 leading-relaxed">{reason}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fallback plain text explanation */}
+      {picked && !expl && plainText && (
+        <div className="px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+          <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide mb-1">Explanation</p>
+          <p className="text-xs text-blue-800 leading-relaxed">{plainText}</p>
+        </div>
+      )}
+
+      {/* No explanation */}
+      {picked && !expl && !plainText && (
+        <p className="text-xs text-gray-400 italic">No explanation saved for this question yet.</p>
+      )}
+    </div>
+  )
+}
+
+// ── Topic tagger panel ────────────────────────────────────────────────────────
+function TopicTagger({ question, onSave, onCancel }) {
+  const [topics,      setTopics]      = useState([])
+  const [loading,     setLoading]     = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+  const [selectedTopic,    setSelectedTopic]    = useState(question.topic_id    ?? '')
+  const [selectedSubtopic, setSelectedSubtopic] = useState(question.subtopic_id ?? '')
+  const [saving,      setSaving]      = useState(false)
+  const [subjectId,   setSubjectId]   = useState(question.subject_id ?? '')
+
+  // Fetch subjects to pick one if not set
+  const [subjects, setSubjects] = useState([])
+  useEffect(() => {
+    fetch('/api/admin/subjects?active=true')
+      .then(r => r.json())
+      .then(d => setSubjects(Array.isArray(d) ? d : []))
+  }, [])
+
+  // When subjectId changes, load curriculum
+  useEffect(() => {
+    if (!subjectId) { setTopics([]); setSuggestions([]); return }
+    setLoading(true)
+    fetch(`/api/admin/curriculum?subjectId=${subjectId}`)
+      .then(r => r.json())
+      .then(tree => {
+        setTopics(Array.isArray(tree) ? tree : [])
+        // Get AI suggestions
+        return fetch('/api/admin/sdash/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            questions: [{ id: question.id, question_text: question.question_text, options: question.options }],
+            topics: Array.isArray(tree) ? tree : [],
+          })
+        }).then(r => r.json()).then(d => {
+          setSuggestions(d.suggestions?.[0]?.matches ?? [])
+        })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [subjectId, question.id, question.question_text, question.options])
+
+  const subtopics = topics.find(t => t.id === selectedTopic)?.subtopics ?? []
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/questions/${question.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic_id:    selectedTopic    || null,
+          subtopic_id: selectedSubtopic || null,
+        })
+      })
+      if (!res.ok) throw new Error('Save failed')
+      const updated = await res.json()
+      onSave(updated)
+    } catch (e) {
+      alert('Failed to save: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-2">Tag to curriculum</p>
+        <p className="text-xs text-gray-500 mb-3">
+          {question.topic_id ? 'Already tagged — you can change it below.' : 'This question is untagged. Pick a topic and subtopic.'}
+        </p>
+      </div>
+
+      {/* Subject picker */}
+      <div>
+        <label className="text-xs font-medium text-gray-600 block mb-1">Subject</label>
+        <select value={subjectId} onChange={e => { setSubjectId(e.target.value); setSelectedTopic(''); setSelectedSubtopic('') }}
+          className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="">Select subject…</option>
+          {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+
+      {/* AI suggestions */}
+      {suggestions.length > 0 && (
+        <div>
+          <p className="text-[10px] font-black text-indigo-500 uppercase tracking-wide mb-1.5">AI suggestions</p>
+          <div className="space-y-1">
+            {suggestions.map((s, i) => (
+              <button key={i}
+                onClick={() => { setSelectedTopic(s.topicId); setSelectedSubtopic(s.subtopicId ?? '') }}
+                className={`w-full text-left px-3 py-2 rounded-xl text-xs border transition-colors ${
+                  selectedTopic === s.topicId && selectedSubtopic === (s.subtopicId ?? '')
+                    ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                    : 'bg-gray-50 border-gray-100 text-gray-700 hover:bg-indigo-50 hover:border-indigo-200'
+                }`}>
+                <span className="font-medium">{s.topicName}</span>
+                {s.subtopicName && <span className="text-gray-400"> → {s.subtopicName}</span>}
+                <span className={`ml-2 text-[10px] font-black ${s.score >= 60 ? 'text-green-600' : s.score >= 30 ? 'text-amber-500' : 'text-gray-400'}`}>
+                  {s.score}%
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+      )}
+
+      {/* Manual pickers */}
+      {topics.length > 0 && (
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Topic</label>
+            <select value={selectedTopic} onChange={e => { setSelectedTopic(e.target.value); setSelectedSubtopic('') }}
+              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">Select topic…</option>
+              {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          {subtopics.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Subtopic</label>
+              <select value={selectedSubtopic} onChange={e => setSelectedSubtopic(e.target.value)}
+                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                <option value="">Select subtopic…</option>
+                {subtopics.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+          {topics.length > 0 && !topics.some(t => t.subtopics?.length) && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 px-3 py-2 rounded-xl">
+              No subtopics in this subject's curriculum yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      {subjectId && !loading && topics.length === 0 && (
+        <p className="text-xs text-gray-400 bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
+          No curriculum loaded for this subject yet. Add topics in{' '}
+          <Link href="/admin/curriculum" className="text-indigo-600 underline">Curriculum →</Link>
+        </p>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 pt-1">
+        <button onClick={handleSave} disabled={!selectedTopic || saving}
+          className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 disabled:opacity-40 transition-colors">
+          {saving ? 'Saving…' : 'Save tag'}
+        </button>
+        <button onClick={onCancel}
+          className="px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Question drawer ───────────────────────────────────────────────────────────
+// Replaces the old modal. Right-side slide-in with two tabs: Preview + Tag.
+function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
+  const [q,    setQ]    = useState(initialQ)
+  const [tab,  setTab]  = useState('preview') // 'preview' | 'tag'
+  const [saved, setSaved] = useState(false)
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function handleTagSaved(updated) {
+    setQ(updated)
+    setSaved(true)
+    onUpdated?.(updated)
+    setTab('preview')
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const opts = q.options ?? {}
+  const diffColor = q.difficulty === 'hard' ? 'red' : q.difficulty === 'easy' ? 'green' : 'amber'
+  const sourceLabel = q.source === 'past_paper' ? 'Past Paper' : 'AI'
+  const sourceColor = q.source === 'past_paper' ? 'indigo' : 'violet'
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" onClick={onClose} />
+
+      {/* Drawer */}
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-lg bg-white shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {q.subjects?.name && <Badge color="indigo">{q.subjects.name}</Badge>}
+            {q.topics?.name   && <Badge color="gray">{q.topics.name}</Badge>}
+            {q.subtopics?.name && <Badge color="gray">{q.subtopics.name}</Badge>}
+            <Badge color={diffColor}>{q.difficulty}</Badge>
+            <Badge color={sourceColor}>{sourceLabel}</Badge>
+            {q.year && <Badge color="gray">{q.year}</Badge>}
+            {!q.subtopic_id && <Badge color="red">Untagged</Badge>}
+            {saved && <Badge color="green">✓ Tagged!</Badge>}
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 flex-shrink-0 text-lg font-light leading-none">
+            ×
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-5 pt-3 pb-0 flex-shrink-0 border-b border-gray-100">
+          <button onClick={() => setTab('preview')}
+            className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors ${
+              tab === 'preview'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}>
+            👁 Student preview
+          </button>
+          <button onClick={() => setTab('tag')}
+            className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors ${
+              tab === 'tag'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}>
+            🏷 Tag topic {q.subtopic_id ? '✓' : ''}
+          </button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {tab === 'preview' ? (
+            <ExplanationPreview
+              question={q.question_text}
+              options={opts}
+              correctAnswer={q.correct_answer}
+              explanation={q.explanation}
+            />
+          ) : (
+            <TopicTagger
+              question={q}
+              onSave={handleTagSaved}
+              onCancel={() => setTab('preview')}
+            />
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Question row ──────────────────────────────────────────────────────────────
 const QuestionRow = memo(function QuestionRow({ question: q, onOpen }) {
-  const diffColor = q.difficulty === 'hard' ? 'red' : q.difficulty === 'easy' ? 'green' : 'amber'
+  const diffColor   = q.difficulty === 'hard' ? 'red' : q.difficulty === 'easy' ? 'green' : 'amber'
   const sourceColor = q.source === 'past_paper' ? 'indigo' : 'violet'
   const sourceLabel = q.source === 'past_paper' ? 'Past Paper' : 'AI'
 
@@ -64,20 +447,17 @@ const QuestionRow = memo(function QuestionRow({ question: q, onOpen }) {
 })
 
 // ── Batch history ─────────────────────────────────────────────────────────────
-function BatchHistory({ subjectId, examType }) {
+function BatchHistory() {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const p = new URLSearchParams()
-    if (subjectId) p.set('subjectId', subjectId)
-    if (examType)  p.set('examType', examType)
-    fetch(`/api/admin/questions/batches?${p}`)
+    fetch('/api/admin/questions/batches')
       .then(r => r.json())
       .then(d => setBatches(d.batches ?? []))
       .catch(() => setBatches([]))
       .finally(() => setLoading(false))
-  }, [subjectId, examType])
+  }, [])
 
   if (loading) return <div className="flex justify-center py-12"><Spinner /></div>
   if (!batches.length) return (
@@ -110,114 +490,64 @@ function BatchHistory({ subjectId, examType }) {
   )
 }
 
-// ── Question modal ────────────────────────────────────────────────────────────
-function QuestionModal({ question: q, onClose }) {
-  if (!q) return null
-  const opts = q.options ?? {}
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-xl max-h-[85vh] overflow-y-auto shadow-xl"
-        onClick={e => e.stopPropagation()}>
-        <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {q.subjects?.name && <Badge color="indigo">{q.subjects.name}</Badge>}
-            {q.topics?.name   && <Badge color="gray">{q.topics.name}</Badge>}
-            <Badge color={q.difficulty === 'hard' ? 'red' : q.difficulty === 'easy' ? 'green' : 'amber'}>
-              {q.difficulty}
-            </Badge>
-            <Badge color={q.source === 'past_paper' ? 'indigo' : 'violet'}>
-              {q.source === 'past_paper' ? 'Past Paper' : 'AI Generated'}
-            </Badge>
-            {q.year && <Badge color="gray">{q.year}</Badge>}
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0 text-lg leading-none">×</button>
-        </div>
-        <div className="px-5 py-4 space-y-4">
-          <p className="text-sm text-gray-800 leading-relaxed font-medium">{q.question_text}</p>
-          <div className="space-y-2">
-            {Object.entries(opts).map(([key, val]) => (
-              <div key={key}
-                className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm ${
-                  key === q.correct_answer
-                    ? 'bg-green-50 border border-green-200 text-green-800'
-                    : 'bg-gray-50 text-gray-700'
-                }`}>
-                <span className="font-black text-xs w-5 flex-shrink-0 mt-0.5">{key}.</span>
-                <span className="leading-relaxed">{val}</span>
-                {key === q.correct_answer && <span className="ml-auto text-green-600 text-xs font-black flex-shrink-0">✓</span>}
-              </div>
-            ))}
-          </div>
-          {q.explanation && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-3">
-              <p className="text-xs font-black text-blue-700 mb-1">Explanation</p>
-              <p className="text-xs text-blue-800 leading-relaxed">
-                {typeof q.explanation === 'string' ? q.explanation : q.explanation?.text ?? q.explanation?.correct ?? JSON.stringify(q.explanation)}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Question list with filters (used by both Bank and Past Questions tabs) ────
+// ── Question list ─────────────────────────────────────────────────────────────
 function QuestionList({ source, subjects }) {
-  const [questions,     setQuestions]     = useState([])
-  const [total,         setTotal]         = useState(0)
-  const [loading,       setLoading]       = useState(true)
-  const [page,          setPage]          = useState(1)
-  const [topics,        setTopics]        = useState([])
-  const [selected,      setSelected]      = useState(null)
+  const [questions,      setQuestions]      = useState([])
+  const [total,          setTotal]          = useState(0)
+  const [loading,        setLoading]        = useState(true)
+  const [page,           setPage]           = useState(1)
+  const [topics,         setTopics]         = useState([])
+  const [selected,       setSelected]       = useState(null)
+  const [filterExam,     setFilterExam]     = useState('')
+  const [filterSubject,  setFilterSubject]  = useState('')
+  const [filterTopic,    setFilterTopic]    = useState('')
+  const [filterDiff,     setFilterDiff]     = useState('')
+  const [filterYear,     setFilterYear]     = useState('')
+  const [filterUntagged, setFilterUntagged] = useState(false)
+  const PER_PAGE = 25
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
-  const [filterExam,      setFilterExam]      = useState('')
-  const [filterSubject,   setFilterSubject]   = useState('')
-  const [filterTopic,     setFilterTopic]     = useState('')
-  const [filterDifficulty,setFilterDifficulty]= useState('')
-  const [filterUntagged,  setFilterUntagged]  = useState(false)
-  const [filterYear,      setFilterYear]      = useState('')
-  const [search,          setSearch]          = useState('')
-
+  // Load topics when subject changes
   useEffect(() => {
-    if (!filterSubject) { setTopics([]); return }
+    if (!filterSubject) { setTopics([]); setFilterTopic(''); return }
     fetch(`/api/admin/curriculum?subjectId=${filterSubject}`)
       .then(r => r.json())
-      .then(data => setTopics(Array.isArray(data) ? data : []))
+      .then(d => setTopics(Array.isArray(d) ? d : []))
+      .catch(() => setTopics([]))
   }, [filterSubject])
 
   const load = useCallback(() => {
     setLoading(true)
-    const p = new URLSearchParams({ page: String(page), limit: '25', source })
-    if (filterExam)       p.set('exam',       filterExam)
-    if (filterSubject)    p.set('subject',    filterSubject)
-    if (filterTopic)      p.set('topic',      filterTopic)
-    if (filterDifficulty) p.set('difficulty', filterDifficulty)
-    if (filterUntagged)   p.set('untagged',   'true')
-    if (filterYear)       p.set('year',       filterYear)
-    if (search)           p.set('search',     search)
+    const p = new URLSearchParams()
+    p.set('source',  source)
+    p.set('page',    String(page))
+    p.set('perPage', String(PER_PAGE))
+    if (filterExam)     p.set('examType',   filterExam)
+    if (filterSubject)  p.set('subjectId',  filterSubject)
+    if (filterTopic)    p.set('topicId',    filterTopic)
+    if (filterDiff)     p.set('difficulty', filterDiff)
+    if (filterYear)     p.set('year',       filterYear)
+    if (filterUntagged) p.set('untagged',   'true')
     fetch(`/api/admin/questions?${p}`)
       .then(r => r.json())
       .then(d => { setQuestions(d.questions ?? []); setTotal(d.total ?? 0) })
-      .catch(() => setQuestions([]))
+      .catch(() => {})
       .finally(() => setLoading(false))
-  }, [source, filterExam, filterSubject, filterTopic, filterDifficulty, filterUntagged, filterYear, search, page])
+  }, [source, page, filterExam, filterSubject, filterTopic, filterDiff, filterYear, filterUntagged])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [filterExam, filterSubject, filterTopic, filterDifficulty, filterUntagged, filterYear, search])
 
-  const totalPages = Math.ceil(total / 25)
+  // When a question gets tagged, refresh that row in state
+  function handleUpdated(updated) {
+    setQuestions(qs => qs.map(q => q.id === updated.id ? updated : q))
+    setSelected(updated)
+  }
 
   return (
     <>
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder={source === 'past_paper' ? 'Search past questions…' : 'Search AI questions…'}
-          className="flex-1 min-w-[180px] px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
-
-        <select value={filterExam} onChange={e => setFilterExam(e.target.value)}
+        <select value={filterExam} onChange={e => { setFilterExam(e.target.value); setPage(1) }}
           className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <option value="">All exams</option>
           <option value="WAEC">WAEC</option>
@@ -225,21 +555,21 @@ function QuestionList({ source, subjects }) {
           <option value="BOTH">BOTH</option>
         </select>
 
-        <select value={filterSubject} onChange={e => { setFilterSubject(e.target.value); setFilterTopic('') }}
+        <select value={filterSubject} onChange={e => { setFilterSubject(e.target.value); setFilterTopic(''); setPage(1) }}
           className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <option value="">All subjects</option>
           {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
 
         {topics.length > 0 && (
-          <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
+          <select value={filterTopic} onChange={e => { setFilterTopic(e.target.value); setPage(1) }}
             className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="">All topics</option>
             {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         )}
 
-        <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)}
+        <select value={filterDiff} onChange={e => { setFilterDiff(e.target.value); setPage(1) }}
           className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <option value="">All difficulties</option>
           <option value="easy">Easy</option>
@@ -247,22 +577,21 @@ function QuestionList({ source, subjects }) {
           <option value="hard">Hard</option>
         </select>
 
-        {/* Year filter — only relevant for past papers */}
         {source === 'past_paper' && (
-          <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
+          <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setPage(1) }}
             className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="">All years</option>
-            {Array.from({ length: 15 }, (_, i) => 2024 - i).map(y => (
+            {Array.from({ length: 25 }, (_, i) => 2025 - i).map(y => (
               <option key={y} value={String(y)}>{y}</option>
             ))}
           </select>
         )}
 
-        <button onClick={() => setFilterUntagged(u => !u)}
+        <button onClick={() => { setFilterUntagged(u => !u); setPage(1) }}
           className={`text-xs px-3 py-2 rounded-xl border font-medium transition-colors ${
             filterUntagged ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
           }`}>
-          {filterUntagged ? '✕ Untagged only' : 'Show untagged'}
+          {filterUntagged ? '✕ Untagged only' : 'Untagged only'}
         </button>
       </div>
 
@@ -282,11 +611,6 @@ function QuestionList({ source, subjects }) {
             <p className="text-gray-500 text-sm">
               {source === 'past_paper' ? 'No past questions found.' : 'No AI-generated questions yet.'}
             </p>
-            {source === 'past_paper' && (
-              <Link href="/admin/questions/upload" className="text-sm font-bold text-indigo-600 hover:underline">
-                Upload past questions →
-              </Link>
-            )}
           </div>
         ) : (
           questions.map(q => <QuestionRow key={q.id} question={q} onOpen={setSelected} />)
@@ -297,7 +621,7 @@ function QuestionList({ source, subjects }) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-400">
-            {((page - 1) * 25) + 1}–{Math.min(page * 25, total)} of {total.toLocaleString()}
+            {((page - 1) * PER_PAGE) + 1}–{Math.min(page * PER_PAGE, total)} of {total.toLocaleString()}
           </p>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
@@ -309,7 +633,14 @@ function QuestionList({ source, subjects }) {
         </div>
       )}
 
-      {selected && <QuestionModal question={selected} onClose={() => setSelected(null)} />}
+      {/* Drawer */}
+      {selected && (
+        <QuestionDrawer
+          question={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={handleUpdated}
+        />
+      )}
     </>
   )
 }
@@ -326,19 +657,18 @@ export default function QuestionsPage() {
   }, [])
 
   const tabs = [
-    { id: 'past',     label: '📝 Past Questions'    },
-    { id: 'bank',     label: '🤖 AI Generated'      },
-    { id: 'history',  label: '📦 Upload History'    },
+    { id: 'past',    label: '📝 Past Questions' },
+    { id: 'bank',    label: '🤖 AI Generated'   },
+    { id: 'history', label: '📦 Upload History' },
   ]
 
   return (
     <div className="space-y-6 max-w-5xl">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-gray-900">Questions</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Past questions are sourced from WAEC/JAMB papers. AI questions are generated from lesson content.
+            Click any question to preview how students see it, or tag it to a curriculum topic.
           </p>
         </div>
         <Link href="/admin/questions/upload"
@@ -347,7 +677,6 @@ export default function QuestionsPage() {
         </Link>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -359,33 +688,30 @@ export default function QuestionsPage() {
         ))}
       </div>
 
-      {/* Past questions */}
       {tab === 'past' && (
         <div className="space-y-4">
           <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
             <p className="text-xs text-indigo-700 leading-relaxed">
               <strong>Past questions</strong> are extracted from official WAEC and JAMB exam papers.
-              These are the highest-quality questions for student practice.
+              Click any question to preview it or tag it to a topic.
             </p>
           </div>
           <QuestionList source="past_paper" subjects={subjects} />
         </div>
       )}
 
-      {/* AI generated */}
       {tab === 'bank' && (
         <div className="space-y-4">
           <div className="bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
             <p className="text-xs text-violet-700 leading-relaxed">
-              <strong>AI-generated questions</strong> are created from lesson content to supplement past papers.
-              They fill coverage gaps for topics with few past questions.
+              <strong>AI-generated questions</strong> supplement past papers for topics with low coverage.
+              Click any question to preview it or tag it to a topic.
             </p>
           </div>
           <QuestionList source="ai_generated" subjects={subjects} />
         </div>
       )}
 
-      {/* History */}
       {tab === 'history' && (
         <div className="space-y-4">
           <BatchHistory />

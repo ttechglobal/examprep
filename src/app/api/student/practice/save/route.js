@@ -13,7 +13,6 @@
 import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
-import { rebuildStudyPlan }          from '@/lib/studyPlanEngine'
 
 function svc() {
   return svcClient(
@@ -63,11 +62,10 @@ async function updateTopicMastery(db, userId, answers, qMap) {
     const newScore = Math.round(alpha * sessionScore + (1 - alpha) * prevScore)
 
     return {
-      student_id:   userId,
-      topic_id:     tid,
-      subject_id:   byTopic[tid].subjectId,
-      score:        newScore,
-      last_updated: new Date().toISOString(),
+      student_id: userId,
+      topic_id:   tid,
+      subject_id: byTopic[tid].subjectId,
+      score:      newScore,
     }
   })
 
@@ -225,23 +223,16 @@ export async function POST(request) {
 
   // 4. Write a practice_sessions row (powers dashboard/progress activity chart)
   const subjectNames = [...new Set(answers.map(a => qMap[a.questionId]?.subject_name).filter(Boolean))]
-  await db.from('practice_sessions').insert({
-    student_id:      user.id,
-    mode:            body.config?.mode ?? 'practice',
-    questions_count: total,
-    correct_count:   correct,
-    subject_name:    subjectNames[0] ?? null,
-    completed_at:    new Date().toISOString(),
-  }).catch(e => console.warn('[practice-save] practice_sessions insert skipped:', e.message))
-
-  // 5. Rebuild study plan for subjects touched
-  const subjectIds = [...new Set(answers.map(a => qMap[a.questionId]?.subject_id).filter(Boolean))]
-  if (subjectIds.length) {
-    try {
-      await rebuildStudyPlan(db, user.id, subjectIds)
-    } catch (e) {
-      console.error('[practice-save] rebuildStudyPlan:', e.message)
-    }
+  {
+    const { error: sessErr } = await db.from('practice_sessions').insert({
+      student_id:      user.id,
+      mode:            body.config?.mode ?? 'practice',
+      questions_count: total,
+      correct_count:   correct,
+      subject_name:    subjectNames[0] ?? null,
+      completed_at:    new Date().toISOString(),
+    })
+    if (sessErr) console.warn('[practice-save] practice_sessions insert skipped:', sessErr.message)
   }
 
   return NextResponse.json({

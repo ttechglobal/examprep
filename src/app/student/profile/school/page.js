@@ -58,8 +58,10 @@ export default function SchoolConnectionPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to join')
-      setMessage({ type: 'success', text: `Joined ${data.cohort_name ?? 'cohort'} ✓` })
-      setCohortInfo({ name: data.cohort_name, schoolName: data.school_name })
+      const cohortName = data.cohort?.name ?? data.cohort_name ?? 'cohort'
+      const schoolName = data.cohort?.school ?? data.school_name ?? 'Your school'
+      setMessage({ type: 'success', text: `Joined ${cohortName} ✓` })
+      setCohortInfo({ name: cohortName, schoolName })
       setCode('')
       // Refresh profile
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', profile.id).single()

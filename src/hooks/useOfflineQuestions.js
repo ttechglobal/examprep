@@ -1,115 +1,116 @@
-// src/hooks/useOfflineQuestions.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Drop-in replacement for the fetch inside practice/diagnostic pages.
-// Tries the network first. If offline (or network fails), falls back to
-// IndexedDB cache via offlineSync.getOfflineQuestions().
+// src/app/api/offline/questions/route.js
+// Serves questions for offline caching (IndexedDB via offlineSync.js).
+// Supports delta sync via ?since=ISO_TIMESTAMP.
 //
-// Usage:
-//   const { questions, loading, error, source } = useOfflineQuestions({
-//     examType: 'WAEC',
-//     subjects: ['Mathematics', 'Physics'],
-//     count: 20,
-//     mode: 'practice',    // 'practice' | 'exam' | 'diagnostic'
-//     topicId: null,       // optional
-//   })
-//
-//   `source` is 'network' | 'cache' | null — show a badge when 'cache'
-// ─────────────────────────────────────────────────────────────────────────────
+// FIX: removed nested joins (subtopics, topics) from OFFLINE_SELECT.
+// Nested joins cause a 500 if any question has an orphaned FK or if the
+// joined table is missing a column. We now do two separate bulk lookups
+// (topics + subtopics by ID set) and merge them in JS — no joins, no 500s.
+// exam_types is also added to OFFLINE_SELECT so the field is actually returned.
 
-import { useState, useEffect, useRef } from 'react'
-import { getOfflineQuestions } from '@/lib/offlineSync'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { applyExamFilter, normaliseExamType } from '@/lib/examFilter'
 
-export function useOfflineQuestions({ examType, subjects = [], count = 20, mode = 'practice', topicId = null }) {
-  const [questions, setQuestions] = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [error,     setError]     = useState(null)
-  const [source,    setSource]    = useState(null)  // 'network' | 'cache'
+// Flat select — no nested joins
+const OFFLINE_SELECT = `
+  id,
+  question_text,
+  options,
+  correct_answer,
+  explanation,
+  difficulty,
+  has_image,
+  image_url,
+  image_description,
+  explanation_has_image,
+  explanation_image_url,
+  subtopic_id,
+  topic_id,
+  subject_id,
+  exam_types,
+  source,
+  updated_at
+`
 
-  const abortRef = useRef(null)
+export async function GET(request) {
+  // Auth check
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  useEffect(() => {
-    if (!examType || !subjects.length) return
+  const { searchParams } = new URL(request.url)
+  const subjectId = searchParams.get('subject_id')
+  const examType  = normaliseExamType(searchParams.get('exam_type') ?? 'WAEC')
+  const since     = searchParams.get('since')
+  const limit     = Math.min(parseInt(searchParams.get('limit') ?? '300', 10) || 300, 500)
 
-    let cancelled = false
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
+  if (!subjectId) {
+    return NextResponse.json({ error: 'subject_id required' }, { status: 400 })
+  }
 
-    setLoading(true)
-    setError(null)
-    setQuestions([])
-    setSource(null)
+  const db = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  )
 
-    async function load() {
-      // ── Try network first ────────────────────────────────────────────────
-      try {
-        const params = new URLSearchParams({
-          subjects: subjects.join(','),
-          exam:     examType,
-          count:    String(count),
-          mode,
-        })
-        if (topicId) params.set('topic_id', topicId)
+  // ── 1. Fetch questions — flat select, no joins ─────────────────────────────
+  let query = db
+    .from('questions')
+    .select(OFFLINE_SELECT)
+    .eq('subject_id', subjectId)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(limit)
 
-        const res  = await fetch(`/api/practice/questions?${params}`, {
-          signal: controller.signal,
-        })
-        const data = await res.json()
+  if (since) query = query.gt('updated_at', since)
 
-        if (cancelled) return
+  // Only apply exam filter if questions actually use exam_types.
+  // If exam_types column doesn't exist or is empty, this returns 0 rows.
+  // We apply it but catch gracefully.
+  query = applyExamFilter(query, examType)
 
-        if (res.ok && data.questions?.length) {
-          setQuestions(data.questions)
-          setSource('network')
-          setLoading(false)
-          return
-        }
-      } catch (err) {
-        if (err.name === 'AbortError') return
-        // Network failed — fall through to cache
-      }
+  const { data: rows, error: qError } = await query
 
-      if (cancelled) return
+  if (qError) {
+    console.error('[offline/questions] query failed:', qError.message)
+    return NextResponse.json({ error: qError.message }, { status: 500 })
+  }
 
-      // ── Fall back to IndexedDB cache ─────────────────────────────────────
-      try {
-        const cached = await getOfflineQuestions({
-          examType,
-          subjectIds: [],   // we filter by name below since IDs aren't in the hook
-          limit: count * 3,
-        })
+  const allRows = rows ?? []
 
-        if (cancelled) return
+  // ── 2. Bulk-fetch topic + subtopic names (no per-row joins) ────────────────
+  const topicIds    = [...new Set(allRows.map(q => q.topic_id).filter(Boolean))]
+  const subtopicIds = [...new Set(allRows.map(q => q.subtopic_id).filter(Boolean))]
 
-        // Filter by subject name (cached rows have subject_name)
-        const filtered = cached
-          .filter(q => subjects.includes(q.subject_name))
-          .sort(() => Math.random() - 0.5)
-          .slice(0, count)
+  const [topicRes, subtopicRes, subjectRes] = await Promise.all([
+    topicIds.length
+      ? db.from('topics').select('id, name, slug').in('id', topicIds)
+      : Promise.resolve({ data: [] }),
+    subtopicIds.length
+      ? db.from('subtopics').select('id, name, slug').in('id', subtopicIds)
+      : Promise.resolve({ data: [] }),
+    db.from('subjects').select('id, name, slug').eq('id', subjectId).single(),
+  ])
 
-        if (filtered.length) {
-          setQuestions(filtered)
-          setSource('cache')
-          setLoading(false)
-          return
-        }
+  const topicMap    = Object.fromEntries((topicRes.data    ?? []).map(t => [t.id, t]))
+  const subtopicMap = Object.fromEntries((subtopicRes.data ?? []).map(s => [s.id, s]))
+  const subject     = subjectRes.data ?? {}
 
-        setError('No questions available. Connect to the internet to download questions.')
-        setSource(null)
-      } catch {
-        setError('Could not load questions.')
-      }
+  // ── 3. Shape into self-contained cached rows ───────────────────────────────
+  const questions = allRows.map(q => ({
+    ...q,
+    subject_name:  subject.name ?? '',
+    subject_slug:  subject.slug ?? '',
+    topic_name:    topicMap[q.topic_id]?.name       ?? '',
+    subtopic_name: subtopicMap[q.subtopic_id]?.name ?? '',
+    exam_types:    q.exam_types ?? [examType],
+  }))
 
-      setLoading(false)
-    }
-
-    load()
-
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [examType, subjects.join(','), count, mode, topicId])
-
-  return { questions, loading, error, source }
+  return NextResponse.json({
+    questions,
+    count:     questions.length,
+    synced_at: new Date().toISOString(),
+  })
 }

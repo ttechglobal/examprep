@@ -295,15 +295,19 @@ function YearRangePicker({ value, onChange }) {
   )
 }
 
+// ── Stable year constant — computed once at module level to avoid SSR/client mismatch ──
+const CURRENT_YEAR = new Date().getFullYear()
+const DEFAULT_YEAR = String(CURRENT_YEAR - 1)
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SdashImportPage() {
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
   const [subjectName,    setSubjectName]    = useState('')
   const [examType,       setExamType]       = useState('WAEC')
-  const [year,           setYear]           = useState(String(new Date().getFullYear() - 1))
+  const [year,           setYear]           = useState(DEFAULT_YEAR)
   const [mode,           setMode]           = useState('single')   // 'single' | 'range'
-  const [yearRange,      setYearRange]      = useState({ from: '2015', to: String(new Date().getFullYear() - 1) })
+  const [yearRange,      setYearRange]      = useState({ from: '2015', to: DEFAULT_YEAR })
   const [preview,        setPreview]        = useState([])
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError,   setPreviewError]   = useState(null)
@@ -311,6 +315,8 @@ export default function SdashImportPage() {
   const [importResult,   setImportResult]   = useState(null)
   const [importLog,      setImportLog]      = useState([])
   const [activeTab,      setActiveTab]      = useState('import')
+  // Gate env-dependent UI behind mount so SSR and client render the same HTML
+  const [mounted,        setMounted]        = useState(false)
 
   // ── Enrichment flow state ─────────────────────────────────────────────────
   const [fetchedQuestions,  setFetchedQuestions]  = useState([])  // raw SdashAPI batch
@@ -324,9 +330,11 @@ export default function SdashImportPage() {
   const [saving,            setSaving]             = useState(false)
   const pasteRef = useRef(null)
 
-  const currentYear = new Date().getFullYear()
+  // Mark as mounted (client-only) so env-dependent content renders correctly
+  useEffect(() => { setMounted(true) }, [])
+
   const years = []
-  for (let y = currentYear; y >= 2001; y--) years.push(y)
+  for (let y = CURRENT_YEAR; y >= 2001; y--) years.push(y)
 
   // ── Group subjects by name (Mathematics, not "Mathematics WAEC" + "Mathematics JAMB")
   const groupedSubjects = useMemo(() => {
@@ -382,7 +390,11 @@ export default function SdashImportPage() {
       .catch(() => setTopics([]))
   }, [subjectId])
 
-  const selectedSubject = useMemo(() => subjects.find(s => s.id === subjectId), [subjects, subjectId])
+  // useMemo so Turbopack treats these as stable reactive values in useCallback deps
+  const selectedSubject = useMemo(
+    () => subjects.find(s => s.id === subjectId),
+    [subjects, subjectId]
+  )
   const sdashSlug = useMemo(() => {
     if (!selectedSubject) return null
     return slugForSubject(baseSubjectName(selectedSubject.name))
@@ -441,16 +453,16 @@ export default function SdashImportPage() {
     }
   }
 
-  // ── Parse the AI paste-back ────────────────────────────────────────────────
+  // ── Parse the AI paste-back ─────────────────────────────────────────────────
+  // AI returns a lean enrichment-only array (index + explanation + topic tags).
+  // We merge it back onto fetchedQuestions to get the full question objects.
   function handleParsePaste() {
     setParseError(null)
-    // Parse the lean enrichment response (index + explanation + tags only)
     const result = parseEnrichment(pasteText)
     if (!result.valid) {
       setParseError(result.errors.join('\n'))
       return
     }
-    // Merge enrichment delta onto the original fetched questions
     const merged = mergeSdashEnrichment(
       fetchedQuestions,
       result.enrichments,
@@ -458,20 +470,12 @@ export default function SdashImportPage() {
       selectedSubject?.name ?? 'Unknown Subject'
     )
     // Auto-match topics against loaded curriculum
-    const enriched = merged.map(q => {
+    const withMatches = merged.map(q => {
       const match = matchTopicSubtopic(q, topics)
       return { ...q, _topicMatch: match }
     })
-    setParsedQuestions(enriched)
-    setEnrichStep(4)
-  }
-    // Auto-run topic matching against curriculum
-    const enriched = result.questions.map(q => {
-      const match = matchTopicSubtopic(q, topics)
-      return { ...q, _topicMatch: match }
-    })
-    setParsedQuestions(enriched)
-    setEnrichStep(4)
+    setParsedQuestions(withMatches)
+    setEnrichStep(4)  // step 4 = Review panel; step 5 = Done (set after save)
   }
 
   // ── Save the reviewed questions ────────────────────────────────────────────
@@ -677,8 +681,8 @@ export default function SdashImportPage() {
         </div>
       </div>
 
-      {/* API key warning */}
-      {!process.env.SDASH_API_KEY && (
+      {/* API key warning — only render after mount to avoid SSR/client hydration mismatch */}
+      {mounted && !process.env.NEXT_PUBLIC_SDASH_KEY_SET && (
         <Alert type="warning">
           ⚠️ <strong>SDASH_API_KEY</strong> is not set in your environment variables.
           Add it to <code>.env.local</code> to enable imports.
@@ -1174,3 +1178,4 @@ export default function SdashImportPage() {
       )}
     </div>
   )
+}

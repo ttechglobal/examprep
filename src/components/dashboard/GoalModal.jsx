@@ -1,12 +1,23 @@
 'use client'
-// src/components/dashboard/GoalModal.jsx — v5
-// Changes vs v4:
-//  • handleSave now writes subjects_waec and subjects_jamb as SEPARATE columns
+// src/components/dashboard/GoalModal.jsx — v6
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANGES vs v5:
+//  • Accepts `initialPage` prop — callers can pass the page index to open
+//    directly (e.g. profile edit page passes 0 for goals, 1 for JAMB subjects).
+//    Default is 0 (same behaviour as before).
+//  • Saves current page to sessionStorage on every page change, and restores
+//    it on mount — so reopening the modal picks up where you left off within
+//    the same session. Cleared on successful save.
+//  • Added `mode` prop: 'full' (default, all steps) or 'subjects-only'
+//    (skips Goals page, jumps straight to subject selection — for the
+//    "Change subjects →" link in the practice modal).
+//  • handleSave: writes subjects_waec and subjects_jamb as SEPARATE columns
 //    so the practice page can show different lists per exam tab.
 //    Also still writes the merged `subjects` column for backward compat.
-//  • Falls back gracefully if subjects_waec/subjects_jamb columns don't exist yet.
+//  • Falls back gracefully if subjects_waec/subjects_jamb columns don't exist.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 const SUBJECT_STYLES = {
@@ -56,15 +67,16 @@ const WAEC_SUBJECTS = [
 
 const WAEC_GRADES = ['A1', 'B2', 'B3', 'C4', 'C5', 'C6']
 
+// Session storage key for page progress
+const GOAL_PAGE_KEY = 'exl_goal_modal_page'
+
 function seedJambSubjects(profile) {
-  // Try subjects_jamb first, fall back to legacy subjects
   const src = profile?.subjects_jamb?.length ? profile.subjects_jamb : (profile?.subjects ?? [])
   const valid = src.filter(s => s === USE_OF_ENGLISH || JAMB_ELECTIVES.includes(s))
   if (!valid.includes(USE_OF_ENGLISH)) valid.unshift(USE_OF_ENGLISH)
   return valid.slice(0, 4)
 }
 function seedWaecSubjects(profile) {
-  // Try subjects_waec first, fall back to legacy subjects
   const src = profile?.subjects_waec?.length ? profile.subjects_waec : (profile?.subjects ?? [])
   return src.filter(s => WAEC_SUBJECTS.includes(s))
 }
@@ -135,7 +147,8 @@ function Field({ label, value, onChange, placeholder }) {
   )
 }
 
-export default function GoalModal({ profile, onClose, onSave }) {
+// ── Main component ────────────────────────────────────────────────────────────
+export default function GoalModal({ profile, onClose, onSave, initialPage = 0, mode = 'full' }) {
   const supabase = createClient()
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState(null)
@@ -163,14 +176,29 @@ export default function GoalModal({ profile, onClose, onSave }) {
   const jambAutoTotal = jambSubjects.reduce((sum, s) => sum + (Number(jambScores[s]) || 0), 0)
   const jambSlots     = 3 - (jambSubjects.filter(s => s !== USE_OF_ENGLISH).length)
 
-  const pages = ['Goals']
+  // Build pages list — 'subjects-only' mode skips the Goals page
+  const pages = mode === 'subjects-only' ? [] : ['Goals']
   if (examType === 'JAMB' || examType === 'BOTH') pages.push('JAMB Subjects')
   if (examType === 'WAEC' || examType === 'BOTH') pages.push('WAEC Subjects')
   pages.push('Targets')
 
-  const [page, setPage]   = useState(0)
-  const totalPages        = pages.length
-  const currentPageLabel  = pages[page]
+  // Restore page from sessionStorage, then apply initialPage, clamp to valid range
+  const getInitialPage = () => {
+    try {
+      const saved = parseInt(sessionStorage.getItem(GOAL_PAGE_KEY) ?? '', 10)
+      if (!isNaN(saved) && saved > 0 && saved < pages.length) return saved
+    } catch {}
+    return Math.min(initialPage, pages.length - 1)
+  }
+
+  const [page, setPage] = useState(getInitialPage)
+  const totalPages       = pages.length
+  const currentPageLabel = pages[page]
+
+  // Persist page to sessionStorage whenever it changes
+  useEffect(() => {
+    try { sessionStorage.setItem(GOAL_PAGE_KEY, String(page)) } catch {}
+  }, [page])
 
   function nextPage() { setPage(p => Math.min(p + 1, totalPages - 1)) }
   function prevPage() { setPage(p => Math.max(p - 1, 0)) }
@@ -191,7 +219,6 @@ export default function GoalModal({ profile, onClose, onSave }) {
     setJambScores(prev => ({ ...prev, [s]: Math.min(100, Math.max(0, Number(raw) || 0)) }))
   }
 
-  // Merged list for backward compat (pages that still read profiles.subjects)
   const allSubjects = [...new Set([
     ...(examType === 'JAMB' || examType === 'BOTH' ? jambSubjects : []),
     ...(examType === 'WAEC' || examType === 'BOTH' ? waecSubjects : []),
@@ -201,12 +228,11 @@ export default function GoalModal({ profile, onClose, onSave }) {
     setSaving(true); setError(null)
     const { data: { user } } = await supabase.auth.getUser()
 
-    // Build the update — write per-exam columns AND the legacy merged column
     const updates = {
       exam_type:           examType,
-      subjects:            allSubjects,         // legacy — keeps other pages working
-      subjects_waec:       waecSubjects,        // WAEC-specific list
-      subjects_jamb:       jambSubjects,        // JAMB-specific list
+      subjects:            allSubjects,
+      subjects_waec:       waecSubjects,
+      subjects_jamb:       jambSubjects,
       university_course:   universityCourse.trim() || null,
       target_university:   targetUniversity.trim()  || null,
       desired_profession:  desiredProfession.trim() || null,
@@ -216,8 +242,6 @@ export default function GoalModal({ profile, onClose, onSave }) {
       goals_set:           true,
     }
 
-    // Try full update first. If subjects_waec/subjects_jamb don't exist yet,
-    // Supabase will error — catch and retry without those columns.
     let { error: err } = await supabase.from('profiles').update(updates).eq('id', user.id)
 
     if (err && (err.message?.includes('subjects_waec') || err.message?.includes('subjects_jamb'))) {
@@ -231,7 +255,6 @@ export default function GoalModal({ profile, onClose, onSave }) {
 
     console.debug('[GoalModal] saved — waec:', waecSubjects, '| jamb:', jambSubjects, '| examType:', examType)
 
-    // Ensure student_learning_paths rows exist for all saved subjects
     try {
       const { data: subjectRows } = await supabase
         .from('subjects').select('id, name, exam_type').in('name', allSubjects)
@@ -251,6 +274,9 @@ export default function GoalModal({ profile, onClose, onSave }) {
     } catch (e) {
       console.error('[GoalModal] learning_paths sync error:', e.message)
     }
+
+    // Clear saved page on successful save — next open starts fresh
+    try { sessionStorage.removeItem(GOAL_PAGE_KEY) } catch {}
 
     setSaving(false)
     onSave?.({ ...profile, ...updates })

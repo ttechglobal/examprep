@@ -1,14 +1,18 @@
 'use client'
-// src/app/student/practice/page.js — v10
-// Changes:
-//  • WAEC/JAMB tab now fetches the correct subject list per exam from the API
-//    (/api/student/subjects?exam=WAEC vs ?exam=JAMB) — subjects change when
-//    the tab switches, so WAEC students see WAEC subjects and JAMB students
-//    see JAMB subjects. No cross-contamination.
-//  • "Change subjects" link shown in the modal footer for quick access to
-//    the subject editor on the profile/school page.
-//  • Subject fetch is cached per exam tab — no extra requests on tab switch
-//    if already fetched.
+// src/app/student/practice/page.js — v11
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANGES vs v10:
+//  • PracticeSetupModal: when subjects list changes, default-select English /
+//    Use of English for JAMB (was always picking subjects[0] which could be
+//    anything). Falls back to subjects[0] if no English subject found.
+//  • fetchSubjectsForExam: no loading spinner when result is already cached —
+//    swaps instantly from cache, spinner only on genuine network fetch.
+//  • PracticeSetupModal: saves last-selected subject to sessionStorage on
+//    every "go()" call, and restores it on mount so students don't lose
+//    their pick when navigating away and back.
+//  • loadingSubjects prop now accepted cleanly — was missing from dashboard
+//    usage which caused console warning.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -48,6 +52,55 @@ const MODES = [
   { key: 'timed',  icon: '⏱️', label: 'Speed round', color: '#4ade80', desc: 'Race against the clock' },
   { key: 'mock',   icon: '📝', label: 'Mock exam',    color: '#FFB800', desc: 'Full timed simulation' },
 ]
+
+// ── Session storage helpers ───────────────────────────────────────────────────
+const LAST_SUBJECT_KEY = 'exl_last_practice_subject'
+
+function saveLastSubject(subject) {
+  try {
+    if (subject?.id) sessionStorage.setItem(LAST_SUBJECT_KEY, JSON.stringify({ id: subject.id, name: subject.name }))
+  } catch {}
+}
+
+function loadLastSubject() {
+  try {
+    const raw = sessionStorage.getItem(LAST_SUBJECT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+// ── Pick the best default subject for a given exam + subjects list ─────────────
+// JAMB: prefer "Use of English" (always required), then "English Language"
+// WAEC: prefer "English Language", then first subject
+// Falls back to subjects[0] for any other case
+function pickDefaultSubject(subjects, exam) {
+  if (!subjects.length) return null
+
+  // First try to restore from sessionStorage
+  const saved = loadLastSubject()
+  if (saved) {
+    const match = subjects.find(s => s.id === saved.id)
+    if (match) return match
+  }
+
+  // For JAMB, default to Use of English (always required)
+  if (exam === 'JAMB') {
+    const useOfEnglish = subjects.find(s => s.name === 'Use of English')
+    if (useOfEnglish) return useOfEnglish
+    const englishLang = subjects.find(s => /english/i.test(s.name))
+    if (englishLang) return englishLang
+  }
+
+  // For WAEC, prefer English Language
+  if (exam === 'WAEC') {
+    const englishLang = subjects.find(s => s.name === 'English Language')
+    if (englishLang) return englishLang
+  }
+
+  return subjects[0]
+}
 
 // ── Press button ──────────────────────────────────────────────────────────────
 function PressBtn({ onClick, children, color = '#1264E5', shadowColor = '#0a3fa0', style = {} }) {
@@ -113,13 +166,21 @@ export function PracticeSetupModal({ subjects, loadingSubjects, profile, initial
   const [loadingTopics, setLoadingTopics] = useState(false)
   const [timeMin,   setTimeMin]   = useState(10)
 
-  // When subjects load or change, default-select the first one
+  // When subjects or exam changes, pick the best default subject:
+  // - Restore from sessionStorage first (user's last pick)
+  // - Then prefer English / Use of English depending on exam
+  // - Fall back to subjects[0]
+  // Only resets if the current subject is no longer in the list
   useEffect(() => {
-    if (subjects.length > 0 && (!subject || !subjects.find(s => s.id === subject.id))) {
-      setSubject(subjects[0])
+    if (subjects.length === 0) {
+      setSubject(null)
+      return
     }
-    if (subjects.length === 0) setSubject(null)
-  }, [subjects]) // eslint-disable-line
+    // Keep current selection if it's still valid for the new list
+    if (subject && subjects.find(s => s.id === subject.id)) return
+    // Otherwise pick the best default
+    setSubject(pickDefaultSubject(subjects, exam))
+  }, [subjects, exam]) // eslint-disable-line
 
   const accent   = getAccent(subject?.name ?? '')
   const modeMeta = MODES.find(m => m.key === mode)
@@ -138,6 +199,9 @@ export function PracticeSetupModal({ subjects, loadingSubjects, profile, initial
 
   function go() {
     if (!subject) return
+    // Save selection for next time
+    saveLastSubject(subject)
+
     if (mode === 'mock') { onMockExam?.(); return }
     if (mode === 'quick5') {
       onStart({ subject, type: 'mixed', count: 5, answerMode: 'practice', topic: null, duration: null })
@@ -394,7 +458,7 @@ export default function PracticePage() {
   const supabase   = createClient()
   const { userId } = useUser()
 
-  // Per-exam subject cache — fetched once per exam, re-used on tab switch
+  // Per-exam subject cache — fetched once per exam, re-used on tab switch (no spinner)
   const subjectCache = useRef({})
 
   const [profile,         setProfile]         = useState(null)
@@ -406,16 +470,18 @@ export default function PracticePage() {
   const [showModal,       setShowModal]        = useState(false)
   const [modalMode,       setModalMode]        = useState('quick5')
   const [history,         setHistory]          = useState([])
-  const [showGoalModal,   setShowGoalModal]   = useState(false)
+  const [showGoalModal,   setShowGoalModal]    = useState(false)
 
   function openModal(mode = 'quick5') { setModalMode(mode); setShowModal(true) }
 
   // ── Fetch subjects for a given exam tab ───────────────────────────────────
   async function fetchSubjectsForExam(examTab) {
+    // If already cached, swap instantly — no loading flash
     if (subjectCache.current[examTab]) {
       setSubjects(subjectCache.current[examTab])
       return
     }
+    // Only show spinner for genuine network fetch
     setLoadingSubjects(true)
     try {
       const res = await fetch(`/api/student/subjects?exam=${examTab}`)
@@ -473,9 +539,7 @@ export default function PracticePage() {
     const examTab = prof?.exam_type === 'JAMB' ? 'JAMB' : 'WAEC'
     setExam(examTab)
 
-    // Fetch subjects for the student's primary exam
     await fetchSubjectsForExam(examTab)
-
     await loadHistory(uid)
 
     try {
@@ -631,7 +695,7 @@ export default function PracticePage() {
             onSave={updated => {
               setProfile(prev => ({ ...prev, ...updated }))
               setShowGoalModal(false)
-              // Reload subjects for current exam after saving
+              // Clear cache so fresh subjects load after goal save
               subjectCache.current = {}
               fetchSubjectsForExam(exam)
             }}

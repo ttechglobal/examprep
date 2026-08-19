@@ -37,15 +37,17 @@ export default function RootLayout({ children }) {
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head>
         {/* Prevent flash of wrong theme — must run before first paint */}
-        <Script id="theme-init" strategy="beforeInteractive">{`
-          (function() {
-            try {
-              var stored = localStorage.getItem('ep-theme');
-              var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-              if (dark) document.documentElement.classList.add('dark');
-            } catch(e) {}
-          })();
-        `}</Script>
+        {/* Use a plain <script> tag (not Next.js Script) so it runs inline in <head> */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className="font-jakarta antialiased bg-base text-primary">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
         {/* Register service worker for PWA / offline support */}
         <Script id="sw-register" strategy="afterInteractive">{`
           if ('serviceWorker' in navigator) {
@@ -55,11 +57,6 @@ export default function RootLayout({ children }) {
             });
           }
         `}</Script>
-      </head>
-      <body className="font-jakarta antialiased bg-base text-primary">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
       </body>
     </html>
   )

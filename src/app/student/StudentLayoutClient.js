@@ -1,25 +1,12 @@
 'use client'
-// src/app/student/StudentLayoutClient.js — EXL Game Feel v1
+// src/app/student/StudentLayoutClient.js — EXL Game Feel v2
 // ─────────────────────────────────────────────────────────────────────────────
-// Full redesign matching the EXL ExamPrep game-feel prototype.
-//
-// DESIGN SYSTEM:
-//   • Dark-first: #0a0c14 canvas, glass cards, EXL brand blues
-//   • Light mode: #f0f4ff canvas, white cards, EXL navy text
-//   • CTA: EXL Blue #1264E5 (never old #0b1330)
-//   • Gold: #FFB800 for XP/streaks/achievement
-//   • Active nav: EXL Cyan #18B7F2
-//
-// LAYOUT:
-//   • Mobile: sticky header + bottom nav (5 items)
-//   • Desktop lg+: header + left sidebar (220px) + content + right aside (200px)
-//   • Right aside: activity chart + class rank + target (home/progress/leaderboard only)
-//
-// GAME FEEL (shell only — not in session/exam pages):
-//   • Streak flame animation
-//   • Ambient star dots on sidebar
-//   • XP pill with gold tint
-//   • Sidebar streak card with amber glow
+// CHANGES vs v1:
+//   • maxWidth 900 → 1280 on header + body wrapper — uses full desktop width
+//   • Right aside 200px → 260px — more breathing room for leaderboard/target
+//   • dash-grid right column 240px → 300px for wider screens
+//   • Left sidebar still 220px (good as-is)
+//   • Content area gains ~380px of previously wasted lateral space on 1440 screens
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { usePathname } from 'next/navigation'
@@ -215,8 +202,6 @@ function LayoutRightAside({ myId, profile }) {
 }
 
 // ── Header XP + Streak pill ───────────────────────────────────────────────────
-// Uses mounted gate to prevent hydration mismatch — server and client render
-// identical placeholder until after first paint, then swap in live values.
 function HeaderPills({ streak }) {
   const { totalPoints } = usePoints()
   const [mounted, setMounted] = useState(false)
@@ -226,8 +211,6 @@ function HeaderPills({ streak }) {
     ? `${(totalPoints / 1000).toFixed(1)}k`
     : String(totalPoints)
 
-  // Before mount: render stable placeholder (no streak pill, 0 XP shown)
-  // This matches server render exactly → no hydration mismatch
   if (!mounted) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -327,7 +310,8 @@ export default function StudentLayoutClient({ children, profile }) {
         borderBottom: '1px solid var(--nav-border)',
         display: 'flex', alignItems: 'center',
       }}>
-        <div style={{ width: '100%', maxWidth: 900, margin: '0 auto', padding: '0 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        {/* maxWidth: 1280 — was 900, now uses full desktop width */}
+        <div style={{ width: '100%', maxWidth: 1280, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
 
           <Link href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, textDecoration: 'none' }}>
             <EXLLogo size={30} />
@@ -364,7 +348,8 @@ export default function StudentLayoutClient({ children, profile }) {
       </header>
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', padding: '0 18px', gap: 0 }}>
+      {/* maxWidth: 1280 — was 900 */}
+      <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', padding: '0 24px', gap: 0 }}>
 
         {/* ── Left sidebar (desktop) ── */}
         <aside style={{ width: 220, flexShrink: 0, paddingTop: 20, paddingRight: 16 }} className="hidden lg:block">
@@ -432,8 +417,9 @@ export default function StudentLayoutClient({ children, profile }) {
         </div>
 
         {/* ── Right aside (desktop xl+, selected pages) ── */}
+        {/* width: 260 — was 200 */}
         {showAside && (
-          <aside style={{ width: 200, flexShrink: 0, paddingTop: 20, paddingLeft: 14 }} className="hidden xl:block">
+          <aside style={{ width: 260, flexShrink: 0, paddingTop: 20, paddingLeft: 20 }} className="hidden xl:block">
             <div style={{ position: 'sticky', top: 72 }}>
               <LayoutRightAside myId={profile?.id} profile={profile} />
             </div>
