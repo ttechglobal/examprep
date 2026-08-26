@@ -1,13 +1,12 @@
 'use client'
-// src/app/student/home/page.js — v5
-// Full rebuild with: improved backgrounds, proper dark mode, new sidebar + bottom nav
-// Desktop 3-col | Mobile single-col
-// Mascot: /images/zara_studybuddy.png
+// src/app/student/home/page.js — v7
+// Uses shared StudentSidebar + StudentBottomNav from StudentNav component.
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
+import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
 import Link from 'next/link'
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
@@ -17,6 +16,7 @@ const CYAN   = '#18B7F2'
 const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
+const PURPLE = '#7C3AED'
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
 function getInitials(n) { return (n || 'EX').slice(0, 2).toUpperCase() }
@@ -25,7 +25,7 @@ function getGreeting() {
   return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'
 }
 
-// ─── ZARA MESSAGES ────────────────────────────────────────────────────────────
+// Zara motivational messages
 const MSGS = [
   (n, l) => l > 0 ? `Just ${l} more ${l === 1 ? 'quest' : 'quests'} to go, ${n}!` : `All done today, ${n}. Excellent work!`,
   (n) => `You are on track, ${n}. Keep the momentum going.`,
@@ -33,388 +33,225 @@ const MSGS = [
   (n) => `Consistent effort every day is what separates you, ${n}.`,
 ]
 
-// ─── APP BACKGROUND — learning environment atmosphere ─────────────────────────
-// Dot grid + soft orbs + barely-visible subject icons
+// ─── SHARED BACKGROUND ───────────────────────────────────────────────────────
 function AppBackground({ dark }) {
-  const icons = ['📐', '⚗️', '📚', '🧬', '✏️', '🔭']
-  const positions = [
-    { top: '8%', right: '6%', size: 24 },
-    { top: '22%', left: '3%', size: 20 },
-    { top: '45%', right: '4%', size: 18 },
-    { bottom: '28%', left: '5%', size: 22 },
-    { bottom: '12%', right: '8%', size: 16 },
-    { top: '65%', left: '2%', size: 14 },
-  ]
-
   return (
-    <div aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {/* Dot grid */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: dark
-          ? 'radial-gradient(circle, rgba(255,255,255,.045) 1px, transparent 1px)'
-          : 'radial-gradient(circle, rgba(6,42,120,.07) 1px, transparent 1px)',
-        backgroundSize: '28px 28px',
-      }}/>
-
-      {/* Colour orbs */}
-      {dark ? (
-        <>
-          <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.1)', filter:'blur(60px)', top:-80, right:-60 }}/>
-          <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(6,42,120,.18)', filter:'blur(60px)', bottom:-60, left:-60 }}/>
-          <div style={{ position:'absolute', width:180, height:180, borderRadius:'50%', background:'rgba(255,184,0,.04)', filter:'blur(50px)', top:'40%', left:'35%' }}/>
-        </>
-      ) : (
-        <>
-          <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(18,100,229,.06)', filter:'blur(50px)', top:-60, right:-40 }}/>
-          <div style={{ position:'absolute', width:220, height:220, borderRadius:'50%', background:'rgba(255,184,0,.05)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-          <div style={{ position:'absolute', width:160, height:160, borderRadius:'50%', background:'rgba(24,183,242,.04)', filter:'blur(40px)', top:'50%', right:'20%' }}/>
-        </>
-      )}
-
-      {/* Floating subject icons */}
-      {icons.map((ic, i) => (
-        <div key={i} style={{
-          position: 'absolute', fontSize: positions[i].size,
-          opacity: dark ? 0.1 : 0.08,
-          ...positions[i],
-          userSelect: 'none',
-        }}>{ic}</div>
-      ))}
-
-      {/* Subtle corner sparkles */}
+    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
+      <div style={{ position:'absolute', inset:0, backgroundImage: dark ? 'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)' : 'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
+      {dark ? (<>
+        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
+        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
+        <div style={{ position:'absolute', width:200, height:200, borderRadius:'50%', background:'rgba(255,184,0,.04)', filter:'blur(50px)', top:'40%', left:'40%' }}/>
+      </>) : (<>
+        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
+        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(255,106,0,.04)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
+        <div style={{ position:'absolute', width:180, height:180, borderRadius:'50%', background:'rgba(24,183,242,.03)', filter:'blur(40px)', top:'50%', right:'20%' }}/>
+      </>)}
+      {['📐','⚗️','📚','🧬','✏️','🔭'].map((ic,i)=>{
+        const pos = [{top:'8%',right:'6%'},{top:'22%',left:'3%'},{top:'48%',right:'4%'},{bottom:'28%',left:'5%'},{bottom:'12%',right:'9%'},{top:'68%',left:'2%'}][i]
+        return <div key={i} style={{ position:'absolute', fontSize:20, opacity:dark?0.08:0.06, userSelect:'none', ...pos }}>{ic}</div>
+      })}
       {[[14,'12%','18%',GOLD],[10,'78%','8%',BLUE],[8,'45%','92%',CYAN],[12,'88%','55%',GOLD]].map(([sz,top,left,c],i)=>(
-        <div key={`sp${i}`} style={{ position:'absolute', top, left, fontSize:sz, color:c, opacity: dark?0.18:0.12 }}>✦</div>
+        <div key={i} style={{ position:'absolute', top, left, fontSize:sz, color:c, opacity:dark?0.16:0.1 }}>✦</div>
       ))}
     </div>
   )
 }
 
-// ─── CARD ─────────────────────────────────────────────────────────────────────
+// Sidebar + BottomNav come from shared StudentNav component (imported above)
+
+// ─── SHARED CARD ─────────────────────────────────────────────────────────────
 function Card({ children, style = {} }) {
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      borderRadius: 18,
-      border: '1px solid var(--border)',
-      boxShadow: '0 2px 12px rgba(6,42,120,.06)',
-      overflow: 'hidden',
-      ...style,
-    }}>{children}</div>
+    <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 2px 16px rgba(6,42,120,.06)', overflow:'hidden', ...style }}>
+      {children}
+    </div>
   )
 }
 
-function SecHead({ title, right }) {
+function SecLabel({ children, right }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-      <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.025em' }}>{title}</span>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+      <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>{children}</span>
       {right}
     </div>
   )
 }
 
-// ─── XP SHIELD ────────────────────────────────────────────────────────────────
-function XPShield({ size = 36 }) {
+// ─── DESKTOP TOPBAR ──────────────────────────────────────────────────────────
+function DesktopTopbar({ name, xp, dark, toggle }) {
+  const level    = Math.floor((xp || 0) / 2000) + 1
+  const initials = getInitials(name)
   return (
-    <svg width={size} height={size} viewBox="0 0 44 44" aria-hidden="true" style={{ flexShrink: 0 }}>
-      <polygon points="22,2 40,12 40,32 22,42 4,32 4,12" fill={NAVY} stroke={GOLD} strokeWidth="2.5"/>
-      <text x="22" y="28" textAnchor="middle" fontSize="15" fill={GOLD} fontWeight="900">⚡</text>
-    </svg>
-  )
-}
-
-// ─── DARK MODE TOGGLE ─────────────────────────────────────────────────────────
-function DarkBtn({ dark, toggle }) {
-  return (
-    <button onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} style={{
-      width: 36, height: 36, borderRadius: 11,
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-    }}>
-      {dark
-        ? <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-        : <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      }
-    </button>
-  )
-}
-
-// ─── NAV CONFIG ───────────────────────────────────────────────────────────────
-// Each item has a study-themed icon + coloured badge background
-const NAV = [
-  { id: 'home',        label: 'Home',        href: '/student/home',        icon: '🏠', color: NAVY,   bg: 'rgba(6,42,120,.1)'   },
-  { id: 'learn',       label: 'Learn',       href: '/student/learn',       icon: '📖', color: CYAN,   bg: 'rgba(24,183,242,.1)' },
-  { id: 'practice',    label: 'Practice',    href: '/student/practice',    icon: '⚡', color: ORANGE, bg: 'rgba(255,106,0,.1)'  },
-  { id: 'leaderboard', label: 'Leaderboard', href: '/student/leaderboard', icon: '🏆', color: GOLD,   bg: 'rgba(255,184,0,.1)'  },
-  { id: 'progress',    label: 'Progress',    href: '/student/progress',    icon: '📊', color: GREEN,  bg: 'rgba(34,197,94,.1)'  },
-  { id: 'profile',     label: 'Profile',     href: '/student/profile',     icon: '👤', color: NAVY,   bg: 'rgba(6,42,120,.07)'  },
-]
-
-// ─── DESKTOP LEFT SIDEBAR ─────────────────────────────────────────────────────
-function DesktopSidebar({ xp, dark }) {
-  const level = Math.floor((xp || 0) / 2000) + 1
-  const xpInLevel = (xp || 0) % 2000
-  const xpPct = Math.min(100, Math.round((xpInLevel / 2000) * 100))
-  const mainNav = NAV.filter(n => n.id !== 'profile')
-  const profileNav = NAV.filter(n => n.id === 'profile')
-
-  return (
-    <aside style={{
-      width: 224, flexShrink: 0, paddingRight: 16,
-      position: 'sticky', top: 20,
-      height: 'calc(100vh - 40px)',
-      display: 'flex', flexDirection: 'column',
-      // Sidebar surface — richer than the page bg
-      background: dark ? 'rgba(14,17,32,.95)' : 'rgba(255,255,255,.92)',
-      borderRadius: 20,
-      border: dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(6,42,120,.08)',
-      boxShadow: dark ? '0 4px 24px rgba(0,0,0,.35)' : '0 4px 24px rgba(6,42,120,.08)',
-      padding: '18px 14px',
-      backdropFilter: 'blur(12px)',
-    }}>
-      {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: GOLD, flexShrink: 0 }}>E</div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.02em', lineHeight: 1 }}>ExamPrep</div>
-          <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-tert)', marginTop: 1 }}>EXL Learning World</div>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:18, borderBottom:'1px solid var(--border)', marginBottom:22 }}>
+      {/* Search */}
+      <div style={{ flex:1, maxWidth:420, position:'relative' }}>
+        <div style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="var(--text-tert)" strokeWidth="1.8"/><path d="M15 15l3 3" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/></svg>
         </div>
+        <input placeholder="Search topics, questions, exams…" style={{ width:'100%', padding:'10px 14px 10px 40px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none' }}/>
       </div>
-
-      {/* Main nav */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-        {mainNav.map(item => {
-          const on = item.id === 'home'
-          return (
-            <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px',
-                borderRadius: 12, cursor: 'pointer',
-                background: on ? (dark ? 'rgba(255,255,255,.09)' : `rgba(6,42,120,.07)`) : 'transparent',
-                border: on ? (dark ? '1px solid rgba(255,255,255,.1)' : `1px solid rgba(6,42,120,.12)`) : '1px solid transparent',
-                transition: 'all .12s',
-              }}>
-                {/* Coloured icon badge */}
-                <div style={{
-                  width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-                  background: on ? item.bg : (dark ? 'rgba(255,255,255,.05)' : 'rgba(6,42,120,.04)'),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-                  transition: 'all .12s',
-                }}>{item.icon}</div>
-                <span style={{
-                  fontSize: 13,
-                  fontWeight: on ? 800 : 600,
-                  color: on ? (dark ? '#fff' : NAVY) : 'var(--text-tert)',
-                }}>{item.label}</span>
-                {on && (
-                  <div style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: BLUE, flexShrink: 0 }}/>
-                )}
-              </div>
-            </Link>
-          )
-        })}
-
-        <div style={{ height: 1, background: 'var(--border)', margin: '8px 4px' }}/>
-
-        {profileNav.map(item => (
-          <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, cursor: 'pointer', border: '1px solid transparent' }}>
-              <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: dark ? 'rgba(255,255,255,.05)' : 'rgba(6,42,120,.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{item.icon}</div>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-tert)' }}>{item.label}</span>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* XP card at bottom */}
-      <div style={{
-        borderRadius: 14, padding: 14, marginTop: 12,
-        background: dark ? 'rgba(255,255,255,.04)' : '#f4f7ff',
-        border: dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(6,42,120,.08)',
-      }}>
-        <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 8 }}>
-          Level {level} · Scholar
+      {/* Right cluster */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
+        {/* XP */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
+          <span style={{ fontSize:16 }}>⚡</span>
+          <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()} XP</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <XPShield size={30}/>
-          <div style={{ flex: 1 }}>
-            <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${xpPct}%`, borderRadius: 3, background: `linear-gradient(90deg, ${ORANGE}, ${GOLD})` }}/>
-            </div>
+        {/* Hearts */}
+        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
+          <span style={{ fontSize:16 }}>💗</span>
+          <span style={{ fontSize:13, fontWeight:900, color:'#f43f5e' }}>32</span>
+        </div>
+        {/* Profile chip */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer' }}>
+          <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
+          <div>
+            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
+            <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
           </div>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft:2 }}><path d="M3 4.5l3 3 3-3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)' }}>
-          {xpInLevel.toLocaleString()} / 2,000 XP
+        {/* Dark mode */}
+        <button onClick={toggle} style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+          {dark
+            ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          }
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
+function MobileTopbar({ name, xp, dark, toggle }) {
+  const initials = getInitials(name)
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ width:36, height:36, borderRadius:11, background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
+        <div>
+          <div style={{ fontSize:10, color:'var(--text-tert)', fontWeight:600 }}>Good {getGreeting()},</div>
+          <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em', lineHeight:1.1 }}>{name} 👑</div>
         </div>
       </div>
-    </aside>
-  )
-}
-
-// ─── MOBILE BOTTOM NAV ────────────────────────────────────────────────────────
-function MobileNav({ dark }) {
-  const leftTabs  = [NAV[0], NAV[1]]   // Home, Learn
-  const rightTabs = [NAV[3], NAV[4]]   // Leaderboard, Progress
-
-  const tabStyle = (on) => ({
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-    padding: '6px 10px', textDecoration: 'none', cursor: 'pointer',
-    borderTop: on ? `3px solid ${dark ? CYAN : NAVY}` : '3px solid transparent',
-  })
-
-  return (
-    <nav aria-label="Main navigation" style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-      height: 70,
-      // Richer surface for dark mode
-      background: dark ? 'rgba(14,17,32,.97)' : 'rgba(255,255,255,.98)',
-      borderTop: dark ? '1px solid rgba(255,255,255,.08)' : '1px solid rgba(6,42,120,.08)',
-      backdropFilter: 'blur(16px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-      paddingBottom: 'env(safe-area-inset-bottom)',
-      boxShadow: dark ? '0 -4px 20px rgba(0,0,0,.4)' : '0 -4px 20px rgba(6,42,120,.06)',
-    }}>
-      {leftTabs.map((tab, i) => {
-        const on = tab.id === 'home'
-        return (
-          <Link key={tab.id} href={tab.href} style={tabStyle(on)}>
-            <div style={{
-              width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-              background: on ? tab.bg : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 17, transition: 'all .15s',
-            }}>{tab.icon}</div>
-            <span style={{
-              fontSize: 8, fontWeight: on ? 800 : 600,
-              textTransform: 'uppercase', letterSpacing: '.07em',
-              color: on ? (dark ? CYAN : NAVY) : 'var(--text-tert)',
-            }}>{tab.label}</span>
-          </Link>
-        )
-      })}
-
-      {/* Practice FAB */}
-      <Link href="/student/practice" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginTop: -20 }}>
-        <div style={{
-          width: 54, height: 54, borderRadius: '50%',
-          background: dark ? `linear-gradient(135deg, ${BLUE}, ${NAVY})` : NAVY,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 6px 20px rgba(6,42,120,.45)`,
-        }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 5V19M5 12H19" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
-          </svg>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
+          <span style={{ fontSize:13 }}>⚡</span>
+          <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()}</span>
         </div>
-        <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.07em', color: dark ? CYAN : NAVY }}>
-          Practice
-        </span>
-      </Link>
-
-      {rightTabs.map(tab => (
-        <Link key={tab.id} href={tab.href} style={tabStyle(false)}>
-          <div style={{ width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>{tab.icon}</div>
-          <span style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text-tert)' }}>{tab.label}</span>
-        </Link>
-      ))}
-    </nav>
+        {/* Notifications */}
+        <div style={{ width:34, height:34, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', position:'relative' }}>
+          <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M11 3C7.7 3 5 5.7 5 9V14L3 16H19L17 14V9C17 5.7 14.3 3 11 3Z" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/><path d="M9 18C9 19.1 9.9 20 11 20C12.1 20 13 19.1 13 18" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/></svg>
+          <div style={{ position:'absolute', top:7, right:7, width:7, height:7, borderRadius:'50%', background:BLUE, border:'2px solid var(--bg-card)' }}/>
+        </div>
+        <button onClick={toggle} style={{ width:34, height:34, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+          {dark
+            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          }
+        </button>
+      </div>
+    </div>
   )
 }
 
-// ─── HERO CARD ────────────────────────────────────────────────────────────────
-function HeroCard({ name, quests, xp }) {
+// ─── HERO / MASCOT BANNER ─────────────────────────────────────────────────────
+function HeroBanner({ name, quests, xp, dark, isMobile = false }) {
   const leftCount = quests.filter(q => !q.completed).length
   const msg = MSGS[Math.floor(Date.now() / 86400000) % MSGS.length](name, leftCount)
-  const level = Math.floor((xp || 0) / 2000) + 1
-  const xpInLevel = (xp || 0) % 2000
-  const xpPct = Math.min(100, Math.round((xpInLevel / 2000) * 100))
+  const level   = Math.floor((xp || 0) / 2000) + 1
+  const xpInLvl = (xp || 0) % 2000
+  const xpPct   = Math.min(100, Math.round((xpInLvl / 2000) * 100))
 
   return (
-    <Card style={{ position: 'relative' }}>
-      {/* Hero gradient */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(150deg, rgba(18,100,229,.04) 0%, rgba(240,248,255,.5) 50%, rgba(255,245,228,.3) 100%)', pointerEvents: 'none' }}/>
-      {/* Sparkles inside hero */}
-      {[[9,14,GOLD,8],[42,7,BLUE,6],[74,7,CYAN,7],[6,55,GOLD,5],[48,65,ORANGE,4]].map(([x,y,c,s],i)=>(
-        <div key={i} style={{ position:'absolute', left:`${x}%`, top:`${y}%`, width:s, height:s, borderRadius:'50%', background:c, opacity:.5, pointerEvents:'none' }}/>
-      ))}
-      {[[27,9,GOLD,10],[54,17,BLUE,8],[76,5,GOLD,8]].map(([x,y,c,fs],i)=>(
-        <div key={`s${i}`} style={{ position:'absolute', left:`${x}%`, top:`${y}%`, fontSize:fs, color:c, opacity:.55, pointerEvents:'none' }}>✦</div>
-      ))}
+    <div style={{ borderRadius:22, overflow:'hidden', position:'relative', background:dark?`linear-gradient(135deg,${NAVY} 0%,#0a1f5e 60%,#0e2875 100%)`:`linear-gradient(135deg,${NAVY} 0%,#0c2360 50%,#1040a0 100%)`, padding:'22px 24px' }}>
+      {/* Glow orb */}
+      <div style={{ position:'absolute', top:0, right:0, width:220, height:220, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.12) 0%,transparent 70%)', pointerEvents:'none' }}/>
+      {/* Sparkles */}
+      <div style={{ position:'absolute', top:14, right:'40%', fontSize:14, color:GOLD, opacity:.5 }}>✦</div>
+      <div style={{ position:'absolute', top:28, right:'36%', fontSize:8, color:CYAN, opacity:.6 }}>✦</div>
+      <div style={{ position:'absolute', bottom:20, right:'42%', fontSize:10, color:GOLD, opacity:.4 }}>✦</div>
 
-      {/* Content */}
-      <div style={{ position:'relative', display:'flex', alignItems:'flex-end', minHeight:170 }}>
-        <div style={{ flex:1, padding:'22px 0 18px 22px', zIndex:1 }}>
-          <div style={{ fontSize:21, fontWeight:800, color:'var(--text-prim)', letterSpacing:'-.025em', lineHeight:1.3, marginBottom:8 }}>
-            {msg}
-          </div>
-          <div style={{ fontSize:11, fontWeight:700, color:ORANGE }}>— Zara, your study buddy</div>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:0 }}>
+        {/* Left: text + optional XP pill (mobile only — desktop has sidebar) */}
+        <div style={{ flex:1, zIndex:1 }}>
+          <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:'rgba(255,255,255,.45)', marginBottom:6 }}>Good {getGreeting()}</div>
+          <div style={{ fontSize:isMobile?18:20, fontWeight:900, color:'#fff', letterSpacing:'-.03em', lineHeight:1.25, marginBottom:12 }}>{msg}</div>
+          <div style={{ fontSize:11, fontWeight:700, color:`${GOLD}cc`, marginBottom:isMobile?14:6 }}>— Zara, your study buddy</div>
+
+          {/* XP progress pill — only on mobile (desktop: already in sidebar) */}
+          {isMobile && (
+            <div style={{ background:'rgba(255,255,255,.09)', backdropFilter:'blur(8px)', borderRadius:14, padding:'10px 13px', border:'1px solid rgba(255,255,255,.12)', display:'inline-flex', alignItems:'center', gap:9, minWidth:180 }}>
+              <svg width="24" height="24" viewBox="0 0 44 44" aria-hidden="true" style={{ flexShrink:0 }}>
+                <polygon points="22,2 40,12 40,32 22,42 4,32 4,12" fill={NAVY} stroke={GOLD} strokeWidth="2.5"/>
+                <text x="22" y="28" textAnchor="middle" fontSize="13" fill={GOLD} fontWeight="900">⚡</text>
+              </svg>
+              <div style={{ flex:1, minWidth:90 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                  <span style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'rgba(255,255,255,.5)' }}>Level {level}</span>
+                  <span style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.6)' }}>{xpInLvl.toLocaleString()} / 2,000</span>
+                </div>
+                <div style={{ height:5, borderRadius:999, background:'rgba(255,255,255,.15)', overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${xpPct}%`, borderRadius:999, background:`linear-gradient(90deg,${ORANGE},${GOLD})`, transition:'width .8s ease' }}/>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <div style={{ flexShrink:0, alignSelf:'flex-end', zIndex:1 }}>
+
+        {/* Mascot — desktop: bigger (260×280), mobile: medium (155×170) */}
+        <div style={{ width:isMobile?155:260, height:isMobile?170:280, flexShrink:0, position:'relative', zIndex:1, alignSelf:'flex-end', marginRight:isMobile?0:-4 }}>
           <img
             src="/images/zara_studybuddy.png"
             alt="Zara your study buddy"
-            width={148} height={172}
-            style={{ display:'block', objectFit:'contain', objectPosition:'bottom center' }}
-            onError={e => { e.currentTarget.style.display = 'none' }}
+            style={{ width:'100%', height:'100%', objectFit:'contain', objectPosition:'bottom center', display:'block', filter:'drop-shadow(0 6px 20px rgba(0,0,0,.45))' }}
+            onError={e => { e.currentTarget.style.display='none' }}
           />
         </div>
       </div>
-
-      {/* XP bar */}
-      <div style={{
-        position:'relative', margin:'0 16px 16px',
-        background:'var(--bg-subtle)', borderRadius:14, padding:'10px 14px',
-        display:'flex', alignItems:'center', gap:12, border:'1px solid var(--border)',
-      }}>
-        <XPShield size={36}/>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:10, fontWeight:800, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.09em', marginBottom:5 }}>
-            Level {level}
-          </div>
-          <div style={{ height:7, borderRadius:4, background:'var(--border)', overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${xpPct}%`, borderRadius:4, background:`linear-gradient(90deg, ${ORANGE}, ${GOLD})`, transition:'width .8s ease' }}/>
-          </div>
-        </div>
-        <div style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', whiteSpace:'nowrap' }}>
-          {xpInLevel.toLocaleString()} / 2,000 XP
-        </div>
-      </div>
-    </Card>
+    </div>
   )
 }
 
-// ─── QUEST LIST ───────────────────────────────────────────────────────────────
-function QuestList({ quests }) {
+// ─── TODAY'S QUESTS ───────────────────────────────────────────────────────────
+function TodaysQuests({ quests, dark }) {
   const done = quests.filter(q => q.completed).length
+
   return (
     <div>
-      <SecHead title="Today's Quests" right={
-        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, fontWeight:700, color:'var(--text-tert)' }}>
-          <span style={{ fontSize:15 }}>🔥</span>
-          <span style={{ fontWeight:900, color:'var(--text-prim)' }}>{done}</span>
-          <span>/ {quests.length} completed</span>
-        </div>
-      }/>
+      <SecLabel
+        right={
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <span style={{ fontSize:15 }}>🔥</span>
+            <span style={{ fontSize:12, fontWeight:800, color:ORANGE }}>{done} / {quests.length} done</span>
+          </div>
+        }
+      >
+        Today's Quests
+      </SecLabel>
       <Card>
         {quests.map((q, i) => (
-          <div key={q.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderBottom: i < quests.length - 1 ? '1px solid var(--border)' : 'none' }}>
-            <div style={{ width:24, height:24, borderRadius:7, flexShrink:0, background:q.completed?BLUE:'transparent', border:q.completed?'none':'2px solid var(--border-strong)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              {q.completed && <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          <div key={q.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 18px', borderBottom:i<quests.length-1?'1px solid var(--border)':'none' }}>
+            <div style={{ width:24, height:24, borderRadius:7, flexShrink:0, background:q.completed?GREEN:'transparent', border:q.completed?'none':`2px solid ${dark?'rgba(255,255,255,.2)':'rgba(6,42,120,.18)'}`, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>
+              {q.completed && <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:q.completed?'var(--text-tert)':'var(--text-prim)', textDecoration:q.completed?'line-through':'none', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{q.title}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:q.completed?'var(--text-tert)':'var(--text-prim)', textDecoration:q.completed?'line-through':'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{q.title}</div>
               <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>{q.subtitle}</div>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
-              <span style={{ fontSize:12, fontWeight:800, color:q.completed?GREEN:BLUE }}>+{q.xp} XP</span>
-              <div style={{ width:20, height:20, borderRadius:'50%', background:q.completed?GREEN:GOLD, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5.5 1L3 5.5H5L4.5 9L7 4.5H5L5.5 1Z" fill="#fff"/></svg>
+              <span style={{ fontSize:12, fontWeight:800, color:q.completed?'var(--text-tert)':ORANGE }}>+{q.xp} XP</span>
+              <div style={{ width:20, height:20, borderRadius:6, background:q.completed?'rgba(34,197,94,.1)':'rgba(255,106,0,.1)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <span style={{ fontSize:9, fontWeight:900, color:q.completed?GREEN:ORANGE }}>XP</span>
               </div>
             </div>
           </div>
         ))}
         <Link href="/student/practice" style={{ textDecoration:'none' }}>
-          <div style={{ padding:'12px 16px', textAlign:'center', fontSize:13, fontWeight:700, color:BLUE, background:'rgba(18,100,229,.03)', borderTop:'1px solid var(--border)', cursor:'pointer' }}>
-            View all quests ›
+          <div style={{ padding:'12px 18px', display:'flex', alignItems:'center', justifyContent:'center', gap:4, fontSize:12, fontWeight:700, color:BLUE, background:dark?'rgba(18,100,229,.06)':'rgba(18,100,229,.03)', borderTop:'1px solid var(--border)', cursor:'pointer' }}>
+            View all quests <span style={{ fontSize:14 }}>›</span>
           </div>
         </Link>
       </Card>
@@ -422,29 +259,57 @@ function QuestList({ quests }) {
   )
 }
 
-// ─── EXAM GOALS ───────────────────────────────────────────────────────────────
-function ExamGoals({ goals, exams }) {
-  const base = [
-    { icon:'🏛️', label:'University', value:goals?.university||'Not set', bg:'rgba(18,100,229,.08)' },
-    { icon:'📚', label:'Course',     value:goals?.course||'Not set',     bg:'rgba(18,100,229,.08)' },
+// ─── JUMP IN CARDS ────────────────────────────────────────────────────────────
+function JumpInCards({ dark }) {
+  const items = [
+    { icon:'⚡', iconBg:`rgba(255,184,0,.2)`, label:'Speed Round', sub:'10 questions · 60 sec', xp:'+15 XP', isDark:false, href:'/student/practice?mode=speed' },
+    { icon:'📋', iconBg:`rgba(255,255,255,.18)`, label:'Mock Exam', sub:'Full WAEC / JAMB format', xp:'+200 XP', isDark:true, href:'/student/practice?mode=mock' },
   ]
-  if (!exams || exams.includes('WAEC')) base.push({ label:'WAEC target', value:goals?.waec||'Not set', bg:'rgba(6,42,120,.08)', text:'WAEC', textColor:NAVY })
-  if (!exams || exams.includes('JAMB')) base.push({ label:'JAMB target', value:goals?.jamb||'Not set', bg:'rgba(255,106,0,.08)', text:'JAMB', textColor:ORANGE })
+  return (
+    <div>
+      <SecLabel>Jump In</SecLabel>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        {items.map(item => (
+          <Link key={item.label} href={item.href} style={{ textDecoration:'none' }}>
+            <div style={{ borderRadius:20, padding:'18px 16px', display:'flex', flexDirection:'column', gap:10, cursor:'pointer', background:item.isDark?`linear-gradient(145deg,${NAVY} 0%,#04194a 100%)`:'var(--bg-card)', border:item.isDark?`1px solid rgba(24,183,242,.2)`:'1px solid var(--border)', boxShadow:item.isDark?`0 6px 24px rgba(6,42,120,.4)`:'0 2px 10px rgba(6,42,120,.05)', minHeight:130, transition:'transform .15s', position:'relative', overflow:'hidden' }}>
+              {item.isDark && <div style={{ position:'absolute', top:-20, right:-20, width:100, height:100, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.12) 0%,transparent 70%)', pointerEvents:'none' }}/>}
+              <div style={{ width:44, height:44, borderRadius:'50%', background:item.iconBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{item.icon}</div>
+              <div>
+                <div style={{ fontSize:14, fontWeight:900, color:item.isDark?'#fff':'var(--text-prim)', marginBottom:3 }}>{item.label}</div>
+                <div style={{ fontSize:11, color:item.isDark?'rgba(255,255,255,.5)':'var(--text-tert)' }}>{item.sub}</div>
+              </div>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:999, fontSize:10, fontWeight:800, background:item.isDark?'rgba(255,255,255,.15)':'rgba(255,184,0,.14)', color:item.isDark?'#fff':ORANGE, alignSelf:'flex-start' }}>⚡ {item.xp}</div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── EXAM GOALS ──────────────────────────────────────────────────────────────
+function ExamGoals({ goals, exams, dark }) {
+  const items = [
+    { icon:'🏛️', label:'University', value:goals?.university||'Not set', color:BLUE },
+    { icon:'📚', label:'Course',     value:goals?.course||'Not set',     color:PURPLE },
+  ]
+  if (!exams.length || exams.includes('WAEC')) items.push({ text:'WAEC', label:'WAEC target', value:goals?.waec||'Not set', color:NAVY })
+  if (!exams.length || exams.includes('JAMB')) items.push({ text:'JAMB', label:'JAMB target', value:goals?.jamb||'Not set', color:ORANGE })
 
   return (
     <div>
-      <SecHead title="Exam Goals" right={
-        <Link href="/student/profile" style={{ textDecoration:'none', fontSize:12, fontWeight:700, color:ORANGE }}>Edit</Link>
-      }/>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>
-        {base.map((item, i) => (
-          <div key={i} style={{ background:'var(--bg-card)', borderRadius:14, padding:'12px 13px', display:'flex', alignItems:'center', gap:10, border:'1px solid var(--border)', boxShadow:'0 1px 4px rgba(6,42,120,.04)' }}>
-            <div style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:item.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:item.text?11:18, fontWeight:900, color:item.textColor }}>
+      <SecLabel right={<Link href="/student/profile" style={{ textDecoration:'none', fontSize:12, fontWeight:700, color:BLUE }}>Edit →</Link>}>
+        Exam Goals
+      </SecLabel>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ background:'var(--bg-card)', borderRadius:16, padding:'13px 14px', display:'flex', alignItems:'center', gap:10, border:'1px solid var(--border)', boxShadow:'0 1px 6px rgba(6,42,120,.04)' }}>
+            <div style={{ width:38, height:38, borderRadius:12, flexShrink:0, background:`${item.color}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:item.text?11:18, fontWeight:900, color:item.color }}>
               {item.text || item.icon}
             </div>
             <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:ORANGE, marginBottom:3 }}>{item.label}</div>
-              <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.value}</div>
+              <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:item.color, marginBottom:3 }}>{item.label}</div>
+              <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.value}</div>
             </div>
           </div>
         ))}
@@ -454,30 +319,34 @@ function ExamGoals({ goals, exams }) {
 }
 
 // ─── PRACTICE ACTIVITY ────────────────────────────────────────────────────────
-function PracticeActivity({ activity }) {
+function PracticeActivity({ activity, dark }) {
   const days = ['M','T','W','T','F','S','S']
   const todayIdx = (new Date().getDay() + 6) % 7
   const maxH = Math.max(...activity, 1)
+  const total = activity.reduce((a,b)=>a+b,0)
+
   return (
-    <Card style={{ padding:16 }}>
-      <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:3 }}>Practice Activity</div>
-      <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:12 }}>This week</div>
-      <div style={{ display:'flex', alignItems:'flex-end', gap:5, height:56 }}>
+    <Card style={{ padding:18 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+        <span style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Practice Activity</span>
+        <span style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)' }}>This week</span>
+      </div>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:5, height:52, marginTop:14, marginBottom:8 }}>
         {days.map((d, i) => {
-          const h = Math.max(Math.round((activity[i] / maxH) * 48), activity[i] > 0 ? 4 : 2)
+          const h = Math.max(Math.round((activity[i] / maxH) * 44), activity[i] > 0 ? 4 : 2)
           const isToday = i === todayIdx
           return (
             <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, height:'100%', justifyContent:'flex-end' }}>
-              <div style={{ width:'100%', borderRadius:'3px 3px 0 0', height:h, background:isToday?NAVY:BLUE, opacity:isToday?1:activity[i]>0?0.55:0.15, transition:'height .4s' }}/>
-              <span style={{ fontSize:9, fontWeight:700, color:isToday?NAVY:'var(--text-tert)', textTransform:'uppercase' }}>{d}</span>
+              <div style={{ width:'100%', borderRadius:'4px 4px 0 0', height:h, background:isToday?ORANGE:BLUE, opacity:isToday?1:activity[i]>0?0.55:0.12, transition:'height .4s' }}/>
+              <span style={{ fontSize:9, fontWeight:700, color:isToday?ORANGE:'var(--text-tert)', textTransform:'uppercase' }}>{d}</span>
             </div>
           )
         })}
       </div>
-      <div style={{ display:'flex', gap:16, marginTop:12, paddingTop:10, borderTop:'1px solid var(--border)' }}>
-        {[{val:activity.reduce((a,b)=>a+b,0),label:'Questions'},{val:'68%',label:'Accuracy'},{val:'5🔥',label:'Streak'}].map((s,i)=>(
-          <div key={i}>
-            <div style={{ fontSize:17, fontWeight:900, color:i===2?ORANGE:'var(--text-prim)', lineHeight:1 }}>{s.val}</div>
+      <div style={{ display:'flex', gap:0, marginTop:12, paddingTop:12, borderTop:'1px solid var(--border)' }}>
+        {[{val:total,label:'Questions'},{val:'68%',label:'Accuracy'},{val:`12🔥`,label:'Streak'}].map((s,i)=>(
+          <div key={i} style={{ flex:1, textAlign:i===1?'center':i===2?'right':'left' }}>
+            <div style={{ fontSize:16, fontWeight:900, color:i===2?ORANGE:'var(--text-prim)', lineHeight:1 }}>{s.val}</div>
             <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginTop:3 }}>{s.label}</div>
           </div>
         ))}
@@ -487,38 +356,32 @@ function PracticeActivity({ activity }) {
 }
 
 // ─── LEADERBOARD SNAPSHOT ─────────────────────────────────────────────────────
-function LeaderboardSnap({ board, myId }) {
+function LeaderboardSnap({ board, myId, dark }) {
   const medals = ['🥇','🥈','🥉']
-  const avBgs  = [`rgba(255,184,0,.15)`,`rgba(18,100,229,.12)`,`rgba(255,106,0,.1)`,`rgba(24,183,242,.1)`,`rgba(6,42,120,.08)`]
+  const avBgs  = [`${GOLD}22`,`${BLUE}20`,`${ORANGE}18`,`${CYAN}18`,`${NAVY}14`]
   const avCols = [GOLD, BLUE, ORANGE, CYAN, NAVY]
 
   return (
-    <Card style={{ padding:16 }}>
+    <Card style={{ padding:18 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
-        <span style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)' }}>Leaderboard</span>
+        <span style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Leaderboard</span>
         <Link href="/student/leaderboard" style={{ textDecoration:'none', fontSize:11, fontWeight:700, color:BLUE }}>See all →</Link>
       </div>
-      <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:12 }}>School · This week</div>
+      <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:14 }}>School · This week</div>
       {board.length === 0 ? (
-        <div style={{ fontSize:12, color:'var(--text-tert)', padding:'8px 0', textAlign:'center' }}>
-          No data yet — start practising to rank!
-        </div>
+        <div style={{ fontSize:12, color:'var(--text-tert)', padding:'12px 0', textAlign:'center' }}>Start practising to rank!</div>
       ) : board.map((entry, i) => {
         const isMe = entry.student_id === myId
         return (
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 4px', borderBottom:i<board.length-1?'1px solid var(--border)':'none', background:isMe?'rgba(18,100,229,.05)':'transparent', borderRadius:isMe?8:0 }}>
-            <span style={{ fontSize:i<3?13:10, width:20, textAlign:'center', flexShrink:0 }}>
-              {i < 3 ? medals[i] : <span style={{ fontWeight:800, color:'var(--text-tert)', fontSize:11 }}>{i+1}</span>}
-            </span>
-            <div style={{ width:26, height:26, borderRadius:'50%', flexShrink:0, background:avBgs[i%5], display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:800, color:avCols[i%5] }}>
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 6px', borderBottom:i<board.length-1?'1px solid var(--border)':'none', background:isMe?`${BLUE}08`:'transparent', borderRadius:isMe?10:0 }}>
+            <span style={{ fontSize:i<3?13:10, width:22, textAlign:'center', flexShrink:0, fontWeight:800, color:'var(--text-tert)' }}>{i<3?medals[i]:i+1}</span>
+            <div style={{ width:26, height:26, borderRadius:'50%', flexShrink:0, background:avBgs[i%5], display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:avCols[i%5] }}>
               {(entry.first_name||'S').charAt(0)}
             </div>
             <span style={{ flex:1, fontSize:12, fontWeight:isMe?800:600, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {isMe?'You':entry.first_name}
             </span>
-            <span style={{ fontSize:11, fontWeight:800, color:isMe?GOLD:'var(--text-tert)', flexShrink:0 }}>
-              {(entry.points||0).toLocaleString()} XP
-            </span>
+            <span style={{ fontSize:11, fontWeight:800, color:isMe?GOLD:'var(--text-tert)', flexShrink:0 }}>{(entry.points||0).toLocaleString()} XP</span>
           </div>
         )
       })}
@@ -526,43 +389,26 @@ function LeaderboardSnap({ board, myId }) {
   )
 }
 
-// ─── JUMP IN ──────────────────────────────────────────────────────────────────
-function JumpIn() {
-  const items = [
-    { icon:'⚡', iconBg:`rgba(255,184,0,.15)`, title:'Speed Round',  sub:'10 questions · 60 sec',  xp:'+15 XP', dark:false, href:'/student/practice?mode=speed' },
-    { icon:'📋', iconBg:`rgba(255,255,255,.15)`, title:'Mock Exam', sub:'Full WAEC / JAMB format',  xp:'+50 XP', dark:true,  href:'/student/practice?mode=mock'  },
-  ]
+// ─── CONSISTENCY BANNER ───────────────────────────────────────────────────────
+function ConsistencyBanner() {
   return (
-    <div>
-      <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:10 }}>Jump in</div>
-      <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-        {items.map(item => (
-          <Link key={item.title} href={item.href} style={{ textDecoration:'none' }}>
-            <div style={{
-              display:'flex', alignItems:'center', gap:12, padding:'13px 14px', borderRadius:16, cursor:'pointer',
-              background:item.dark?`linear-gradient(135deg, ${NAVY} 0%, #04194a 100%)`:'var(--bg-card)',
-              border:item.dark?'none':'1px solid var(--border)',
-              boxShadow:item.dark?`0 4px 16px rgba(6,42,120,.3)`:'0 2px 8px rgba(6,42,120,.04)',
-            }}>
-              <div style={{ width:40, height:40, borderRadius:'50%', background:item.iconBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>{item.icon}</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:800, color:item.dark?'#fff':'var(--text-prim)', marginBottom:2 }}>{item.title}</div>
-                <div style={{ fontSize:11, color:item.dark?'rgba(255,255,255,.5)':'var(--text-tert)' }}>{item.sub}</div>
-                <div style={{ display:'inline-flex', alignItems:'center', gap:3, marginTop:5, padding:'3px 8px', borderRadius:999, fontSize:10, fontWeight:800, background:item.dark?'rgba(255,255,255,.15)':`rgba(255,184,0,.14)`, color:item.dark?'#fff':ORANGE }}>⚡ {item.xp}</div>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M5 3L9 7L5 11" stroke={item.dark?'rgba(255,255,255,.4)':'var(--text-tert)'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </div>
-          </Link>
-        ))}
+    <div style={{ borderRadius:20, background:'rgba(255,184,0,.06)', border:`1px solid ${GOLD}30`, padding:'18px 22px', display:'flex', alignItems:'center', gap:14, overflow:'hidden', position:'relative' }}>
+      <div style={{ position:'absolute', right:-20, top:-20, width:130, height:130, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,184,0,.1) 0%,transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ fontSize:36, flexShrink:0 }}>🏆</div>
+      <div style={{ flex:1, zIndex:1 }}>
+        <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', marginBottom:3 }}>Consistency is your superpower! 💪</div>
+        <div style={{ fontSize:11, color:'var(--text-tert)', lineHeight:1.4 }}>Keep practising daily and watch yourself level up.</div>
       </div>
+      <div style={{ flexShrink:0, fontSize:32, zIndex:1 }}>⭐</div>
     </div>
   )
 }
 
-// ─── PAGE ─────────────────────────────────────────────────────────────────────
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function HomePage() {
-  const router = useRouter()
+  const router  = useRouter()
   const { dark, toggle } = useTheme()
+
   const [profile,  setProfile]  = useState(null)
   const [quests,   setQuests]   = useState([])
   const [goals,    setGoals]    = useState(null)
@@ -580,17 +426,14 @@ export default function HomePage() {
     } catch {}
     const subs = prof?.subjects||[]
     const [s0='Mathematics',s1='Biology',s2='Chemistry'] = subs
-    const day = new Date().getDay()
-    const count = (day===0||day===6)?2:day<=2?3:4
     const pool = [
-      {id:1,title:`Solve 8 ${s0} questions`,   subtitle:'Keep your streak going!',xp:20,completed:false},
-      {id:2,title:`${s1} speed round`,           subtitle:'10 questions · 60 sec',  xp:15,completed:false},
-      {id:3,title:`Score 60%+ in ${s2}`,         subtitle:`${s2} practice set`,     xp:25,completed:false},
-      {id:4,title:"Revise today's lesson",        subtitle:'Quick recap',            xp:10,completed:false},
+      {id:1, title:`Solve 8 ${s0} questions`,  subtitle:'Keep your streak going!', xp:20, completed:false},
+      {id:2, title:`${s1} speed round`,          subtitle:'10 questions · 60 sec',   xp:15, completed:false},
+      {id:3, title:`Score 60%+ in ${s2}`,        subtitle:`${s2} practice set`,      xp:25, completed:false},
+      {id:4, title:"Revise today's lesson",       subtitle:'Quick recap',             xp:10, completed:false},
     ]
-    const daily = pool.slice(0,count)
-    localStorage.setItem('ep_quests',JSON.stringify({date:new Date().toISOString().slice(0,10),quests:daily}))
-    setQuests(daily)
+    localStorage.setItem('ep_quests', JSON.stringify({date:new Date().toISOString().slice(0,10), quests:pool}))
+    setQuests(pool)
   }
 
   const load = useCallback(async () => {
@@ -624,7 +467,7 @@ export default function HomePage() {
         try {
           const guest = JSON.parse(localStorage.getItem('ep_guest')||'{}')
           if (!guest.onboarded) { router.replace('/onboarding'); return }
-          setProfile({username:guest.username,subjects:guest.subjects||[]})
+          setProfile({username:guest.username, subjects:guest.subjects||[]})
           setExams(guest.exams||['WAEC','JAMB'])
           setGoals({university:'Not set',course:'Not set',waec:'Not set',jamb:'Not set'})
           buildQuests({subjects:guest.subjects||[]})
@@ -638,95 +481,60 @@ export default function HomePage() {
 
   if (loading) return (
     <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
-      <div style={{ width:32,height:32,borderRadius:'50%',border:`3px solid var(--border)`,borderTopColor:BLUE,animation:'spin .7s linear infinite' }}/>
+      <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid var(--border)`, borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
-  const name = cap(profile?.username||profile?.full_name?.split(' ')[0]||'King')
-  const av   = getInitials(name)
+  const name = cap(profile?.username||profile?.full_name?.split(' ')[0]||'Student')
 
   return (
     <>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box}`}</style>
-
-      {/* Background */}
       <AppBackground dark={dark}/>
 
-      {/* ══ DESKTOP ══════════════════════════════════════════════ */}
+      {/* ── DESKTOP ── */}
       <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1320, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:18, alignItems:'flex-start' }}>
+        <div style={{ maxWidth:1340, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
+          <StudentSidebar active="home" xp={xp} dark={dark}/>
 
-          <DesktopSidebar xp={xp} dark={dark}/>
+          {/* Main area: topbar + two-col body */}
+          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
+            {/* Topbar stretches full width of this area */}
+            <DesktopTopbar name={name} xp={xp} dark={dark} toggle={toggle}/>
 
-          {/* Centre */}
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:18 }}>
-            {/* Desktop header */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:16, borderBottom:'1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600, marginBottom:2 }}>Good {getGreeting()},</div>
-                <div style={{ fontSize:22, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', lineHeight:1 }}>{name} 👑</div>
+            {/* Two-col body below topbar */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20, alignItems:'flex-start' }}>
+              {/* Centre feed */}
+              <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
+                <HeroBanner name={name} quests={quests} xp={xp} dark={dark} isMobile={false}/>
+                <TodaysQuests quests={quests} dark={dark}/>
+                <ExamGoals goals={goals} exams={exams} dark={dark}/>
+                <ConsistencyBanner/>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <DarkBtn dark={dark} toggle={toggle}/>
-                <div style={{ width:38, height:38, borderRadius:12, background:NAVY, color:GOLD, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:900 }}>{av}</div>
+
+              {/* Right column — sticky */}
+              <div style={{ position:'sticky', top:20, display:'flex', flexDirection:'column', gap:14 }}>
+                <PracticeActivity activity={activity} dark={dark}/>
+                <LeaderboardSnap board={board} myId={myId} dark={dark}/>
+                <JumpInCards dark={dark}/>
               </div>
             </div>
-            <HeroCard name={name} quests={quests} xp={xp}/>
-            <QuestList quests={quests}/>
-            <ExamGoals goals={goals} exams={exams}/>
-          </div>
-
-          {/* Right column */}
-          <div style={{ width:288, flexShrink:0, display:'flex', flexDirection:'column', gap:14, position:'sticky', top:20 }}>
-            <PracticeActivity activity={activity}/>
-            <LeaderboardSnap board={board} myId={myId}/>
-            <JumpIn/>
           </div>
         </div>
       </div>
 
-      {/* ══ MOBILE ══════════════════════════════════════════════ */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:88, position:'relative', zIndex:1 }}>
-        {/* Mobile header */}
-        <div style={{ padding:'52px 16px 14px', display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#dce8ff,#c4d8ff)', border:`1.5px solid rgba(6,42,120,.12)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:900, color:NAVY, flexShrink:0 }}>{av}</div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:12, fontWeight:600, color:'var(--text-tert)', marginBottom:2 }}>Good {getGreeting()},</div>
-            <div style={{ fontSize:19, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', lineHeight:1 }}>{name} 👑</div>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-            <DarkBtn dark={dark} toggle={toggle}/>
-            <div style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', cursor:'pointer' }}>
-              <svg width="17" height="17" viewBox="0 0 22 22" fill="none" aria-label="Notifications"><path d="M11 3C7.7 3 5 5.7 5 9V14L3 16H19L17 14V9C17 5.7 14.3 3 11 3Z" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/><path d="M9 18C9 19.1 9.9 20 11 20C12.1 20 13 19.1 13 18" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/></svg>
-              <div style={{ position:'absolute',top:7,right:7,width:7,height:7,borderRadius:'50%',background:BLUE,border:'2px solid var(--bg-card)' }}/>
-            </div>
-          </div>
+      {/* ── MOBILE ── */}
+      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
+        <MobileTopbar name={name} xp={xp} dark={dark} toggle={toggle}/>
+        <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:20 }}>
+          <HeroBanner name={name} quests={quests} xp={xp} dark={dark} isMobile={true}/>
+          <TodaysQuests quests={quests} dark={dark}/>
+          <ExamGoals goals={goals} exams={exams} dark={dark}/>
+          <JumpInCards dark={dark}/>
+          <ConsistencyBanner/>
         </div>
-        <div style={{ padding:'0 16px', display:'flex', flexDirection:'column', gap:18 }}>
-          <HeroCard name={name} quests={quests} xp={xp}/>
-          <QuestList quests={quests}/>
-          <ExamGoals goals={goals} exams={exams}/>
-          <div>
-            <SecHead title="Jump In"/>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:11 }}>
-              {[
-                {icon:'⚡',bg:`rgba(255,184,0,.15)`,title:'Speed Round',sub:'10 Qs · 60 sec',xp:'+15 XP',dark:false,href:'/student/practice?mode=speed'},
-                {icon:'📋',bg:`rgba(255,255,255,.15)`,title:'Mock Exam',sub:'Full WAEC format',xp:'+50 XP',dark:true,href:'/student/practice?mode=mock'},
-              ].map(item=>(
-                <Link key={item.title} href={item.href} style={{ textDecoration:'none' }}>
-                  <div style={{ borderRadius:18,padding:'14px 13px',display:'flex',flexDirection:'column',gap:8,cursor:'pointer',background:item.dark?`linear-gradient(135deg,${NAVY},#04194a)`:'var(--bg-card)',border:item.dark?'none':'1px solid var(--border)',boxShadow:item.dark?`0 5px 18px rgba(6,42,120,.3)`:'0 2px 8px rgba(6,42,120,.04)',minHeight:120 }}>
-                    <div style={{ width:44,height:44,borderRadius:'50%',background:item.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:21 }}>{item.icon}</div>
-                    <div style={{ fontSize:13,fontWeight:900,color:item.dark?'#fff':'var(--text-prim)' }}>{item.title}</div>
-                    <div style={{ fontSize:11,color:item.dark?'rgba(255,255,255,.5)':'var(--text-tert)',marginTop:-4 }}>{item.sub}</div>
-                    <div style={{ display:'inline-flex',alignItems:'center',gap:3,padding:'3px 9px',borderRadius:999,fontSize:10,fontWeight:800,background:item.dark?'rgba(255,255,255,.15)':`rgba(255,184,0,.14)`,color:item.dark?'#fff':ORANGE,alignSelf:'flex-start' }}>⚡ {item.xp}</div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-        <MobileNav dark={dark}/>
+        <StudentBottomNav active="home" dark={dark}/>
       </div>
     </>
   )
