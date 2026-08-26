@@ -23,28 +23,59 @@ const BG     = '#0a0c14'   // dark mode canvas — matches app globals.css
 const BG2    = '#070810'   // slightly deeper for footer/header
 
 // ── Nav tree ─────────────────────────────────────────────────────────────────
-const NAV = [
-  { section: 'QUESTIONS', items: [
-    { href: '/admin/dashboard',          label: 'Dashboard',        icon: '◼' },
-    { href: '/admin/past-questions',     label: 'Past Questions',   icon: '🗃' },
-    { href: '/admin/coverage',           label: 'Year Coverage',    icon: '📅' },
-    { href: '/admin/questions/import',   label: 'Import (SdashAPI)',icon: '⬆' },
-    { href: '/admin/questions/upload',   label: 'Upload Questions', icon: '📤' },
-    { href: '/admin/questions',          label: 'Question Bank',    icon: '🔍' },
-  ]},
-  { section: 'CURRICULUM', items: [
-    { href: '/admin/subjects-manager',   label: 'Subjects',         icon: '📑' },
-    { href: '/admin/curriculum',         label: 'Topic Tree',       icon: '🌿' },
-    { href: '/admin/core-topics',        label: 'Core Topics',      icon: '⭐' },
-    { href: '/admin/flashcards',         label: 'Flashcards & Formulas', icon: '🃏' },
-  ]},
-  { section: 'PLATFORM', items: [
-    { href: '/admin/users',              label: 'Students',         icon: '👤' },
-    { href: '/admin/schools',            label: 'Schools',          icon: '🏫' },
-    { href: '/admin/analytics',          label: 'Analytics',        icon: '📈' },
-    { href: '/admin/reviewers',          label: 'Reviewers',        icon: '👁' },
-  ]},
-]
+const SECTIONS = {
+  questions: {
+    label: 'Questions',
+    icon: '🗃',
+    accent: '#6366f1',
+    items: [
+      { href: '/admin/dashboard',          label: 'Hub',              icon: '◼' },
+      { href: '/admin/questions/upload',   label: 'Upload Questions', icon: '📤' },
+      { href: '/admin/questions/import',   label: 'Import via Sdash', icon: '⬆' },
+      { href: '/admin/questions',          label: 'Question Bank',    icon: '🔍' },
+      { href: '/admin/past-questions',     label: 'Past Questions',   icon: '🗃' },
+      { href: '/admin/coverage',           label: 'Year Coverage',    icon: '📅' },
+    ],
+  },
+  content: {
+    label: 'Content',
+    icon: '📚',
+    accent: '#0ea5e9',
+    items: [
+      { href: '/admin/dashboard',          label: 'Hub',                   icon: '◼' },
+      { href: '/admin/curriculum',         label: 'Topic Tree',            icon: '🌿' },
+      { href: '/admin/subjects-manager',   label: 'Subjects',              icon: '📑' },
+      { href: '/admin/core-topics',        label: 'Core Topics',           icon: '⭐' },
+      { href: '/admin/flashcards',         label: 'Flashcards & Formulas', icon: '🃏' },
+      { href: '/admin/video-lessons',      label: 'Video Lessons',         icon: '🎬' },
+    ],
+  },
+  platform: {
+    label: 'Platform',
+    icon: '⚙️',
+    accent: '#10b981',
+    items: [
+      { href: '/admin/dashboard',          label: 'Hub',          icon: '◼' },
+      { href: '/admin/users',              label: 'Students',     icon: '👤' },
+      { href: '/admin/schools',            label: 'Schools',      icon: '🏫' },
+      { href: '/admin/access-codes',       label: 'Access Codes', icon: '🎟' },
+      { href: '/admin/analytics',          label: 'Analytics',    icon: '📈' },
+      { href: '/admin/reviewers',          label: 'Reviewers',    icon: '👁' },
+    ],
+  },
+}
+
+function getSectionForPath(pathname) {
+  if (!pathname || pathname === '/admin/dashboard') return 'questions'
+  if (['/admin/curriculum', '/admin/subjects-manager', '/admin/core-topics',
+       '/admin/flashcards', '/admin/video-lessons'].some(p => pathname.startsWith(p))) return 'content'
+  if (['/admin/users', '/admin/schools', '/admin/access-codes',
+       '/admin/analytics', '/admin/reviewers'].some(p => pathname.startsWith(p))) return 'platform'
+  return 'questions'
+}
+
+const NAV_FLAT = Object.values(SECTIONS).flatMap(s => s.items)
+
 
 // ── Logo mark — exact SVG from landing page ───────────────────────────────────
 function LogoMark({ size = 28 }) {
@@ -97,7 +128,9 @@ function NavItem({ href, label, icon, active, onClick }) {
 
 // ── Sidebar body ──────────────────────────────────────────────────────────────
 function SidebarBody({ pathname, onLinkClick, onSignOut }) {
-  const allItems = NAV.flatMap(g => g.items)
+  const sectionKey = getSectionForPath(pathname)
+  const section    = SECTIONS[sectionKey]
+  const otherSections = Object.entries(SECTIONS).filter(([k]) => k !== sectionKey)
 
   function isActive(href) {
     if (href === '/admin/dashboard') return pathname === href
@@ -108,19 +141,18 @@ function SidebarBody({ pathname, onLinkClick, onSignOut }) {
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
       background: BG,
-      // Guarantee GPU compositing so the sidebar never paints over content
       willChange: 'transform',
       transform: 'translateZ(0)',
     }}>
 
       {/* ── Logo header ─────────────────────────────────────────────────── */}
       <div style={{
-        padding: '18px 14px 13px',
+        padding: '14px 14px 12px',
         borderBottom: `1px solid rgba(255,255,255,.07)`,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 11 }}>
-          <LogoMark size={30} />
+        <Link href="/admin/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10, textDecoration: 'none' }}>
+          <LogoMark size={28} />
           <div>
             <p style={{ fontSize: 13, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.02em' }}>
               ExamPrep
@@ -129,48 +161,64 @@ function SidebarBody({ pathname, onLinkClick, onSignOut }) {
               ADMIN STUDIO
             </p>
           </div>
-        </div>
+        </Link>
 
-        {/* Live badge */}
+        {/* Current section pill */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '3px 9px', borderRadius: 6,
-          background: 'rgba(24,183,242,.1)',
-          border: `1px solid rgba(24,183,242,.22)`,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '4px 10px', borderRadius: 7,
+          background: `rgba(255,255,255,.07)`,
+          border: `1px solid rgba(255,255,255,.12)`,
         }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: CYAN }} />
-          <span style={{ fontSize: 9, fontWeight: 800, color: CYAN, letterSpacing: '.08em' }}>LIVE</span>
+          <span style={{ fontSize: 11 }}>{section.icon}</span>
+          <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,.6)', letterSpacing: '.08em', textTransform: 'uppercase' }}>{section.label}</span>
         </div>
       </div>
 
-      {/* ── Nav ─────────────────────────────────────────────────────────── */}
+      {/* ── Nav — focused on current section only ───────────────────────── */}
       <nav style={{
         flex: 1, overflowY: 'auto', padding: '10px 8px',
-        display: 'flex', flexDirection: 'column', gap: 16,
-        // Custom scrollbar
+        display: 'flex', flexDirection: 'column', gap: 2,
         scrollbarWidth: 'thin',
         scrollbarColor: 'rgba(255,255,255,.1) transparent',
       }}>
-        {NAV.map((group, gi) => (
-          <div key={gi}>
-            <p style={{
-              fontSize: 8, fontWeight: 800, letterSpacing: '.14em',
-              color: 'rgba(255,255,255,.16)', padding: '0 11px',
-              marginBottom: 4, textTransform: 'uppercase',
-            }}>
-              {group.section}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {group.items.map(item => (
-                <NavItem
-                  key={item.href}
-                  {...item}
-                  active={isActive(item.href)}
-                  onClick={onLinkClick}
-                />
-              ))}
-            </div>
-          </div>
+        <p style={{
+          fontSize: 8, fontWeight: 800, letterSpacing: '.14em',
+          color: 'rgba(255,255,255,.16)', padding: '0 11px',
+          marginBottom: 4, textTransform: 'uppercase',
+        }}>{section.label}</p>
+        {section.items.map(item => (
+          <NavItem
+            key={item.href}
+            {...item}
+            active={isActive(item.href)}
+            onClick={onLinkClick}
+          />
+        ))}
+
+        {/* ── Jump to other sections ───────────────────────────────────── */}
+        <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '14px 8px 10px' }} />
+        <p style={{
+          fontSize: 8, fontWeight: 800, letterSpacing: '.14em',
+          color: 'rgba(255,255,255,.12)', padding: '0 11px',
+          marginBottom: 6, textTransform: 'uppercase',
+        }}>Switch to</p>
+        {otherSections.map(([key, sec]) => (
+          <Link
+            key={key}
+            href={sec.items[1]?.href ?? '/admin/dashboard'}
+            onClick={onLinkClick}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '7px 11px', borderRadius: 10,
+              textDecoration: 'none', transition: 'background .15s',
+              background: 'transparent',
+            }}
+          >
+            <span style={{ fontSize: 13, width: 18, textAlign: 'center', flexShrink: 0 }}>{sec.icon}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.28)', flex: 1 }}>{sec.label}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5h6M5.5 2.5L8 5 5.5 7.5" stroke="rgba(255,255,255,.2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </Link>
         ))}
       </nav>
 
@@ -276,7 +324,7 @@ export default function AdminSidebar() {
           </div>
           {/* Current page label */}
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,.3)', fontWeight: 600 }}>
-            {NAV.flatMap(g => g.items).find(i =>
+            {NAV_FLAT.find(i =>
               i.href === '/admin/dashboard' ? pathname === i.href : pathname.startsWith(i.href)
             )?.label ?? ''}
           </span>

@@ -88,7 +88,7 @@
   --gold-bright:       #FFB800;  /* EXL Gold — icons, ring fills                   */
 
   /* Navigation */
-  --nav-bg:            rgba(248,251,255,0.97);
+  --nav-bg:            #f8fbff;
   --nav-border:        #dde4f5;
 
   /* Shadows */
@@ -146,7 +146,7 @@
   --gold-bright:       #FFB800;
 
   /* Navigation */
-  --nav-bg:            rgba(6,10,20,0.95);
+  --nav-bg:            #060a14;
   --nav-border:        rgba(255,255,255,0.07);
 
   /* Shadows — borders do the work in dark mode */

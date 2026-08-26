@@ -6,7 +6,6 @@
 // URL params written by /register and /school/signup:
 //   ?exam_type=WAEC&subjects=Chemistry,Physics   (student)
 //   ?role=school_admin                            (school)
-//   ?diag_token=<uuid>                            (diagnostic data in sessionStorage)
 //   ?next=/some/path                              (post-confirm redirect)
 
 import { createClient } from '@/lib/supabase/server'
@@ -28,7 +27,6 @@ export async function GET(request) {
   const examType  = searchParams.get('exam_type')
   const subjects  = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
   const role      = searchParams.get('role')       // 'school_admin' for school signup
-  const diagToken = searchParams.get('diag_token') // key into sessionStorage
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
@@ -54,13 +52,5 @@ export async function GET(request) {
     await db.from('profiles').update(updates).eq('id', user.id)
   }
 
-  // ── Save diagnostic results if a token was passed ─────────────────────────
-  // The actual answers/questions data lives in the browser's sessionStorage
-  // under `diag_pending_<token>`. We can't read sessionStorage server-side,
-  // so we redirect the client to a page that reads it and POSTs to the save API.
-  const redirectPath = diagToken
-    ? `/api/auth/save-diagnostic?token=${diagToken}&next=${encodeURIComponent(next)}`
-    : next
-
-  return NextResponse.redirect(`${origin}${redirectPath}`)
+  return NextResponse.redirect(`${origin}${next}`)
 }

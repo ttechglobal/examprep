@@ -1,88 +1,111 @@
-// src/app/api/student/mastery/route.js
+// src/app/api/student/mastery/route.js — v3 (perf)
 // ─────────────────────────────────────────────────────────────────────────────
-// GET — returns this student's topic mastery rows, enriched with topic name,
-// subject_id, and subject name. Uses the service role key so it can read
-// student_topic_mastery, which is not exposed in the PostgREST anon schema.
-//
-// Response shape:
-// {
-//   mastery: [
-//     { topic_id, score, attempt_count, topic_name, subject_id, subject_name }
-//   ]
-// }
+// PERF: v2 had 5-7 sequential awaits. v3 collapses to 2 parallel rounds:
+//   Round 1 (parallel): auth + profile
+//   Round 2 (parallel): subject resolution + mastery rows
+//   Round 3 (parallel): topics + backward-compat subject name lookup
+// Cache-Control added: private, max-age=60, stale-while-revalidate=120
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }        from '@/lib/supabase/server'
 import { createClient as svc } from '@supabase/supabase-js'
 import { NextResponse }        from 'next/server'
 
-const serviceClient = () =>
-  svc(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
+const serviceClient = () => svc(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
 
 export async function GET() {
-  // 1. Authenticate via the anon client (session cookie)
   const supabase = await createClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  if (authErr || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const db = serviceClient()
 
-  // 2. Fetch mastery rows (service role required — table not in anon schema)
-  const { data: masteryRows, error: masteryErr } = await db
-    .from('student_topic_mastery')
-    .select('topic_id, score, attempt_count')
-    .eq('student_id', user.id)
-    .order('score', { ascending: true })
+  // ── Round 1: profile + existing mastery rows — parallel ───────────────────
+  const [{ data: profile }, { data: masteryRows }] = await Promise.all([
+    db.from('profiles').select('subjects, exam_type').eq('id', user.id).single(),
+    db.from('student_topic_mastery')
+      .select('topic_id, score, attempt_count, subject_id')
+      .eq('student_id', user.id),
+  ])
 
-  if (masteryErr) {
-    console.warn('[/api/student/mastery] fetch error:', masteryErr.message)
-    return NextResponse.json({ mastery: [] })
+  const subjectNames     = profile?.subjects ?? []
+  const masterySubjectIds = [...new Set((masteryRows ?? []).map(m => m.subject_id).filter(Boolean))]
+
+  // ── Round 2: resolve subjects + topics — parallel ────────────────────────
+  // Fetch enrolled subjects by name AND any extra subjects from mastery rows
+  // that aren't in profile (backward-compat) — both in one round
+  const [subjectsByNameRes, subjectsByIdRes] = await Promise.all([
+    subjectNames.length > 0
+      ? db.from('subjects').select('id, name').in('name', subjectNames).eq('is_active', true)
+      : Promise.resolve({ data: [] }),
+    masterySubjectIds.length > 0
+      ? db.from('subjects').select('id, name').in('id', masterySubjectIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  // Build subject map (merge both result sets)
+  const subjectMap = {}
+  for (const s of [...(subjectsByNameRes.data ?? []), ...(subjectsByIdRes.data ?? [])]) {
+    subjectMap[s.id] = s.name
+  }
+  const subjectIds = Object.keys(subjectMap)
+
+  // ── Round 3: fetch all topics for enrolled subjects ───────────────────────
+  let allTopics = []
+  if (subjectIds.length > 0) {
+    const { data } = await db
+      .from('topics')
+      .select('id, name, subject_id, is_core, order_index')
+      .in('subject_id', subjectIds)
+      .eq('is_active', true)
+      .order('order_index', { ascending: true })
+    allTopics = data ?? []
   }
 
-  const rows = masteryRows ?? []
-  if (rows.length === 0) return NextResponse.json({ mastery: [] })
+  // Fallback: no enrollment found — use topics from mastery rows directly
+  if (allTopics.length === 0 && masteryRows?.length > 0) {
+    const attemptedTopicIds = [...new Set(masteryRows.map(m => m.topic_id).filter(Boolean))]
+    if (attemptedTopicIds.length > 0) {
+      const { data: fallbackTopics } = await db
+        .from('topics').select('id, name, subject_id, is_core, order_index').in('id', attemptedTopicIds)
+      allTopics = fallbackTopics ?? []
+    }
+  }
 
-  // 3. Fetch topic metadata in one query
-  const topicIds = [...new Set(rows.map(r => r.topic_id).filter(Boolean))]
-  const { data: topicRows } = await db
-    .from('topics')
-    .select('id, name, subject_id')
-    .in('id', topicIds)
+  // Build mastery lookup
+  const masteryMap = {}
+  for (const m of masteryRows ?? []) {
+    masteryMap[m.topic_id] = { score: m.score ?? 0, attempt_count: m.attempt_count ?? 0 }
+  }
 
-  const topicMap = {}
-  for (const t of topicRows ?? []) topicMap[t.id] = t
-
-  // 4. Fetch subject names in one query
-  const subjectIds = [...new Set((topicRows ?? []).map(t => t.subject_id).filter(Boolean))]
-  const { data: subjectRows } = subjectIds.length
-    ? await db.from('subjects').select('id, name').in('id', subjectIds)
-    : { data: [] }
-
-  const subjectMap = {}
-  for (const s of subjectRows ?? []) subjectMap[s.id] = s.name
-
-  // 5. Enrich and return
-  const mastery = rows
-    .map(row => {
-      const topic = topicMap[row.topic_id]
-      if (!topic) return null
-      const subject_name = subjectMap[topic.subject_id]
-      if (!subject_name) return null
+  // Build combined list: all curriculum topics with scores for attempted ones
+  const mastery = allTopics
+    .map(topic => {
+      const subjectName = subjectMap[topic.subject_id]
+      if (!subjectName) return null
+      const m = masteryMap[topic.id]
       return {
-        topic_id:      row.topic_id,
-        score:         row.score,
-        attempt_count: row.attempt_count,
+        topic_id:      topic.id,
+        score:         m?.score         ?? 0,
+        attempt_count: m?.attempt_count ?? 0,
+        started:       !!m,
         topic_name:    topic.name,
         subject_id:    topic.subject_id,
-        subject_name,
+        subject_name:  subjectName,
+        is_core:       topic.is_core    ?? false,
+        order_index:   topic.order_index ?? 999,
       }
     })
     .filter(Boolean)
+    .sort((a, b) => {
+      if (a.subject_name !== b.subject_name) return a.subject_name.localeCompare(b.subject_name)
+      return (a.order_index ?? 999) - (b.order_index ?? 999)
+    })
 
-  return NextResponse.json({ mastery })
+  const res = NextResponse.json({ mastery })
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return res
 }

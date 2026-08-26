@@ -16,6 +16,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
+const SnapAndMark = dynamic(() => import('@/components/lesson/SnapAndMark'), { ssr: false })
 
 // ── Shared primitives ──────────────────────────────────────────────────────────
 function SlidePill({ label, style }) {
@@ -428,9 +430,29 @@ function SlideRenderer({ slide, accent, onUnlock }) {
   if (type === 'definition')                        return <DefinitionSlide   slide={slide} accent={accent} />
   if (type === 'concept')                           return <ConceptSlide      slide={slide} accent={accent} />
   if (type === 'formula')                           return <FormulaSlide      slide={slide} accent={accent} />
-  if (type === 'worked_example')                    return <WorkedExampleSlide slide={slide} accent={accent} />
+  if (type === 'worked_example')                    return (
+    <>
+      <WorkedExampleSlide slide={slide} accent={accent} />
+      <SnapAndMark question={slide.problem ?? ''} type="maths" accentColor={accent} />
+    </>
+  )
   if (type === 'summary')                           return <SummarySlide      slide={slide} />
-  if (type === 'interaction')                       return <InteractionSlide  slide={slide} onUnlock={onUnlock} />
+  if (type === 'interaction') {
+    const isEssay = slide.answer_type === 'essay' || slide.answer_type === 'written'
+    const isCalc  = slide.answer_type === 'calculation' || slide.answer_type === 'working'
+    return (
+      <>
+        <InteractionSlide slide={slide} onUnlock={onUnlock} />
+        {(isEssay || isCalc) && (
+          <SnapAndMark
+            question={slide.question ?? ''}
+            type={isEssay ? 'essay' : 'maths'}
+            accentColor={accent}
+          />
+        )}
+      </>
+    )
+  }
   if (type === 'end_quiz')                          return <EndQuizSlide      slide={slide} onUnlock={onUnlock} />
   // Fallback for unknown types
   return (

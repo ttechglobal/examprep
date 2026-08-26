@@ -13,7 +13,6 @@
 import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
-import { rebuildStudyPlan }          from '@/lib/studyPlanEngine'
 
 function svc() {
   return svcClient(
@@ -232,16 +231,6 @@ export async function POST(request) {
     })
   } catch (e) {
     console.warn('[practice-save] practice_sessions insert skipped:', e.message)
-  }
-
-  // 5. Rebuild study plan for subjects touched
-  const subjectIds = [...new Set(answers.map(a => qMap[a.questionId]?.subject_id).filter(Boolean))]
-  if (subjectIds.length) {
-    try {
-      await rebuildStudyPlan(db, user.id, subjectIds)
-    } catch (e) {
-      console.error('[practice-save] rebuildStudyPlan:', e.message)
-    }
   }
 
   return NextResponse.json({

@@ -78,9 +78,16 @@ function SubjectMasteryCard({ subj, defaultExpanded = false }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <p style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{subj.subjectName}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>
-                {subj.accuracy !== null ? `${subj.accuracy}%` : '—'} {c.label}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {subj.avgMastery !== null && subj.avgMastery !== undefined && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: '#f0fdf4', color: '#059669', border: '1px solid #86efac' }}>
+                    {subj.avgMastery}% mastery
+                  </span>
+                )}
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>
+                  {subj.accuracy !== null ? `${subj.accuracy}%` : '—'} {c.label}
+                </span>
+              </div>
               <span style={{ fontSize: 11, color: '#9ca3af', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
             </div>
           </div>
@@ -444,51 +451,70 @@ function StudentsSection({ students, atRisk, atRiskSegmented }) {
               {isExpanded && (
                 <div style={{ borderTop: '1px solid #f3f4f6', padding: '12px 14px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* Quick stats */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
                     {[
                       { l: 'Accuracy',    v: s.accuracy !== null ? `${s.accuracy}%` : '—', color: c.fg },
-                      { l: 'Streak',      v: `${s.currentStreak}d`,  color: '#ea580c' },
-                      { l: 'Lessons/wk', v: s.lessonsThisWeek,       color: '#4f46e5' },
+                      { l: 'Streak',      v: s.currentStreak > 0 ? `${s.currentStreak}d 🔥` : '—',  color: '#ea580c' },
+                      { l: 'Avg time/Q',  v: s.avgTimeSecs != null ? (s.avgTimeSecs >= 60 ? `${Math.floor(s.avgTimeSecs/60)}m${s.avgTimeSecs%60}s` : `${s.avgTimeSecs}s`) : '—', color: s.avgTimeSecs > 90 ? '#dc2626' : s.avgTimeSecs > 45 ? '#d97706' : '#059669' },
+                      { l: 'Questions',   v: s.total,               color: '#4f46e5' },
                     ].map(stat => (
                       <div key={stat.l} style={{ background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #f3f4f6' }}>
-                        <p style={{ fontSize: 16, fontWeight: 900, color: stat.color }}>{stat.v}</p>
+                        <p style={{ fontSize: 14, fontWeight: 900, color: stat.color }}>{stat.v}</p>
                         <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 1 }}>{stat.l}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Per-subject mastery + topic drill-down */}
-                  {subjectEntries.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af' }}>Subject mastery</p>
-                      {subjectEntries.map(([sub, sa]) => {
-                        const sacc = sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
-                        const sc   = pctColor(sacc)
-                        const isOpen = topicFilter === `${s.id}-${sub}`
+                  {/* Per-subject mastery — uses EMA mastery scores from student_topic_mastery */}
+                  {(() => {
+                    const masteryEntries = Object.entries(s.subjectMastery ?? {})
+                    const fallbackEntries = Object.entries(s.subjectAcc ?? {})
+                    const hasMastery = masteryEntries.length > 0
+                    const hasAttempts = fallbackEntries.length > 0
 
-                        return (
-                          <div key={sub} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sc.border}`, overflow: 'hidden' }}>
-                            <button
-                              onClick={() => setTopicFilter(isOpen ? null : `${s.id}-${sub}`)}
-                              style={{ width: '100%', padding: '9px 11px', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                  <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{sub}</p>
-                                  <span style={{ fontSize: 11, fontWeight: 800, color: sc.fg }}>{sacc !== null ? `${sacc}%` : '—'}</span>
+                    if (!hasMastery && !hasAttempts) return (
+                      <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>No practice data yet</p>
+                    )
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af' }}>Subject mastery</p>
+                          {hasMastery && <span style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>● Live mastery scores</span>}
+                        </div>
+                        {hasMastery ? masteryEntries.map(([subjectId, score]) => {
+                          // Try to get subject name from subjectAcc keys or attempts
+                          const subName = Object.keys(s.subjectAcc ?? {}).find(n => n) ?? `Subject`
+                          const sc = pctColor(score)
+                          return (
+                            <div key={subjectId} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sc.border}`, padding: '9px 11px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{subName}</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontSize: 9, color: '#9ca3af' }}>mastery</span>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: sc.fg }}>{score}%</span>
                                 </div>
-                                <AccBar pct={sacc} height={4} />
-                                <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 3 }}>{sa.total} attempts</p>
                               </div>
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {subjectEntries.length === 0 && (
-                    <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>No practice data yet</p>
-                  )}
+                              <AccBar pct={score} height={4} />
+                            </div>
+                          )
+                        }) : fallbackEntries.map(([sub, sa]) => {
+                          const sacc = sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
+                          const sc   = pctColor(sacc)
+                          return (
+                            <div key={sub} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sc.border}`, padding: '9px 11px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{sub}</p>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: sc.fg }}>{sacc !== null ? `${sacc}%` : '—'}</span>
+                              </div>
+                              <AccBar pct={sacc} height={4} />
+                              <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 3 }}>{sa.total} attempts</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>

@@ -114,13 +114,14 @@ export async function GET() {
     { data: allAttempts },
     { data: allProgress },
     { data: allStreaks },
+    { data: allMastery },
   ] = await Promise.all([
     db.from('profiles')
       .select('id, full_name, exam_type, subjects, created_at')
       .in('id', studentIds),
 
     db.from('question_attempts')
-      .select('student_id, is_correct, created_at, subject_id, topic_id, subtopic_id, subjects(name), topics(name)')
+      .select('student_id, is_correct, created_at, subject_id, topic_id, subtopic_id, time_spent_secs, subjects(name), topics(name)')
       .in('student_id', studentIds)
       .gte('created_at', thirtyDaysAgo),
 
@@ -131,6 +132,11 @@ export async function GET() {
     db.from('student_streaks')
       .select('student_id, current_streak, last_active_date')
       .in('student_id', studentIds),
+
+    // Direct mastery scores — more accurate than computing from raw attempts
+    db.from('student_topic_mastery')
+      .select('student_id, topic_id, subject_id, score, attempt_count, last_updated')
+      .in('student_id', studentIds),
   ])
 
   const profileMap  = {}
@@ -138,6 +144,21 @@ export async function GET() {
 
   const streakMap = {}
   ;(allStreaks ?? []).forEach(s => { streakMap[s.student_id] = s })
+
+  // Mastery map: studentId → topicId → { score, attempt_count }
+  const masteryByStudent = {}
+  ;(allMastery ?? []).forEach(m => {
+    if (!masteryByStudent[m.student_id]) masteryByStudent[m.student_id] = {}
+    masteryByStudent[m.student_id][m.topic_id] = { score: m.score, attempt_count: m.attempt_count, subject_id: m.subject_id }
+  })
+
+  // Subject-level mastery: subjectId → [scores] across all students (for cohort view)
+  const cohortSubjectMastery = {}
+  ;(allMastery ?? []).forEach(m => {
+    if (!m.subject_id) return
+    if (!cohortSubjectMastery[m.subject_id]) cohortSubjectMastery[m.subject_id] = []
+    cohortSubjectMastery[m.subject_id].push(m.score)
+  })
 
   const weekAgoDate   = new Date(Date.now() - 7 * 86400000)
   const twoWeeksAgo    = new Date(Date.now() - 14 * 86400000)
@@ -170,6 +191,25 @@ export async function GET() {
       if (a.is_correct) subjectAcc[sName].correct++
     })
 
+    // Compute per-subject mastery from student_topic_mastery (more reliable than raw attempts)
+    const studentMastery  = masteryByStudent[id] ?? {}
+    const subjectMasteryMap = {}
+    Object.values(studentMastery).forEach(({ score, subject_id }) => {
+      if (!subject_id) return
+      if (!subjectMasteryMap[subject_id]) subjectMasteryMap[subject_id] = []
+      subjectMasteryMap[subject_id].push(score)
+    })
+    const subjectMastery = {}
+    Object.entries(subjectMasteryMap).forEach(([sid, scores]) => {
+      subjectMastery[sid] = Math.round(scores.reduce((a,b)=>a+b,0) / scores.length)
+    })
+
+    // Avg time per question for this student (last 30 days)
+    const timedAttempts = attempts.filter(a => a.time_spent_secs != null)
+    const avgTimeSecs = timedAttempts.length > 0
+      ? Math.round(timedAttempts.reduce((a,b) => a + (b.time_spent_secs ?? 0), 0) / timedAttempts.length)
+      : null
+
     return {
       id,
       full_name:       profile.full_name,
@@ -183,6 +223,9 @@ export async function GET() {
       isActiveThisWeek,
       lessonsThisWeek,
       subjectAcc,
+      subjectMastery,        // NEW: EMA-based mastery per subject (from student_topic_mastery)
+      topicMastery:    studentMastery,  // NEW: per-topic mastery scores
+      avgTimeSecs,           // NEW: avg seconds per question
       joinedCohortAt:  cohortMembers.find(m => m.student_id === id)?.joined_at ?? null,
     }
   })
@@ -231,6 +274,11 @@ export async function GET() {
     if (a.is_correct) topicAccMap[sName][a.topic_id].correct++
   })
 
+  // Resolve subject names for cohort mastery
+  const subjectIdToName = {}
+  ;(profiles ?? []).forEach(p => {}) // profiles doesn't have subject names, use attempt data
+  ;(allAttempts ?? []).forEach(a => { if (a.subject_id && a.subjects?.name) subjectIdToName[a.subject_id] = a.subjects.name })
+
   const subjectTopics = Object.entries(topicAccMap).map(([subjectName, topicsById]) => {
     const topics = Object.entries(topicsById).map(([topicId, data]) => ({
       topicId,
@@ -243,9 +291,17 @@ export async function GET() {
     const subjectTotal   = topics.reduce((a, t) => a + t.total, 0)
     const subjectCorrect = topics.reduce((a, t) => a + t.correct, 0)
 
+    // Find subject_id for this subject name
+    const subjectId = Object.entries(subjectIdToName).find(([,n]) => n === subjectName)?.[0]
+    const masteryScores = subjectId ? (cohortSubjectMastery[subjectId] ?? []) : []
+    const avgMastery = masteryScores.length > 0
+      ? Math.round(masteryScores.reduce((a,b) => a+b, 0) / masteryScores.length)
+      : null
+
     return {
       subjectName,
-      accuracy: subjectTotal > 0 ? Math.round((subjectCorrect / subjectTotal) * 100) : null,
+      accuracy:    subjectTotal > 0 ? Math.round((subjectCorrect / subjectTotal) * 100) : null,
+      avgMastery,  // EMA-based cohort mastery for this subject
       topics,
     }
   }).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100)) // weakest subject first

@@ -80,7 +80,7 @@ export async function GET(request) {
   const nameOrder = {}
   subjectNames.forEach((name, i) => { nameOrder[name] = i })
 
-  return NextResponse.json(
+  const __r = NextResponse.json(
     allRows
       .map(s => ({
         id: s.id, name: s.name, slug: s.slug, exam_type: s.exam_type,
@@ -89,6 +89,8 @@ export async function GET(request) {
       }))
       .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99))
   )
+  __r.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return __r
 }
 
 // PATCH — update the student's subject list for a specific exam
@@ -111,5 +113,7 @@ export async function PATCH(request) {
   const { error } = await db.from('profiles').update({ [col]: subjects }).eq('id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, exam, subjects })
+  const __r = NextResponse.json({ ok: true, exam, subjects })
+  __r.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return __r
 }

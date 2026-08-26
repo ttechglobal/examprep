@@ -277,7 +277,7 @@ function Q5Card() {
             <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,184,0,.15)', border: '1px solid rgba(255,184,0,.25)', color: GOLD }}>+50 XP</span>
           </div>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', marginBottom: 14 }}>Physics · Waves & Sound · ~4 min</p>
-          <Btn href="/onboarding" style={{ width: '100%', fontSize: 13, padding: '12px 0', justifyContent: 'center' }}>Start today's quest →</Btn>
+          <Btn href="/onboarding" style={{ width: '100%', fontSize: 13, padding: '12px 0', justifyContent: 'center' }}>Start practising →</Btn>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,.09)', alignItems: 'center' }}>
@@ -475,7 +475,7 @@ export default function LandingPage() {
                 <button onClick={() => setView(view === 'students' ? 'schools' : 'students')} style={{ padding: '7px 13px', borderRadius: 9, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.5)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                   {view === 'students' ? 'For Schools' : 'For Students'}
                 </button>
-                <Btn onClick={installPWA} sm style={{ padding: '8px 14px', fontSize: 12 }}>📲 Install</Btn>
+                <Btn onClick={installPWA} sm style={{ padding: '8px 14px', fontSize: 12 }}>📲 Install free</Btn>
               </>
             ) : (
               /* Desktop: full nav */
@@ -483,8 +483,8 @@ export default function LandingPage() {
                 <button onClick={() => setView('students')} style={{ padding: '7px 13px', borderRadius: 9, fontSize: 13, fontWeight: 600, color: view === 'students' ? '#fff' : 'rgba(255,255,255,.5)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>For Students</button>
                 <button onClick={() => setView('schools')} style={{ padding: '7px 13px', borderRadius: 9, fontSize: 13, fontWeight: 600, color: view === 'schools' ? '#fff' : 'rgba(255,255,255,.5)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>For Schools</button>
                 <Link href="/login" style={{ padding: '7px 13px', borderRadius: 9, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.5)', textDecoration: 'none' }}>Sign in</Link>
-                <Btn onClick={installPWA} sm style={{ marginLeft: 4 }}>📲 Install</Btn>
-                <Btn href="/onboarding" sm style={{ marginLeft: 4, background: 'rgba(255,255,255,.07)', border: '1.5px solid rgba(255,255,255,.15)', color: 'rgba(255,255,255,.8)', boxShadow: 'none' }}>Start free →</Btn>
+                <Btn onClick={installPWA} sm style={{ marginLeft: 4 }}>📲 Install free</Btn>
+                <Btn href="/onboarding" sm style={{ marginLeft: 4, background: 'rgba(255,255,255,.07)', border: '1.5px solid rgba(255,255,255,.15)', color: 'rgba(255,255,255,.8)', boxShadow: 'none' }}>Start practising →</Btn>
                 <button onClick={toggleDark} style={{ marginLeft: 6, width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.04)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }} aria-label="Toggle dark mode">
                   {dark ? '☀️' : '🌙'}
                 </button>
@@ -512,8 +512,8 @@ export default function LandingPage() {
                     Practice as little as 5 questions a day. Find your weak topics. Build mastery over time.
                   </p>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28, flexDirection: isMobile ? 'column' : 'row' }}>
-                    <Btn onClick={installPWA} gold style={{ fontSize: 16, padding: '16px 32px', ...(isMobile ? { justifyContent: 'center' } : {}) }}>📲 Install ExamPrep</Btn>
-                    <Btn href="/onboarding" ghost style={{ ...(isMobile ? { justifyContent: 'center' } : {}) }}>Start your Quick 5 →</Btn>
+                    <Btn onClick={installPWA} gold style={{ fontSize: 16, padding: '16px 32px', ...(isMobile ? { justifyContent: 'center' } : {}) }}>📲 Install for free</Btn>
+                    <Btn href="/onboarding" ghost style={{ ...(isMobile ? { justifyContent: 'center' } : {}) }}>Start practising →</Btn>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                     {['⚗️ Chemistry','⚡ Physics','🧬 Biology','📐 Mathematics','📖 English','📊 Economics','+9 more'].map(s => (
@@ -627,7 +627,7 @@ export default function LandingPage() {
                   <p style={subStyle}>You don't need a three-hour study session every time you open ExamPrep.<br/><br/>Start with 5 questions. Do another Quick 5 tomorrow. Keep going when you have more time. Come back when you don't.</p>
                   <p style={soloLine(ORANGE)}>Small practice adds up.</p>
                   <div style={{ marginTop: 32 }}>
-                    <Btn href="/onboarding" gold style={{ fontSize: 15, padding: '15px 28px' }}>Start your Quick 5 →</Btn>
+                    <Btn href="/onboarding" gold style={{ fontSize: 15, padding: '15px 28px' }}>Start practising →</Btn>
                   </div>
                 </div>
               </div>
@@ -678,8 +678,8 @@ export default function LandingPage() {
               <h2 style={{ fontSize: isMobile ? 32 : 54, fontWeight: 900, lineHeight: .97, letterSpacing: '-.045em', marginBottom: 16, color: '#fff' }}>Practice. Learn.<br/>Improve. Repeat.</h2>
               <p style={{ fontSize: 17, color: 'rgba(255,255,255,.48)', marginBottom: 40, lineHeight: 1.7 }}>Build mastery every day.</p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Btn onClick={installPWA} gold style={{ fontSize: 16, padding: '16px 32px' }}>📲 Install ExamPrep</Btn>
-                <Btn href="/onboarding" ghost style={{ fontSize: 15, padding: '15px 28px' }}>Start your Quick 5 →</Btn>
+                <Btn onClick={installPWA} gold style={{ fontSize: 16, padding: '16px 32px' }}>📲 Install for free</Btn>
+                <Btn href="/onboarding" ghost style={{ fontSize: 15, padding: '15px 28px' }}>Start practising →</Btn>
               </div>
             </div>
           </section>

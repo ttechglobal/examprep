@@ -31,18 +31,6 @@ function LoginForm() {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    const resultsRaw = sessionStorage.getItem('diagnostic_results')
-    const setupRaw   = sessionStorage.getItem('diagnostic_setup')
-    if (resultsRaw && setupRaw && user) {
-      try {
-        const results = JSON.parse(resultsRaw)
-        const setup   = JSON.parse(setupRaw)
-        sessionStorage.setItem('pending_diagnostic', JSON.stringify({ userId: user.id, examType: setup.examType, subjects: setup.subjects, answers: results.answers, questions: results.questions }))
-        sessionStorage.removeItem('diagnostic_results')
-        sessionStorage.removeItem('diagnostic_setup')
-      } catch {}
-    }
-
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
     const role = profile?.role
 
@@ -150,7 +138,7 @@ function LoginForm() {
                 </>
               ) : (
                 <>New to ExamPrep?{' '}
-                  <Link href="/onboarding" style={{ color: '#9b7ae0', fontWeight: 700, textDecoration: 'none' }}>Take the free diagnostic →</Link>
+                  <Link href="/onboarding" style={{ color: '#9b7ae0', fontWeight: 700, textDecoration: 'none' }}>Create a free account →</Link>
                 </>
               )}
             </p>

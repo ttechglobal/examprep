@@ -46,14 +46,32 @@ export async function GET(request) {
     .eq('student_id', user.id)
   if (filterSubjectId) pathQuery = pathQuery.eq('subject_id', filterSubjectId)
 
-  const { data: paths } = await pathQuery
-  if (!paths?.length) return NextResponse.json({ topics: {} })
+  // Fetch paths AND profile in parallel — profile needed for fallback anyway
+  const [{ data: paths }, { data: prof }] = await Promise.all([
+    pathQuery,
+    db.from('profiles').select('subjects').eq('id', user.id).single(),
+  ])
 
-  const subjectIds = paths.map(p => p.subject_id)
+  let subjectIds = (paths ?? []).map(p => p.subject_id)
   const subjectMap = {}
-  for (const p of paths) {
+  for (const p of paths ?? []) {
     if (p.subjects) subjectMap[p.subject_id] = p.subjects
   }
+
+  // Fallback: if no learning paths yet, resolve from profile.subjects (already fetched)
+  if (!subjectIds.length) {
+    const subjectNames = prof?.subjects ?? []
+    if (subjectNames.length) {
+      const { data: subRows } = await db
+        .from('subjects').select('id, name, slug').in('name', subjectNames).eq('is_active', true)
+      for (const s of subRows ?? []) {
+        subjectIds.push(s.id)
+        subjectMap[s.id] = s
+      }
+    }
+  }
+
+  if (!subjectIds.length) return NextResponse.json({ topics: {} })
 
   // Run topics + mastery in parallel
   const [{ data: allTopics }, { data: masteryRows }] = await Promise.all([
@@ -122,5 +140,7 @@ export async function GET(request) {
     }
   }
 
-  return NextResponse.json({ topics: result })
+  const res = NextResponse.json({ topics: result })
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return res
 }

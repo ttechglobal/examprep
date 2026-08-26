@@ -29,7 +29,7 @@ const SUBJECTS = [
 
 function RegisterForm() {
   const searchParams = useSearchParams()
-  const fromDiagnostic = searchParams.get('from') === 'diagnostic'
+  
 
   const [step, setStep] = useState(1)
 
@@ -38,7 +38,7 @@ function RegisterForm() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
 
-  // Step 2 fields — pre-filled from diagnostic session if available
+  // Step 2 fields
   const [examType,  setExamType]  = useState('WAEC')
   const [subjects,  setSubjects]  = useState([])
   const [diagData,  setDiagData]  = useState(null) // { results, setup } from sessionStorage
@@ -47,15 +47,12 @@ function RegisterForm() {
   const [error,   setError]   = useState(null)
   const [done,    setDone]    = useState(false)
 
-  // Load diagnostic session data if coming from results page
+  // Restore exam/subject selections from signup flow
   useEffect(() => {
     try {
-      const resultsRaw = sessionStorage.getItem('diagnostic_results')
-      const setupRaw   = sessionStorage.getItem('diagnostic_setup')
-      if (resultsRaw && setupRaw) {
-        const results = JSON.parse(resultsRaw)
-        const setup   = JSON.parse(setupRaw)
-        setDiagData({ results, setup })
+      const raw = sessionStorage.getItem('onboarding_setup')
+      if (raw) {
+        const setup = JSON.parse(raw)
         if (setup.examType) setExamType(setup.examType)
         if (setup.subjects?.length) setSubjects(setup.subjects)
       }
@@ -73,7 +70,7 @@ function RegisterForm() {
     e.preventDefault()
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     setError(null)
-    // If we have diagnostic data, we already know their exam + subjects — skip step 2
+    // Pre-fill from onboarding if available
     if (diagData) { handleSignup(examType, subjects); return }
     setStep(2)
   }
@@ -94,7 +91,7 @@ function RegisterForm() {
       subjects:  finalSubjects.join(','),
     })
 
-    // If we have diagnostic data, stash it in sessionStorage under a token
+    // Save setup data
     // the callback can retrieve. We can't pass it in the URL (too large).
     if (diagData) {
       const token = crypto.randomUUID()
@@ -144,7 +141,7 @@ function RegisterForm() {
         </p>
         {diagData && (
           <p className="text-sm text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 mb-4">
-            Your diagnostic results are saved — your study plan will be ready when you confirm.
+            Your subjects and exam type are saved and ready.
           </p>
         )}
         <p className="text-gray-400 text-sm">
@@ -171,7 +168,7 @@ function RegisterForm() {
       {diagData && (
         <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 mb-5">
           <p className="text-sm text-green-800 font-medium">
-            ✓ Your diagnostic results will be saved to your account automatically.
+            ✓ Your exam type and subjects will be saved to your account.
           </p>
         </div>
       )}
@@ -208,7 +205,7 @@ function RegisterForm() {
 
             {diagData && (
               <div className="bg-indigo-50 rounded-xl px-3 py-2.5 space-y-1">
-                <p className="text-xs font-bold text-indigo-700">From your diagnostic:</p>
+                <p className="text-xs font-bold text-indigo-700">Your selections:</p>
                 <p className="text-xs text-indigo-600">Exam: {diagData.setup.examType}</p>
                 <p className="text-xs text-indigo-600">Subjects: {diagData.setup.subjects?.join(', ')}</p>
               </div>
@@ -222,7 +219,7 @@ function RegisterForm() {
         </>
       )}
 
-      {/* Step 2 — exam + subjects (skipped if we have diagnostic data) */}
+      {/* Step 2 — exam + subjects */}
       {step === 2 && !diagData && (
         <>
           <h2 className="text-lg font-bold text-gray-900 mb-1">Your exam & subjects</h2>
