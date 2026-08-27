@@ -210,13 +210,11 @@ function SaveButton({ onClick, saving, label = 'Save changes' }) {
 
 // ── SHEET 1: My Information ────────────────────────────────────────────────────
 function InfoSheet({ profile, onClose, onSaved }) {
-  const [firstName, setFirstName]   = useState(profile?.first_name ?? '')
-  const [lastName,  setLastName]    = useState(profile?.last_name  ?? '')
-  const [username,  setUsername]    = useState(profile?.username   ?? '')
-  const [bio,       setBio]         = useState(profile?.bio        ?? '')
-  const [classLevel,setClassLevel]  = useState(profile?.class_level ?? '')
-  const [saving,    setSaving]      = useState(false)
-  const [error,     setError]       = useState(null)
+  const [fullName,   setFullName]   = useState(profile?.full_name   ?? '')
+  const [username,   setUsername]   = useState(profile?.username    ?? '')
+  const [schoolName, setSchoolName] = useState(profile?.school_name ?? '')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState(null)
 
   async function save() {
     setSaving(true)
@@ -226,17 +224,14 @@ function InfoSheet({ profile, onClose, onSaved }) {
         method:  'PATCH',
         headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
-          first_name:  firstName.trim(),
-          last_name:   lastName.trim(),
-          full_name:   [firstName.trim(), lastName.trim()].filter(Boolean).join(' '),
+          full_name:   fullName.trim(),
           username:    username.trim(),
-          bio:         bio.trim(),
-          class_level: classLevel,
+          school_name: schoolName.trim(),
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Save failed')
-      onSaved({ first_name:firstName.trim(), last_name:lastName.trim(), full_name:[firstName.trim(),lastName.trim()].filter(Boolean).join(' '), username:username.trim(), bio:bio.trim(), class_level:classLevel })
+      onSaved({ full_name:fullName.trim(), username:username.trim(), school_name:schoolName.trim() })
       onClose()
     } catch(e) {
       setError(e.message)
@@ -247,13 +242,15 @@ function InfoSheet({ profile, onClose, onSaved }) {
 
   return (
     <Sheet title="My Information" onClose={onClose}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 12px' }}>
-        <Field label="First name" value={firstName} onChange={setFirstName} placeholder="Ada"/>
-        <Field label="Last name"  value={lastName}  onChange={setLastName}  placeholder="Okafor"/>
-      </div>
+      <Field label="Full name" value={fullName} onChange={setFullName} placeholder="Ada Okafor"/>
       <Field label="Username" value={username} onChange={setUsername} placeholder="ada_okafor" hint="Shown on the leaderboard"/>
-      <Field label="Bio" value={bio} onChange={setBio} placeholder="SS3 student at…" multiline/>
-      <SelectField label="Class / Year" value={classLevel} onChange={setClassLevel} options={CLASS_LEVELS}/>
+      <Field
+        label="School"
+        value={schoolName}
+        onChange={setSchoolName}
+        placeholder="e.g. King's College Lagos"
+        hint="You'll be able to connect to your school via a school code later"
+      />
       {error && <p style={{ fontSize:12, color:RED, marginBottom:12 }}>{error}</p>}
       <SaveButton onClick={save} saving={saving}/>
     </Sheet>
@@ -282,11 +279,27 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
   useEffect(() => {
     if (!currentExam) return
     setLoadingSubjs(true)
-    fetch(`/api/admin/subjects?exam_type=${currentExam}&active=true`)
+    // Fetch ALL subjects for this exam type from the admin route (with explicit filter),
+    // or fall back to a hardcoded list if the route doesn't support filtering.
+    // The admin GET ignores query params so we filter client-side after fetch.
+    fetch(`/api/admin/subjects`)
       .then(r => r.json())
       .then(d => {
-        const list = Array.isArray(d) ? d : (d.subjects ?? [])
-        setAllSubjects(list.map(s => s.name ?? s))
+        const raw = Array.isArray(d) ? d : (d.subjects ?? [])
+        // Filter to the current exam, deduplicate by name
+        const filtered = raw.filter(s => s.exam_type === currentExam && s.is_active !== false)
+        const seen = new Set()
+        const names = []
+        for (const s of filtered) {
+          const name = s.name ?? s
+          if (!seen.has(name)) { seen.add(name); names.push(name) }
+        }
+        // Sort alphabetically but keep Use of English / English Language first
+        names.sort((a, b) => {
+          const priority = n => /english/i.test(n) ? 0 : /mathematics/i.test(n) ? 1 : 2
+          return priority(a) - priority(b) || a.localeCompare(b)
+        })
+        setAllSubjects(names)
       })
       .catch(() => setAllSubjects([]))
       .finally(() => setLoadingSubjs(false))
@@ -296,6 +309,13 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
     setActiveExams(prev =>
       prev.includes(exam) ? prev.filter(e => e !== exam) : [...prev, exam]
     )
+  }
+
+  function goBackToExams() {
+    setStep(1)
+    // Reset subject list so it re-fetches cleanly if exam is changed
+    setAllSubjects([])
+    // Keep currentExam set so summary rows still show the right subjects
   }
 
   function toggleSubject(name, exam) {
@@ -389,7 +409,7 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
                     <div style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{exam} Subjects</div>
                     <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>
                       {subs.length > 0
-                        ? subs.slice(0,3).join(', ') + (subs.length > 3 ? ` +${subs.length - 3} more` : '')
+                        ? subs.slice(0,3).map(s => typeof s === 'string' ? s : s.name ?? s).join(', ') + (subs.length > 3 ? ` +${subs.length - 3} more` : '')
                         : 'Tap to select subjects'}
                     </div>
                   </div>
@@ -413,7 +433,7 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
   return (
     <Sheet title={`${currentExam} Subjects`} onClose={onClose} wide>
       <button
-        onClick={() => setStep(1)}
+        onClick={goBackToExams}
         style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0, marginBottom:16 }}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke={BLUE} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -465,7 +485,7 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
       )}
 
       <button
-        onClick={() => setStep(1)}
+        onClick={goBackToExams}
         style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:15, background:`linear-gradient(135deg,${NAVY},${BLUE})`, color:'#fff', boxShadow:`0 4px 16px ${BLUE}40` }}
       >
         Done — {selected.length} subject{selected.length !== 1 ? 's' : ''} selected
@@ -475,12 +495,27 @@ function SubjectsSheet({ profile, onClose, onSaved }) {
 }
 
 // ── SHEET 3: Goals & Targets ───────────────────────────────────────────────────
-function GoalsSheet({ profile, onClose, onSaved }) {
+function GoalsSheet({ profile, onClose, onSaved, focus }) {
+  // Tab: 'university' | 'jamb' | 'waec'
+  // Determined by which row the user tapped, so the sheet opens to the right section
+  const [activeTab, setActiveTab] = useState(() => {
+    if (focus === 'jamb') return 'jamb'
+    if (focus === 'waec') return 'waec'
+    return 'university'
+  })
   const [university,  setUniversity]  = useState(profile?.target_university ?? '')
   const [course,      setCourse]      = useState(profile?.target_course     ?? '')
-  const [jambScore,   setJambScore]   = useState(() => {
-    const v = profile?.target_jamb
-    return v && !isNaN(Number(v)) ? String(v) : ''
+  // Per-subject JAMB scores: { "Use of English": 75, "Mathematics": 80, ... }
+  // Initialise from stored breakdown, or distribute stored total evenly, or default 50 each
+  const [jambBreakdown, setJambBreakdown] = useState(() => {
+    const jambSubs = profile?.subjects_jamb ?? []
+    if (!jambSubs.length) return {}
+    const stored = profile?.target_jamb_breakdown
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored
+    // If only a total is stored, spread it evenly as a starting point
+    const total = profile?.target_jamb
+    const each = (total && jambSubs.length) ? Math.round(total / jambSubs.length) : 50
+    return Object.fromEntries(jambSubs.map(s => [s, each]))
   })
   // Per-subject WAEC grade targets: { subjectName: gradeString }
   const [waecGrades,  setWaecGrades]  = useState(() => {
@@ -493,8 +528,11 @@ function GoalsSheet({ profile, onClose, onSaved }) {
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState(null)
 
-  const waecSubs = profile?.subjects_waec ?? []
-  const jambSubs = profile?.subjects_jamb ?? []
+  const waecSubs  = profile?.subjects_waec ?? []
+  const jambSubs  = profile?.subjects_jamb ?? []
+
+  // Default to 'jamb' tab if JAMB subjects are set but no WAEC; otherwise 'university'
+  // (already handled by focus prop — this just ensures a valid tab is always active)
 
   async function save() {
     setSaving(true)
@@ -506,13 +544,16 @@ function GoalsSheet({ profile, onClose, onSaved }) {
         body: JSON.stringify({
           target_university: university.trim(),
           target_course:     course.trim(),
-          target_jamb:       jambScore ? Number(jambScore) : null,
+          // Save total (for backward compat with practice page) and breakdown
+          target_jamb:           Object.values(jambBreakdown).reduce((s, v) => s + v, 0) || null,
+          target_jamb_breakdown: Object.keys(jambBreakdown).length ? jambBreakdown : null,
           target_waec:       waecGrades,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Save failed')
-      onSaved({ target_university:university.trim(), target_course:course.trim(), target_jamb:jambScore ? Number(jambScore) : null, target_waec:waecGrades })
+      const jambTotal = Object.values(jambBreakdown).reduce((s, v) => s + v, 0)
+      onSaved({ target_university:university.trim(), target_course:course.trim(), target_jamb:jambTotal||null, target_jamb_breakdown:jambBreakdown, target_waec:waecGrades })
       onClose()
     } catch(e) {
       setError(e.message)
@@ -521,41 +562,106 @@ function GoalsSheet({ profile, onClose, onSaved }) {
     }
   }
 
+  // Tab labels — only show tabs that are relevant (no JAMB tab if no JAMB subjects set)
+  const tabs = [
+    { id:'university', label:'🏛 University' },
+    ...(jambSubs.length > 0 ? [{ id:'jamb', label:'📋 JAMB' }] : []),
+    ...(waecSubs.length > 0 ? [{ id:'waec', label:'✏️ WAEC Grades' }] : []),
+  ]
+
   return (
     <Sheet title="Goals & Targets" onClose={onClose}>
-      {/* University + course */}
-      <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>University Goals</p>
-      <Field label="Target university" value={university} onChange={setUniversity} placeholder="University of Lagos"/>
-      <Field label="Target course" value={course} onChange={setCourse} placeholder="Medicine & Surgery"/>
 
-      {/* JAMB target score */}
-      {jambSubs.length > 0 && (
+      {/* Tab switcher */}
+      {tabs.length > 1 && (
+        <div style={{ display:'flex', gap:6, marginBottom:20, background:'var(--bg-subtle)', borderRadius:12, padding:4 }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              style={{ flex:1, padding:'8px 10px', borderRadius:9, border:'none', cursor:'pointer', fontFamily:'inherit',
+                fontWeight: activeTab === t.id ? 900 : 600, fontSize:12,
+                background: activeTab === t.id ? 'var(--bg-card)' : 'transparent',
+                color: activeTab === t.id ? BLUE : 'var(--text-tert)',
+                boxShadow: activeTab === t.id ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+                transition:'all .12s',
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tab: University & Course */}
+      {activeTab === 'university' && (
         <>
-          <div style={{ height:1, background:'var(--border)', margin:'4px 0 18px' }}/>
-          <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>JAMB Target Score</p>
-          <div style={{ marginBottom:16 }}>
-            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:6 }}>JAMB score (200–400)</label>
-            <input
-              type="number"
-              min={100} max={400}
-              value={jambScore}
-              onChange={e => setJambScore(e.target.value)}
-              placeholder="e.g. 280"
-              style={{ width:'100%', padding:'12px 14px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none' }}
-            />
-          </div>
+          <Field label="Target university" value={university} onChange={setUniversity} placeholder="University of Lagos"/>
+          <Field label="Target course" value={course} onChange={setCourse} placeholder="Medicine & Surgery"/>
         </>
       )}
 
-      {/* WAEC per-subject grade targets */}
-      {waecSubs.length > 0 && (
+      {/* Tab: JAMB per-subject score sliders */}
+      {activeTab === 'jamb' && (
+        <div>
+          {/* Running total */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px', borderRadius:14, background:`linear-gradient(135deg,${NAVY},${BLUE})`, marginBottom:20 }}>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:'rgba(255,255,255,.6)', textTransform:'uppercase', letterSpacing:'.08em', margin:0 }}>Total JAMB Score</p>
+              <p style={{ fontSize:11, color:'rgba(255,255,255,.5)', margin:'2px 0 0' }}>Each subject is out of 100</p>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <span style={{ fontSize:32, fontWeight:900, color:GOLD, lineHeight:1 }}>
+                {Object.values(jambBreakdown).reduce((s,v) => s+v, 0)}
+              </span>
+              <span style={{ fontSize:14, color:'rgba(255,255,255,.5)', marginLeft:3 }}>/400</span>
+            </div>
+          </div>
+
+          {jambSubs.length === 0 ? (
+            <p style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>
+              Set your JAMB subjects first, then come back to set your score targets.
+            </p>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              {jambSubs.map(subj => {
+                const score = jambBreakdown[subj] ?? 50
+                const pct   = score  // score IS the pct (0–100)
+                const color = score >= 80 ? GREEN : score >= 60 ? BLUE : score >= 40 ? ORANGE : RED
+                return (
+                  <div key={subj}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:16 }}>{si(subj)}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{subj}</span>
+                      </div>
+                      <span style={{ fontSize:16, fontWeight:900, color, minWidth:32, textAlign:'right' }}>{score}</span>
+                    </div>
+                    {/* Score bar track */}
+                    <div style={{ position:'relative', height:36 }}>
+                      <div style={{ position:'absolute', top:'50%', left:0, right:0, height:6, borderRadius:999, background:'var(--bg-subtle)', border:'1px solid var(--border)', transform:'translateY(-50%)' }}/>
+                      <div style={{ position:'absolute', top:'50%', left:0, height:6, borderRadius:999, background:color, width:`${pct}%`, transform:'translateY(-50%)', transition:'width .15s' }}/>
+                      <input
+                        type="range" min={0} max={100} step={1}
+                        value={score}
+                        onChange={e => setJambBreakdown(prev => ({ ...prev, [subj]: Number(e.target.value) }))}
+                        style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', opacity:0, cursor:'pointer', margin:0 }}
+                      />
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:2 }}>
+                      <span style={{ fontSize:10, color:'var(--text-tert)' }}>0</span>
+                      <span style={{ fontSize:10, color:'var(--text-tert)' }}>100</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: WAEC per-subject grade targets */}
+      {activeTab === 'waec' && (
         <>
-          <div style={{ height:1, background:'var(--border)', margin:'4px 0 18px' }}/>
-          <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>
-            WAEC Target Grades
-          </p>
           <p style={{ fontSize:12, color:'var(--text-tert)', marginBottom:14, lineHeight:1.5 }}>
-            Set your target grade for each subject. This helps us focus your practice on where you need the most improvement.
+            Set your target grade for each subject. This helps us focus your practice where you need it most.
           </p>
           <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
             {waecSubs.map(subj => (
@@ -571,9 +677,7 @@ function GoalsSheet({ profile, onClose, onSaved }) {
                 >
                   <option value="">Target…</option>
                   {WAEC_GRADES.map(g => (
-                    <option key={g} value={g}
-                      style={{ color: g === 'A1' ? GREEN : g.startsWith('B') ? BLUE : g.startsWith('C') ? ORANGE : RED }}
-                    >{g}</option>
+                    <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
               </div>
@@ -582,7 +686,7 @@ function GoalsSheet({ profile, onClose, onSaved }) {
         </>
       )}
 
-      {waecSubs.length === 0 && jambSubs.length === 0 && (
+      {tabs.length === 0 && (
         <p style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6, marginBottom:16 }}>
           Set your subjects first — then you can set per-subject grade targets here.
         </p>
@@ -603,8 +707,8 @@ function AvatarCard({ profile, xp, onEditInfo }) {
   const xpRange = (next?.minXp ?? xp + 1) - rank.minXp
   const pct     = Math.min(100, xpRange > 0 ? Math.round((xpInLvl / xpRange) * 100) : 100)
   const level   = Math.floor(xp / 2000) + 1
-  const dName   = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || 'Student'
-  const initials = dName.slice(0, 2).toUpperCase()
+  const dName   = profile?.full_name || profile?.username || 'Student'
+  const initials = (dName || 'ST').slice(0, 2).toUpperCase()
 
   return (
     <Card>
@@ -631,8 +735,8 @@ function AvatarCard({ profile, xp, onEditInfo }) {
         {/* Name */}
         <div style={{ fontSize:20, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:2 }}>{dName}</div>
         {profile?.username && <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:3 }}>@{profile.username}</div>}
-        {profile?.bio && <div style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.5, marginBottom:12 }}>{profile.bio}</div>}
-        {!profile?.bio && <div style={{ marginBottom:12 }}/>}
+        {profile?.school_name && <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:12 }}>🏫 {profile.school_name}</div>}
+        {!profile?.school_name && <div style={{ marginBottom:12 }}/>}
 
         {/* Rank strip */}
         <div style={{ padding:'14px', borderRadius:14, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', border:'1px solid var(--border)' }}>
@@ -674,7 +778,9 @@ function GoalsSummary({ profile, onEdit }) {
       {/* University */}
       <Row icon="🏛️" label="University"  value={profile?.target_university} onTap={onEdit}/>
       <Row icon="📚" label="Course"       value={profile?.target_course}     onTap={onEdit}/>
-      <Row icon="📋" label="JAMB Target"  value={profile?.target_jamb ? `${profile.target_jamb} / 400` : null} onTap={onEdit}/>
+      <Row icon="📋" label="JAMB Target"
+        value={profile?.target_jamb ? `${profile.target_jamb} / 400` : null}
+        onTap={() => onEdit('jamb')}/>
 
       {/* WAEC per-subject grades */}
       {waecSubs.length > 0 && (
@@ -709,7 +815,7 @@ export default function ProfilePage() {
 
   const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
-  const [sheet,    setSheet]    = useState(null)  // 'info' | 'subjects' | 'goals' | null
+  const [sheet,    setSheet]    = useState(null)  // null | { type: 'info'|'subjects'|'goals', focus?: string }
 
   const load = useCallback(async () => {
     try {
@@ -743,7 +849,7 @@ export default function ProfilePage() {
     </div>
   )
 
-  const dName   = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || 'Student'
+  const dName   = profile?.full_name || profile?.username || 'Student'
   const isGuest = !!profile?.isGuest
 
   // Guest banner
@@ -789,10 +895,10 @@ export default function ProfilePage() {
   // Goals section
   const goalsSection = (
     <div>
-      <SectionLabel action={<button onClick={() => setSheet('goals')} style={{ fontSize:12, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Edit →</button>}>
+      <SectionLabel action={<button onClick={() => setSheet({ type:'goals', focus:null })} style={{ fontSize:12, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Edit →</button>}>
         Goals & Targets
       </SectionLabel>
-      <GoalsSummary profile={profile} onEdit={() => setSheet('goals')}/>
+      <GoalsSummary profile={profile} onEdit={(focus) => setSheet({ type:'goals', focus })}/>
     </div>
   )
 
@@ -872,23 +978,24 @@ export default function ProfilePage() {
       </div>
 
       {/* ── SHEETS ── */}
-      {sheet === 'info' && (
+      {(sheet === 'info' || sheet?.type === 'info') && (
         <InfoSheet
           profile={profile}
           onClose={() => setSheet(null)}
           onSaved={patchProfile}
         />
       )}
-      {sheet === 'subjects' && (
+      {(sheet === 'subjects' || sheet?.type === 'subjects') && (
         <SubjectsSheet
           profile={profile}
           onClose={() => setSheet(null)}
           onSaved={patchProfile}
         />
       )}
-      {sheet === 'goals' && (
+      {(sheet?.type === 'goals' || sheet === 'goals') && (
         <GoalsSheet
           profile={profile}
+          focus={sheet?.focus ?? null}
           onClose={() => setSheet(null)}
           onSaved={patchProfile}
         />

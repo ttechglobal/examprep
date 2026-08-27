@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
+import { formatQuestion, formatOption } from '@/lib/formatMath'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -499,7 +500,7 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
 
       {/* Question text */}
       <div style={{ fontSize:17, fontWeight:700, color:'var(--text-prim)', lineHeight:1.7, marginBottom:20 }}>
-        {question.text}
+        {formatQuestion(question.text ?? question.question_text ?? '')}
       </div>
 
       {/* Options */}
@@ -515,7 +516,7 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
               <div style={{ width:32, height:32, borderRadius:10, background: state==='idle'?s.pill:s.border, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color: state==='idle'?'var(--text-tert)':'#fff', fontSize:13, fontWeight:900, transition:'all .14s' }}>
                 {(state==='correct'&&(reviewMode||isStudy)) ? '✓' : (state==='wrong'&&(reviewMode||isStudy)) ? '✗' : LETTERS[idx]}
               </div>
-              <span style={{ fontSize:14, fontWeight: state==='correct'?700:600, color:s.text, lineHeight:1.45, flex:1 }}>{opt}</span>
+              <span style={{ fontSize:14, fontWeight: state==='correct'?700:600, color:s.text, lineHeight:1.45, flex:1 }}>{formatOption(opt)}</span>
             </button>
           )
         })}
@@ -767,13 +768,14 @@ function ResultsScreen({ questions, answers, config, xpAwarded, streakDays, dura
           </div>
 
           {/* Stats row — Score ring + 4 stat cells */}
-          <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'20px', display:'grid', gridTemplateColumns:'auto 1fr', gap:20 }}>
+          <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'18px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:16 }}>
             {/* Score ring */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
               <ScoreRing pct={accuracy} color={scoreColor} dark={dark}/>
             </div>
-            {/* Stats grid */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            {/* Stats grid — 2-col on all screen sizes; score ring stacks above on mobile */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               {[
                 { icon:'✅', label:'Correct',    value:correct,       sub:`/ ${total}`,          color:GREEN  },
                 { icon:'❌', label:'Incorrect',  value:incorrect,     sub:`/ ${total}`,          color:RED    },
@@ -791,7 +793,7 @@ function ResultsScreen({ questions, answers, config, xpAwarded, streakDays, dura
                 </div>
               ))}
             </div>
-          </div>
+          </div></div>
 
           {/* Score summary bars */}
           <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'20px' }}>
@@ -983,7 +985,7 @@ export default function PracticeSessionPage() {
     const durationSecs = msToSecs(Date.now() - startTimeRef.current)
     const results = questions.map((q, i) => map[i] ?? { question_id:q.id, topic_id:q.topic_id, subject_id:q.subject_id, isCorrect:false, is_correct:false, selectedIdx:null, time_taken_ms:0 })
     try {
-      const res  = await fetch('/api/student/session/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id:sessionIdRef.current, exam:config?.examType||'WAEC', mode:config?.mode||'practice', results, duration_secs:durationSecs }) })
+      const res  = await fetch('/api/student/questions/session/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id:sessionIdRef.current, exam:config?.examType||'WAEC', mode:config?.mode||'practice', results, duration_secs:durationSecs }) })
       const data = await res.json()
       if (data.ok) {
         try { localStorage.removeItem('ep_pending_session') } catch {}

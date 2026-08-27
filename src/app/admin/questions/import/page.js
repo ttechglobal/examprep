@@ -537,6 +537,23 @@ export default function SdashImportPage() {
   async function handleSave(questionsToSave) {
     setSaving(true)
     try {
+      // Resolve topic_id and subtopic_id from _topicMatch before saving.
+      // The API stores topic_id (UUID) not topic_title (string) — this was
+      // the bug causing all questions to save as untagged.
+      const questionsWithIds = questionsToSave.map(q => {
+        const match = q._topicMatch
+        // Priority: explicit topic_id (from manual/suggestion edit) > AI match > null
+        const topicId    = q.topic_id    ?? match?.topic?.id    ?? null
+        const subtopicId = q.subtopic_id ?? match?.subtopic?.id ?? null
+        return {
+          ...q,
+          topic_id:      topicId,
+          subtopic_id:   subtopicId,
+          topic_title:    q.topic_title    || match?.topic?.name    || '',
+          subtopic_title: q.subtopic_title || match?.subtopic?.name || '',
+        }
+      })
+
       // Create batch record
       const batchRes = await fetch('/api/admin/questions/batch', {
         method: 'POST',
@@ -555,7 +572,7 @@ export default function SdashImportPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          questions: questionsToSave,
+          questions: questionsWithIds,
           examType,
           subjectId,
           defaultYear: year,
@@ -886,9 +903,35 @@ export default function SdashImportPage() {
   }
 
   // Update topic/subtopic on a question in parsedQuestions
+  // Preserves IDs from AI suggestions (_topicId / _subtopicId) or falls back to
+  // re-matching by name so the question saves with the correct topic_id UUID.
   function applyTopicEdit(index) {
+    const topicId    = topicEditValue._topicId    ?? null
+    const subtopicId = topicEditValue._subtopicId ?? null
+
+    // If IDs not provided (manual text edit), try to find matching topic by name
+    let resolvedTopicId    = topicId
+    let resolvedSubtopicId = subtopicId
+    if (!resolvedTopicId && topics.length > 0) {
+      const matchedTopic = topics.find(t => t.name.toLowerCase() === topicEditValue.topic_title.toLowerCase())
+      if (matchedTopic) {
+        resolvedTopicId = matchedTopic.id
+        if (!resolvedSubtopicId && topicEditValue.subtopic_title) {
+          const matchedSub = (matchedTopic.subtopics ?? []).find(s => s.name.toLowerCase() === topicEditValue.subtopic_title.toLowerCase())
+          if (matchedSub) resolvedSubtopicId = matchedSub.id
+        }
+      }
+    }
+
     setParsedQuestions(prev => prev.map((q, i) =>
-      i === index ? { ...q, topic_title: topicEditValue.topic_title, subtopic_title: topicEditValue.subtopic_title, _topicMatch: null } : q
+      i === index ? {
+        ...q,
+        topic_title:    topicEditValue.topic_title,
+        subtopic_title: topicEditValue.subtopic_title,
+        topic_id:       resolvedTopicId,
+        subtopic_id:    resolvedSubtopicId,
+        _topicMatch:    null,   // cleared so handleSave uses the explicit ids above
+      } : q
     ))
     setEditingTopicIdx(null)
   }
@@ -1562,29 +1605,60 @@ export default function SdashImportPage() {
                             </div>
                           </div>
 
-                          {/* Topic tag — editable */}
+                          {/* Topic tag — editable with AI suggestions */}
                           {isEditingTopic ? (
                             <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
                               <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide">Edit topic tag</p>
+
+                              {/* AI suggestions from matchTopicSubtopic */}
+                              {q._topicMatch?.suggestions?.length > 0 && (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wide">AI suggestions — click to apply:</p>
+                                  {q._topicMatch.suggestions.map((s, si) => (
+                                    <button key={si}
+                                      onClick={() => {
+                                        setTopicEditValue({ topic_title: s.topic.name, subtopic_title: s.subtopic.name, _topicId: s.topic.id, _subtopicId: s.subtopic.id })
+                                      }}
+                                      className={`w-full text-left text-[11px] px-3 py-2 rounded-lg border transition-colors ${
+                                        topicEditValue.topic_title === s.topic.name && topicEditValue.subtopic_title === s.subtopic.name
+                                          ? 'bg-indigo-600 text-white border-indigo-600'
+                                          : 'bg-white text-indigo-700 border-indigo-100 hover:bg-indigo-50'
+                                      }`}
+                                    >
+                                      <span className="font-bold">{s.topic.name}</span>
+                                      <span className="text-indigo-400 mx-1">→</span>
+                                      {s.subtopic.name}
+                                      <span className="ml-2 text-[10px] opacity-60">{Math.round(s.score * 100)}% match</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wide pt-1">Or search manually:</p>
                               <input type="text" placeholder="Topic (e.g. Forces and Motion)"
                                 value={topicEditValue.topic_title}
-                                onChange={e => setTopicEditValue(v => ({ ...v, topic_title: e.target.value }))}
+                                onChange={e => setTopicEditValue(v => ({ ...v, topic_title: e.target.value, _topicId: null }))}
                                 className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
                               />
                               <input type="text" placeholder="Subtopic (e.g. Newton's Laws)"
                                 value={topicEditValue.subtopic_title}
-                                onChange={e => setTopicEditValue(v => ({ ...v, subtopic_title: e.target.value }))}
+                                onChange={e => setTopicEditValue(v => ({ ...v, subtopic_title: e.target.value, _subtopicId: null }))}
                                 className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
                               />
-                              {topics.length > 0 && (
+                              {/* Filtered curriculum list for manual search */}
+                              {topics.length > 0 && topicEditValue.topic_title && (
                                 <div className="max-h-28 overflow-y-auto space-y-0.5 border border-indigo-100 rounded-lg bg-white p-1">
-                                  <p className="text-[10px] text-indigo-400 font-bold px-1 pt-0.5">Tap to fill from curriculum:</p>
-                                  {topics.filter(t => !topicEditValue.topic_title || t.name.toLowerCase().includes(topicEditValue.topic_title.toLowerCase())).slice(0, 15).map(t => (
-                                    <button key={t.id} onClick={() => setTopicEditValue(v => ({ ...v, topic_title: t.name }))}
-                                      className="block w-full text-left text-[11px] px-2 py-1 rounded hover:bg-indigo-50 text-indigo-700 truncate">
-                                      {t.name}
-                                    </button>
-                                  ))}
+                                  {topics
+                                    .filter(t => t.name.toLowerCase().includes(topicEditValue.topic_title.toLowerCase()))
+                                    .slice(0, 12)
+                                    .map(t => (
+                                      <button key={t.id}
+                                        onClick={() => setTopicEditValue(v => ({ ...v, topic_title: t.name, _topicId: t.id }))}
+                                        className="block w-full text-left text-[11px] px-2 py-1 rounded hover:bg-indigo-50 text-indigo-700 truncate">
+                                        {t.name}
+                                      </button>
+                                    ))
+                                  }
                                 </div>
                               )}
                               <div className="flex gap-2">

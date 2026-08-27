@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { usePathname } from 'next/navigation'
+import { Suspense } from 'react'
 import { useTheme }    from '@/contexts/ThemeContext'
 import { PointsProvider } from '@/contexts/PointsContext'
 import { StudentSidebar, StudentBottomNav, NAV } from '@/components/student/StudentNav'
@@ -124,7 +125,7 @@ export default function StudentLayout({ children }) {
 
           {/* Page content area */}
           <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            {children}
+            <Suspense fallback={null}>{children}</Suspense>
           </div>
         </div>
       </div>
@@ -134,7 +135,7 @@ export default function StudentLayout({ children }) {
         className="lg:hidden"
         style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}
       >
-        {children}
+        <Suspense fallback={null}>{children}</Suspense>
         {/* Bottom nav stays mounted — only active tab changes */}
         <StudentBottomNav active={active} dark={dark} />
       </div>
