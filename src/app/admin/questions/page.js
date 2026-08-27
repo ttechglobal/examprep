@@ -365,13 +365,42 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
             <Badge color={diffColor}>{q.difficulty}</Badge>
             <Badge color={sourceColor}>{sourceLabel}</Badge>
             {q.year && <Badge color="gray">{q.year}</Badge>}
-            {!q.subtopic_id && <Badge color="red">Untagged</Badge>}
+            {!q.subtopic_id          && <Badge color="red">Untagged</Badge>}
+            {q.is_active === false   && <Badge color="amber">⊘ Inactive</Badge>}
+            {q.is_flagged            && <Badge color="red">🚩 Flagged</Badge>}
             {saved && <Badge color="green">✓ Tagged!</Badge>}
           </div>
-          <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 flex-shrink-0 text-lg font-light leading-none">
-            ×
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              title={q.is_active === false ? 'Reactivate question' : 'Remove from student pool'}
+              onClick={async () => {
+                const newVal = q.is_active === false ? true : false
+                const res = await fetch(`/api/admin/questions/${q.id}`, {
+                  method:'PATCH', headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({ is_active: newVal }),
+                })
+                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) }
+              }}
+              className={`px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors ${q.is_active === false ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100' : 'border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100'}`}>
+              {q.is_active === false ? '✓ Reactivate' : '⊘ Remove'}
+            </button>
+            <button
+              title={q.is_flagged ? 'Unflag' : 'Flag for review (missing instruction, unclear, etc.)'}
+              onClick={async () => {
+                const res = await fetch(`/api/admin/questions/${q.id}`, {
+                  method:'PATCH', headers:{'Content-Type':'application/json'},
+                  body: JSON.stringify({ is_flagged: !q.is_flagged }),
+                })
+                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) }
+              }}
+              className={`px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors ${q.is_flagged ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              {q.is_flagged ? '🚩 Flagged' : '⚑ Flag'}
+            </button>
+            <button onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 text-lg font-light leading-none">
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -437,7 +466,9 @@ const QuestionRow = memo(function QuestionRow({ question: q, onOpen }) {
             <Badge color={diffColor}>{q.difficulty}</Badge>
             <Badge color={sourceColor}>{sourceLabel}</Badge>
             {q.year && <Badge color="gray">{q.year}</Badge>}
-            {!q.subtopic_id && <Badge color="red">Untagged</Badge>}
+            {!q.subtopic_id          && <Badge color="red">Untagged</Badge>}
+            {q.is_active === false   && <Badge color="amber">⊘ Inactive</Badge>}
+            {q.is_flagged            && <Badge color="red">🚩 Flagged</Badge>}
           </div>
         </div>
         <span className="text-gray-300 text-xs flex-shrink-0 mt-1">›</span>
@@ -504,6 +535,8 @@ function QuestionList({ source, subjects }) {
   const [filterDiff,     setFilterDiff]     = useState('')
   const [filterYear,     setFilterYear]     = useState('')
   const [filterUntagged, setFilterUntagged] = useState(false)
+  const [filterInactive, setFilterInactive] = useState(false)
+  const [filterFlagged,  setFilterFlagged]  = useState(false)
   const PER_PAGE = 25
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
@@ -528,12 +561,14 @@ function QuestionList({ source, subjects }) {
     if (filterDiff)     p.set('difficulty', filterDiff)
     if (filterYear)     p.set('year',       filterYear)
     if (filterUntagged) p.set('untagged',   'true')
+    if (filterInactive) p.set('inactive',   'true')
+    if (filterFlagged)  p.set('flagged',    'true')
     fetch(`/api/admin/questions?${p}`)
       .then(r => r.json())
       .then(d => { setQuestions(d.questions ?? []); setTotal(d.total ?? 0) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [source, page, filterExam, filterSubject, filterTopic, filterDiff, filterYear, filterUntagged])
+  }, [source, page, filterExam, filterSubject, filterTopic, filterDiff, filterYear, filterUntagged, filterInactive, filterFlagged])
 
   useEffect(() => { load() }, [load])
 
@@ -592,6 +627,18 @@ function QuestionList({ source, subjects }) {
             filterUntagged ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
           }`}>
           {filterUntagged ? '✕ Untagged only' : 'Untagged only'}
+        </button>
+        <button onClick={() => { setFilterInactive(v => !v); setPage(1) }}
+          className={`text-xs px-3 py-2 rounded-xl border font-medium transition-colors ${
+            filterInactive ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+          }`}>
+          {filterInactive ? '✕ Inactive only' : '⊘ Inactive'}
+        </button>
+        <button onClick={() => { setFilterFlagged(v => !v); setPage(1) }}
+          className={`text-xs px-3 py-2 rounded-xl border font-medium transition-colors ${
+            filterFlagged ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+          }`}>
+          {filterFlagged ? '✕ Flagged only' : '🚩 Flagged'}
         </button>
       </div>
 

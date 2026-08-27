@@ -1,35 +1,36 @@
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
-import { ThemeProvider } from '@/contexts/ThemeContext'
+import { ThemeProvider }  from '@/contexts/ThemeContext'
+import { PointsProvider } from '@/contexts/PointsContext'
 
 const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
+  subsets:  ['latin'],
   variable: '--font-jakarta',
-  weight: ['400', '500', '600', '700', '800'],
-  display: 'swap',
+  weight:   ['400', '500', '600', '700', '800'],
+  display:  'swap',
 })
 
 export const metadata = {
-  title: 'ExamPrep A1',
+  title:       'ExamPrep A1',
   description: 'Prepare for WAEC and JAMB with confidence',
-  manifest: '/manifest.json',
+  manifest:    '/manifest.json',
   appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'ExamPrep',
+    capable:         true,
+    statusBarStyle:  'black-translucent',
+    title:           'ExamPrep',
   },
   icons: {
-    icon: '/images/examprep_logo.png',
+    icon:  '/images/examprep_logo.png',
     apple: '/images/examprep_logo.png',
   },
 }
 
 export const viewport = {
-  themeColor: '#062A78',
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
+  themeColor:    '#062A78',
+  width:         'device-width',
+  initialScale:  1,
+  maximumScale:  1,
 }
 
 export default function RootLayout({ children }) {
@@ -37,7 +38,6 @@ export default function RootLayout({ children }) {
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head>
         {/* Prevent flash of wrong theme — must run before first paint */}
-        {/* Use a plain <script> tag (not Next.js Script) so it runs inline in <head> */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
@@ -46,8 +46,18 @@ export default function RootLayout({ children }) {
       </head>
       <body className="font-jakarta antialiased bg-base text-primary">
         <ThemeProvider>
-          {children}
+          {/*
+            PointsProvider lives here so XP is available to any part of the app.
+            The student/layout.js also wraps in PointsProvider — React dedupes
+            context providers, so the inner one (student) shadows the outer one
+            for student pages. Non-student pages (admin, onboarding) get the
+            outer provider with a zero default, which is fine.
+          */}
+          <PointsProvider>
+            {children}
+          </PointsProvider>
         </ThemeProvider>
+
         {/* Register service worker for PWA / offline support */}
         <Script id="sw-register" strategy="afterInteractive">{`
           if ('serviceWorker' in navigator) {

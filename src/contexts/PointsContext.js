@@ -1,154 +1,150 @@
 'use client'
 // src/contexts/PointsContext.js
-// XP is stored in localStorage so it survives layout re-renders between pages.
-// PointsProvider takes initialTotal from the server but always uses the higher
-// of (localStorage, initialTotal) — so a just-earned XP update isn't wiped
-// when the layout Server Component re-fetches a stale profile.total_points.
+// ─────────────────────────────────────────────────────────────────────────────
+// Single source of truth for the student's total XP across the whole app.
+//
+// How it works:
+//   1. On mount, reads from localStorage (instant — no flash)
+//   2. Then reconciles with the DB (auth check → profiles.total_points)
+//   3. Always uses Math.max(localStorage, DB) — earned XP never goes backwards
+//   4. After a practice session, the session page calls setTotalPoints(new_total)
+//      which immediately updates every component that calls usePoints()
+//   5. localStorage is kept in sync so the value survives page navigations
+//
+// Usage:
+//   const { totalPoints, setTotalPoints } = usePoints()
+//
+// To update after a session save:
+//   const { setTotalPoints } = usePoints()
+//   const data = await saveSession()         // your fetch to /api/student/session/save
+//   if (data.ok) setTotalPoints(data.new_total_xp)
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+// ── localStorage key ──────────────────────────────────────────────────────────
 const LS_KEY = 'ep_total_xp'
 
-function readCachedXP() {
+function readLS() {
   if (typeof window === 'undefined') return 0
-  try { return parseInt(localStorage.getItem(LS_KEY) ?? '0', 10) || 0 } catch { return 0 }
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    const val = parseInt(raw ?? '0', 10)
+    return isNaN(val) ? 0 : Math.max(0, val)
+  } catch { return 0 }
 }
 
-function writeCachedXP(val) {
+function writeLS(val) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(LS_KEY, String(val)) } catch {}
+  try { localStorage.setItem(LS_KEY, String(Math.max(0, val))) } catch {}
 }
 
+// ── Context shape ─────────────────────────────────────────────────────────────
 const PointsContext = createContext({
-  awardPoints: async () => {},
-  totalPoints: 0,
-  setTotalPoints: () => {},
-  toast: null,
+  totalPoints:    0,
+  setTotalPoints: (_val) => {},  // call with the new absolute total after a session save
+  showXPToast:    (_xpEarned, _label) => {},  // show the earned-XP toast
 })
 
-const REASON_LABELS = {
-  lesson_complete:   { label: 'Lesson complete!',       emoji: '🎉' },
-  practice_complete: { label: 'Practice session done!', emoji: '✅' },
-  weekly_goal:       { label: 'Weekly goal smashed!',   emoji: '🏆' },
-  badge_earned:      { label: 'New badge earned!',      emoji: '🥇' },
-}
-
-export function PointsProvider({ children, initialTotal = 0 }) {
-  // Start with the best known value: max(server, localStorage)
-  const [totalPoints, setTotalPointsRaw] = useState(() => {
-    const cached = readCachedXP()
-    return Math.max(initialTotal, cached)
-  })
-  const [toast, setToast] = useState(null)
+// ── Provider ──────────────────────────────────────────────────────────────────
+export function PointsProvider({ children }) {
+  // Seed from localStorage immediately — no waiting for DB
+  const [totalPoints, _setTotal] = useState(readLS)
+  const [toast, setToast] = useState(null)   // { earned, label } | null
   const toastTimer = useRef(null)
 
-  // Keep localStorage in sync whenever totalPoints changes
-  useEffect(() => { writeCachedXP(totalPoints) }, [totalPoints])
+  // Wrapper: always keep localStorage in sync
+  const setTotalPoints = useCallback((newTotal) => {
+    const safe = Math.max(0, Number(newTotal) || 0)
+    _setTotal(safe)
+    writeLS(safe)
+  }, [])
 
-  // On mount: reconcile with the DB directly so we never show a stale/zero value.
-  // This is the authoritative sync — localStorage is a cache, DB is truth.
+  // On mount: reconcile with DB so we never show a stale zero after a fresh login
   useEffect(() => {
-    async function reconcile() {
+    let cancelled = false
+    async function sync() {
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+        if (!user || cancelled) return
         const { data: prof } = await supabase
           .from('profiles')
           .select('total_points')
           .eq('id', user.id)
           .single()
+        if (cancelled) return
         const dbVal = prof?.total_points ?? 0
         if (dbVal > 0) {
-          // DB value wins if it's higher than both localStorage and current state
-          setTotalPointsRaw(prev => {
+          // Take the higher of (current state, DB) — never go backwards
+          _setTotal(prev => {
             const best = Math.max(prev, dbVal)
-            writeCachedXP(best)
+            writeLS(best)
             return best
           })
         }
-      } catch { /* non-fatal */ }
+      } catch { /* non-fatal — localStorage value is already showing */ }
     }
-    reconcile()
-  }, []) // eslint-disable-line
+    sync()
+    return () => { cancelled = true }
+  }, []) // run once on mount
 
-  // Also sync when server layout re-renders with a fresher initialTotal prop
-  useEffect(() => {
-    if (initialTotal > 0) {
-      setTotalPointsRaw(prev => {
-        const best = Math.max(prev, initialTotal)
-        writeCachedXP(best)
-        return best
-      })
-    }
-  }, [initialTotal]) // eslint-disable-line
-
-  const setTotalPoints = useCallback((val) => {
-    setTotalPointsRaw(val)
-    writeCachedXP(val)
-  }, [])
-
-  const showToast = useCallback((reason, points) => {
+  // XP toast
+  const showXPToast = useCallback((earned, label = 'Practice session done!') => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    setToast({ reason, points, id: Date.now() })
+    setToast({ earned, label, id: Date.now() })
     toastTimer.current = setTimeout(() => setToast(null), 3500)
   }, [])
 
-  const awardPoints = useCallback(async (reason, referenceId = null, extraData = {}) => {
-    try {
-      const res = await fetch('/api/points/award', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason, reference_id: referenceId, ...extraData }),
-      })
-      const data = await res.json()
-      if (data.awarded) {
-        setTotalPoints(data.new_total)
-        showToast(reason, data.points_awarded)
-      }
-      return data
-    } catch (err) {
-      console.error('[PointsContext] awardPoints failed:', err)
-      return null
-    }
-  }, [showToast, setTotalPoints])
-
   return (
-    <PointsContext.Provider value={{ awardPoints, totalPoints, setTotalPoints, toast }}>
+    <PointsContext.Provider value={{ totalPoints, setTotalPoints, showXPToast }}>
       {children}
-      <PointsToast toast={toast} onDismiss={() => setToast(null)} />
+      {toast && <XPToast key={toast.id} earned={toast.earned} label={toast.label} onDismiss={() => setToast(null)} />}
     </PointsContext.Provider>
   )
 }
 
+// ── Hook ──────────────────────────────────────────────────────────────────────
 export function usePoints() {
   return useContext(PointsContext)
 }
 
-function PointsToast({ toast, onDismiss }) {
-  if (!toast) return null
-  const meta = REASON_LABELS[toast.reason] ?? { label: 'Points earned!', emoji: '⭐' }
+// ── XP Toast ──────────────────────────────────────────────────────────────────
+// Shown after a session is saved. Appears at the top centre, auto-dismisses.
+function XPToast({ earned, label, onDismiss }) {
   return (
     <button
       onClick={onDismiss}
+      aria-label="Dismiss XP notification"
       style={{
-        position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 999, display: 'flex', alignItems: 'center', gap: 12,
+        position: 'fixed', top: 76, left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+        display: 'flex', alignItems: 'center', gap: 12,
         padding: '12px 20px', borderRadius: 20,
-        background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-        border: '1px solid rgba(255,255,255,.2)',
-        boxShadow: '0 8px 32px rgba(79,70,229,.4)',
-        color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer',
-        whiteSpace: 'nowrap', letterSpacing: '-0.01em',
-        animation: 'ep-toast-in .35s cubic-bezier(0.34,1.56,0.64,1)',
+        background: 'linear-gradient(135deg,#062A78,#1264E5)',
+        border: '1px solid rgba(255,255,255,.18)',
+        boxShadow: '0 8px 32px rgba(6,42,120,.45)',
+        color: '#fff', fontSize: 13, fontWeight: 800,
+        cursor: 'pointer', whiteSpace: 'nowrap',
+        letterSpacing: '-0.01em',
+        animation: 'ep-xp-toast-in .35s cubic-bezier(0.34,1.56,0.64,1) both',
+        fontFamily: 'inherit',
       }}
     >
-      <style>{`@keyframes ep-toast-in{from{opacity:0;transform:translateX(-50%) translateY(-12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}`}</style>
-      <span style={{ fontSize: 16 }}>{meta.emoji}</span>
+      <style>{`
+        @keyframes ep-xp-toast-in {
+          from { opacity:0; transform:translateX(-50%) translateY(-14px) scale(.9) }
+          to   { opacity:1; transform:translateX(-50%) translateY(0)     scale(1)  }
+        }
+      `}</style>
+      <span style={{ fontSize: 18 }}>⚡</span>
       <div style={{ textAlign: 'left' }}>
-        <p style={{ fontWeight: 900, lineHeight: 1.2 }}>{meta.label}</p>
-        <p style={{ color: 'rgba(255,255,255,.7)', fontSize: 11, fontWeight: 600 }}>+{toast.points} XP earned</p>
+        <p style={{ margin: 0, fontWeight: 900, lineHeight: 1.2, fontSize: 13 }}>{label}</p>
+        <p style={{ margin: 0, color: '#FFB800', fontSize: 12, fontWeight: 800, marginTop: 2 }}>
+          +{earned} XP earned
+        </p>
       </div>
     </button>
   )

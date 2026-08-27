@@ -40,6 +40,8 @@ export async function GET(request) {
   const difficulty  = searchParams.get('difficulty')
   const source      = searchParams.get('source')        // 'past_paper' | 'ai_generated' | omitted = both
   const untagged    = searchParams.get('untagged')       // 'true' = subtopic_id IS NULL
+  const inactive    = searchParams.get('inactive')       // 'true' = is_active IS FALSE
+  const flagged     = searchParams.get('flagged')        // 'true' = is_flagged IS TRUE
   const hasImage    = searchParams.get('has_image')
   const missingImg  = searchParams.get('missing_image')
   const year        = searchParams.get('year')
@@ -78,6 +80,7 @@ export async function GET(request) {
   if (difficulty)            query = query.eq('difficulty', difficulty)
   if (source)                query = query.eq('source', source)
   if (untagged === 'true')   query = query.is('subtopic_id', null)
+  if (flagged  === 'true')   query = query.eq('is_flagged', true)
   if (hasImage === 'true')   query = query.eq('has_image', true)
   if (year)                  query = query.eq('year', year)
   if (search)                query = query.ilike('question_text', `%${search}%`)

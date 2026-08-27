@@ -429,8 +429,24 @@ function StepMascot({ data, onFinish }) {
 
   async function handleStart() {
     setLoading(true)
+    // Generate a stable local user ID if one doesn't exist yet
+    let localId = localStorage.getItem('ep_local_id')
+    if (!localId) {
+      localId = 'local_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem('ep_local_id', localId)
+    }
     // Save to localStorage immediately (offline-first)
-    const setup = { username, exams, subjects, onboarded: true, createdAt: Date.now() }
+    // subjects split by exam so subject picker can read them per-exam
+    const subjectsWaec = exams.includes('WAEC') ? subjects : []
+    const subjectsJamb = exams.includes('JAMB') ? subjects : []
+    const setup = {
+      local_id: localId,
+      username, exams, subjects,
+      subjects_waec: subjectsWaec,
+      subjects_jamb: subjectsJamb,
+      onboarded: true,
+      createdAt: Date.now(),
+    }
     localStorage.setItem('ep_guest', JSON.stringify(setup))
 
     // Try to persist to Supabase (anonymous session)

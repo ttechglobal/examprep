@@ -1,690 +1,898 @@
 'use client'
-// src/app/student/profile/page.js — v1
-// Profile page: avatar + name + rank card + info sections + goals + exam scores
-// + activity summary + settings + premium upsell + logout
-// Desktop: sidebar + 3-col layout. Mobile: topbar + single col + bottom nav.
+// src/app/student/profile/page.js — v3
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile page — redesigned with three grouped modal sheets:
+//
+//   Sheet 1 — My Information  : name, username, bio, class, school
+//   Sheet 2 — Exams & Subjects: which exams → then subjects per exam
+//   Sheet 3 — Goals & Targets : university, course, per-subject WAEC grades,
+//                               JAMB target score
+//
+// XP comes from PointsContext (no local xp state).
+// Layout shell (sidebar, bottom nav, background) comes from student/layout.js.
+// This page renders its own topbar and content only.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
-import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
+import { usePoints } from '@/contexts/PointsContext'
+import { DesktopTopbar, MobileTopbar } from '@/components/student/StudentTopbar'
 import Link from 'next/link'
 
-// ─── BRAND ────────────────────────────────────────────────────────────────────
+// ── Brand ─────────────────────────────────────────────────────────────────────
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
-const CYAN   = '#18B7F2'
 const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
-const PURPLE = '#7C3AED'
 const RED    = '#f43f5e'
+const CYAN   = '#18B7F2'
 
-// ─── RANK SYSTEM ──────────────────────────────────────────────────────────────
+// ── Rank ladder ───────────────────────────────────────────────────────────────
 const RANKS = [
-  { name:'Bronze',   minXp:0,     maxXp:1000,  color:'#cd7f32', icon:'🥉', bg:'rgba(205,127,50,.15)' },
-  { name:'Silver I', minXp:1000,  maxXp:3000,  color:'#9ca3af', icon:'🥈', bg:'rgba(156,163,175,.15)' },
-  { name:'Silver II',minXp:3000,  maxXp:5000,  color:'#6b7280', icon:'🥈', bg:'rgba(107,114,128,.15)' },
-  { name:'Gold I',   minXp:5000,  maxXp:8000,  color:GOLD,      icon:'🥇', bg:`${GOLD}18` },
-  { name:'Gold II',  minXp:8000,  maxXp:12000, color:GOLD,      icon:'🥇', bg:`${GOLD}18` },
-  { name:'Platinum', minXp:12000, maxXp:20000, color:CYAN,      icon:'💎', bg:`${CYAN}18` },
-  { name:'Diamond',  minXp:20000, maxXp:35000, color:BLUE,      icon:'💠', bg:`${BLUE}18` },
-  { name:'Legend',   minXp:35000, maxXp:Infinity, color:ORANGE, icon:'👑', bg:`${ORANGE}18` },
+  { name:'Bronze',    minXp:0,     maxXp:1000,  color:'#cd7f32', icon:'🥉' },
+  { name:'Silver I',  minXp:1000,  maxXp:3000,  color:'#9ca3af', icon:'🥈' },
+  { name:'Silver II', minXp:3000,  maxXp:5000,  color:'#6b7280', icon:'🥈' },
+  { name:'Gold I',    minXp:5000,  maxXp:8000,  color:GOLD,      icon:'🥇' },
+  { name:'Gold II',   minXp:8000,  maxXp:12000, color:GOLD,      icon:'🥇' },
+  { name:'Platinum',  minXp:12000, maxXp:20000, color:CYAN,      icon:'💎' },
+  { name:'Diamond',   minXp:20000, maxXp:35000, color:BLUE,      icon:'💠' },
+  { name:'Legend',    minXp:35000, maxXp:Infinity, color:ORANGE, icon:'👑' },
 ]
-function getRank(xp) {
-  return RANKS.find(r => xp >= r.minXp && xp < r.maxXp) ?? RANKS[RANKS.length-1]
-}
-function getNextRank(xp) {
-  const idx = RANKS.findIndex(r => xp >= r.minXp && xp < r.maxXp)
-  return RANKS[idx+1] ?? null
-}
+const getRank     = xp => RANKS.find(r => xp >= r.minXp && xp < r.maxXp) ?? RANKS[RANKS.length - 1]
+const getNextRank = xp => { const i = RANKS.findIndex(r => xp >= r.minXp && xp < r.maxXp); return RANKS[i + 1] ?? null }
 
-// ─── BG ───────────────────────────────────────────────────────────────────────
-function AppBackground({ dark }) {
+// ── Subject meta ──────────────────────────────────────────────────────────────
+const SUBJ_COLOR = {
+  'Mathematics':'#FF6A00','Further Mathematics':'#FF6A00',
+  'English Language':'#22c55e','Use of English':'#22c55e',
+  'Physics':'#7C3AED','Chemistry':'#1264E5','Biology':'#18B7F2',
+  'Economics':'#f43f5e','Government':'#9b7ae0','Geography':'#34d399',
+  'Literature in English':'#f9a8d4','Agricultural Science':'#86efac',
+  'Commerce':'#818cf8','Accounting':'#fde68a','default':'#1264E5',
+}
+const SUBJ_ICON = {
+  'Mathematics':'🧮','Further Mathematics':'📐',
+  'English Language':'📖','Use of English':'📖',
+  'Physics':'⚡','Chemistry':'⚗️','Biology':'🧬',
+  'Economics':'📊','Government':'🏛️','Geography':'🌍',
+  'Literature in English':'📚','Agricultural Science':'🌱',
+  'Commerce':'💼','Accounting':'🧮','default':'📝',
+}
+const sc = n => SUBJ_COLOR[n] ?? SUBJ_COLOR.default
+const si = n => SUBJ_ICON[n]  ?? SUBJ_ICON.default
+
+// WAEC grade options
+const WAEC_GRADES = ['A1','B2','B3','C4','C5','C6','D7','E8','F9']
+
+// Class levels
+const CLASS_LEVELS = ['JSS1','JSS2','JSS3','SS1','SS2','SS3']
+
+// ── Shared primitives ─────────────────────────────────────────────────────────
+function Card({ children, style = {} }) {
   return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, backgroundImage: dark?'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)':'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-      {dark?(<>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-      </>):(<>
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
-        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(255,184,0,.04)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-      </>)}
+    <div style={{ background:'var(--bg-card)', borderRadius:18, border:'1px solid var(--border)', overflow:'hidden', ...style }}>
+      {children}
     </div>
   )
 }
 
-// ─── CARD ─────────────────────────────────────────────────────────────────────
-function Card({ children, style={} }) {
-  return <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 2px 16px rgba(6,42,120,.06)', overflow:'hidden', ...style }}>{children}</div>
-}
-function Row({ children, style={} }) {
-  return <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 18px', borderBottom:'1px solid var(--border)', ...style }}>{children}</div>
-}
-function ChevronRight({ color='var(--text-tert)' }) {
-  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-}
-
-// ─── DESKTOP TOPBAR ───────────────────────────────────────────────────────────
-function DesktopTopbar({ name, xp, dark, toggle }) {
-  const level = Math.floor((xp||0)/2000)+1
-  const initials = (name||'EX').slice(0,2).toUpperCase()
+function SectionLabel({ children, action }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:18, borderBottom:'1px solid var(--border)', marginBottom:24 }}>
-      <div style={{ flex:1, maxWidth:420, position:'relative' }}>
-        <div style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="var(--text-tert)" strokeWidth="1.8"/><path d="M15 15l3 3" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/></svg>
-        </div>
-        <input placeholder="Search topics, lessons, questions…" style={{ width:'100%', padding:'10px 14px 10px 40px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none' }}/>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
-          <span style={{ fontSize:16 }}>⚡</span>
-          <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()} XP</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
-          <span style={{ fontSize:16 }}>💗</span>
-          <span style={{ fontSize:13, fontWeight:900, color:RED }}>32</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-          <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
-          <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
-            <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
-          </div>
-        </div>
-        <button onClick={toggle} style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+      <span style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>{children}</span>
+      {action}
     </div>
   )
 }
 
-// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
-function MobileTopbar({ dark, toggle }) {
+function Row({ icon, label, value, onTap, last = false }) {
+  const { dark } = useTheme()
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.93)':'rgba(249,250,255,.93)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>Profile</span>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <Link href="/student/profile/settings">
-          <div style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-            <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="3" stroke="var(--text-tert)" strokeWidth="1.7"/><path d="M11 2v2m0 16v-2m-7-7H2m18 0h-2M4.9 4.9l1.4 1.4m9.9 9.9 1.4 1.4M4.9 17.1l1.4-1.4m9.9-9.9 1.4-1.4" stroke="var(--text-tert)" strokeWidth="1.7" strokeLinecap="round"/></svg>
-          </div>
-        </Link>
-        <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── AVATAR CARD ─────────────────────────────────────────────────────────────
-function AvatarCard({ profile, xp, isGuest, dark }) {
-  const rank     = getRank(xp)
-  const nextRank = getNextRank(xp)
-  const xpToNext = nextRank ? nextRank.minXp - xp : 0
-  const pct      = nextRank ? Math.round(((xp - rank.minXp) / (nextRank.minXp - rank.minXp)) * 100) : 100
-  const initials = ((profile?.first_name||'E').charAt(0) + (profile?.last_name||'X').charAt(0)).toUpperCase()
-  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || 'Student'
-  const username = profile?.username ? `@${profile.username}` : null
-  const bio = profile?.bio || 'Discipline today, freedom tomorrow. 🚀'
-  const joined = profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-GB',{month:'long',year:'numeric'}) : 'May 2024'
-
-  return (
-    <Card>
-      {/* Blue header strip */}
-      <div style={{ height:56, background:`linear-gradient(135deg,${NAVY},${BLUE})`, position:'relative' }}>
-        <div style={{ position:'absolute', top:0, right:0, width:120, height:120, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.15) 0%,transparent 70%)', pointerEvents:'none' }}/>
-      </div>
-      <div style={{ padding:'0 24px 24px', position:'relative' }}>
-        {/* Avatar — overlapping the strip */}
-        <div style={{ position:'relative', display:'inline-block', marginTop:-36, marginBottom:10 }}>
-          <div style={{ width:80, height:80, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, border:`3px solid var(--bg-card)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:900, color:GOLD, overflow:'hidden', position:'relative' }}>
-            {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt="avatar" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.currentTarget.style.display='none'}}/>
-              : initials
-            }
-          </div>
-          {/* Camera button */}
-          <label style={{ position:'absolute', bottom:2, right:2, width:22, height:22, borderRadius:'50%', background:BLUE, border:`2px solid var(--bg-card)`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M14 12a1 1 0 01-1 1H3a1 1 0 01-1-1V6a1 1 0 011-1h2l1.5-2h3L11 5h2a1 1 0 011 1v6z" stroke="#fff" strokeWidth="1.4" fill="none"/><circle cx="8" cy="8.5" r="2" stroke="#fff" strokeWidth="1.4"/></svg>
-          </label>
-        </div>
-
-        {/* Name + username */}
-        <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:4 }}>
-          <span style={{ fontSize:20, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>{displayName}</span>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill={BLUE}/><path d="M5 9l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <button style={{ width:22, height:22, borderRadius:7, background:'var(--bg-subtle)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-            <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z" stroke="var(--text-tert)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </div>
-        {username && <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:6 }}>{username}</div>}
-        <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:12, fontStyle:'italic', lineHeight:1.4 }}>{bio}</div>
-
-        {/* Meta chips */}
-        <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:18 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="11" rx="2" stroke="var(--text-tert)" strokeWidth="1.4"/><path d="M4 1v2M10 1v2M1 5h12" stroke="var(--text-tert)" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-tert)' }}>Joined {joined}</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z" stroke="var(--text-tert)" strokeWidth="1.4" fill="none"/><circle cx="7" cy="5" r="1.5" fill="var(--text-tert)"/></svg>
-            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-tert)' }}>{profile?.country||'Nigeria'}</span>
-          </div>
-        </div>
-
-        {/* Rank strip */}
-        <div style={{ padding:'14px 16px', borderRadius:16, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', border:'1px solid var(--border)', marginBottom:18 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:40, height:40, borderRadius:14, background:rank.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{rank.icon}</div>
-              <div>
-                <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>{rank.name}</div>
-                <div style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)' }}>Current Rank</div>
-              </div>
-            </div>
-            {nextRank && (
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:14, fontWeight:900, color:BLUE }}>{xpToNext.toLocaleString()} XP</div>
-                <div style={{ fontSize:10, color:'var(--text-tert)' }}>to reach {nextRank.name}</div>
-              </div>
-            )}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
-            <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{(xp||0).toLocaleString()} / {(nextRank?.minXp||xp).toLocaleString()} XP</span>
-            <span style={{ fontSize:10, fontWeight:800, color:rank.color }}>{pct}%</span>
-          </div>
-          <div style={{ height:8, borderRadius:999, background:dark?'rgba(255,255,255,.1)':'rgba(6,42,120,.08)', overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${pct}%`, borderRadius:999, background:`linear-gradient(90deg,${rank.color},${nextRank?.color||rank.color})`, transition:'width .8s ease' }}/>
-          </div>
-          <div style={{ marginTop:10, textAlign:'right' }}>
-            <Link href="/student/leaderboard" style={{ fontSize:11, fontWeight:700, color:BLUE, textDecoration:'none' }}>View All Ranks →</Link>
-          </div>
-        </div>
-
-        {/* Edit Profile button */}
-        <Link href="/student/profile/edit" style={{ textDecoration:'none', display:'block' }}>
-          <button style={{ width:'100%', padding:'12px', borderRadius:13, border:`1.5px solid ${BLUE}`, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:14, background:'transparent', color:BLUE, transition:'all .15s' }}>
-            Edit Profile
-          </button>
-        </Link>
-
-        {/* Guest → Create Account prompt */}
-        {isGuest && (
-          <div style={{ marginTop:14, padding:'14px 16px', borderRadius:14, background:`${ORANGE}10`, border:`1.5px solid ${ORANGE}35` }}>
-            <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:4 }}>Back up your progress! 📲</div>
-            <div style={{ fontSize:11, color:'var(--text-tert)', lineHeight:1.5, marginBottom:10 }}>Create a free account to save your progress, sync across devices, and unlock more features.</div>
-            <Link href="/auth/signup" style={{ textDecoration:'none' }}>
-              <button style={{ width:'100%', padding:'10px', borderRadius:11, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:13, background:ORANGE, color:'#fff', boxShadow:`0 4px 14px ${ORANGE}40` }}>Create Free Account</button>
-            </Link>
-          </div>
+    <div
+      onClick={onTap}
+      style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 18px', borderBottom:last?'none':'1px solid var(--border)', cursor:onTap?'pointer':'default', transition:'background .1s' }}
+      onMouseEnter={e => { if (onTap) e.currentTarget.style.background = dark?'rgba(255,255,255,.03)':'rgba(6,42,120,.02)' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {icon && <span style={{ fontSize:16, flexShrink:0 }}>{icon}</span>}
+      <span style={{ flex:1, fontSize:13, fontWeight:600, color:'var(--text-prim)' }}>{label}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <span style={{ fontSize:12, color:'var(--text-tert)', maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value || 'Not set'}</span>
+        {onTap && (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         )}
       </div>
-    </Card>
+    </div>
   )
 }
 
-// ─── INFO SECTION (desktop right sidebar version) ─────────────────────────────
-function InfoRows({ profile, dark }) {
-  const fields = [
-    { icon:'🏫', label:'School', value:profile?.school||'Add school', href:'/student/profile/edit?field=school' },
-    { icon:'🎓', label:'Class',  value:profile?.class_level||'Add class', href:'/student/profile/edit?field=class' },
-    { icon:'📋', label:'Exams',  value:(profile?.exam_types||['WAEC','JAMB']).join(', '), href:'/student/profile/edit?field=exams' },
-    { icon:'📚', label:'Subjects', value:profile?.subjects?.length ? `${profile.subjects.length} Subjects` : 'Add subjects', href:'/student/profile/edit?field=subjects' },
-    { icon:'🎯', label:'Goals',  value:'View & edit', href:'/student/profile/goals' },
-  ]
+// ── Sheet backdrop + container ─────────────────────────────────────────────────
+function Sheet({ title, onClose, children, wide = false }) {
   return (
-    <Card>
-      <div style={{ padding:'16px 18px 8px', fontSize:13, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.015em' }}>My Information</div>
-      {fields.map((f,i)=>(
-        <Link key={i} href={f.href} style={{ textDecoration:'none' }}>
-          <Row style={{ borderBottom:i<fields.length-1?'1px solid var(--border)':'none', cursor:'pointer' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-              <div style={{ width:34, height:34, borderRadius:10, background:dark?'rgba(255,255,255,.05)':'rgba(6,42,120,.05)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>{f.icon}</div>
-              <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{f.label}</span>
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:12, fontWeight:600, color:'var(--text-tert)' }}>{f.value}</span>
-              <ChevronRight/>
-            </div>
-          </Row>
-        </Link>
-      ))}
-    </Card>
-  )
-}
-
-// ─── STREAK CARD ─────────────────────────────────────────────────────────────
-function StreakCard({ streak, dark }) {
-  const days = ['M','T','W','T','F','S','S']
-  return (
-    <Card style={{ padding:'16px 18px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-        <span style={{ fontSize:20 }}>🔥</span>
-        <div>
-          <div style={{ fontSize:15, fontWeight:900, color:ORANGE }}>{streak} Day Streak</div>
-          <div style={{ fontSize:11, color:'var(--text-tert)' }}>Keep it up, King!</div>
+    <div
+      style={{ position:'fixed', inset:0, zIndex:500, background:'rgba(0,0,0,.65)', backdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', justifyContent:'center', padding:0 }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <style>{`
+        @keyframes ep-sheet-up { from { transform:translateY(100%) } to { transform:translateY(0) } }
+        @keyframes ep-sheet-fade { from { opacity:0; transform:translateY(28px) } to { opacity:1; transform:translateY(0) } }
+      `}</style>
+      <div style={{
+        width:'100%', maxWidth: wide ? 640 : 520,
+        maxHeight:'92dvh', overflowY:'auto',
+        background:'var(--bg-card)',
+        borderRadius:'24px 24px 0 0',
+        border:'1px solid var(--border)',
+        boxShadow:'0 -8px 40px rgba(0,0,0,.4)',
+        animation:'ep-sheet-up .3s cubic-bezier(0.32,0.72,0,1)',
+        paddingBottom:'env(safe-area-inset-bottom, 16px)',
+      }}>
+        {/* Handle + header */}
+        <div style={{ padding:'12px 20px 0', position:'sticky', top:0, background:'var(--bg-card)', zIndex:1 }}>
+          <div style={{ width:36, height:4, borderRadius:999, background:'var(--border)', margin:'0 auto 14px' }}/>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:14, borderBottom:'1px solid var(--border)', marginBottom:20 }}>
+            <span style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>{title}</span>
+            <button onClick={onClose} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-subtle)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1 1l10 10M11 1L1 11" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div style={{ padding:'0 20px 24px' }}>
+          {children}
         </div>
       </div>
-      <div style={{ display:'flex', gap:4 }}>
-        {days.map((d,i)=>(
-          <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-            <div style={{ width:'100%', aspectRatio:'1', borderRadius:8, background:i<streak%7?ORANGE:dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.08)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              {i<streak%7&&<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </div>
-            <span style={{ fontSize:8, fontWeight:700, color:'var(--text-tert)' }}>{d}</span>
-          </div>
+    </div>
+  )
+}
+
+// ── Text input row ─────────────────────────────────────────────────────────────
+function Field({ label, value, onChange, placeholder, multiline = false, hint }) {
+  return (
+    <div style={{ marginBottom:16 }}>
+      <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:6 }}>{label}</label>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={3}
+          style={{ width:'100%', padding:'12px 14px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none', resize:'none', lineHeight:1.5 }}
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{ width:'100%', padding:'12px 14px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none' }}
+        />
+      )}
+      {hint && <p style={{ fontSize:11, color:'var(--text-tert)', marginTop:5 }}>{hint}</p>}
+    </div>
+  )
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <div style={{ marginBottom:16 }}>
+      <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:6 }}>{label}</label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ width:'100%', padding:'12px 14px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none', cursor:'pointer' }}
+      >
+        <option value="">Select…</option>
+        {options.map(o => (
+          <option key={o} value={o}>{o}</option>
         ))}
-      </div>
-    </Card>
-  )
-}
-
-// ─── GOALS CARD ──────────────────────────────────────────────────────────────
-function GoalsCard({ goals, dark }) {
-  const defaultGoals = [
-    { icon:'🎯', label:'Score 8 A\'s in WAEC',  pct:62, color:BLUE   },
-    { icon:'🎯', label:'JAMB Score: 280+',       pct:48, color:ORANGE },
-    { icon:'🎯', label:'Improve in Physics',     pct:35, color:PURPLE },
-  ]
-  const list = (goals?.length ? goals.map((g,i)=>({...defaultGoals[i],...g})) : defaultGoals).slice(0,3)
-
-  return (
-    <div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-        <span style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>My Goals</span>
-        <Link href="/student/profile/goals" style={{ textDecoration:'none', fontSize:12, fontWeight:700, color:BLUE }}>Edit Goals</Link>
-      </div>
-      <Card>
-        {list.map((g,i)=>(
-          <div key={i} style={{ padding:'14px 18px', borderBottom:i<list.length-1?'1px solid var(--border)':'none' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <div style={{ width:32, height:32, borderRadius:10, background:`${g.color}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>{g.icon}</div>
-                <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{g.label}</span>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:9, fontWeight:700, color:'var(--text-tert)', textTransform:'uppercase' }}>Progress</div>
-                <div style={{ fontSize:14, fontWeight:900, color:g.color }}>{g.pct}%</div>
-              </div>
-            </div>
-            <div style={{ height:6, borderRadius:999, background:dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.07)', overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${g.pct}%`, borderRadius:999, background:g.color, transition:'width .6s ease' }}/>
-            </div>
-          </div>
-        ))}
-      </Card>
+      </select>
     </div>
   )
 }
 
-// ─── INFO CARDS ROW (desktop — School, Class, Exams, Subjects) ───────────────
-function InfoCardsRow({ profile, dark }) {
-  const cards = [
-    { icon:'🏫', label:'School',   value:profile?.school||'Not set',     color:BLUE },
-    { icon:'🎓', label:'Class',    value:profile?.class_level||'Not set', color:GREEN },
-    { icon:'📋', label:'Exams',    value:(profile?.exam_types||['WAEC','JAMB']).join(', '), color:PURPLE },
-    { icon:'📚', label:'Subjects', value:profile?.subjects?.length?`${profile.subjects.length} Subjects`:'Not set', color:ORANGE },
-  ]
+function SaveButton({ onClick, saving, label = 'Save changes' }) {
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-      {cards.map((c,i)=>(
-        <Link key={i} href={`/student/profile/edit?field=${c.label.toLowerCase()}`} style={{ textDecoration:'none' }}>
-          <Card style={{ padding:'16px', cursor:'pointer', transition:'box-shadow .15s' }}
-            onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 18px ${c.color}25`}
-            onMouseLeave={e=>e.currentTarget.style.boxShadow='0 2px 16px rgba(6,42,120,.06)'}
-          >
-            <div style={{ width:36, height:36, borderRadius:11, background:`${c.color}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, marginBottom:10 }}>{c.icon}</div>
-            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:4 }}>{c.label}</div>
-            <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.value}</div>
-            <div style={{ marginTop:8, fontSize:11, fontWeight:700, color:c.color }}>Edit →</div>
-          </Card>
-        </Link>
-      ))}
-    </div>
-  )
-}
-
-// ─── RECENT EXAM SCORES ───────────────────────────────────────────────────────
-function ExamScores({ scores, dark }) {
-  const mock = [
-    { name:'WAEC Mock 3',    date:'May 18, 2025', score:68,  rank:'124 / 2,340', color:GREEN, up:true },
-    { name:'JAMB CBT Practice', date:'May 12, 2025', score:241, rank:'—', color:ORANGE, up:true, isJamb:true },
-    { name:'NECO Mock 2',    date:'May 5, 2025',  score:72,  rank:'210 / 2,100', color:GREEN, up:true },
-  ]
-  const list = scores?.length ? scores : mock
-  return (
-    <div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-        <span style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Recent Exam Scores</span>
-        <Link href="/student/progress" style={{ textDecoration:'none', fontSize:12, fontWeight:700, color:BLUE }}>View All Scores</Link>
-      </div>
-      <Card>
-        {list.map((s,i)=>(
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 18px', borderBottom:i<list.length-1?'1px solid var(--border)':'none', cursor:'pointer' }}>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:2 }}>{s.name}</div>
-              <div style={{ fontSize:10, color:'var(--text-tert)' }}>{s.date}</div>
-            </div>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:9, fontWeight:700, color:'var(--text-tert)', textTransform:'uppercase', marginBottom:2 }}>Score</div>
-              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                <span style={{ fontSize:16, fontWeight:900, color:s.color }}>{s.isJamb?s.score:`${s.score}%`}</span>
-                <span style={{ fontSize:14 }}>{s.up?'↗️':'↘️'}</span>
-              </div>
-              {!s.isJamb && <div style={{ fontSize:10, color:'var(--text-tert)' }}>Rank {s.rank}</div>}
-            </div>
-            <ChevronRight/>
-          </div>
-        ))}
-      </Card>
-    </div>
-  )
-}
-
-// ─── ACTIVITY SUMMARY ─────────────────────────────────────────────────────────
-function ActivitySummary({ stats, dark }) {
-  const items = [
-    { icon:'📋', label:'Questions Answered', value:(stats?.questions||1248).toLocaleString(), delta:18, color:BLUE },
-    { icon:'🎯', label:'Accuracy',           value:`${stats?.accuracy||78}%`,               delta:6,  color:ORANGE },
-    { icon:'⚡', label:'XP Earned',          value:(stats?.xp||12840).toLocaleString(),      delta:22, color:GOLD },
-    { icon:'🌟', label:'Topics Mastered',    value:stats?.topics||24,                        delta:4,  color:GREEN },
-  ]
-  return (
-    <div>
-      <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', marginBottom:12 }}>Activity Summary</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-        {items.map((s,i)=>(
-          <Card key={i} style={{ padding:'14px 16px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:8 }}>
-              <div style={{ width:28, height:28, borderRadius:9, background:`${s.color}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>{s.icon}</div>
-              <span style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)', lineHeight:1.2 }}>{s.label}</span>
-            </div>
-            <div style={{ fontSize:20, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:4 }}>{s.value}</div>
-            <div style={{ fontSize:10, fontWeight:800, color:GREEN }}>↑ {s.delta}{typeof s.value==='string'&&s.value.endsWith('%')?'':''} vs last 7 days</div>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── SETTINGS LIST ───────────────────────────────────────────────────────────
-function SettingsCard({ dark, toggle, onLogout }) {
-  const settings = [
-    { icon:'☀️', label:'Appearance', value:dark?'Dark Mode':'Light Mode', action:toggle },
-    { icon:'🔔', label:'Notifications', value:'On', href:'/student/profile/notifications' },
-    { icon:'🔒', label:'Privacy', value:'Manage your data', href:'/student/profile/privacy' },
-    { icon:'👤', label:'Account', value:'Change password', href:'/student/profile/account' },
-    { icon:'🌍', label:'Language', value:'English', href:'/student/profile/language' },
-    { icon:'💾', label:'Data & Storage', value:'Manage offline data', href:'/student/profile/storage' },
-  ]
-  return (
-    <div>
-      <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', marginBottom:12 }}>Settings</div>
-      <Card>
-        {settings.map((s,i)=>(
-          s.href ? (
-            <Link key={i} href={s.href} style={{ textDecoration:'none' }}>
-              <Row style={{ borderBottom:i<settings.length-1?'1px solid var(--border)':'none', cursor:'pointer' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                  <div style={{ width:34, height:34, borderRadius:10, background:dark?'rgba(255,255,255,.05)':'rgba(6,42,120,.05)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>{s.icon}</div>
-                  <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{s.label}</span>
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:11, color:'var(--text-tert)' }}>{s.value}</span>
-                  <ChevronRight/>
-                </div>
-              </Row>
-            </Link>
-          ) : (
-            <div key={i} onClick={s.action} style={{ cursor:'pointer' }}>
-              <Row style={{ borderBottom:i<settings.length-1?'1px solid var(--border)':'none' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                  <div style={{ width:34, height:34, borderRadius:10, background:dark?'rgba(255,255,255,.05)':'rgba(6,42,120,.05)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>{s.icon}</div>
-                  <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{s.label}</span>
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:11, color:'var(--text-tert)' }}>{s.value}</span>
-                  <ChevronRight/>
-                </div>
-              </Row>
-            </div>
-          )
-        ))}
-      </Card>
-    </div>
-  )
-}
-
-// ─── HELP + SUPPORT ──────────────────────────────────────────────────────────
-function HelpCard({ dark }) {
-  const links = [
-    { icon:'❓', label:'Help Center', href:'/help' },
-    { icon:'💬', label:'Contact Support', href:'/support' },
-    { icon:'📩', label:'Send Feedback', href:'/feedback' },
-  ]
-  return (
-    <Card>
-      <div style={{ padding:'14px 18px 8px', fontSize:12, fontWeight:800, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em' }}>Need help?</div>
-      {links.map((l,i)=>(
-        <Link key={i} href={l.href} style={{ textDecoration:'none' }}>
-          <Row style={{ borderBottom:i<links.length-1?'1px solid var(--border)':'none', cursor:'pointer', padding:'11px 18px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ fontSize:15 }}>{l.icon}</span>
-              <span style={{ fontSize:13, fontWeight:600, color:'var(--text-prim)' }}>{l.label}</span>
-            </div>
-            <ChevronRight/>
-          </Row>
-        </Link>
-      ))}
-    </Card>
-  )
-}
-
-// ─── PREMIUM CARD ─────────────────────────────────────────────────────────────
-function PremiumCard({ dark }) {
-  return (
-    <div style={{ borderRadius:20, overflow:'hidden', position:'relative', background:`linear-gradient(135deg,${NAVY} 0%,#1040a0 60%,${BLUE} 100%)`, padding:'20px 22px' }}>
-      <div style={{ position:'absolute', top:-20, right:-20, width:140, height:140, borderRadius:'50%', background:'rgba(255,255,255,.06)', pointerEvents:'none' }}/>
-      <div style={{ position:'absolute', top:14, right:'18%', fontSize:13, color:GOLD, opacity:.5 }}>✦</div>
-      <div style={{ position:'absolute', top:28, right:'12%', fontSize:8, color:CYAN, opacity:.6 }}>✦</div>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:14 }}>
-        <div style={{ width:38, height:38, borderRadius:12, background:`${GOLD}25`, border:`1px solid ${GOLD}40`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>👑</div>
-        <div>
-          <div style={{ fontSize:15, fontWeight:900, color:'#fff', marginBottom:3 }}>Upgrade to Premium</div>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,.6)', lineHeight:1.5 }}>Unlock unlimited practice, AI explanations, offline mode and more.</div>
-        </div>
-      </div>
-      <Link href="/student/premium" style={{ textDecoration:'none' }}>
-        <button style={{ width:'100%', padding:'12px', borderRadius:13, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:GOLD, color:NAVY, boxShadow:`0 4px 16px ${GOLD}50`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          ⚡ Activate Premium
-        </button>
-      </Link>
-    </div>
-  )
-}
-
-// ─── LOGOUT BUTTON ────────────────────────────────────────────────────────────
-function LogoutButton({ onLogout }) {
-  return (
-    <button onClick={onLogout} style={{ width:'100%', padding:'14px', borderRadius:14, border:`1.5px solid ${RED}30`, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:14, background:'transparent', color:RED, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transition:'all .15s' }}>
-      <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M7 16H3a1 1 0 01-1-1V3a1 1 0 011-1h4M12 13l4-4-4-4M16 9H7" stroke={RED} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      Log Out
+    <button
+      onClick={onClick}
+      disabled={saving}
+      style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:saving?'not-allowed':'pointer', fontFamily:'inherit', fontWeight:900, fontSize:15, background:`linear-gradient(135deg,${NAVY},${BLUE})`, color:'#fff', boxShadow:`0 4px 16px ${BLUE}40`, opacity:saving?0.7:1, marginTop:4 }}
+    >
+      {saving ? 'Saving…' : label}
     </button>
   )
 }
 
-// ─── QUICK SETTINGS (mobile compact) ─────────────────────────────────────────
-function QuickSettings({ dark, toggle }) {
+// ── SHEET 1: My Information ────────────────────────────────────────────────────
+function InfoSheet({ profile, onClose, onSaved }) {
+  const [firstName, setFirstName]   = useState(profile?.first_name ?? '')
+  const [lastName,  setLastName]    = useState(profile?.last_name  ?? '')
+  const [username,  setUsername]    = useState(profile?.username   ?? '')
+  const [bio,       setBio]         = useState(profile?.bio        ?? '')
+  const [classLevel,setClassLevel]  = useState(profile?.class_level ?? '')
+  const [saving,    setSaving]      = useState(false)
+  const [error,     setError]       = useState(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/student/profile', {
+        method:  'PATCH',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          first_name:  firstName.trim(),
+          last_name:   lastName.trim(),
+          full_name:   [firstName.trim(), lastName.trim()].filter(Boolean).join(' '),
+          username:    username.trim(),
+          bio:         bio.trim(),
+          class_level: classLevel,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Save failed')
+      onSaved({ first_name:firstName.trim(), last_name:lastName.trim(), full_name:[firstName.trim(),lastName.trim()].filter(Boolean).join(' '), username:username.trim(), bio:bio.trim(), class_level:classLevel })
+      onClose()
+    } catch(e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Sheet title="My Information" onClose={onClose}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 12px' }}>
+        <Field label="First name" value={firstName} onChange={setFirstName} placeholder="Ada"/>
+        <Field label="Last name"  value={lastName}  onChange={setLastName}  placeholder="Okafor"/>
+      </div>
+      <Field label="Username" value={username} onChange={setUsername} placeholder="ada_okafor" hint="Shown on the leaderboard"/>
+      <Field label="Bio" value={bio} onChange={setBio} placeholder="SS3 student at…" multiline/>
+      <SelectField label="Class / Year" value={classLevel} onChange={setClassLevel} options={CLASS_LEVELS}/>
+      {error && <p style={{ fontSize:12, color:RED, marginBottom:12 }}>{error}</p>}
+      <SaveButton onClick={save} saving={saving}/>
+    </Sheet>
+  )
+}
+
+// ── SHEET 2: Exams & Subjects ──────────────────────────────────────────────────
+function SubjectsSheet({ profile, onClose, onSaved }) {
+  // Step 1 = choose exams, Step 2 = choose subjects per exam
+  const [step,          setStep]          = useState(1)
+  const [activeExams,   setActiveExams]   = useState(() => {
+    const exams = []
+    if (profile?.subjects_waec?.length || profile?.exam_types?.includes?.('WAEC')) exams.push('WAEC')
+    if (profile?.subjects_jamb?.length || profile?.exam_types?.includes?.('JAMB')) exams.push('JAMB')
+    return exams.length ? exams : ['WAEC']
+  })
+  const [currentExam,   setCurrentExam]   = useState(null)  // which exam we're editing subjects for
+  const [waecSubjects,  setWaecSubjects]  = useState(profile?.subjects_waec ?? [])
+  const [jambSubjects,  setJambSubjects]  = useState(profile?.subjects_jamb ?? [])
+  const [allSubjects,   setAllSubjects]   = useState([])    // available from DB
+  const [loadingSubjs,  setLoadingSubjs]  = useState(false)
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState(null)
+
+  // Fetch available subjects when entering step 2
+  useEffect(() => {
+    if (!currentExam) return
+    setLoadingSubjs(true)
+    fetch(`/api/admin/subjects?exam_type=${currentExam}&active=true`)
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d) ? d : (d.subjects ?? [])
+        setAllSubjects(list.map(s => s.name ?? s))
+      })
+      .catch(() => setAllSubjects([]))
+      .finally(() => setLoadingSubjs(false))
+  }, [currentExam])
+
+  function toggleExam(exam) {
+    setActiveExams(prev =>
+      prev.includes(exam) ? prev.filter(e => e !== exam) : [...prev, exam]
+    )
+  }
+
+  function toggleSubject(name, exam) {
+    if (exam === 'WAEC') {
+      setWaecSubjects(prev => prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name])
+    } else {
+      // JAMB: max 4 subjects
+      setJambSubjects(prev => {
+        if (prev.includes(name)) return prev.filter(s => s !== name)
+        if (prev.length >= 4) return prev  // silently cap at 4
+        return [...prev, name]
+      })
+    }
+  }
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const saves = []
+      if (activeExams.includes('WAEC')) {
+        saves.push(fetch('/api/student/subjects', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ exam:'WAEC', subjects: waecSubjects }) }))
+      }
+      if (activeExams.includes('JAMB')) {
+        saves.push(fetch('/api/student/subjects', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ exam:'JAMB', subjects: jambSubjects }) }))
+      }
+      const results = await Promise.all(saves)
+      for (const res of results) {
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Save failed') }
+      }
+      onSaved({ subjects_waec: waecSubjects, subjects_jamb: jambSubjects, exam_types: activeExams })
+      onClose()
+    } catch(e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Step 1: exam toggles
+  if (step === 1) {
+    return (
+      <Sheet title="Exams & Subjects" onClose={onClose}>
+        <p style={{ fontSize:13, color:'var(--text-tert)', marginBottom:20, lineHeight:1.6 }}>
+          Select the exams you are preparing for. You can pick both.
+        </p>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:24 }}>
+          {['WAEC','JAMB'].map(exam => {
+            const on = activeExams.includes(exam)
+            const meta = { WAEC:{ icon:'📋', desc:'WASSCE — 9 subjects' }, JAMB:{ icon:'🎓', desc:'UTME — 4 subjects' } }[exam]
+            return (
+              <button
+                key={exam}
+                onClick={() => toggleExam(exam)}
+                style={{
+                  padding:'18px 16px', borderRadius:16, cursor:'pointer', fontFamily:'inherit',
+                  border: `2px solid ${on ? BLUE : 'var(--border)'}`,
+                  background: on ? `${BLUE}10` : 'var(--bg-card)',
+                  display:'flex', flexDirection:'column', alignItems:'flex-start', gap:6,
+                  textAlign:'left', transition:'all .15s',
+                }}
+              >
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%' }}>
+                  <span style={{ fontSize:22 }}>{meta.icon}</span>
+                  {on && (
+                    <div style={{ width:20, height:20, borderRadius:'50%', background:BLUE, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize:15, fontWeight:900, color: on ? BLUE : 'var(--text-prim)' }}>{exam}</div>
+                <div style={{ fontSize:11, color:'var(--text-tert)' }}>{meta.desc}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Per-exam subject summary rows */}
+        {activeExams.length > 0 && (
+          <div style={{ marginBottom:20 }}>
+            <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:10 }}>Your subjects</p>
+            {activeExams.map(exam => {
+              const subs = exam === 'WAEC' ? waecSubjects : jambSubjects
+              return (
+                <div
+                  key={exam}
+                  onClick={() => { setCurrentExam(exam); setStep(2) }}
+                  style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 16px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', marginBottom:8 }}
+                >
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{exam} Subjects</div>
+                    <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>
+                      {subs.length > 0
+                        ? subs.slice(0,3).join(', ') + (subs.length > 3 ? ` +${subs.length - 3} more` : '')
+                        : 'Tap to select subjects'}
+                    </div>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {error && <p style={{ fontSize:12, color:RED, marginBottom:12 }}>{error}</p>}
+        <SaveButton onClick={save} saving={saving} label={`Save — ${activeExams.join(' & ')}`}/>
+      </Sheet>
+    )
+  }
+
+  // Step 2: subject picker for currentExam
+  const selected = currentExam === 'WAEC' ? waecSubjects : jambSubjects
+  const isJAMB   = currentExam === 'JAMB'
+
+  return (
+    <Sheet title={`${currentExam} Subjects`} onClose={onClose} wide>
+      <button
+        onClick={() => setStep(1)}
+        style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0, marginBottom:16 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke={BLUE} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Back to exams
+      </button>
+
+      {isJAMB && (
+        <div style={{ padding:'10px 14px', borderRadius:11, background:`${ORANGE}10`, border:`1px solid ${ORANGE}30`, marginBottom:16 }}>
+          <p style={{ fontSize:12, fontWeight:700, color:ORANGE, margin:0 }}>
+            JAMB requires exactly 4 subjects — <strong>{selected.length}</strong> selected
+          </p>
+        </div>
+      )}
+
+      {loadingSubjs ? (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 0' }}>
+          <div style={{ width:24, height:24, borderRadius:'50%', border:`2.5px solid var(--border)`, borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:10, marginBottom:20 }}>
+          {allSubjects.map(name => {
+            const on    = selected.includes(name)
+            const color = sc(name)
+            const capped = isJAMB && !on && selected.length >= 4
+            return (
+              <button
+                key={name}
+                onClick={() => !capped && toggleSubject(name, currentExam)}
+                style={{
+                  padding:'14px 12px', borderRadius:14, cursor: capped?'not-allowed':'pointer',
+                  border: `2px solid ${on ? color : 'var(--border)'}`,
+                  background: on ? `${color}12` : 'var(--bg-card)',
+                  display:'flex', flexDirection:'column', alignItems:'flex-start', gap:5,
+                  fontFamily:'inherit', textAlign:'left', opacity: capped ? 0.4 : 1,
+                  transition:'all .12s',
+                }}
+              >
+                <span style={{ fontSize:20 }}>{si(name)}</span>
+                <span style={{ fontSize:12, fontWeight: on?800:600, color: on ? color : 'var(--text-prim)', lineHeight:1.3 }}>{name}</span>
+                {on && (
+                  <div style={{ width:16, height:16, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', alignSelf:'flex-end', marginTop:'auto' }}>
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l1.8 1.8L6.5 2" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <button
+        onClick={() => setStep(1)}
+        style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:15, background:`linear-gradient(135deg,${NAVY},${BLUE})`, color:'#fff', boxShadow:`0 4px 16px ${BLUE}40` }}
+      >
+        Done — {selected.length} subject{selected.length !== 1 ? 's' : ''} selected
+      </button>
+    </Sheet>
+  )
+}
+
+// ── SHEET 3: Goals & Targets ───────────────────────────────────────────────────
+function GoalsSheet({ profile, onClose, onSaved }) {
+  const [university,  setUniversity]  = useState(profile?.target_university ?? '')
+  const [course,      setCourse]      = useState(profile?.target_course     ?? '')
+  const [jambScore,   setJambScore]   = useState(() => {
+    const v = profile?.target_jamb
+    return v && !isNaN(Number(v)) ? String(v) : ''
+  })
+  // Per-subject WAEC grade targets: { subjectName: gradeString }
+  const [waecGrades,  setWaecGrades]  = useState(() => {
+    try {
+      const stored = profile?.target_waec
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored
+      return {}
+    } catch { return {} }
+  })
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState(null)
+
+  const waecSubs = profile?.subjects_waec ?? []
+  const jambSubs = profile?.subjects_jamb ?? []
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/student/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          target_university: university.trim(),
+          target_course:     course.trim(),
+          target_jamb:       jambScore ? Number(jambScore) : null,
+          target_waec:       waecGrades,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Save failed')
+      onSaved({ target_university:university.trim(), target_course:course.trim(), target_jamb:jambScore ? Number(jambScore) : null, target_waec:waecGrades })
+      onClose()
+    } catch(e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Sheet title="Goals & Targets" onClose={onClose}>
+      {/* University + course */}
+      <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>University Goals</p>
+      <Field label="Target university" value={university} onChange={setUniversity} placeholder="University of Lagos"/>
+      <Field label="Target course" value={course} onChange={setCourse} placeholder="Medicine & Surgery"/>
+
+      {/* JAMB target score */}
+      {jambSubs.length > 0 && (
+        <>
+          <div style={{ height:1, background:'var(--border)', margin:'4px 0 18px' }}/>
+          <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>JAMB Target Score</p>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:6 }}>JAMB score (200–400)</label>
+            <input
+              type="number"
+              min={100} max={400}
+              value={jambScore}
+              onChange={e => setJambScore(e.target.value)}
+              placeholder="e.g. 280"
+              style={{ width:'100%', padding:'12px 14px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none' }}
+            />
+          </div>
+        </>
+      )}
+
+      {/* WAEC per-subject grade targets */}
+      {waecSubs.length > 0 && (
+        <>
+          <div style={{ height:1, background:'var(--border)', margin:'4px 0 18px' }}/>
+          <p style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--text-tert)', marginBottom:12 }}>
+            WAEC Target Grades
+          </p>
+          <p style={{ fontSize:12, color:'var(--text-tert)', marginBottom:14, lineHeight:1.5 }}>
+            Set your target grade for each subject. This helps us focus your practice on where you need the most improvement.
+          </p>
+          <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
+            {waecSubs.map(subj => (
+              <div key={subj} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-card)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:16 }}>{si(subj)}</span>
+                  <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{subj}</span>
+                </div>
+                <select
+                  value={waecGrades[subj] ?? ''}
+                  onChange={e => setWaecGrades(prev => ({ ...prev, [subj]: e.target.value }))}
+                  style={{ padding:'6px 10px', borderRadius:9, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none', cursor:'pointer', fontWeight:700 }}
+                >
+                  <option value="">Target…</option>
+                  {WAEC_GRADES.map(g => (
+                    <option key={g} value={g}
+                      style={{ color: g === 'A1' ? GREEN : g.startsWith('B') ? BLUE : g.startsWith('C') ? ORANGE : RED }}
+                    >{g}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {waecSubs.length === 0 && jambSubs.length === 0 && (
+        <p style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6, marginBottom:16 }}>
+          Set your subjects first — then you can set per-subject grade targets here.
+        </p>
+      )}
+
+      {error && <p style={{ fontSize:12, color:RED, marginBottom:12 }}>{error}</p>}
+      <SaveButton onClick={save} saving={saving}/>
+    </Sheet>
+  )
+}
+
+// ── Avatar + rank card ─────────────────────────────────────────────────────────
+function AvatarCard({ profile, xp, onEditInfo }) {
+  const { dark } = useTheme()
+  const rank    = getRank(xp)
+  const next    = getNextRank(xp)
+  const xpInLvl = xp - rank.minXp
+  const xpRange = (next?.minXp ?? xp + 1) - rank.minXp
+  const pct     = Math.min(100, xpRange > 0 ? Math.round((xpInLvl / xpRange) * 100) : 100)
+  const level   = Math.floor(xp / 2000) + 1
+  const dName   = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || 'Student'
+  const initials = dName.slice(0, 2).toUpperCase()
+
   return (
     <Card>
-      <div style={{ padding:'14px 18px 4px', fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>Quick Settings</div>
-      {[
-        { icon:'☀️', label:'Appearance', value:dark?'Dark Mode':'Light Mode', action:toggle },
-        { icon:'🔔', label:'Notifications', value:'On', href:'/student/profile/notifications' },
-      ].map((s,i)=>(
-        s.href ? (
-          <Link key={i} href={s.href} style={{ textDecoration:'none' }}>
-            <Row style={{ borderBottom:i===0?'1px solid var(--border)':'none', cursor:'pointer' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                <span style={{ fontSize:16 }}>{s.icon}</span>
-                <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{s.label}</span>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:11, color:'var(--text-tert)' }}>{s.value}</span>
-                <ChevronRight/>
-              </div>
-            </Row>
-          </Link>
-        ) : (
-          <div key={i} onClick={s.action} style={{ cursor:'pointer' }}>
-            <Row style={{ borderBottom:i===0?'1px solid var(--border)':'none' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-                <span style={{ fontSize:16 }}>{s.icon}</span>
-                <span style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{s.label}</span>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:11, color:'var(--text-tert)' }}>{s.value}</span>
-                <ChevronRight/>
-              </div>
-            </Row>
+      {/* Cover banner */}
+      <div style={{ height:64, background:`linear-gradient(135deg,${NAVY},${BLUE})`, position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', top:0, right:0, width:140, height:140, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.2),transparent 70%)', pointerEvents:'none' }}/>
+      </div>
+
+      <div style={{ padding:'0 20px 20px', position:'relative' }}>
+        {/* Avatar */}
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginTop:-32, marginBottom:12 }}>
+          <div style={{ width:72, height:72, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, border:'3px solid var(--bg-card)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:900, color:GOLD, flexShrink:0 }}>
+            {initials}
           </div>
-        )
-      ))}
+          <button
+            onClick={onEditInfo}
+            style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:11, border:`1.5px solid ${BLUE}`, background:'transparent', cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:13, color:BLUE }}
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z" stroke={BLUE} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Edit Profile
+          </button>
+        </div>
+
+        {/* Name */}
+        <div style={{ fontSize:20, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:2 }}>{dName}</div>
+        {profile?.username && <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:3 }}>@{profile.username}</div>}
+        {profile?.bio && <div style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.5, marginBottom:12 }}>{profile.bio}</div>}
+        {!profile?.bio && <div style={{ marginBottom:12 }}/>}
+
+        {/* Rank strip */}
+        <div style={{ padding:'14px', borderRadius:14, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', border:'1px solid var(--border)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:22 }}>{rank.icon}</span>
+              <div>
+                <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>{rank.name}</div>
+                <div style={{ fontSize:10, color:'var(--text-tert)' }}>Level {level}</div>
+              </div>
+            </div>
+            {next && (
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:13, fontWeight:900, color:BLUE }}>{(next.minXp - xp).toLocaleString()} XP</div>
+                <div style={{ fontSize:10, color:'var(--text-tert)' }}>to {next.name}</div>
+              </div>
+            )}
+          </div>
+          <div style={{ height:6, borderRadius:999, background:dark?'rgba(255,255,255,.1)':'rgba(6,42,120,.08)', overflow:'hidden', marginBottom:6 }}>
+            <div style={{ height:'100%', width:`${pct}%`, borderRadius:999, background:`linear-gradient(90deg,${rank.color},${next?.color??rank.color})`, transition:'width .8s ease' }}/>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between' }}>
+            <span style={{ fontSize:10, color:'var(--text-tert)' }}>{xp.toLocaleString()} XP total</span>
+            <Link href="/student/leaderboard" style={{ textDecoration:'none', fontSize:10, fontWeight:700, color:BLUE }}>View all ranks →</Link>
+          </div>
+        </div>
+      </div>
     </Card>
   )
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+// ── Goals summary card ─────────────────────────────────────────────────────────
+function GoalsSummary({ profile, onEdit }) {
+  const hasWaecGrades = profile?.target_waec && typeof profile.target_waec === 'object' && Object.keys(profile.target_waec).length > 0
+  const waecSubs = profile?.subjects_waec ?? []
+
+  return (
+    <Card>
+      {/* University */}
+      <Row icon="🏛️" label="University"  value={profile?.target_university} onTap={onEdit}/>
+      <Row icon="📚" label="Course"       value={profile?.target_course}     onTap={onEdit}/>
+      <Row icon="📋" label="JAMB Target"  value={profile?.target_jamb ? `${profile.target_jamb} / 400` : null} onTap={onEdit}/>
+
+      {/* WAEC per-subject grades */}
+      {waecSubs.length > 0 && (
+        <div style={{ padding:'12px 18px', borderTop:'1px solid var(--border)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.06em' }}>WAEC Grade Targets</span>
+            <button onClick={onEdit} style={{ fontSize:11, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Edit →</button>
+          </div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {waecSubs.map(subj => {
+              const grade = hasWaecGrades ? profile.target_waec[subj] : null
+              const color = grade ? (grade === 'A1' ? GREEN : grade.startsWith('B') ? BLUE : grade.startsWith('C') ? ORANGE : RED) : 'var(--text-tert)'
+              return (
+                <div key={subj} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:20, background:'var(--bg-subtle)', border:'1px solid var(--border)' }}>
+                  <span style={{ fontSize:11, color:'var(--text-prim)', fontWeight:600 }}>{subj}</span>
+                  <span style={{ fontSize:11, fontWeight:900, color }}>{grade || '—'}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
-  const router = useRouter()
+  const router         = useRouter()
   const { dark, toggle } = useTheme()
+  const { totalPoints: xp } = usePoints()
 
   const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
-  const [xp,       setXp]       = useState(3720)
-  const [streak,   setStreak]   = useState(12)
-  const [isGuest,  setIsGuest]  = useState(false)
-  const [stats,    setStats]    = useState(null)
+  const [sheet,    setSheet]    = useState(null)  // 'info' | 'subjects' | 'goals' | null
 
-  useEffect(()=>{
-    async function load() {
-      try {
-        const supabase = createClient()
-        const { data:{session} } = await supabase.auth.getSession()
-        if (session?.user) {
-          const { data:prof } = await supabase.from('profiles').select('*').eq('id',session.user.id).single()
-          if (prof) { setProfile(prof); setXp(prof.total_points||prof.xp||3720) }
-        } else {
-          // Guest mode
-          setIsGuest(true)
-          try {
-            const g = JSON.parse(localStorage.getItem('ep_guest')||'{}')
-            setProfile({ username:g.username, first_name:g.first_name, exam_types:g.exams, subjects:g.subjects })
-          } catch {}
-        }
-      } catch(e){ console.error(e) }
-      finally { setLoading(false) }
-    }
-    load()
-  },[])
+  const load = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        try { const g = JSON.parse(localStorage.getItem('ep_guest') || '{}'); setProfile({ ...g, isGuest:true }) } catch {}
+        setLoading(false); return
+      }
+      const res = await fetch('/api/student/profile')
+      if (res.ok) { const d = await res.json(); setProfile(d) }
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
 
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+  useEffect(() => { load() }, [load])
+
+  function patchProfile(updates) {
+    setProfile(p => ({ ...p, ...updates }))
+  }
+
+  async function logout() {
+    const s = createClient()
+    await s.auth.signOut()
     router.replace('/onboarding')
   }
 
-  const name = profile?.username || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Student'
-  const cap  = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : ''
-
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
-      <div style={{ width:32,height:32,borderRadius:'50%',border:`3px solid var(--border)`,borderTopColor:BLUE,animation:'spin .7s linear infinite' }}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid var(--border)`, borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
     </div>
+  )
+
+  const dName   = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.username || 'Student'
+  const isGuest = !!profile?.isGuest
+
+  // Guest banner
+  const guestBanner = isGuest && (
+    <div style={{ borderRadius:16, padding:'16px 18px', background:`${ORANGE}08`, border:`1.5px solid ${ORANGE}30`, marginBottom:4 }}>
+      <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:4 }}>Back up your progress 📲</div>
+      <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.5, marginBottom:10 }}>Create a free account to save progress and sync across devices.</div>
+      <Link href="/register" style={{ textDecoration:'none' }}>
+        <button style={{ padding:'9px 18px', borderRadius:10, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:13, background:ORANGE, color:'#fff' }}>Create Free Account →</button>
+      </Link>
+    </div>
+  )
+
+  // Subjects section
+  const subjectsSection = (
+    <div>
+      <SectionLabel action={<button onClick={() => setSheet('subjects')} style={{ fontSize:12, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Edit →</button>}>
+        Exams & Subjects
+      </SectionLabel>
+      <Card>
+        {['WAEC','JAMB'].map((exam, i) => {
+          const subs = exam === 'WAEC' ? profile?.subjects_waec : profile?.subjects_jamb
+          return (
+            <div
+              key={exam}
+              onClick={() => setSheet('subjects')}
+              style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 18px', borderBottom: i === 0 ? '1px solid var(--border)' : 'none', cursor:'pointer' }}
+            >
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)' }}>{exam}</div>
+                <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>
+                  {subs?.length ? subs.slice(0,3).join(', ') + (subs.length > 3 ? ` +${subs.length - 3}` : '') : 'Not set up'}
+                </div>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+          )
+        })}
+      </Card>
+    </div>
+  )
+
+  // Goals section
+  const goalsSection = (
+    <div>
+      <SectionLabel action={<button onClick={() => setSheet('goals')} style={{ fontSize:12, fontWeight:700, color:BLUE, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Edit →</button>}>
+        Goals & Targets
+      </SectionLabel>
+      <GoalsSummary profile={profile} onEdit={() => setSheet('goals')}/>
+    </div>
+  )
+
+  // Settings section
+  const settingsSection = (
+    <div>
+      <SectionLabel>Settings</SectionLabel>
+      <Card style={{ marginBottom:10 }}>
+        <Row icon="🎨" label="Appearance"    value={dark?'Dark Mode':'Light Mode'} onTap={toggle}/>
+        <Row icon="🔔" label="Notifications" value="On"/>
+        <Row icon="🔑" label="Account"       value="Change password"/>
+        <Row icon="🌐" label="Language"      value="English" last/>
+      </Card>
+      <button
+        onClick={logout}
+        style={{ width:'100%', padding:'13px', borderRadius:13, border:`1.5px solid ${RED}30`, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:14, background:'transparent', color:RED, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}
+      >
+        <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M7 16H3a1 1 0 01-1-1V3a1 1 0 011-1h4M12 13l4-4-4-4M16 9H7" stroke={RED} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        Log Out
+      </button>
+    </div>
+  )
+
+  const premiumCard = (
+    <div style={{ borderRadius:18, padding:'20px', background:`linear-gradient(135deg,${NAVY},${BLUE})`, position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:-20, right:-20, width:120, height:120, borderRadius:'50%', background:'rgba(255,255,255,.06)', pointerEvents:'none' }}/>
+      <div style={{ fontSize:13, fontWeight:900, color:'#fff', marginBottom:4 }}>👑 Upgrade to Premium</div>
+      <div style={{ fontSize:11, color:'rgba(255,255,255,.6)', lineHeight:1.5, marginBottom:14 }}>Unlimited practice, AI explanations, offline mode and more.</div>
+      <button style={{ width:'100%', padding:'11px', borderRadius:11, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:13, background:GOLD, color:NAVY }}>⚡ Activate Premium</button>
+    </div>
+  )
+
+  const helpCard = (
+    <Card>
+      {[['❓','Help Center'],['💬','Contact Support'],['📩','Send Feedback']].map(([icon, label], i) => (
+        <Row key={i} icon={icon} label={label} last={i === 2}/>
+      ))}
+    </Card>
   )
 
   return (
     <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box}`}</style>
-      <AppBackground dark={dark}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} * {box-sizing:border-box}`}</style>
 
-      {/* ══ DESKTOP ══════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1380, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active="profile" xp={xp} dark={dark}/>
-
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
-
-            {/* Top row: avatar card + rank strip */}
-            <div style={{ display:'grid', gridTemplateColumns:'340px 1fr', gap:20, marginBottom:20 }}>
-              <AvatarCard profile={profile} xp={xp} isGuest={isGuest} dark={dark}/>
-              {/* Right of avatar: info tiles + streak + keep going mascot */}
-              <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-                <InfoCardsRow profile={profile} dark={dark}/>
-                <StreakCard streak={streak} dark={dark}/>
-                {/* Motivational panel */}
-                <div style={{ borderRadius:20, overflow:'hidden', position:'relative', background:`linear-gradient(135deg,${dark?NAVY:'#f0f6ff'},${dark?'#0a1f5e':'#e8f0ff'})`, border:`1px solid ${BLUE}18`, padding:'18px 18px 0 150px', minHeight:100, display:'flex', alignItems:'center' }}>
-                  <div style={{ position:'absolute', bottom:0, left:0, width:140, height:100 }}>
-                    <img src="/images/zara_studybuddy.png" alt="Zara" style={{ width:'100%', height:'100%', objectFit:'contain', objectPosition:'bottom left', filter:'drop-shadow(0 2px 8px rgba(0,0,0,.2))' }} onError={e=>{e.currentTarget.style.display='none'}}/>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:14, fontWeight:900, color:dark?'#fff':'var(--text-prim)', marginBottom:4 }}>Keep going!</div>
-                    <div style={{ fontSize:12, color:dark?'rgba(255,255,255,.55)':'var(--text-tert)', lineHeight:1.5 }}>Every step you take today brings you closer to your goals.</div>
-                  </div>
-                </div>
-                <PremiumCard dark={dark}/>
-              </div>
-            </div>
-
-            {/* 3-col middle row */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 280px', gap:20, marginBottom:20 }}>
-              <GoalsCard goals={null} dark={dark}/>
-              <ExamScores scores={null} dark={dark}/>
-              <SettingsCard dark={dark} toggle={toggle} onLogout={handleLogout}/>
-            </div>
-
-            {/* Activity summary — full width */}
-            <div style={{ marginBottom:20 }}>
-              <ActivitySummary stats={stats} dark={dark}/>
-            </div>
-
-            {/* Logout */}
-            <LogoutButton onLogout={handleLogout}/>
+      {/* ── DESKTOP ── */}
+      <div className="hidden lg:flex" style={{ flex:1, minWidth:0, flexDirection:'column' }}>
+        <DesktopTopbar name={dName}/>
+        {guestBanner}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20, alignItems:'flex-start' }}>
+          {/* Left column */}
+          <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+            <AvatarCard profile={profile} xp={xp} onEditInfo={() => setSheet('info')}/>
+            {subjectsSection}
+            {goalsSection}
+          </div>
+          {/* Right column — sticky */}
+          <div style={{ position:'sticky', top:20, display:'flex', flexDirection:'column', gap:16 }}>
+            {premiumCard}
+            {settingsSection}
+            {helpCard}
           </div>
         </div>
       </div>
 
-      {/* ══ MOBILE ══════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar dark={dark} toggle={toggle}/>
+      {/* ── MOBILE ── */}
+      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80 }}>
+        <MobileTopbar title="Profile"/>
         <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:18 }}>
-          <AvatarCard profile={profile} xp={xp} isGuest={isGuest} dark={dark}/>
-          <StreakCard streak={streak} dark={dark}/>
-          <InfoRows profile={profile} dark={dark}/>
-          <GoalsCard goals={null} dark={dark}/>
-          <ExamScores scores={null} dark={dark}/>
-          <QuickSettings dark={dark} toggle={toggle}/>
-          <PremiumCard dark={dark}/>
-          <HelpCard dark={dark}/>
-          <LogoutButton onLogout={handleLogout}/>
+          {guestBanner}
+          <AvatarCard profile={profile} xp={xp} onEditInfo={() => setSheet('info')}/>
+          {subjectsSection}
+          {goalsSection}
+          {premiumCard}
+          {settingsSection}
+          {helpCard}
         </div>
-        <StudentBottomNav active="profile" dark={dark}/>
       </div>
+
+      {/* ── SHEETS ── */}
+      {sheet === 'info' && (
+        <InfoSheet
+          profile={profile}
+          onClose={() => setSheet(null)}
+          onSaved={patchProfile}
+        />
+      )}
+      {sheet === 'subjects' && (
+        <SubjectsSheet
+          profile={profile}
+          onClose={() => setSheet(null)}
+          onSaved={patchProfile}
+        />
+      )}
+      {sheet === 'goals' && (
+        <GoalsSheet
+          profile={profile}
+          onClose={() => setSheet(null)}
+          onSaved={patchProfile}
+        />
+      )}
     </>
   )
 }

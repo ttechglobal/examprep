@@ -655,88 +655,77 @@ export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topi
 
   const topicList = topics.length
     ? topics.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
-    : '(curriculum not yet loaded — suggest the most accurate topic name you know)'
+    : '(use the most accurate topic name you know)'
 
-  const isMathSci = /physics|chemistry|mathematics|further math|biology|economics/i.test(subjectName)
-  const isLanguage = /english|literature|yoruba|igbo|hausa/i.test(subjectName)
+  const isCalc = /physics|chemistry|mathematics|further math|economics/i.test(subjectName)
+  const isBio  = /biology/i.test(subjectName)
 
+  // ── Format questions inline into the prompt ──────────────────────────────
   const questionLines = rawQuestions.map((q, i) => {
-    const opts = typeof q.options === 'object' && !Array.isArray(q.options)
-      ? Object.entries(q.options).map(([k, v]) => `   ${k}. ${v}`).join('\n')
-      : ''
-    const answer = q.answer ? `\n   ✓ Correct answer: ${q.answer}` : ''
-    const sol = q.solution ? `\n   Original solution hint: ${q.solution.trim().slice(0, 200)}` : ''
-    return `[${i + 1}] (${q.examyear ?? '?'}) ${(q.question ?? '').trim()}\n${opts}${answer}${sol}`
+    const opts = Object.entries(q.option ?? {})
+      .map(([k, v]) => `   ${k.toUpperCase()}. ${v}`)
+      .join('\n')
+    const answer  = (q.answer ?? '').toUpperCase()
+    const hint    = q.solution ? `\n   Solution hint: ${q.solution.trim().slice(0, 200)}` : ''
+    return `Q${i + 1}. ${(q.question ?? '').trim()}\n${opts}\n   ✓ Answer: ${answer}${hint}`
   }).join('\n\n')
 
-  const mathSciWorkingsGuide = `
-"workings": Array of step-by-step strings. Each step must be a complete, readable line — not just a formula.
-Label your steps: "Given:", "Formula:", "Substitute:", "Solve:", "Answer:"
-GOOD EXAMPLE (Physics — velocity):
-  ["Given: initial velocity u = 0, acceleration a = 10 m/s², time t = 5s",
-   "Formula: v = u + at",
-   "Substitute: v = 0 + (10 × 5)",
-   "Solve: v = 50 m/s ✓"]
-BAD EXAMPLE:
-  ["Use v = u + at", "Get 50"]
-For pure recall questions with no calculation: use []`
+  const calcWorkingsGuide = `
+"steps": REQUIRED for every calculation, algebra, or numeric question. Array of step objects.
+Each step: { "title": "Short action label", "lines": ["working line 1", "working line 2", ...] }
 
-  const nonMathWorkingsGuide = `
-"workings": Always [] for this subject — no calculation steps needed.
-Put any extra clarification in the "correct" field instead.`
+RULES FOR STEPS — READ CAREFULLY:
+- "title" is a short action phrase: "Write down what we know", "Apply the formula", "Expand the brackets", "Collect like terms", "Solve for x", "Check the answer"
+- "lines" = actual working, one equation or expression per line
+- ⚠️ NEVER skip intermediate steps. Show every single line of working.
+  BAD:  { "title": "Solve", "lines": ["x = 4.75"] }    ← skips all working
+  GOOD: { "title": "Collect like terms", "lines": ["6x - 2x = 8 + 11", "4x = 19"] }
+        { "title": "Divide both sides", "lines": ["x = 19 ÷ 4", "x = 4.75"] }
+- The first step should always state the given values or write down the formula used
+- Substitution is its own step — show the numbers going in before you calculate
+- Each arithmetic operation (expansion, collection, division, evaluation) is its own step
+- Write equations in plain text — no LaTeX, no markdown
+- Use × for multiply, ÷ for divide, plain fractions like 19/4
+- Last line of the last step = the clean final answer with units if applicable
+- A student should be able to reproduce the answer by following your steps alone
 
-  return `You are helping Nigerian secondary school students prepare for ${ctx} — ${subjectName}.
+STEP COUNT GUIDE (minimum steps expected):
+  Simple substitution (e.g. v = u + at): 3 steps — write formula / substitute values / evaluate
+  Algebra (solve for x): 4–6 steps — set up / expand / collect / simplify / solve / verify
+  Geometry/mensuration: 4–5 steps — identify shape / write formula / find unknowns / substitute / compute
+  Physics/Chemistry calculation: 4–6 steps — state given / write equation / rearrange / substitute / compute / state answer with units
+  Word problem: 5+ steps — define variables / set up equations / solve step by step / interpret answer
 
-Your job is to write clear, student-friendly explanations for each question below.
-You have been given the correct answer and an original solution hint. Use these to stay accurate, but write your own explanation in simple, plain English.
+EXAMPLE (3(2x-5)+4 = 2(x+7)-6, answer A — x = 4.75):
+"steps": [
+  { "title": "Write down the equation",   "lines": ["3(2x - 5) + 4 = 2(x + 7) - 6"] },
+  { "title": "Expand the brackets",       "lines": ["6x - 15 + 4 = 2x + 14 - 6", "6x - 11 = 2x + 8"] },
+  { "title": "Collect like terms",        "lines": ["6x - 2x = 8 + 11", "4x = 19"] },
+  { "title": "Divide both sides by 4",   "lines": ["x = 19 ÷ 4", "x = 4.75"] }
+]
+For pure recall with NO calculation: "steps": []`
+
+  const nonCalcWorkingsGuide = `"steps": [] — no calculation steps needed for this subject.`
+
+  return `You are writing student-friendly solutions for ${ctx} — ${subjectName}.
+
+Below are ${rawQuestions.length} questions. For EACH one write a clear explanation.
 
 ═══════════════════════════════════════
-EXPLANATION QUALITY STANDARDS
+⚠️ CRITICAL — READ BEFORE STARTING
 ═══════════════════════════════════════
 
-Your explanations must meet these three standards:
+You MUST process questions in EXACTLY the order shown (Q1, Q2, Q3 ...).
+Do NOT skip, reorder, or group questions.
+Each output object MUST include "question_snippet" — the first 8 words of that question
+copied EXACTLY. This is used to verify each explanation matches its question.
+If question_snippet does not match the question, the explanation will be rejected.
 
-1. VERIFY FIRST
-   Start the "correct" field by confirming which answer is right and why — one sentence.
-   Then explain the concept behind it — 1 to 2 more sentences.
-   Total: 2–3 sentences maximum for "correct". No padding.
-
-2. PLAIN ENGLISH — EXPLAIN LIKE A SMART 12-YEAR-OLD WOULD UNDERSTAND
-   Avoid textbook language. Say "speed increases" not "velocity is augmented."
-   If a concept needs a real-world comparison to click, use one.
-   No long paragraphs. Short sentences. Every word earns its place.
-   GOOD: "The correct answer is B — osmosis. Water moves from a dilute solution
-         to a concentrated one through a semi-permeable membrane. Think of it like
-         water being 'pulled in' to balance things out."
-   BAD:  "The correct option is B because osmosis is a process by which solvent
-         molecules pass through a semipermeable membrane from a less concentrated
-         solution to a more concentrated one."
-
-3. NAME THE MISCONCEPTION IN WRONG OPTIONS
-   For each wrong option, explain the SPECIFIC mistake a student makes when they pick it.
-   Don't just say "this is incorrect." Say WHY a student might think it's right, and what's wrong with that thinking.
-   GOOD: "D — diffusion. Students confuse this with osmosis. Diffusion is about particles moving,
-         not specifically water through a membrane."
-   BAD:  "D is wrong because diffusion is different from osmosis."
-
-"concept" field: One short line naming the core idea being tested.
-   e.g. "Osmosis vs diffusion", "Newton's second law", "Subject-verb agreement"
-   This appears as a label above the explanation in the app.
-
-${isMathSci ? mathSciWorkingsGuide : nonMathWorkingsGuide}
-
-MATHS FORMATTING
-Wrap expressions in $…$: $v = u + at$, $\\frac{1}{2}mv^2$, $\\sqrt{x+1}$
-Use ₦ directly for Naira. Symbols: × → \\times, ÷ → \\div, π → \\pi, ≠ → \\neq
-
-DIFFICULTY GUIDE
-easy   — direct recall, one-step, straightforward
-medium — requires understanding, 2–3 steps, some reasoning
-hard   — multi-step, tricky wording, requires deep understanding
-
-TOPIC TAGGING
-Pick the single closest topic from this numbered list:
-${topicList}
+Before writing any explanation, verify:
+  1. Which question number is this? (Q1? Q2?)
+  2. What is the correct answer letter shown after "✓ Answer:"?
+  3. What is the actual text of that answer option?
+Your explanation MUST match the correct answer shown — not what you think is correct.
 
 ═══════════════════════════════════════
 QUESTIONS
@@ -745,30 +734,78 @@ QUESTIONS
 ${questionLines}
 
 ═══════════════════════════════════════
+EXPLANATION STRUCTURE
+═══════════════════════════════════════
+
+Each explanation object has these fields:
+
+"concept"      — One short phrase naming what is being tested. E.g. "Curved surface area of a cylinder", "Linear equations", "Osmosis vs diffusion"
+
+"intro"        — One sentence introducing the solution. For calculation: "Let's work through this step by step." For recall: brief context sentence.
+
+"steps"        — ${isCalc || isBio ? 'REQUIRED for calculation questions' : 'leave as []'}
+${isCalc || isBio ? calcWorkingsGuide : nonCalcWorkingsGuide}
+
+"answer_note"  — The green confirmation box the student sees.
+                 MUST start with: "The correct answer is [LETTER] — [option text]."
+                 The LETTER must match the ✓ Answer shown above for this question.
+                 Then 1–2 plain-English sentences saying why.
+                 No LaTeX. No bold. Keep it warm and clear.
+
+"study_tip"    — One short exam technique tip. Only include if genuinely useful. Otherwise "".
+
+"correct"      — Repeat answer_note here exactly (legacy field).
+
+═══════════════════════════════════════
+STYLE
+═══════════════════════════════════════
+
+- Plain English. Smart older sibling, not a textbook.
+- Equations in plain text — never LaTeX
+- × not *   ÷ not /   ² not ^2   fractions as 19/4
+- No filler. Every word earns its place.
+
+DIFFICULTY: easy = direct recall / one step · medium = 2-3 steps · hard = multi-step deep reasoning
+
+TOPIC TAGGING — pick the single closest name from this list:
+${topicList}
+
+═══════════════════════════════════════
 OUTPUT — JSON ARRAY ONLY
 ═══════════════════════════════════════
-Return ONLY a valid JSON array. No markdown, no text before or after the array.
-One object per question, in the same order as the questions above.
+
+Return ONLY a valid JSON array. No markdown fences, no text before or after.
+One object per question, in the SAME ORDER as the questions above (Q1 → index 1).
+The array must have EXACTLY ${rawQuestions.length} objects.
 
 [
   {
     "index": 1,
-    "topic_title": "exact topic name from the list above",
-    "subtopic_title": "specific subtopic if you know it, or empty string",
-    "difficulty": "easy",
+    "question_snippet": "COPY the first 8 words of Q1 here",
+    "topic_title": "exact topic name from the list",
+    "subtopic_title": "specific subtopic or empty string",
+    "difficulty": "medium",
     "explanation": {
-      "concept": "One-line core concept being tested",
-      "correct": "Verify the answer in one sentence. Then explain the concept in 1–2 more sentences. Plain English, no padding.",
-      "workings": ["Step 1 — labelled", "Step 2 — labelled", "Answer ✓"],
-      "wrong_options": {
-        "B": "Name the specific misconception — why a student picks this and what's wrong with that thinking",
-        "C": "Same — name the specific mistake",
-        "D": "Same — name the specific mistake"
-      }
+      "concept": "Curved surface area of a cylinder",
+      "intro": "Let's work through this step by step.",
+      "steps": [
+        { "title": "Write down the formula", "lines": ["CSA = 2 × π × r × h"] },
+        { "title": "Find the radius",         "lines": ["diameter = 8cm", "radius = 8 ÷ 2 = 4cm"] },
+        { "title": "Substitute and calculate","lines": ["CSA = 2 × 22/7 × 4 × 14", "CSA = 2 × 22/7 × 56", "CSA = 2 × 176", "CSA = 352 cm²"] }
+      ],
+      "answer_note": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm².",
+      "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
+      "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm²."
     }
   }
-]`
+]
+
+FINAL CHECK before submitting: scan your array. For each object, confirm:
+  • index matches Q number
+  • question_snippet matches the first 8 words of that question
+  • answer_note starts with the correct answer letter from ✓ Answer`
 }
+
 
 //
 // Merges the AI's enrichment delta onto the original SdashAPI question data.
@@ -782,8 +819,49 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
     if (e.index != null) byIndex[Number(e.index)] = e
   }
 
+  // Secondary match by question_snippet — if the AI included one and the index is off,
+  // we can still find the right question by text prefix match.
+  function snippetMatch(qText, snippet) {
+    if (!snippet || !qText) return false
+    const a = qText.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
+    const b = snippet.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
+    return a.length > 8 && b.length > 8 && a.startsWith(b.slice(0, 20))
+  }
+
   return fetchedQuestions.map((q, i) => {
-    const e = byIndex[i + 1] ?? {}
+    let e = byIndex[i + 1] ?? {}
+
+    // Verify the match — if the AI returned a question_snippet, check it matches
+    const snippet = e.question_snippet ?? ''
+    const qText   = (q.question ?? '').trim()
+    let _mismatch = false
+
+    if (snippet && !snippetMatch(qText, snippet)) {
+      // Index-based match failed the snippet check — try to find the right enrichment by snippet
+      const allEnrichments = Object.values(byIndex)
+      const betterMatch = allEnrichments.find(en =>
+        en.question_snippet && snippetMatch(qText, en.question_snippet)
+      )
+      if (betterMatch) {
+        e = betterMatch
+      } else {
+        _mismatch = true  // Flag this for the admin preview
+      }
+    }
+
+    // Secondary mismatch check: does the explanation's answer_note start with the correct answer letter?
+    // e.g. if correct_answer is "C" but answer_note says "The correct answer is A", flag it.
+    if (!_mismatch && e.explanation) {
+      const answerNote = (e.explanation.answer_note ?? e.explanation.correct ?? '').toLowerCase()
+      const correctLetter = (q.answer ?? '').toLowerCase().trim()
+      if (correctLetter && answerNote) {
+        // Look for "the correct answer is X" pattern
+        const letterMatch = answerNote.match(/correct answer is\s+([a-e])/i)
+        if (letterMatch && letterMatch[1].toLowerCase() !== correctLetter) {
+          _mismatch = true  // AI explained the wrong answer
+        }
+      }
+    }
     return {
       exam:          examType,
       subject:       subjectName,
@@ -800,14 +878,29 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
         ...(q.option?.e || q.option?.E ? { E: q.option.e ?? q.option.E } : {}),
       },
       correct_answer: (q.answer ?? '').toUpperCase(),
-      explanation: e.explanation ?? {
-        correct: q.solution?.trim() ?? '',
-        workings: [],
-        wrong_options: {},
-      },
+      explanation: e.explanation
+        ? {
+            // New schema fields
+            concept:          e.explanation.concept          ?? '',
+            intro:            e.explanation.intro            ?? '',
+            steps:            e.explanation.steps            ?? [],
+            answer_note:      e.explanation.answer_note      ?? e.explanation.correct ?? '',
+            study_tip:        e.explanation.study_tip        ?? '',
+            wrong_option_note:e.explanation.wrong_option_note ?? '',
+            // Legacy compat
+            correct:          e.explanation.correct          ?? e.explanation.answer_note ?? '',
+            workings:         e.explanation.workings         ?? [],
+            wrong_options:    e.explanation.wrong_options    ?? {},
+          }
+        : {
+            concept: '', intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
+            study_tip: '', wrong_option_note: '',
+            correct: q.solution?.trim() ?? '', workings: [], wrong_options: {},
+          },
       topic_title:    e.topic_title    ?? '',
       subtopic_title: e.subtopic_title ?? '',
       difficulty:     e.difficulty     ?? 'medium',
+      _mismatch,   // true if explanation may not match this question
     }
   })
 }
@@ -888,7 +981,9 @@ export function parseEnrichment(rawText) {
   const errors = []
   parsed.forEach((e, i) => {
     const n = e.index ?? i + 1
-    if (!e.explanation?.correct?.trim()) errors.push(`Question ${n}: explanation.correct is empty`)
+    // Accept either the new answer_note field OR the legacy correct field
+    const hasExplanation = e.explanation?.answer_note?.trim() || e.explanation?.correct?.trim()
+    if (!hasExplanation) errors.push(`Question ${n}: explanation.answer_note (or correct) is empty`)
     if (!e.topic_title?.trim())          errors.push(`Question ${n}: topic_title is missing`)
     if (!['easy','medium','hard'].includes(e.difficulty)) errors.push(`Question ${n}: difficulty must be easy / medium / hard`)
   })

@@ -40,15 +40,23 @@ function emaScore(prevScore, prevCount, sessionScore) {
 }
 
 // XP formula
+// Every attempted question earns XP — even zero score students are rewarded for trying.
+// Base: 5 XP per question attempted
+// Bonus: 10 XP per correct answer
+// Accuracy bonus: +50 XP if ≥80%, +25 XP if ≥60%
+// Mode bonus on top
+// Minimum: 5 XP (never zero — always reward the attempt)
 function calcXP(results, mode) {
-  const correct = results.filter(r => r.is_correct).length
-  const total   = results.length
-  if (!total) return 0
-  const base       = correct * 10
-  const pctRight   = Math.round((correct / total) * 100)
+  const attempted  = results.filter(r => r.selectedIdx !== null && r.selectedIdx !== undefined).length
+  const correct    = results.filter(r => r.is_correct).length
+  const total      = results.length
+  if (!total) return 5
+  const attemptXP  = attempted * 5          // 5 XP per question attempted
+  const correctXP  = correct   * 10         // 10 XP per correct answer
+  const pctRight   = total > 0 ? Math.round((correct / total) * 100) : 0
   const accuracyXP = pctRight >= 80 ? 50 : pctRight >= 60 ? 25 : 0
-  const modeBonus  = { quick5:0, weak:20, mixed:10, timed:30, mock:100 }[mode] ?? 0
-  return base + accuracyXP + modeBonus
+  const modeBonus  = { quick5:10, weak:20, mixed:10, timed:30, mock:100, practice:0, study:0 }[mode] ?? 0
+  return Math.max(5, attemptXP + correctXP + accuracyXP + modeBonus)
 }
 
 export async function POST(request) {

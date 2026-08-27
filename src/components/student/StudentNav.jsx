@@ -1,15 +1,27 @@
-// src/components/student/StudentNav.jsx
-// Shared sidebar + bottom nav used across ALL student pages.
-// Import: import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
-
 'use client'
+// src/components/student/StudentNav.jsx
+// Shared sidebar (desktop) and bottom nav (mobile) for all student pages.
+//
+// XP is read from PointsContext — no xp prop needed. Both components
+// automatically update whenever a practice session is saved because
+// setTotalPoints() is called in the session page after save.
+//
+// Import:
+//   import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
+//
+// Usage (in layout.js — active is derived from pathname):
+//   <StudentSidebar active="home" dark={dark} />
+//   <StudentBottomNav active="home" dark={dark} />
+
 import Link from 'next/link'
+import { usePoints } from '@/contexts/PointsContext'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
 const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 
+// Nav item definitions — used by both sidebar and bottom nav
 export const NAV = [
   { id:'home',        label:'Home',     href:'/student/home',        icon:'🏠', bg:'rgba(6,42,120,.1)'   },
   { id:'learn',       label:'Learn',    href:'/student/learn',       icon:'📖', bg:'rgba(24,183,242,.1)' },
@@ -21,23 +33,25 @@ export const NAV = [
 
 // ─── DESKTOP SIDEBAR ──────────────────────────────────────────────────────────
 // Props:
-//   active  — id string matching NAV (e.g. 'home', 'practice')
-//   xp      — total XP number (for level card)
-//   dark    — boolean
-export function StudentSidebar({ active = 'home', xp = 0, dark }) {
+//   active  — id string (e.g. 'home', 'practice')
+//   dark    — boolean from ThemeContext
+export function StudentSidebar({ active = 'home', dark }) {
+  const { totalPoints: xp } = usePoints()
+
   const level   = Math.floor(xp / 2000) + 1
   const xpInLvl = xp % 2000
   const xpPct   = Math.min(100, Math.round((xpInLvl / 2000) * 100))
 
   return (
     <aside style={{
-      width:220, flexShrink:0, position:'sticky', top:20,
-      height:'calc(100vh - 40px)', display:'flex', flexDirection:'column',
-      background: dark ? 'rgba(14,17,32,.97)' : 'rgba(255,255,255,.95)',
-      borderRadius:20,
-      border: dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(6,42,120,.09)',
-      boxShadow: dark ? '0 4px 32px rgba(0,0,0,.4)' : '0 4px 24px rgba(6,42,120,.09)',
-      padding:'20px 14px', backdropFilter:'blur(16px)',
+      width: 220, flexShrink: 0, position: 'sticky', top: 20,
+      height: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column',
+      background:  dark ? 'rgba(14,17,32,.97)' : 'rgba(255,255,255,.95)',
+      borderRadius: 20,
+      border:      dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(6,42,120,.09)',
+      boxShadow:   dark ? '0 4px 32px rgba(0,0,0,.4)' : '0 4px 24px rgba(6,42,120,.09)',
+      padding: '20px 14px',
+      backdropFilter: 'blur(16px)',
     }}>
 
       {/* Logo */}
@@ -51,7 +65,7 @@ export function StudentSidebar({ active = 'home', xp = 0, dark }) {
         </div>
       </div>
 
-      {/* Nav items */}
+      {/* Nav links — profile sits below a divider */}
       <div style={{ display:'flex', flexDirection:'column', gap:3, flex:1 }}>
         {NAV.filter(n => n.id !== 'profile').map(item => {
           const on = item.id === active
@@ -60,11 +74,15 @@ export function StudentSidebar({ active = 'home', xp = 0, dark }) {
               <div style={{
                 display:'flex', alignItems:'center', gap:10, padding:'10px 11px', borderRadius:13,
                 background: on ? (dark ? 'rgba(255,255,255,.08)' : 'rgba(18,100,229,.07)') : 'transparent',
-                border: on ? (dark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(18,100,229,.14)') : '1px solid transparent',
-                transition:'all .12s',
+                border:     on ? (dark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(18,100,229,.14)') : '1px solid transparent',
+                transition: 'all .12s',
               }}>
-                <div style={{ width:32, height:32, borderRadius:10, flexShrink:0, background: on ? item.bg : (dark ? 'rgba(255,255,255,.05)' : 'rgba(6,42,120,.04)'), display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>{item.icon}</div>
-                <span style={{ fontSize:13, fontWeight:on?800:600, color: on ? (dark ? '#fff' : BLUE) : 'var(--text-tert)' }}>{item.label}</span>
+                <div style={{ width:32, height:32, borderRadius:10, flexShrink:0, background: on ? item.bg : (dark ? 'rgba(255,255,255,.05)' : 'rgba(6,42,120,.04)'), display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>
+                  {item.icon}
+                </div>
+                <span style={{ fontSize:13, fontWeight:on?800:600, color: on ? (dark ? '#fff' : BLUE) : 'var(--text-tert)' }}>
+                  {item.label}
+                </span>
                 {on && <div style={{ marginLeft:'auto', width:7, height:7, borderRadius:'50%', background:ORANGE, flexShrink:0 }}/>}
               </div>
             </Link>
@@ -74,18 +92,24 @@ export function StudentSidebar({ active = 'home', xp = 0, dark }) {
         <div style={{ height:1, background:'var(--border)', margin:'8px 4px' }}/>
 
         <Link href="/student/profile" style={{ textDecoration:'none' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 11px', borderRadius:13, border:'1px solid transparent' }}>
+          <div style={{
+            display:'flex', alignItems:'center', gap:10, padding:'10px 11px', borderRadius:13,
+            background: active === 'profile' ? (dark ? 'rgba(255,255,255,.08)' : 'rgba(18,100,229,.07)') : 'transparent',
+            border:     active === 'profile' ? (dark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(18,100,229,.14)') : '1px solid transparent',
+            transition: 'all .12s',
+          }}>
             <div style={{ width:32, height:32, borderRadius:10, background: dark ? 'rgba(255,255,255,.05)' : 'rgba(6,42,120,.04)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>👤</div>
-            <span style={{ fontSize:13, fontWeight:600, color:'var(--text-tert)' }}>Profile</span>
+            <span style={{ fontSize:13, fontWeight: active === 'profile' ? 800 : 600, color: active === 'profile' ? (dark ? '#fff' : BLUE) : 'var(--text-tert)' }}>Profile</span>
+            {active === 'profile' && <div style={{ marginLeft:'auto', width:7, height:7, borderRadius:'50%', background:ORANGE, flexShrink:0 }}/>}
           </div>
         </Link>
       </div>
 
-      {/* Level / XP card */}
+      {/* Level / XP card — updates live via PointsContext */}
       <div style={{
         borderRadius:16, padding:'14px', marginTop:14,
         background: dark ? 'rgba(255,255,255,.04)' : 'rgba(18,100,229,.05)',
-        border: dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(18,100,229,.1)',
+        border:     dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(18,100,229,.1)',
       }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
           <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)' }}>Level {level}</div>
@@ -112,33 +136,35 @@ export function StudentSidebar({ active = 'home', xp = 0, dark }) {
 }
 
 // ─── MOBILE BOTTOM NAV ────────────────────────────────────────────────────────
-// Props:
-//   active — id string matching NAV
-//   dark   — boolean
+// Shows the first 5 nav items. Profile is accessible via the sidebar on desktop.
 export function StudentBottomNav({ active = 'home', dark }) {
-  const tabs = [NAV[0], NAV[1], NAV[2], NAV[3], NAV[4]]
-  const activeColor = active === 'home' ? BLUE : active === 'practice' ? ORANGE : BLUE
+  const tabs = NAV.slice(0, 5)   // home, learn, practice, leaderboard, progress
 
   return (
     <nav style={{
-      position:'fixed', bottom:0, left:0, right:0, zIndex:100, height:68,
-      background: dark ? 'rgba(10,13,28,.98)' : 'rgba(255,255,255,.98)',
-      borderTop: dark ? '1px solid rgba(255,255,255,.08)' : '1px solid rgba(6,42,120,.08)',
-      backdropFilter:'blur(20px)', display:'flex', alignItems:'center',
-      paddingBottom:'env(safe-area-inset-bottom)',
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, height: 68,
+      background:     dark ? 'rgba(10,13,28,.98)' : 'rgba(255,255,255,.98)',
+      borderTop:      dark ? '1px solid rgba(255,255,255,.08)' : '1px solid rgba(6,42,120,.08)',
+      backdropFilter: 'blur(20px)',
+      display: 'flex', alignItems: 'center',
+      paddingBottom: 'env(safe-area-inset-bottom)',
       boxShadow: dark ? '0 -4px 20px rgba(0,0,0,.4)' : '0 -4px 20px rgba(6,42,120,.06)',
     }}>
       {tabs.map(tab => {
-        const on = tab.id === active
+        const on       = tab.id === active
         const dotColor = tab.id === 'practice' ? ORANGE : BLUE
         return (
           <Link key={tab.id} href={tab.href} style={{
-            textDecoration:'none', flex:1, display:'flex', flexDirection:'column',
-            alignItems:'center', gap:3, padding:'8px 0',
-            borderTop:`2.5px solid ${on ? dotColor : 'transparent'}`,
+            textDecoration: 'none', flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 3, padding: '8px 0',
+            borderTop: `2.5px solid ${on ? dotColor : 'transparent'}`,
           }}>
-            <div style={{ width:28, height:28, borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', fontSize:on?18:16, background:on?tab.bg:'transparent', transition:'all .15s' }}>{tab.icon}</div>
-            <span style={{ fontSize:9, fontWeight:on?800:600, textTransform:'uppercase', letterSpacing:'.06em', color:on?dotColor:'var(--text-tert)' }}>{tab.label}</span>
+            <div style={{ width:28, height:28, borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', fontSize:on?18:16, background:on?tab.bg:'transparent', transition:'all .15s' }}>
+              {tab.icon}
+            </div>
+            <span style={{ fontSize:9, fontWeight:on?800:600, textTransform:'uppercase', letterSpacing:'.06em', color:on?dotColor:'var(--text-tert)' }}>
+              {tab.label}
+            </span>
           </Link>
         )
       })}

@@ -326,12 +326,43 @@ export default function SdashImportPage() {
   const [pasteText,         setPasteText]          = useState('')
   const [parsedQuestions,   setParsedQuestions]    = useState([])  // after AI paste-back
   const [parseError,        setParseError]         = useState(null)
+  const [diagramQuestions,  setDiagramQuestions]   = useState([])  // held back — need diagram images
   const [copiedPrompt,      setCopiedPrompt]       = useState(false)
   const [saving,            setSaving]             = useState(false)
   const pasteRef = useRef(null)
 
+  // ── Per-question UI state (review step) ───────────────────────────────────
+  const [hiddenIndexes,     setHiddenIndexes]      = useState(new Set())  // questions user hid in this session
+  const [previewQuestion,   setPreviewQuestion]    = useState(null)       // question to show in modal
+  const [editingTopicIdx,   setEditingTopicIdx]    = useState(null)       // question index being topic-edited
+  const [topicEditValue,    setTopicEditValue]     = useState({ topic_title: '', subtopic_title: '' })
+
+  // ── Held (diagram) questions management ───────────────────────────────────
+  const [heldGroups,        setHeldGroups]         = useState([])   // all groups from localStorage
+  const [heldEditTarget,    setHeldEditTarget]      = useState(null) // { groupKey, questionIndex }
+  const [heldEditText,      setHeldEditText]        = useState('')   // JSON edit textarea
+  const [heldEditError,     setHeldEditError]       = useState(null)
+  const [heldSendPrompt,    setHeldSendPrompt]      = useState('')   // enrichment prompt for held group
+  const [heldPasteText,     setHeldPasteText]       = useState('')
+  const [heldParseError,    setHeldParseError]      = useState(null)
+  const [heldSendGroupKey,  setHeldSendGroupKey]    = useState(null) // which group we're re-sending
+  const [heldSendStep,      setHeldSendStep]        = useState(null) // 'prompt'|'paste'|'review'
+  const [heldParsedQs,      setHeldParsedQs]        = useState([])
+  const [heldSaving,        setHeldSaving]          = useState(false)
+  const [heldCopied,        setHeldCopied]          = useState(false)
+
   // Mark as mounted (client-only) so env-dependent content renders correctly
   useEffect(() => { setMounted(true) }, [])
+
+  // Load held (diagram) questions from localStorage
+  function loadHeldGroups() {
+    try {
+      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
+      setHeldGroups(Array.isArray(held) ? held : [])
+    } catch { setHeldGroups([]) }
+  }
+
+  useEffect(() => { if (mounted) loadHeldGroups() }, [mounted])
 
   const years = []
   for (let y = CURRENT_YEAR; y >= 2001; y--) years.push(y)
@@ -436,10 +467,34 @@ export default function SdashImportPage() {
         return
       }
 
-      setFetchedQuestions(qs)
+      // ── Separate diagram questions from processable ones ──────────────────
+      // Questions with q.image truthy reference a diagram we don't have.
+      // They should NOT enter the question bank — hold them back and
+      // save them to localStorage so they can be revisited later.
+      const diagramQs   = qs.filter(q => q.image)
+      const cleanQs     = qs.filter(q => !q.image)
+
+      if (diagramQs.length) {
+        try {
+          const key  = `ep_diagram_hold_${sdashSlug}_${sdashType}_${year}`
+          const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
+          const newEntry = { key, subject: selectedSubject?.name, exam: examType, year, questions: diagramQs, savedAt: new Date().toISOString() }
+          const updated  = [...held.filter(h => h.key !== key), newEntry]
+          localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
+        } catch {}
+      }
+
+      setFetchedQuestions(cleanQs)
+      setDiagramQuestions(diagramQs)
+
+      if (!cleanQs.length) {
+        setPreviewError(`All ${qs.length} questions reference diagrams we don't have yet. They've been saved for later — try a different year.`)
+        return
+      }
+
       // Build the enrichment prompt with the full curriculum tree
       const prompt = buildSdashEnrichPrompt(
-        qs,
+        cleanQs,
         examType,
         selectedSubject?.name ?? 'Unknown Subject',
         topics
@@ -663,8 +718,303 @@ export default function SdashImportPage() {
     setImporting(false)
   }
 
+  // ── Held questions helpers ─────────────────────────────────────────────────
+
+  function deleteHeldGroup(key) {
+    try {
+      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
+      const updated = held.filter(h => h.key !== key)
+      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
+      setHeldGroups(updated)
+    } catch {}
+  }
+
+  function deleteHeldQuestion(groupKey, qIndex) {
+    try {
+      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
+      const updated = held.map(h => {
+        if (h.key !== groupKey) return h
+        const qs = [...h.questions]
+        qs.splice(qIndex, 1)
+        return { ...h, questions: qs }
+      }).filter(h => h.questions.length > 0)
+      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
+      setHeldGroups(updated)
+    } catch {}
+  }
+
+  function saveHeldEdit(groupKey, qIndex) {
+    setHeldEditError(null)
+    let parsed
+    try { parsed = JSON.parse(heldEditText) } catch (e) {
+      setHeldEditError('Invalid JSON: ' + e.message)
+      return
+    }
+    try {
+      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
+      const updated = held.map(h => {
+        if (h.key !== groupKey) return h
+        const qs = [...h.questions]
+        qs[qIndex] = { ...qs[qIndex], ...parsed }
+        return { ...h, questions: qs }
+      })
+      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
+      setHeldGroups(updated)
+      setHeldEditTarget(null)
+      setHeldEditText('')
+    } catch (e) { setHeldEditError(e.message) }
+  }
+
+  function buildHeldPrompt(group) {
+    // Build the same enrichment prompt for these formerly-held questions
+    const prompt = buildSdashEnrichPrompt(
+      group.questions,
+      group.exam,
+      group.subject,
+      topics
+    )
+    setHeldSendPrompt(prompt)
+    setHeldSendGroupKey(group.key)
+    setHeldSendStep('prompt')
+    setHeldPasteText('')
+    setHeldParseError(null)
+    setHeldParsedQs([])
+    setHeldCopied(false)
+  }
+
+  function handleHeldParsePaste(group) {
+    setHeldParseError(null)
+    const result = parseEnrichment(heldPasteText)
+    if (!result.valid) { setHeldParseError(result.errors.join('\n')); return }
+    const merged = mergeSdashEnrichment(
+      group.questions,
+      result.enrichments,
+      group.exam,
+      group.subject
+    )
+    const withMatches = merged.map(q => {
+      const match = matchTopicSubtopic(q, topics)
+      return { ...q, _topicMatch: match }
+    })
+    setHeldParsedQs(withMatches)
+    setHeldSendStep('review')
+  }
+
+  async function handleHeldSave(group) {
+    setHeldSaving(true)
+    try {
+      // find the right subjectId — look it up from loaded subjects by name
+      const matchedSubject = subjects.find(s =>
+        s.name.toLowerCase().includes(group.subject?.toLowerCase?.() ?? '') &&
+        s.exam_type === group.exam
+      ) ?? subjects.find(s => s.exam_type === group.exam)
+
+      const saveSubjectId = matchedSubject?.id ?? subjectId
+      if (!saveSubjectId) throw new Error('Cannot find subject ID — please re-select the subject on the Import tab first')
+
+      const batchRes = await fetch('/api/admin/questions/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examType: group.exam, subjectId: saveSubjectId, total: heldParsedQs.length }),
+      })
+      const batch = await batchRes.json()
+
+      const saveRes = await fetch('/api/admin/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questions: heldParsedQs,
+          examType: group.exam,
+          subjectId: saveSubjectId,
+          defaultYear: group.year,
+          batchId: batch.id ?? null,
+          source: 'past_paper',
+        }),
+      })
+      const saveData = await saveRes.json()
+      if (!saveRes.ok) throw new Error(saveData.error ?? 'Save failed')
+
+      // Remove this group from held
+      deleteHeldGroup(group.key)
+      setHeldSendStep(null)
+      setHeldSendGroupKey(null)
+      setHeldParsedQs([])
+      alert(`✅ ${saveData.saved} questions saved from held queue.`)
+    } catch (err) {
+      setHeldParseError(err.message)
+    } finally {
+      setHeldSaving(false)
+    }
+  }
+
+  const totalHeld = heldGroups.reduce((sum, g) => sum + (g.questions?.length ?? 0), 0)
+
+  // ── Hide a question (saves to DB, removes from save batch) ───────────────
+  async function hideQuestion(q, index) {
+    // Optimistically mark as hidden in the UI immediately
+    setHiddenIndexes(prev => new Set([...prev, index]))
+    try {
+      await fetch('/api/admin/questions/hidden', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_text:  q.question_text,
+          options:        q.options,
+          correct_answer: q.correct_answer,
+          explanation:    q.explanation,
+          subject_name:   q.subject ?? selectedSubject?.name,
+          exam_type:      q.exam ?? examType,
+          year:           q.year || year,
+          topic_title:    q.topic_title ?? '',
+          subtopic_title: q.subtopic_title ?? '',
+          difficulty:     q.difficulty ?? 'medium',
+          hide_reason:    'manual_review',
+          sdash_id:       q.sdash_id ?? null,
+        }),
+      })
+    } catch {
+      // Non-fatal: hide is still reflected in UI, can re-save later from Hidden tab
+    }
+  }
+
+  function unhideQuestion(index) {
+    setHiddenIndexes(prev => {
+      const next = new Set(prev)
+      next.delete(index)
+      return next
+    })
+  }
+
+  // Update topic/subtopic on a question in parsedQuestions
+  function applyTopicEdit(index) {
+    setParsedQuestions(prev => prev.map((q, i) =>
+      i === index ? { ...q, topic_title: topicEditValue.topic_title, subtopic_title: topicEditValue.subtopic_title, _topicMatch: null } : q
+    ))
+    setEditingTopicIdx(null)
+  }
+
+  // ── Preview Modal ──────────────────────────────────────────────────────────
+  function PreviewModal({ q, onClose }) {
+    if (!q) return null
+    const opts = q.options ?? {}
+    const exp  = q.explanation ?? {}
+    const steps = Array.isArray(exp.steps) ? exp.steps
+                : Array.isArray(exp.workings) ? exp.workings.map((w, i) => ({ title: `Step ${i+1}`, lines: [typeof w === 'string' ? w : w?.instruction ?? ''] }))
+                : []
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+        <div
+          className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Modal header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">Student View</span>
+              <span className="text-xs text-gray-400">{q.exam ?? examType} · {q.year || year}</span>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">×</button>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Passage (if any) */}
+            {q.passage_text && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p className="text-[11px] font-black text-gray-400 uppercase tracking-wide mb-2">Passage / Context</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{q.passage_text}</p>
+              </div>
+            )}
+
+            {/* Question */}
+            <p className="text-base font-semibold text-gray-900 leading-relaxed">{q.question_text}</p>
+
+            {/* Options */}
+            <div className="space-y-2">
+              {Object.entries(opts).map(([k, v]) => {
+                const isCorrect = k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
+                return (
+                  <div key={k} className={`flex items-start gap-3 px-4 py-3 rounded-xl border-2 text-sm transition-colors ${
+                    isCorrect ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'
+                  }`}>
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 ${
+                      isCorrect ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>{k.toUpperCase()}</span>
+                    <span className={`leading-snug ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`}>{String(v)}</span>
+                    {isCorrect && <span className="ml-auto text-green-600 font-black flex-shrink-0">✓</span>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-dashed border-gray-200 pt-4">
+              <p className="text-[11px] font-black text-gray-400 uppercase tracking-wide mb-3">Explanation (as student sees it)</p>
+
+              {/* Concept chip */}
+              {exp.concept && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold mb-3">
+                  💡 {exp.concept}
+                </div>
+              )}
+
+              {/* Intro */}
+              {exp.intro && <p className="text-sm text-gray-700 mb-3">{exp.intro}</p>}
+
+              {/* Steps */}
+              {steps.length > 0 && (
+                <div className="space-y-3 mb-3">
+                  {steps.map((step, si) => {
+                    const lines = Array.isArray(step.lines) ? step.lines : (step.instruction ? [step.instruction] : [String(step)])
+                    return (
+                      <div key={si} className="rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 border-b border-gray-200">
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">{si+1}</span>
+                          <span className="text-xs font-black text-gray-700">{step.title ?? `Step ${si+1}`}</span>
+                        </div>
+                        <div className="px-4 py-2 space-y-1">
+                          {lines.map((line, li) => (
+                            <p key={li} className="text-sm font-mono text-gray-800 leading-relaxed">{line}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Answer note */}
+              {(exp.answer_note || exp.correct) && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                  <p className="text-sm text-green-800 leading-relaxed">{exp.answer_note ?? exp.correct}</p>
+                </div>
+              )}
+
+              {/* Study tip */}
+              {exp.study_tip && (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <p className="text-[11px] font-black text-amber-700 uppercase tracking-wide mb-1">💡 Study tip</p>
+                  <p className="text-sm text-amber-800">{exp.study_tip}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Topic tag */}
+            <div className="border-t border-gray-100 pt-3 text-xs text-gray-400">
+              Topic: <span className="text-gray-600 font-medium">{q.topic_title || '—'}</span>
+              {q.subtopic_title && <> → <span className="text-gray-600 font-medium">{q.subtopic_title}</span></>}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Preview Modal */}
+      {previewQuestion && <PreviewModal q={previewQuestion} onClose={() => setPreviewQuestion(null)} />}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -681,23 +1031,18 @@ export default function SdashImportPage() {
         </div>
       </div>
 
-      {/* API key warning — only render after mount to avoid SSR/client hydration mismatch */}
-      {mounted && !process.env.NEXT_PUBLIC_SDASH_KEY_SET && (
-        <Alert type="warning">
-          ⚠️ <strong>SDASH_API_KEY</strong> is not set in your environment variables.
-          Add it to <code>.env.local</code> to enable imports.
-        </Alert>
-      )}
+
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { id: 'import', label: '⬆ Import' },
+          { id: 'held',   label: totalHeld > 0 ? `🖼️ Held (${totalHeld})` : '🖼️ Held' },
           { id: 'guide',  label: '📖 How it works' },
         ].map(t => (
           <button
             key={t.id}
-            onClick={() => setActiveTab(t.id)}
+            onClick={() => { setActiveTab(t.id); if (t.id === 'held') loadHeldGroups() }}
             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
               activeTab === t.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
@@ -715,11 +1060,9 @@ export default function SdashImportPage() {
           <div className="flex items-center gap-0">
             {[
               { n: 1, label: 'Select' },
-              { n: 2, label: 'Fetch' },
-              { n: 3, label: 'Copy Prompt' },
+              { n: 2, label: 'Copy Prompt' },
               { n: 4, label: 'Paste AI' },
-              { n: 5, label: 'Review' },
-              { n: 6, label: 'Done' },
+              { n: 5, label: 'Done' },
             ].map(({ n, label }, i, arr) => (
               <div key={n} className="flex items-center flex-1">
                 <div className="flex flex-col items-center">
@@ -868,88 +1211,73 @@ export default function SdashImportPage() {
             </div>
           )}
 
-          {/* ── STEP 2: FETCHED — show raw count + go to prompt ───────── */}
+          {/* ── STEP 2: COPY PROMPT (questions embedded inside) ──────── */}
           {enrichStep === 2 && (
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-black text-gray-700">Step 2 — Questions fetched</p>
+                <p className="text-sm font-black text-gray-700">Step 2 — Copy the prompt &amp; send to Claude or ChatGPT</p>
                 <button onClick={() => setEnrichStep(1)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
               </div>
 
               <Alert type="success">
-                ✅ Fetched <strong>{fetchedQuestions.length} questions</strong> for {selectedSubject?.name} · {examType} · {year}
+                ✅ Fetched <strong>{fetchedQuestions.length} questions</strong> ready for enrichment for {selectedSubject?.name} · {examType} · {year}
               </Alert>
 
-              {/* Raw preview */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-                  <p className="text-xs font-black text-gray-500 uppercase tracking-wide">Raw SdashAPI data (first 3)</p>
-                </div>
-                <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
-                  {fetchedQuestions.slice(0, 3).map((q, i) => (
-                    <div key={i} className="px-4 py-3">
-                      <p className="text-xs text-gray-700 font-medium line-clamp-2">{q.question}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Answer: <span className="font-bold text-green-600">{q.answer?.toUpperCase()}</span>
-                        {q.solution
-                          ? <span className="ml-2 text-gray-400">· Solution: {q.solution.slice(0, 60)}…</span>
-                          : <span className="ml-2 text-amber-500">· No solution</span>
-                        }
-                      </p>
+              {/* Diagram hold-back notice */}
+              {diagramQuestions.length > 0 && (
+                <div className="border border-amber-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200">
+                    <span className="text-base">🖼️</span>
+                    <div className="flex-1">
+                      <span className="text-xs font-black text-amber-800">
+                        {diagramQuestions.length} question{diagramQuestions.length !== 1 ? 's' : ''} held back — need diagrams
+                      </span>
+                      <p className="text-[11px] text-amber-700 mt-0.5">These reference diagrams we don&apos;t have yet. They&apos;re saved in your browser — not sent to the AI, not saved to the database.</p>
                     </div>
-                  ))}
+                  </div>
+                  <div className="divide-y divide-amber-50 max-h-40 overflow-y-auto bg-white">
+                    {diagramQuestions.map((q, i) => (
+                      <div key={i} className="px-4 py-2.5">
+                        <p className="text-xs text-gray-700 leading-snug line-clamp-2">
+                          <span className="font-bold text-amber-700 mr-1">⚠</span>
+                          {q.question}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-                <strong>Next:</strong> copy the enrichment prompt and paste it into Claude or ChatGPT
-                along with these questions. The AI will write proper explanations and suggest topic tags.
-              </div>
-
-              <button
-                onClick={() => setEnrichStep(3)}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
-              >
-                → Get enrichment prompt
-              </button>
-            </div>
-          )}
-
-          {/* ── STEP 3: COPY PROMPT ────────────────────────────────────── */}
-          {enrichStep === 3 && (
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-black text-gray-700">Step 3 — Copy prompt to Claude / ChatGPT</p>
-                <button onClick={() => setEnrichStep(2)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-1">
-                <p className="font-black">How to use this:</p>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Click <strong>Copy prompt</strong> below</li>
-                  <li>Open Claude.ai or ChatGPT in a new tab</li>
-                  <li>Paste the prompt and send</li>
-                  <li>Come back here and paste the AI&apos;s JSON response</li>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-black text-blue-800 uppercase tracking-wide">How to use this</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-xs text-blue-800">
+                  <li>Click <strong>Copy prompt</strong> below — the questions are already inside it</li>
+                  <li>Open <strong>Claude.ai or ChatGPT</strong> in a new tab</li>
+                  <li>Paste and send — one message, everything included</li>
+                  <li>Come back here and paste the AI&apos;s JSON response in the next step</li>
                 </ol>
               </div>
 
-              {/* Copy box */}
+              {/* Single copy box — prompt with questions embedded */}
               <div className="border border-indigo-200 rounded-2xl overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
-                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-                    Enrichment Prompt — {fetchedQuestions.length} questions · {selectedSubject?.name} {examType} {year}
-                  </span>
+                  <div>
+                    <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">
+                      Prompt · {fetchedQuestions.length} questions · {selectedSubject?.name} {examType} {year}
+                    </span>
+                    <p className="text-[11px] text-indigo-500 mt-0.5">Questions are embedded inside — copy and paste the whole thing</p>
+                  </div>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(enrichPrompt)
                       setCopiedPrompt(true)
                       setTimeout(() => setCopiedPrompt(false), 2500)
                     }}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                    className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                       copiedPrompt ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-500'
                     }`}
                   >
-                    {copiedPrompt ? '✓ Copied!' : 'Copy prompt'}
+                    {copiedPrompt ? '✓ Copied!' : '📋 Copy prompt'}
                   </button>
                 </div>
                 <textarea
@@ -969,11 +1297,11 @@ export default function SdashImportPage() {
             </div>
           )}
 
-          {/* ── STEP 4: PASTE AI RESPONSE ──────────────────────────────── */}
+                    {/* ── STEP 4: PASTE AI RESPONSE ──────────────────────────────── */}
           {enrichStep === 4 && parsedQuestions.length === 0 && (
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-black text-gray-700">Step 4 — Paste the AI response</p>
+                <p className="text-sm font-black text-gray-700">Step 4 — Paste the AI&apos;s JSON response</p>
                 <button onClick={() => setEnrichStep(3)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
               </div>
 
@@ -1006,84 +1334,311 @@ export default function SdashImportPage() {
             </div>
           )}
 
-          {/* ── STEP 5: TAG REVIEW ────────────────────────────────────── */}
+          {/* ── STEP 4 (review): FULL QUESTION PREVIEW ───────────────── */}
           {enrichStep === 4 && parsedQuestions.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="space-y-5">
+              {/* Header */}
+              {/* Mismatch summary */}
+              {parsedQuestions.some(q => q._mismatch) && (() => {
+                const mismatchCount = parsedQuestions.filter(q => q._mismatch).length
+                const allMismatch   = mismatchCount === parsedQuestions.length
+                return (
+                  <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <span className="text-xl flex-shrink-0">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-red-700">
+                        {mismatchCount} possible explanation mismatch{mismatchCount !== 1 ? 'es' : ''} detected
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        {allMismatch
+                          ? 'All explanations appear mismatched — the AI likely returned explanations in the wrong order. Go back and re-send the prompt to Claude.'
+                          : 'Questions highlighted in red may have the wrong explanation. The AI may have returned answers out of order. Review each carefully before saving.'}
+                      </p>
+                      {allMismatch && (
+                        <button
+                          onClick={() => { setParsedQuestions([]); setEnrichStep(2) }}
+                          className="mt-2 px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-500 transition-colors"
+                        >
+                          ← Go back and re-send prompt
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+              <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-black text-gray-900">Step 5 — Review topic tags</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {parsedQuestions.length} questions ready · check tags then save
+                  <p className="text-sm font-black text-gray-900">Step 4 — Preview every question before saving</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {parsedQuestions.length} questions · check the explanation quality, then save
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setParsedQuestions([]); setEnrichStep(4) }}
-                    className="text-xs text-gray-400 hover:text-gray-600">← Re-paste</button>
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => handleSave(parsedQuestions)}
-                    disabled={saving}
+                    onClick={() => { setParsedQuestions([]); setEnrichStep(4) }}
+                    className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 bg-white"
+                  >
+                    ← Re-paste
+                  </button>
+                  <button
+                    onClick={() => handleSave(parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)))}
+                    disabled={saving || parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)).length === 0}
                     className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-black rounded-xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-sm"
                   >
-                    {saving ? <><Spinner size="sm" /> Saving…</> : `✓ Save all ${parsedQuestions.length} questions`}
+                    {saving ? <><Spinner size="sm" /> Saving…</> : `✓ Save ${parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)).length} questions`}
                   </button>
                 </div>
               </div>
 
               {parseError && <Alert type="error">{parseError}</Alert>}
 
-              <div className="space-y-3">
+              {/* Per-question cards */}
+              <div className="space-y-4">
                 {parsedQuestions.map((q, i) => {
                   const match = q._topicMatch
                   const hasMatch = match && match.confidence > 0.1
+                  const exp = q.explanation ?? {}
+                  const wrongOpts = exp.wrong_options ?? {}
+                  const steps = Array.isArray(exp.steps) ? exp.steps : []
+                  const workings = Array.isArray(exp.workings) ? exp.workings : []
+                  const opts = q.options ?? {}
+                  const letters = ['A','B','C','D','E']
+                  const isHidden = hiddenIndexes.has(i)
+                  const isEditingTopic = editingTopicIdx === i
+
                   return (
-                    <div key={i} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm text-gray-900 font-medium leading-snug flex-1 line-clamp-3">{q.question_text}</p>
-                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                          <Badge color={q.difficulty === 'easy' ? 'green' : q.difficulty === 'hard' ? 'red' : 'amber'}>
-                            {q.difficulty}
-                          </Badge>
+                    <div key={i} className={`rounded-2xl shadow-sm overflow-hidden border-2 transition-opacity ${
+                      isHidden ? 'opacity-40 border-gray-200' : q._mismatch ? 'border-red-400' : 'border-gray-200'
+                    } bg-white`}>
+                      {/* Mismatch warning */}
+                      {q._mismatch && !isHidden && (
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border-b border-red-200">
+                          <span className="text-base">⚠️</span>
+                          <div>
+                            <span className="text-xs font-black text-red-700">Explanation mismatch detected</span>
+                            <p className="text-xs text-red-600 mt-0.5">The explanation below may belong to a different question. Review carefully or hide this question.</p>
+                          </div>
+                        </div>
+                      )}
+                      {/* Card header */}
+                      <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                            Q{i + 1}
+                          </span>
+                          {exp.concept && !isHidden && (
+                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{exp.concept}</span>
+                          )}
+                          {isHidden && <span className="text-xs text-gray-400 italic">Hidden — will not be saved</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {!isHidden && (
+                            <Badge color={q.difficulty === 'easy' ? 'green' : q.difficulty === 'hard' ? 'red' : 'amber'}>
+                              {q.difficulty ?? 'medium'}
+                            </Badge>
+                          )}
                           <Badge color="gray">{q.year || year}</Badge>
+                          {!isHidden && (
+                            <button
+                              onClick={() => setPreviewQuestion(q)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              👁 Preview
+                            </button>
+                          )}
+                          {isHidden ? (
+                            <button
+                              onClick={() => unhideQuestion(i)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-600 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              ↩ Unhide
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => hideQuestion(q, i)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-700 border border-amber-200 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
+                              title="Hide — won't be saved, stored in Hidden Questions for later"
+                            >
+                              🚫 Hide
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Topic match */}
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs ${
-                        hasMatch
-                          ? match.confidence >= 0.7 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
-                          : 'bg-red-50 border-red-200'
-                      }`}>
-                        <span className="font-black">
-                          {hasMatch ? (match.confidence >= 0.7 ? '✓' : '~') : '⚠'}
-                        </span>
-                        <span className={hasMatch ? 'text-gray-700' : 'text-red-600'}>
-                          {hasMatch
-                            ? `${match.topic?.name ?? '—'} → ${match.subtopic?.name ?? '(topic only)'} · ${Math.round(match.confidence * 100)}%`
-                            : `Untagged — topic_title: "${q.topic_title || 'missing'}"`
-                          }
-                        </span>
-                      </div>
+                      {/* Body — collapsed when hidden */}
+                      {!isHidden && (
+                        <div className="p-5 space-y-4">
+                          <p className="text-sm font-semibold text-gray-900 leading-relaxed">{q.question_text}</p>
+                          {exp.concept && (
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${
+                              q._mismatch ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-100 text-indigo-700'
+                            }`}>
+                              <span>{q._mismatch ? '⚠️' : '💡'}</span>
+                              <span>Concept: <em>{exp.concept}</em> — does this match the question above?</span>
+                            </div>
+                          )}
 
-                      {/* Explanation preview */}
-                      {q.explanation?.correct && (
-                        <p className="text-xs text-gray-500 italic line-clamp-2">{q.explanation.correct}</p>
+                          {/* Options */}
+                          {Object.keys(opts).length > 0 && (
+                            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                              {(Array.isArray(opts) ? opts.map((v, idx) => [letters[idx], v]) : Object.entries(opts)).map(([k, v]) => {
+                                const isCorrect = k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
+                                return (
+                                  <div key={k} className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-xs ${
+                                    isCorrect ? 'border-green-300 bg-green-50 text-green-800' : 'border-gray-100 bg-gray-50 text-gray-600'
+                                  }`}>
+                                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5 ${
+                                      isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
+                                    }`}>{k.toUpperCase()}</span>
+                                    <span className="leading-snug">{String(v)}</span>
+                                    {isCorrect && <span className="ml-auto font-black text-green-600 flex-shrink-0">✓</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {/* Explanation */}
+                          <div className="rounded-xl border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <div className="px-4 py-2 border-b border-indigo-100 bg-indigo-100/50">
+                              <span className="text-[11px] font-black text-indigo-700 uppercase tracking-wide">Explanation</span>
+                            </div>
+                            <div className="p-4 space-y-3">
+                              {(exp.answer_note || exp.correct) && (
+                                <div>
+                                  <p className="text-[11px] font-black text-green-700 uppercase tracking-wide mb-1">✓ Answer</p>
+                                  <p className="text-xs text-gray-700 leading-relaxed">{exp.answer_note ?? exp.correct}</p>
+                                </div>
+                              )}
+                              {steps.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide mb-1.5">Working ({steps.length} step{steps.length !== 1 ? 's' : ''})</p>
+                                  <div className="space-y-2">
+                                    {steps.map((step, si) => {
+                                      const lines = Array.isArray(step.lines) ? step.lines : [String(step)]
+                                      return (
+                                        <div key={si} className="rounded-lg bg-white border border-indigo-100 overflow-hidden">
+                                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100/40 border-b border-indigo-100">
+                                            <span className="w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[9px] font-black">{si+1}</span>
+                                            <span className="text-[11px] font-bold text-indigo-700">{step.title ?? `Step ${si+1}`}</span>
+                                          </div>
+                                          <div className="px-3 py-2 space-y-0.5">
+                                            {lines.map((line, li) => (
+                                              <p key={li} className="text-xs font-mono text-gray-800 leading-relaxed">{line}</p>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {steps.length === 0 && workings.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide mb-1.5">Working</p>
+                                  <div className="space-y-1">
+                                    {workings.map((step, si) => (
+                                      <div key={si} className="flex gap-2 text-xs text-gray-700">
+                                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center text-[9px] font-black mt-0.5">{si + 1}</span>
+                                        <span className="leading-relaxed font-mono">{typeof step === 'string' ? step : step?.instruction ?? JSON.stringify(step)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {Object.keys(wrongOpts).length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-black text-red-600 uppercase tracking-wide mb-1.5">Why wrong answers are wrong</p>
+                                  <div className="space-y-1.5">
+                                    {Object.entries(wrongOpts).map(([letter, reason]) => (
+                                      <div key={letter} className="flex gap-2 text-xs">
+                                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[9px] font-black mt-0.5">{letter.toUpperCase()}</span>
+                                        <span className="text-gray-600 leading-relaxed">{reason}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Topic tag — editable */}
+                          {isEditingTopic ? (
+                            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                              <p className="text-[11px] font-black text-indigo-700 uppercase tracking-wide">Edit topic tag</p>
+                              <input type="text" placeholder="Topic (e.g. Forces and Motion)"
+                                value={topicEditValue.topic_title}
+                                onChange={e => setTopicEditValue(v => ({ ...v, topic_title: e.target.value }))}
+                                className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                              />
+                              <input type="text" placeholder="Subtopic (e.g. Newton's Laws)"
+                                value={topicEditValue.subtopic_title}
+                                onChange={e => setTopicEditValue(v => ({ ...v, subtopic_title: e.target.value }))}
+                                className="w-full px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                              />
+                              {topics.length > 0 && (
+                                <div className="max-h-28 overflow-y-auto space-y-0.5 border border-indigo-100 rounded-lg bg-white p-1">
+                                  <p className="text-[10px] text-indigo-400 font-bold px-1 pt-0.5">Tap to fill from curriculum:</p>
+                                  {topics.filter(t => !topicEditValue.topic_title || t.name.toLowerCase().includes(topicEditValue.topic_title.toLowerCase())).slice(0, 15).map(t => (
+                                    <button key={t.id} onClick={() => setTopicEditValue(v => ({ ...v, topic_title: t.name }))}
+                                      className="block w-full text-left text-[11px] px-2 py-1 rounded hover:bg-indigo-50 text-indigo-700 truncate">
+                                      {t.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <button onClick={() => applyTopicEdit(i)}
+                                  className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-500 transition-colors">✓ Apply</button>
+                                <button onClick={() => setEditingTopicIdx(null)}
+                                  className="px-3 py-1.5 border border-gray-200 text-xs font-bold text-gray-600 rounded-lg hover:bg-gray-50">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs cursor-pointer group hover:shadow-sm transition-shadow ${
+                                hasMatch ? (match.confidence >= 0.7 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200') : 'bg-red-50 border-red-200'
+                              }`}
+                              onClick={() => { setEditingTopicIdx(i); setTopicEditValue({ topic_title: q.topic_title ?? '', subtopic_title: q.subtopic_title ?? '' }) }}
+                            >
+                              <span className="font-black flex-shrink-0">{hasMatch ? (match.confidence >= 0.7 ? '✓' : '~') : '⚠'}</span>
+                              <span className={`${hasMatch ? 'text-gray-700' : 'text-red-600'} min-w-0 flex-1 truncate`}>
+                                {q.topic_title
+                                  ? `${q.topic_title}${q.subtopic_title ? ' → ' + q.subtopic_title : ''}${hasMatch ? ' · ' + Math.round(match.confidence * 100) + '%' : ' (manual)'}`
+                                  : 'Untagged — click to add topic'}
+                              </span>
+                              <span className="text-gray-400 group-hover:text-indigo-600 flex-shrink-0 ml-auto text-[11px] font-bold">✏️ Edit</span>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )
                 })}
               </div>
 
-              <button
-                onClick={() => handleSave(parsedQuestions)}
-                disabled={saving}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white text-sm font-black rounded-xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-sm"
-              >
-                {saving ? <><Spinner size="sm" /> Saving…</> : `✓ Save all ${parsedQuestions.length} questions`}
-              </button>
+              {/* Sticky save bar at the bottom */}
+              <div className="sticky bottom-4 z-10 space-y-2">
+                {hiddenIndexes.size > 0 && (
+                  <div className="text-center text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                    {hiddenIndexes.size} question{hiddenIndexes.size !== 1 ? 's' : ''} hidden — they will not be saved. Find them in Hidden Questions later.
+                  </div>
+                )}
+                <button
+                  onClick={() => handleSave(parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)))}
+                  disabled={saving || parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)).length === 0}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-green-600 text-white text-sm font-black rounded-2xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-lg"
+                >
+                  {saving
+                    ? <><Spinner size="sm" /> Saving questions…</>
+                    : `✓ Save ${parsedQuestions.filter((_, i) => !hiddenIndexes.has(i)).length} of ${parsedQuestions.length} questions`
+                  }
+                </button>
+              </div>
             </div>
           )}
 
-          {/* ── STEP 6: DONE ──────────────────────────────────────────── */}
+          {/* ── STEP 5: DONE ──────────────────────────────────────────── */}
           {enrichStep === 5 && importResult && (
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
               <Alert type="success">
@@ -1109,6 +1664,207 @@ export default function SdashImportPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── HELD (DIAGRAM) QUESTIONS TAB ───────────────────────────────── */}
+      {activeTab === 'held' && (
+        <div className="space-y-6">
+          <div>
+            <p className="text-sm font-black text-gray-700">Questions waiting for diagram images</p>
+            <p className="text-xs text-gray-500 mt-1">
+              These questions were held back during import because they reference a diagram.
+              Edit them to add context, then send them through the enrichment flow and save them.
+            </p>
+          </div>
+
+          {heldGroups.length === 0 && (
+            <Alert type="info">No held questions. When questions with diagrams are filtered during import, they&apos;ll appear here.</Alert>
+          )}
+
+          {/* If we're in send-prompt or review mode for a group */}
+          {heldSendStep && (() => {
+            const group = heldGroups.find(g => g.key === heldSendGroupKey)
+            if (!group) return null
+            return (
+              <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-black text-gray-700">
+                    {heldSendStep === 'prompt' ? 'Copy prompt → send to Claude or ChatGPT' : 'Review and save'}
+                  </p>
+                  <button onClick={() => { setHeldSendStep(null); setHeldSendGroupKey(null); setHeldParsedQs([]) }}
+                    className="text-xs text-gray-400 hover:text-gray-600">← Back to list</button>
+                </div>
+
+                <Alert type="info">
+                  {group.subject} · {group.exam} · {group.year} · {group.questions.length} questions
+                </Alert>
+
+                {heldSendStep === 'prompt' && (
+                  <>
+                    <div className="border border-indigo-200 rounded-2xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
+                        <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">Enrichment Prompt</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(heldSendPrompt); setHeldCopied(true); setTimeout(() => setHeldCopied(false), 2500) }}
+                          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${heldCopied ? 'bg-green-100 text-green-700' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+                        >{heldCopied ? '✓ Copied!' : '📋 Copy prompt'}</button>
+                      </div>
+                      <textarea readOnly value={heldSendPrompt}
+                        className="w-full text-xs font-mono text-gray-600 bg-white p-4 resize-none focus:outline-none" rows={8} />
+                    </div>
+                    <button onClick={() => setHeldSendStep('paste')}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm">
+                      → I&apos;ve got the AI response — paste it now
+                    </button>
+                  </>
+                )}
+
+                {heldSendStep === 'paste' && heldParsedQs.length === 0 && (
+                  <>
+                    <textarea
+                      value={heldPasteText}
+                      onChange={e => { setHeldPasteText(e.target.value); setHeldParseError(null) }}
+                      placeholder={'[\n  {\n    "index": 1,\n    ...\n  }\n]'}
+                      className="w-full h-48 text-xs font-mono text-gray-700 border border-gray-200 rounded-xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    {heldParseError && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                        <pre className="text-xs text-red-600 whitespace-pre-wrap">{heldParseError}</pre>
+                      </div>
+                    )}
+                    <button onClick={() => handleHeldParsePaste(group)} disabled={!heldPasteText.trim()}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 disabled:opacity-40 transition-colors shadow-sm">
+                      → Parse and review
+                    </button>
+                  </>
+                )}
+
+                {heldSendStep === 'review' && heldParsedQs.length > 0 && (
+                  <div className="space-y-4">
+                    {heldParsedQs.some(q => q._mismatch) && (
+                      <Alert type="error">
+                        ⚠️ {heldParsedQs.filter(q => q._mismatch).length} possible explanation mismatch(es) detected. Review each highlighted question carefully.
+                      </Alert>
+                    )}
+                    {heldParseError && <Alert type="error">{heldParseError}</Alert>}
+                    <div className="space-y-3">
+                      {heldParsedQs.map((q, i) => (
+                        <div key={i} className={`rounded-xl border-2 p-4 space-y-2 ${q._mismatch ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'}`}>
+                          {q._mismatch && <p className="text-xs font-black text-red-600">⚠️ Explanation mismatch — verify this one</p>}
+                          <p className="text-sm font-semibold text-gray-900">{q.question_text}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(q.options ?? {}).map(([k, v]) => (
+                              <span key={k} className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${k === q.correct_answer ? 'bg-green-100 text-green-700 font-bold' : 'bg-gray-100 text-gray-500'}`}>
+                                {k}: {String(v).slice(0, 40)}
+                              </span>
+                            ))}
+                          </div>
+                          {q.explanation?.answer_note && (
+                            <p className="text-xs text-indigo-700 italic">{q.explanation.answer_note}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => handleHeldSave(group)} disabled={heldSaving}
+                      className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-green-600 text-white text-sm font-black rounded-2xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-lg">
+                      {heldSaving ? <><Spinner size="sm" /> Saving…</> : `✓ Save all ${heldParsedQs.length} questions`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Group list */}
+          {!heldSendStep && heldGroups.map(group => (
+            <div key={group.key} className="bg-white border border-amber-200 rounded-2xl shadow-sm overflow-hidden">
+              {/* Group header */}
+              <div className="flex items-center justify-between px-5 py-3 bg-amber-50 border-b border-amber-200">
+                <div>
+                  <p className="text-sm font-black text-amber-900">
+                    {group.subject} · {group.exam} · {group.year}
+                  </p>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    {group.questions?.length ?? 0} question{group.questions?.length !== 1 ? 's' : ''} · saved {new Date(group.savedAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => buildHeldPrompt(group)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-500 transition-colors"
+                  >
+                    → Enrich &amp; Import
+                  </button>
+                  <button onClick={() => { if (confirm('Delete this entire group?')) deleteHeldGroup(group.key) }}
+                    className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">
+                    🗑 Delete group
+                  </button>
+                </div>
+              </div>
+
+              {/* Question list */}
+              <div className="divide-y divide-gray-50">
+                {(group.questions ?? []).map((q, qi) => {
+                  const isEditing = heldEditTarget?.groupKey === group.key && heldEditTarget?.questionIndex === qi
+                  return (
+                    <div key={qi} className="px-5 py-4 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm text-gray-800 leading-snug flex-1">{q.question}</p>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => {
+                              if (isEditing) {
+                                setHeldEditTarget(null)
+                                setHeldEditText('')
+                                setHeldEditError(null)
+                              } else {
+                                setHeldEditTarget({ groupKey: group.key, questionIndex: qi })
+                                setHeldEditText(JSON.stringify(q, null, 2))
+                                setHeldEditError(null)
+                              }
+                            }}
+                            className="text-xs text-indigo-500 hover:text-indigo-700 border border-indigo-100 rounded-lg px-2 py-1"
+                          >{isEditing ? 'Cancel' : '✏️ Edit'}</button>
+                          <button onClick={() => { if (confirm('Remove this question from the held queue?')) deleteHeldQuestion(group.key, qi) }}
+                            className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Option pills */}
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(q.option ?? {}).map(([k, v]) => (
+                          <span key={k} className={`text-[11px] px-2 py-0.5 rounded-full ${k === q.answer ? 'bg-green-100 text-green-700 font-bold' : 'bg-gray-100 text-gray-500'}`}>
+                            {k.toUpperCase()}: {String(v ?? '').slice(0, 35)}
+                          </span>
+                        ))}
+                        <Badge color="blue">🖼 Has image</Badge>
+                      </div>
+
+                      {/* Edit textarea */}
+                      {isEditing && (
+                        <div className="space-y-2 mt-2">
+                          <p className="text-[11px] text-gray-500">Edit the question JSON — you can update the text, options, or answer. Add an <code className="bg-gray-100 px-1 rounded">image_description</code> field to describe the diagram so the AI can explain it.</p>
+                          <textarea
+                            value={heldEditText}
+                            onChange={e => setHeldEditText(e.target.value)}
+                            className="w-full h-48 text-xs font-mono text-gray-700 border border-indigo-200 rounded-xl p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          />
+                          {heldEditError && <p className="text-xs text-red-600 font-mono">{heldEditError}</p>}
+                          <button onClick={() => saveHeldEdit(group.key, qi)}
+                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-500 transition-colors">
+                            ✓ Save edit
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
