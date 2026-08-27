@@ -1,8 +1,5 @@
 'use client'
-// src/app/student/practice/page.js — v13
-// Full redesign. Shared sidebar/nav via StudentNav component.
-// No WAEC/JAMB switcher on the main page — exam selection lives inside the session setup sheet.
-// Brand-new PracticeSetupSheet replacing the old modal.
+// src/app/student/practice/page.js — v13 + subject picker + goals sheet
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -11,7 +8,6 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
 import Link from 'next/link'
 
-// ─── BRAND ────────────────────────────────────────────────────────────────────
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
 const CYAN   = '#18B7F2'
@@ -19,6 +15,7 @@ const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
 const PURPLE = '#7C3AED'
+const RED    = '#f43f5e'
 
 const ACCENT = {
   'Chemistry':'#9b7ae0','Physics':'#18B7F2','Biology':'#4ade80',
@@ -51,7 +48,6 @@ function pickDefault(subjects, exam) {
   return subjects[0]
 }
 
-// ─── SHARED BG ───────────────────────────────────────────────────────────────
 function AppBackground({ dark }) {
   return (
     <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
@@ -71,7 +67,6 @@ function AppBackground({ dark }) {
   )
 }
 
-// ─── SHARED CARD ─────────────────────────────────────────────────────────────
 function Card({ children, style={} }) {
   return <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 2px 16px rgba(6,42,120,.06)', overflow:'hidden', ...style }}>{children}</div>
 }
@@ -85,7 +80,6 @@ function SecLabel({ children, right }) {
   )
 }
 
-// ─── DESKTOP TOPBAR (identical pattern to home) ────────────────────────────────
 function DesktopTopbar({ name, xp, dark, toggle }) {
   const level = Math.floor((xp||0) / 2000) + 1
   const initials = (name||'EX').slice(0,2).toUpperCase()
@@ -125,8 +119,7 @@ function DesktopTopbar({ name, xp, dark, toggle }) {
   )
 }
 
-// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
-function MobileTopbar({ dark, toggle }) {
+function MobileTopbar({ dark, toggle, onSubjects, onGoals }) {
   return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -135,11 +128,13 @@ function MobileTopbar({ dark, toggle }) {
         </div>
         <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>Practice</span>
       </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
-          <span style={{ fontSize:13 }}>⚡</span>
-          <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>2,840</span>
-        </div>
+      <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+        <button onClick={onSubjects} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 11px', borderRadius:999, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700, color:'var(--text-tert)' }}>
+          📚 Subjects
+        </button>
+        <button onClick={onGoals} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 11px', borderRadius:999, border:`1px solid ${GOLD}35`, background:`${GOLD}10`, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700, color:GOLD }}>
+          🎯 Goals
+        </button>
         <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
           {dark
             ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -151,7 +146,6 @@ function MobileTopbar({ dark, toggle }) {
   )
 }
 
-// ─── HERO BANNER ─────────────────────────────────────────────────────────────
 function HeroBanner({ name, dark }) {
   return (
     <div style={{ borderRadius:22, overflow:'hidden', position:'relative', background:dark?`linear-gradient(135deg,${NAVY} 0%,#0a1f5e 60%,#0e2875 100%)`:`linear-gradient(135deg,${NAVY} 0%,#0c2360 50%,#1040a0 100%)`, padding:'22px 24px', display:'flex', alignItems:'center', minHeight:110 }}>
@@ -170,7 +164,6 @@ function HeroBanner({ name, dark }) {
   )
 }
 
-// ─── DAILY QUESTS ─────────────────────────────────────────────────────────────
 const QUEST_DATA = [
   { id:'algebra',   label:'Solve 8 Algebra questions',  xp:20, mode:'quick5' },
   { id:'bio-speed', label:'Biology speed round',          xp:15, mode:'timed',  sub:'10 questions · 60 sec' },
@@ -181,7 +174,6 @@ const QUEST_DATA = [
 function DailyQuests({ onStart, dark }) {
   const [done, setDone] = useState({ algebra:true, 'bio-speed':false, chem60:true, lesson:false })
   const count = Object.values(done).filter(Boolean).length
-
   return (
     <Card>
       <div style={{ padding:'18px 20px' }}>
@@ -212,7 +204,6 @@ function DailyQuests({ onStart, dark }) {
             </div>
           )
         })}
-        {/* Streak row */}
         <div style={{ marginTop:14, padding:'12px 14px', borderRadius:13, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <div style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)', marginBottom:2 }}>Daily XP Goal</div>
@@ -226,11 +217,9 @@ function DailyQuests({ onStart, dark }) {
             <div style={{ fontSize:10, color:'var(--text-tert)' }}>current streak</div>
           </div>
         </div>
-        {/* XP bar */}
         <div style={{ marginTop:10, height:7, borderRadius:999, background:dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.08)', overflow:'hidden' }}>
           <div style={{ height:'100%', width:'80%', borderRadius:999, background:`linear-gradient(90deg,${BLUE},${CYAN})` }}/>
         </div>
-        {/* Week dots */}
         <div style={{ display:'flex', gap:4, marginTop:10, justifyContent:'space-between' }}>
           {['M','T','W','T','F','S','S'].map((d,i)=>(
             <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
@@ -249,12 +238,11 @@ function DailyQuests({ onStart, dark }) {
   )
 }
 
-// ─── PRACTICE MODE CARDS ─────────────────────────────────────────────────────
 const MODES = [
-  { key:'quick5', iconBg:`linear-gradient(135deg,${BLUE},#0a4fc8)`,   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>, label:'Topic Practice',  desc:'Practice by topic',          body:'Focus on specific topics and sharpen your skills.', xp:'+50 XP', color:BLUE,   shadow:'#0a3fa0' },
-  { key:'timed',  iconBg:`linear-gradient(135deg,${ORANGE},#d94e00)`, icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" strokeWidth="2"/><path d="M12 9v4l3 2" stroke="#fff" strokeWidth="2" strokeLinecap="round"/><path d="M9 2h6M12 2v3" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>, label:'Speed Rounds',    desc:'Timed per question',         body:'Answer questions with a set time per question.',   xp:'+60 XP', color:ORANGE, shadow:'#b84200' },
-  { key:'mixed',  iconBg:`linear-gradient(135deg,${PURPLE},#5b21b6)`, icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M16 3l5 5-5 5M3 8h18M8 21l-5-5 5-5M21 16H3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, label:'Mixed Practice',  desc:'Mix topics & subjects',      body:'Get questions from multiple topics and subjects.',  xp:'+35 XP', color:PURPLE, shadow:'#4c1d95' },
-  { key:'mock',   iconBg:`linear-gradient(135deg,${BLUE},${NAVY})`,   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>, label:'Mock Exam',      desc:'Full exam simulation',       body:'Simulate real exams under actual exam conditions.', xp:'+200 XP',color:NAVY,   shadow:'#031440' },
+  { key:'quick5', iconBg:`linear-gradient(135deg,${BLUE},#0a4fc8)`,   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>, label:'Topic Practice',  desc:'Practice by topic',       body:'Focus on specific topics and sharpen your skills.', xp:'+50 XP', color:BLUE,   shadow:'#0a3fa0' },
+  { key:'timed',  iconBg:`linear-gradient(135deg,${ORANGE},#d94e00)`, icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" strokeWidth="2"/><path d="M12 9v4l3 2" stroke="#fff" strokeWidth="2" strokeLinecap="round"/><path d="M9 2h6M12 2v3" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>, label:'Speed Rounds',    desc:'Timed per question',      body:'Answer questions with a set time per question.',   xp:'+60 XP', color:ORANGE, shadow:'#b84200' },
+  { key:'mixed',  iconBg:`linear-gradient(135deg,${PURPLE},#5b21b6)`, icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M16 3l5 5-5 5M3 8h18M8 21l-5-5 5-5M21 16H3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, label:'Mixed Practice',  desc:'Mix topics & subjects',   body:'Get questions from multiple topics and subjects.',  xp:'+35 XP', color:PURPLE, shadow:'#4c1d95' },
+  { key:'mock',   iconBg:`linear-gradient(135deg,${BLUE},${NAVY})`,   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>, label:'Mock Exam',      desc:'Full exam simulation',    body:'Simulate real exams under actual exam conditions.', xp:'+200 XP',color:NAVY,   shadow:'#031440' },
 ]
 
 function PracticeModeCards({ onStart, onMock, dark }) {
@@ -283,7 +271,6 @@ function PracticeModeCards({ onStart, onMock, dark }) {
   )
 }
 
-// ─── RECENT SESSIONS ──────────────────────────────────────────────────────────
 function RecentSessions({ history, dark }) {
   if (!history.length) return (
     <Card style={{ padding:'28px 20px', textAlign:'center' }}>
@@ -322,7 +309,6 @@ function RecentSessions({ history, dark }) {
   )
 }
 
-// ─── CONSISTENCY BANNER ───────────────────────────────────────────────────────
 function ConsistencyBanner() {
   return (
     <div style={{ borderRadius:20, background:'rgba(255,184,0,.06)', border:`1px solid ${GOLD}30`, padding:'20px 24px', display:'flex', alignItems:'center', gap:16, overflow:'hidden', position:'relative' }}>
@@ -337,7 +323,6 @@ function ConsistencyBanner() {
   )
 }
 
-// ─── BUILD HISTORY ────────────────────────────────────────────────────────────
 function buildHistory(attempts) {
   if (!attempts?.length) return []
   const sessions=[]; let sess=null
@@ -352,12 +337,251 @@ function buildHistory(attempts) {
   return sessions.slice(0,8).map(s=>({...s,pct:s.count?Math.round((s.correct/s.count)*100):0}))
 }
 
-// ─── BRAND-NEW PRACTICE SETUP SHEET ──────────────────────────────────────────
-// Completely fresh design: full-screen step flow on mobile, centered modal on desktop.
-// Step 1: Pick exam type (WAEC / JAMB) + mode
-// Step 2: Pick subject (+ topic for weak-areas)
-// Step 3: Configure (count / time) + launch
+// ─── SUBJECT PICKER SHEET ─────────────────────────────────────────────────────
+// Opens as a separate bottom sheet so the student can add/change subjects
+// without leaving the practice page or going to profile.
+function SubjectPickerSheet({ exam, onExamChange, currentSubjectNames, onClose, onSaved, dark }) {
+  const [allAvail,  setAllAvail]  = useState([])
+  const [selected,  setSelected]  = useState(new Set(currentSubjectNames))
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [error,     setError]     = useState('')
 
+  // Reload available subjects when exam tab changes
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/admin/subjects?exam=${exam}&active=true&limit=60`)
+      .then(r => r.json())
+      .then(d => setAllAvail(d.subjects ?? d ?? []))
+      .catch(() => setAllAvail([]))
+      .finally(() => setLoading(false))
+  }, [exam])
+
+  function toggle(name) {
+    setSelected(prev => { const s = new Set(prev); s.has(name) ? s.delete(name) : s.add(name); return s })
+  }
+
+  async function save() {
+    if (!selected.size) { setError('Select at least one subject.'); return }
+    setSaving(true); setError('')
+    try {
+      const r = await fetch('/api/student/subjects', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exam, subjects: [...selected] }),
+      })
+      if (!r.ok) throw new Error()
+      onSaved(exam, [...selected])
+    } catch { setError('Could not save. Please try again.') }
+    finally { setSaving(false) }
+  }
+
+  const selCount = selected.size
+
+  return (
+    <>
+      <style>{`
+        .spb{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:flex-end;flex-direction:column}
+        .sps{width:100%;max-width:540px;background:var(--bg-card);border-radius:26px 26px 0 0;border-top:1px solid var(--border);max-height:92vh;display:flex;flex-direction:column;animation:su .28s cubic-bezier(.22,.61,.36,1)}
+        @keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+        @media(min-width:768px){.spb{justify-content:center}.sps{border-radius:22px;border:1px solid var(--border);max-height:84vh;animation:fi .22s ease}}
+        @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:.6}50%{opacity:.3}}
+      `}</style>
+      <div className="spb" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="sps">
+          <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 0' }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
+          </div>
+          <div style={{ padding:'14px 22px 12px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid var(--border)' }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>My subjects</div>
+              <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>
+                {selCount > 0 ? <><span style={{ fontWeight:800, color:BLUE }}>{selCount}</span> selected for {exam}</> : `Choose your ${exam} subjects`}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width:32, height:32, borderRadius:'50%', background:'var(--bg-subtle)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text-tert)', fontFamily:'inherit' }}>×</button>
+          </div>
+
+          {/* Exam tabs */}
+          <div style={{ padding:'12px 22px 0' }}>
+            <div style={{ display:'flex', background:'var(--bg-subtle)', borderRadius:12, padding:3, border:'1px solid var(--border)' }}>
+              {['WAEC','JAMB'].map(e => (
+                <button key={e} onClick={() => { onExamChange(e); setSelected(new Set(currentSubjectNames)) }} style={{ flex:1, padding:'8px 0', borderRadius:9, fontSize:13, fontWeight:800, border:'none', cursor:'pointer', fontFamily:'inherit', background:exam===e?BLUE:'transparent', color:exam===e?'#fff':'var(--text-tert)', transition:'all .15s' }}>{e}</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex:1, overflowY:'auto', padding:'16px 22px' }}>
+            {loading ? (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                {[...Array(8)].map((_,i) => (
+                  <div key={i} style={{ height:88, borderRadius:16, background:'var(--bg-subtle)', animation:'pulse 1.4s infinite' }}/>
+                ))}
+              </div>
+            ) : !allAvail.length ? (
+              <div style={{ textAlign:'center', padding:'32px 0' }}>
+                <div style={{ fontSize:32, marginBottom:10 }}>📚</div>
+                <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:6 }}>No {exam} subjects yet</div>
+                <div style={{ fontSize:12, color:'var(--text-tert)' }}>Ask your admin to add subjects for {exam}.</div>
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                {allAvail.map(sub => {
+                  const a  = getAccent(sub.name)
+                  const on = selected.has(sub.name)
+                  return (
+                    <button key={sub.id ?? sub.name} onClick={() => toggle(sub.name)} style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'14px 13px', borderRadius:16, border:`2px solid ${on ? a : 'var(--border)'}`, background:on ? `${a}10` : 'var(--bg-subtle)', cursor:'pointer', textAlign:'left', fontFamily:'inherit', transition:'all .12s', position:'relative' }}>
+                      {on && (
+                        <div style={{ position:'absolute', top:9, right:9, width:20, height:20, borderRadius:'50%', background:a, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                      )}
+                      <div style={{ fontSize:22, marginBottom:8 }}>{getIcon(sub.name)}</div>
+                      <div style={{ fontSize:12, fontWeight:800, color:on ? a : 'var(--text-prim)', lineHeight:1.3, paddingRight:on?20:0 }}>{sub.name}</div>
+                      <div style={{ fontSize:10, marginTop:3, color: sub.question_count > 0 ? 'var(--text-tert)' : ORANGE, fontWeight:600 }}>
+                        {sub.question_count > 0 ? `${sub.question_count.toLocaleString()} questions` : 'Coming soon'}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div style={{ margin:'0 22px', padding:'10px 14px', borderRadius:11, background:`${RED}12`, border:`1px solid ${RED}30`, fontSize:13, color:RED }}>{error}</div>
+          )}
+
+          <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)' }}>
+            <button onClick={save} disabled={saving || selCount === 0}
+              style={{ width:'100%', padding:'14px 0', borderRadius:14, border:'none', cursor:saving||selCount===0?'not-allowed':'pointer', background:selCount===0?'var(--border)':BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:selCount>0?`0 5px 0 #0a3fa0,0 8px 20px ${BLUE}40`:'none', transition:'all .12s' }}>
+              {saving ? 'Saving…' : selCount === 0 ? 'Select at least one subject' : `Save ${selCount} subject${selCount!==1?'s':''} for ${exam} →`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── GOALS SHEET ──────────────────────────────────────────────────────────────
+// Clean, purpose-built sheet. Two sections: WAEC (how many A's) and JAMB (target score).
+// No recycled code — built fresh and specific to this use case.
+function GoalsSheet({ profile, onClose, onSaved, dark }) {
+  const [waecAs,   setWaecAs]   = useState(profile?.target_waec ?? '')
+  const [jambScore,setJambScore]= useState(profile?.target_jamb ? String(profile.target_jamb) : '')
+  const [saving,   setSaving]   = useState(false)
+  const [saved,    setSaved]    = useState(false)
+  const [error,    setError]    = useState('')
+
+  const WAEC_OPTIONS = ['1 A','2 A\'s','3 A\'s','4 A\'s','5 A\'s','6 A\'s','7 A\'s','8 A\'s','9 A\'s']
+  const JAMB_OPTIONS = ['180','200','220','240','250','260','270','280','300','320','350']
+
+  async function save() {
+    setSaving(true); setError('')
+    try {
+      const supabase = createClient()
+      const { error: err } = await supabase.from('profiles').update({
+        target_waec: waecAs || null,
+        target_jamb: jambScore ? parseInt(jambScore) : null,
+      }).eq('id', profile.id)
+      if (err) throw err
+      setSaved(true)
+      setTimeout(() => { onSaved({ target_waec: waecAs, target_jamb: jambScore }); onClose() }, 900)
+    } catch { setError('Could not save. Please try again.') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <>
+      <style>{`
+        .gb{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:flex-end;flex-direction:column}
+        .gs{width:100%;max-width:540px;background:var(--bg-card);border-radius:26px 26px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;animation:gsu .28s cubic-bezier(.22,.61,.36,1)}
+        @keyframes gsu{from{transform:translateY(100%)}to{transform:translateY(0)}}
+        @media(min-width:768px){.gb{justify-content:center}.gs{border-radius:22px;border:1px solid var(--border);animation:gfi .22s ease}}
+        @keyframes gfi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+      `}</style>
+      <div className="gb" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="gs">
+          <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 0' }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
+          </div>
+          <div style={{ padding:'14px 22px 12px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid var(--border)' }}>
+            <div>
+              <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>My exam goals</div>
+              <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>Set what you want to achieve</div>
+            </div>
+            <button onClick={onClose} style={{ width:32, height:32, borderRadius:'50%', background:'var(--bg-subtle)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text-tert)', fontFamily:'inherit' }}>×</button>
+          </div>
+
+          <div style={{ padding:'22px', display:'flex', flexDirection:'column', gap:28 }}>
+            {/* WAEC */}
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                <div style={{ width:28, height:28, borderRadius:8, background:`${BLUE}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>🎓</div>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>WAEC target</div>
+                  <div style={{ fontSize:11, color:'var(--text-tert)' }}>How many A grades do you want?</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:10 }}>
+                {WAEC_OPTIONS.map(opt => {
+                  const on = waecAs === opt
+                  return (
+                    <button key={opt} onClick={() => setWaecAs(on ? '' : opt)} style={{ padding:'9px 15px', borderRadius:999, border:`2px solid ${on ? BLUE : 'var(--border)'}`, background:on ? `${BLUE}12` : 'var(--bg-subtle)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:on ? 800 : 600, color:on ? BLUE : 'var(--text-sec)', transition:'all .12s' }}>{opt}</button>
+                  )
+                })}
+              </div>
+              {waecAs && (
+                <div style={{ marginTop:10, padding:'10px 12px', borderRadius:11, background:`${BLUE}08`, border:`1px solid ${BLUE}20`, fontSize:12, color:BLUE, fontWeight:700 }}>
+                  🎯 Target: {waecAs} in WAEC
+                </div>
+              )}
+            </div>
+
+            {/* JAMB */}
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                <div style={{ width:28, height:28, borderRadius:8, background:`${ORANGE}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>📋</div>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>JAMB target score</div>
+                  <div style={{ fontSize:11, color:'var(--text-tert)' }}>Out of 400 — 4 subjects × 100 marks each</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:10 }}>
+                {JAMB_OPTIONS.map(score => {
+                  const on = jambScore === score
+                  return (
+                    <button key={score} onClick={() => setJambScore(on ? '' : score)} style={{ padding:'9px 15px', borderRadius:999, border:`2px solid ${on ? ORANGE : 'var(--border)'}`, background:on ? `${ORANGE}12` : 'var(--bg-subtle)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:on ? 800 : 600, color:on ? ORANGE : 'var(--text-sec)', transition:'all .12s' }}>{score}+</button>
+                  )
+                })}
+              </div>
+              {jambScore && (
+                <div style={{ marginTop:10, padding:'10px 12px', borderRadius:11, background:`${ORANGE}08`, border:`1px solid ${ORANGE}20`, fontSize:12, color:ORANGE, fontWeight:700 }}>
+                  🎯 Target: {jambScore}+ in JAMB
+                </div>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ margin:'0 22px', padding:'10px 14px', borderRadius:11, background:`${RED}12`, border:`1px solid ${RED}30`, fontSize:13, color:RED }}>{error}</div>
+          )}
+
+          <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)' }}>
+            <button onClick={save} disabled={saving}
+              style={{ width:'100%', padding:'14px 0', borderRadius:14, border:'none', cursor:saving?'not-allowed':'pointer', background:saved?GREEN:GOLD, color:saved?'#fff':NAVY, fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:saved?`0 5px 0 #16a34a`:`0 5px 0 #b45309,0 8px 20px ${GOLD}40`, transition:'all .15s', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+              {saved ? '✓ Saved!' : saving ? 'Saving…' : '⚡ Save my goals'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── PRACTICE SETUP SHEET (unchanged from v13) ────────────────────────────────
 const STEP_MODES = [
   { key:'quick5', emoji:'⚡', label:'Quick 5',    tag:'~4 min',   color:BLUE,   desc:'5 random questions, fast and focused.' },
   { key:'weak',   emoji:'🎯', label:'Weak Areas', tag:'Targeted', color:'#f87171', desc:'Questions pulled from your lowest scoring topics.' },
@@ -367,7 +591,7 @@ const STEP_MODES = [
 ]
 
 export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='quick5', onClose, onStart, onMockExam, exam, onExamChange }) {
-  const [step,      setStep]      = useState(1)     // 1=mode, 2=subject, 3=configure
+  const [step,      setStep]      = useState(1)
   const [mode,      setMode]      = useState(initialMode)
   const [subject,   setSubject]   = useState(() => pickDefault(subjects, exam))
   const [count,     setCount]     = useState(10)
@@ -411,12 +635,8 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
     if(step===2){if(mode==='quick5'||mode==='weak'){go()}else{setStep(3)};return}
     go()
   }
-
   function prevStep() { if(step>1) setStep(s=>s-1) }
-
   const canNext = step===1 ? true : step===2 ? (mode==='mock'||!!subject) : true
-
-  // ── Sheet content ──
   const totalSteps = mode==='mock'?1:mode==='quick5'||mode==='weak'?2:3
 
   return (
@@ -427,16 +647,14 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
         .ps-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
         .ps-sheet{width:100%;max-width:560px;background:var(--bg-card);border-radius:28px 28px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:92vh;box-shadow:0 -20px 60px rgba(0,0,0,.4);animation:sheet-up .3s cubic-bezier(.22,.61,.36,1)}
         @media(min-width:768px){.ps-backdrop{justify-content:center}.ps-sheet{border-radius:24px;border:1px solid var(--border);max-height:86vh;animation:sheet-in .25s ease;box-shadow:0 32px 80px rgba(0,0,0,.5)}}
+        @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
       <div className="ps-backdrop" onClick={e=>e.target===e.currentTarget&&onClose()}>
         <div className="ps-sheet">
-
-          {/* Drag handle (mobile only) */}
           <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 0' }}>
             <div style={{ width:40, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
           </div>
-
-          {/* Header */}
           <div style={{ padding:'16px 22px 14px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid var(--border)' }}>
             {step>1 && (
               <button onClick={prevStep} style={{ width:34, height:34, borderRadius:10, background:'var(--bg-subtle)', border:'1px solid var(--border)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontFamily:'inherit' }}>
@@ -447,7 +665,6 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
               <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>
                 {step===1?'How do you want to practise?':step===2?'Pick your subject':'Configure session'}
               </div>
-              {/* Step dots */}
               <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:6 }}>
                 {Array.from({length:totalSteps},(_,i)=>(
                   <div key={i} style={{ height:4, borderRadius:999, transition:'all .25s', background:i<step?BLUE:'var(--border)', width:i===step-1?24:i<step?16:10 }}/>
@@ -457,12 +674,8 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
             <button onClick={onClose} style={{ width:34, height:34, borderRadius:'50%', background:'var(--bg-subtle)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text-tert)', fontFamily:'inherit', flexShrink:0 }}>×</button>
           </div>
 
-          {/* Body */}
           <div style={{ flex:1, overflowY:'auto', padding:'20px 22px' }}>
-
-            {/* STEP 1 — Exam + Mode */}
             {step===1 && (<>
-              {/* Exam pill switcher */}
               <div style={{ marginBottom:20 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.1em' }}>Exam</div>
                 <div style={{ display:'inline-flex', background:'var(--bg-subtle)', borderRadius:12, padding:3, border:'1px solid var(--border)', gap:3 }}>
@@ -471,8 +684,6 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
                   ))}
                 </div>
               </div>
-
-              {/* Mode cards — vertical list */}
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {STEP_MODES.map(m=>{
                   const on=mode===m.key
@@ -493,7 +704,6 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
               </div>
             </>)}
 
-            {/* STEP 2 — Subject (+ topic for weak) */}
             {step===2 && (<>
               <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:12, textTransform:'uppercase', letterSpacing:'.1em' }}>Subject · {exam}</div>
               {loadingSubjects ? (
@@ -502,9 +712,10 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
                   <span style={{ fontSize:13, color:'var(--text-tert)' }}>Loading subjects…</span>
                 </div>
               ) : !subjects.length ? (
-                <div style={{ textAlign:'center', padding:'24px 0' }}>
-                  <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:10 }}>No subjects found for {exam}.</div>
-                  <Link href="/student/profile" style={{ fontSize:13, fontWeight:700, color:BLUE, textDecoration:'none' }}>Add subjects in profile →</Link>
+                <div style={{ textAlign:'center', padding:'28px 0' }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>📚</div>
+                  <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:6 }}>No {exam} subjects set up yet</div>
+                  <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:16, lineHeight:1.5 }}>Close this and tap <strong>📚 Subjects</strong> to choose your subjects.</div>
                 </div>
               ) : (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9, marginBottom:mode==='weak'?20:0 }}>
@@ -521,7 +732,6 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
                 </div>
               )}
 
-              {/* Topic picker for weak-areas */}
               {mode==='weak'&&subject&&isRealId(subject.id)&&(<>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:10, textTransform:'uppercase', letterSpacing:'.1em' }}>Topic <span style={{ textTransform:'none', letterSpacing:0, fontWeight:400 }}>— leave blank to auto-pick</span></div>
                 {loadingTopics?(
@@ -545,7 +755,6 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
               </>)}
             </>)}
 
-            {/* STEP 3 — Configure */}
             {step===3 && (<>
               <div style={{ marginBottom:22 }}>
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:10, textTransform:'uppercase', letterSpacing:'.1em' }}>Number of questions</div>
@@ -555,8 +764,7 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
                   ))}
                 </div>
               </div>
-
-              {mode==='timed'&&(<>
+              {mode==='timed'&&(
                 <div>
                   <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:10, textTransform:'uppercase', letterSpacing:'.1em' }}>Time limit</div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8 }}>
@@ -568,17 +776,9 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
                     {count} questions · {timeMin} min = <strong style={{ color:'var(--text-prim)' }}>~{Math.round(timeMin*60/count)}s</strong> per question
                   </div>
                 </div>
-              </>)}
-
-              {/* Summary card */}
+              )}
               <div style={{ marginTop:20, padding:'14px 16px', borderRadius:16, background:'var(--bg-subtle)', border:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:6 }}>
-                {[
-                  ['Mode', selectedMode?.label??mode],
-                  ['Subject', subject?.name??'—'],
-                  ['Questions', mode==='quick5'?'5':String(count)],
-                  ...(mode==='timed'?[['Time', `${timeMin} min`]]:[]),
-                  ['Exam', exam],
-                ].map(([k,v])=>(
+                {[['Mode',selectedMode?.label??mode],['Subject',subject?.name??'—'],['Questions',mode==='quick5'?'5':String(count)],...(mode==='timed'?[['Time',`${timeMin} min`]]:[]),['Exam',exam]].map(([k,v])=>(
                   <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
                     <span style={{ color:'var(--text-tert)', fontWeight:600 }}>{k}</span>
                     <span style={{ color:'var(--text-prim)', fontWeight:800 }}>{v}</span>
@@ -588,26 +788,23 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='qui
             </>)}
           </div>
 
-          {/* Footer CTA */}
           <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)', background:'var(--bg-card)' }}>
-            <button
-              onClick={nextStep} disabled={!canNext}
-              style={{ width:'100%', padding:'15px 0', borderRadius:14, border:'none', cursor:canNext?'pointer':'not-allowed', background:canNext?(selectedMode?.color??BLUE):'var(--border)', color:'#fff', fontSize:15, fontWeight:900, fontFamily:'inherit', letterSpacing:'-.01em', boxShadow:canNext?`0 5px 0 ${selectedMode?.shadow??(NAVY)}80, 0 8px 24px ${selectedMode?.color??BLUE}40`:'none', transition:'all .12s', position:'relative', overflow:'hidden' }}>
+            <button onClick={nextStep} disabled={!canNext}
+              style={{ width:'100%', padding:'15px 0', borderRadius:14, border:'none', cursor:canNext?'pointer':'not-allowed', background:canNext?(selectedMode?.color??BLUE):'var(--border)', color:'#fff', fontSize:15, fontWeight:900, fontFamily:'inherit', letterSpacing:'-.01em', boxShadow:canNext?`0 5px 0 ${selectedMode?.shadow??(NAVY)}80,0 8px 24px ${selectedMode?.color??BLUE}40`:'none', transition:'all .12s', position:'relative', overflow:'hidden' }}>
               <div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,transparent,rgba(255,255,255,.13),transparent)', backgroundSize:'200% 100%', animation:'shimmer 2.5s infinite', pointerEvents:'none' }}/>
-              {step===1?(mode==='mock'?'📝 Start Mock Exam →':`Continue →`):step===2?(mode==='quick5'?`⚡ Start Quick 5`:mode==='weak'?`🎯 Start Weak Areas Session`:`Continue →`):`🚀 Start ${selectedMode?.label??'Session'}`}
+              {step===1?(mode==='mock'?'📝 Start Mock Exam →':'Continue →'):step===2?(mode==='quick5'?'⚡ Start Quick 5':mode==='weak'?'🎯 Start Weak Areas':'Continue →'):`🚀 Start ${selectedMode?.label??'Session'}`}
             </button>
           </div>
         </div>
       </div>
-      <style>{`@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </>
   )
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function PracticePage() {
-  const router = useRouter()
-  const supabase = createClient()
+  const router       = useRouter()
+  const supabase     = createClient()
   const { dark, toggle } = useTheme()
   const searchParams = useSearchParams()
   const subjectCache = useRef({})
@@ -622,6 +819,8 @@ export default function PracticePage() {
   const [history,         setHistory]          = useState([])
   const [userId,          setUserId]           = useState(null)
   const [xp,              setXp]               = useState(0)
+  const [showSubjects,    setShowSubjects]     = useState(false)
+  const [showGoals,       setShowGoals]        = useState(false)
 
   function openSheet(mode='quick5') { setSheetMode(mode); setShowSheet(true) }
 
@@ -629,9 +828,9 @@ export default function PracticePage() {
     if (subjectCache.current[examTab]) { setSubjects(subjectCache.current[examTab]); return }
     setLoadingSubjects(true)
     try {
-      const res = await fetch(`/api/student/subjects?exam=${examTab}`)
+      const res  = await fetch(`/api/student/subjects?exam=${examTab}`)
       const data = res.ok ? await res.json() : []
-      const subs = (data??[]).map(s=>({id:s.id,name:s.name}))
+      const subs = (data??[]).map(s=>({id:s.id, name:s.name}))
       subjectCache.current[examTab] = subs
       setSubjects(subs)
     } catch { setSubjects([]) }
@@ -639,6 +838,13 @@ export default function PracticePage() {
   }
 
   function handleExamChange(e) { setExam(e); fetchSubjects(e) }
+
+  function handleSubjectsSaved(savedExam, names) {
+    // Invalidate cache and reload
+    delete subjectCache.current[savedExam]
+    setShowSubjects(false)
+    fetchSubjects(savedExam)
+  }
 
   async function loadHistory(uid) {
     const { data:attempts } = await supabase.from('question_attempts')
@@ -651,9 +857,11 @@ export default function PracticePage() {
     const { data:{user} } = await supabase.auth.getUser()
     if (!user) { router.replace('/onboarding'); return }
     setUserId(user.id)
-    const { data:prof } = await supabase.from('profiles').select('id,exam_type,full_name,username,xp,total_points').eq('id',user.id).single()
+    const { data:prof } = await supabase.from('profiles')
+      .select('id,exam_type,full_name,username,total_points,target_waec,target_jamb')
+      .eq('id',user.id).single()
     setProfile(prof)
-    setXp(prof?.total_points??prof?.xp??0)
+    setXp(prof?.total_points??0)
     const examTab = prof?.exam_type==='JAMB'?'JAMB':'WAEC'
     setExam(examTab)
     await fetchSubjects(examTab)
@@ -680,7 +888,6 @@ export default function PracticePage() {
   const name = profile?.username||profile?.full_name?.split(' ')[0]||'Student'
   const cap  = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : ''
 
-  // Main content — shared between desktop centre col and mobile scroll
   const mainContent = (
     <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
       <HeroBanner name={cap(name)} dark={dark}/>
@@ -707,6 +914,15 @@ export default function PracticePage() {
           <StudentSidebar active="practice" xp={xp} dark={dark}/>
           <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
             <DesktopTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
+            {/* Desktop: Subjects + Goals quick buttons above content */}
+            <div style={{ display:'flex', gap:8, marginBottom:18 }}>
+              <button onClick={()=>setShowSubjects(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:999, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:'var(--text-tert)' }}>
+                📚 Edit subjects
+              </button>
+              <button onClick={()=>setShowGoals(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:999, border:`1px solid ${GOLD}35`, background:`${GOLD}10`, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:GOLD }}>
+                🎯 My goals {profile?.target_waec ? `· ${profile.target_waec} WAEC` : ''}{profile?.target_jamb ? ` · ${profile.target_jamb}+ JAMB` : ''}
+              </button>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20, alignItems:'flex-start' }}>
               <div style={{ display:'flex', flexDirection:'column', gap:22 }}>{mainContent}</div>
               {rightCol}
@@ -717,18 +933,15 @@ export default function PracticePage() {
 
       {/* ── MOBILE ── */}
       <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar dark={dark} toggle={toggle}/>
-        <div style={{ padding:'16px 16px 0' }}>
-          {mainContent}
-        </div>
-        {/* Mobile: daily quests below main content */}
+        <MobileTopbar dark={dark} toggle={toggle} onSubjects={()=>setShowSubjects(true)} onGoals={()=>setShowGoals(true)}/>
+        <div style={{ padding:'16px 16px 0' }}>{mainContent}</div>
         <div style={{ padding:'20px 16px 0' }}>
           <DailyQuests onStart={openSheet} dark={dark}/>
         </div>
         <StudentBottomNav active="practice" dark={dark}/>
       </div>
 
-      {/* Setup Sheet */}
+      {/* Practice setup sheet */}
       {showSheet && (
         <PracticeSetupSheet
           subjects={subjects} loadingSubjects={loadingSubjects}
@@ -737,6 +950,28 @@ export default function PracticePage() {
           onClose={()=>setShowSheet(false)}
           onStart={handleStart}
           onMockExam={()=>{ setShowSheet(false); router.push('/student/exam') }}
+        />
+      )}
+
+      {/* Subject picker sheet */}
+      {showSubjects && (
+        <SubjectPickerSheet
+          exam={exam}
+          onExamChange={handleExamChange}
+          currentSubjectNames={subjects.map(s=>s.name)}
+          dark={dark}
+          onClose={()=>setShowSubjects(false)}
+          onSaved={handleSubjectsSaved}
+        />
+      )}
+
+      {/* Goals sheet */}
+      {showGoals && profile && (
+        <GoalsSheet
+          profile={profile}
+          dark={dark}
+          onClose={()=>setShowGoals(false)}
+          onSaved={(updated)=>{ setProfile(p=>({...p,...updated})) }}
         />
       )}
     </>
