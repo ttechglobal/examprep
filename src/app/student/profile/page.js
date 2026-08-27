@@ -13,12 +13,12 @@
 // This page renders its own topbar and content only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useStudentUser } from '@/app/student/layout'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { DesktopTopbar, MobileTopbar } from '@/components/student/StudentTopbar'
 import Link from 'next/link'
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ function SaveButton({ onClick, saving, label = 'Save changes' }) {
 function InfoSheet({ profile, onClose, onSaved }) {
   const [fullName,   setFullName]   = useState(profile?.full_name   ?? '')
   const [username,   setUsername]   = useState(profile?.username    ?? '')
-  const [schoolName, setSchoolName] = useState(profile?.school_name ?? '')
+  const [classLevel, setClassLevel] = useState(profile?.class_level ?? '')
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState(null)
 
@@ -220,18 +220,27 @@ function InfoSheet({ profile, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
+      const trimName = fullName.trim()
+      const trimUser = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/__+/g, '_')
+      if (!trimName) throw new Error('Full name is required')
+      if (trimUser && trimUser.length < 3) throw new Error('Username must be at least 3 characters')
       const res = await fetch('/api/student/profile', {
         method:  'PATCH',
         headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
-          full_name:   fullName.trim(),
-          username:    username.trim(),
-          school_name: schoolName.trim(),
+          full_name:   trimName,
+          username:    trimUser || undefined,
+          class_level: classLevel || undefined,
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Save failed')
-      onSaved({ full_name:fullName.trim(), username:username.trim(), school_name:schoolName.trim() })
+      if (!res.ok) {
+        if (data.error?.includes('unique') || data.error?.includes('duplicate')) throw new Error('That username is taken — try another')
+        throw new Error(data.error ?? 'Save failed')
+      }
+      // Update localStorage cache so topbar reflects immediately
+      try { localStorage.setItem('ep_student_name', trimName) } catch {}
+      onSaved({ full_name: trimName, username: trimUser, class_level: classLevel })
       onClose()
     } catch(e) {
       setError(e.message)
@@ -243,14 +252,8 @@ function InfoSheet({ profile, onClose, onSaved }) {
   return (
     <Sheet title="My Information" onClose={onClose}>
       <Field label="Full name" value={fullName} onChange={setFullName} placeholder="Ada Okafor"/>
-      <Field label="Username" value={username} onChange={setUsername} placeholder="ada_okafor" hint="Shown on the leaderboard"/>
-      <Field
-        label="School"
-        value={schoolName}
-        onChange={setSchoolName}
-        placeholder="e.g. King's College Lagos"
-        hint="You'll be able to connect to your school via a school code later"
-      />
+      <Field label="Username" value={username} onChange={setUsername} placeholder="ada_okafor" hint="Shown on the leaderboard — no spaces"/>
+      <SelectField label="Class" value={classLevel} onChange={setClassLevel} options={['SS1','SS2','SS3']}/>
       {error && <p style={{ fontSize:12, color:RED, marginBottom:12 }}>{error}</p>}
       <SaveButton onClick={save} saving={saving}/>
     </Sheet>
@@ -698,8 +701,84 @@ function GoalsSheet({ profile, onClose, onSaved, focus }) {
   )
 }
 
+
+// ── Connect School widget ──────────────────────────────────────────────────────
+// Shows school name if already connected (school_id set).
+// Shows a code-entry widget if not connected.
+// Actual linkage happens via the access-codes/redeem route which sets school_id.
+function ConnectSchool({ profile, onLinked }) {
+  const { dark }          = useTheme()
+  const [code,   setCode] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err,    setErr]  = useState(null)
+  const [done,   setDone] = useState(false)
+
+  const isConnected = !!(profile?.school_id)
+  const schoolLabel = profile?.school_name || (isConnected ? 'School connected' : null)
+
+  async function connect() {
+    const clean = code.trim().toUpperCase()
+    if (!clean) return
+    setSaving(true); setErr(null)
+    try {
+      const res  = await fetch('/api/admin/access-codes/redeem', {
+        method: 'POST', headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ code: clean }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Invalid code')
+      setDone(true)
+      onLinked?.({ school_id: data.school_id })
+    } catch(e) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  if (done || isConnected) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background:dark?'rgba(34,197,94,.08)':'rgba(34,197,94,.06)', border:'1px solid rgba(34,197,94,.25)' }}>
+        <span style={{ fontSize:18 }}>🏫</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:GREEN }}>School connected</div>
+          {schoolLabel && <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{schoolLabel}</div>}
+        </div>
+        <span style={{ fontSize:11, fontWeight:700, color:GREEN }}>✓</span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding:'12px 14px', borderRadius:12, background:dark?'rgba(255,255,255,.03)':'rgba(6,42,120,.03)', border:'1px solid var(--border)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+        <span style={{ fontSize:16 }}>🏫</span>
+        <div>
+          <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)' }}>Connect your school</div>
+          <div style={{ fontSize:11, color:'var(--text-tert)' }}>Enter the code your teacher gave you</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <input
+          value={code}
+          onChange={e => { setCode(e.target.value.toUpperCase()); setErr(null) }}
+          onKeyDown={e => e.key === 'Enter' && connect()}
+          placeholder="e.g. KINGS2025"
+          maxLength={20}
+          style={{ flex:1, padding:'9px 12px', borderRadius:10, border:`1.5px solid ${err ? RED : 'var(--border)'}`, background:'var(--bg-card)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none', letterSpacing:'.05em', fontWeight:700, textTransform:'uppercase' }}
+        />
+        <button
+          onClick={connect}
+          disabled={saving || !code.trim()}
+          style={{ padding:'9px 16px', borderRadius:10, border:'none', background:BLUE, color:'#fff', fontSize:13, fontWeight:800, cursor:saving||!code.trim()?'not-allowed':'pointer', fontFamily:'inherit', opacity:saving||!code.trim()?0.6:1, whiteSpace:'nowrap' }}
+        >
+          {saving ? '…' : 'Connect'}
+        </button>
+      </div>
+      {err && <p style={{ fontSize:11, color:RED, marginTop:6, margin:0 }}>{err}</p>}
+    </div>
+  )
+}
+
 // ── Avatar + rank card ─────────────────────────────────────────────────────────
-function AvatarCard({ profile, xp, onEditInfo }) {
+function AvatarCard({ profile, xp, onEditInfo, onLinked }) {
   const { dark } = useTheme()
   const rank    = getRank(xp)
   const next    = getNextRank(xp)
@@ -708,7 +787,7 @@ function AvatarCard({ profile, xp, onEditInfo }) {
   const pct     = Math.min(100, xpRange > 0 ? Math.round((xpInLvl / xpRange) * 100) : 100)
   const level   = Math.floor(xp / 2000) + 1
   const dName   = profile?.full_name || profile?.username || 'Student'
-  const initials = (dName || 'ST').slice(0, 2).toUpperCase()
+  const initials = dName.slice(0, 2).toUpperCase()
 
   return (
     <Card>
@@ -735,8 +814,7 @@ function AvatarCard({ profile, xp, onEditInfo }) {
         {/* Name */}
         <div style={{ fontSize:20, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:2 }}>{dName}</div>
         {profile?.username && <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:3 }}>@{profile.username}</div>}
-        {profile?.school_name && <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:12 }}>🏫 {profile.school_name}</div>}
-        {!profile?.school_name && <div style={{ marginBottom:12 }}/>}
+        {/* school shown via ConnectSchool widget below rank strip */}
 
         {/* Rank strip */}
         <div style={{ padding:'14px', borderRadius:14, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', border:'1px solid var(--border)' }}>
@@ -763,6 +841,18 @@ function AvatarCard({ profile, xp, onEditInfo }) {
             <Link href="/student/leaderboard" style={{ textDecoration:'none', fontSize:10, fontWeight:700, color:BLUE }}>View all ranks →</Link>
           </div>
         </div>
+
+        {/* School connection widget */}
+        <div style={{ marginTop:14 }}>
+          <ConnectSchool profile={profile} onLinked={onLinked}/>
+        </div>
+
+        <button
+          onClick={onEditInfo}
+          style={{ width:'100%', padding:'11px', borderRadius:12, border:`1.5px solid ${BLUE}`, cursor:'pointer', fontFamily:'inherit', fontWeight:800, fontSize:14, background:'transparent', color:BLUE, marginTop:12 }}
+        >
+          Edit Profile
+        </button>
       </div>
     </Card>
   )
@@ -809,29 +899,48 @@ function GoalsSummary({ profile, onEdit }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
-  const router         = useRouter()
-  const { dark, toggle } = useTheme()
+  const router              = useRouter()
+  const { dark, toggle }    = useTheme()
   const { totalPoints: xp } = usePoints()
+  const layoutProfile       = useStudentUser()   // from layout — already fetched
 
+  // Local profile state — seeded from layout context, updatable on save
   const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
-  const [sheet,    setSheet]    = useState(null)  // null | { type: 'info'|'subjects'|'goals', focus?: string }
+  const [sheet,    setSheet]    = useState(null)
 
-  const load = useCallback(async () => {
-    try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user) {
-        try { const g = JSON.parse(localStorage.getItem('ep_guest') || '{}'); setProfile({ ...g, isGuest:true }) } catch {}
-        setLoading(false); return
+  // Once layout profile arrives, use it
+  useEffect(() => {
+    if (layoutProfile !== null) {
+      setProfile(layoutProfile)
+      setLoading(false)
+    }
+  }, [layoutProfile])
+
+  // Fallback: if layout profile takes >3s, fetch directly
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (loading) {
+        try {
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            try {
+              const g = JSON.parse(localStorage.getItem('ep_guest') || '{}')
+              setProfile({ ...g, isGuest: true })
+            } catch { setProfile({ isGuest: true }) }
+          } else {
+            const { data } = await supabase.from('profiles')
+              .select('id,full_name,username,total_points,exam_types,subjects,subjects_waec,subjects_jamb,target_university,target_course,target_waec,target_jamb,onboarded,school_id,class_level')
+              .eq('id', user.id).single()
+            if (data) setProfile(data)
+          }
+        } catch {}
+        setLoading(false)
       }
-      const res = await fetch('/api/student/profile')
-      if (res.ok) { const d = await res.json(); setProfile(d) }
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [loading])
 
   function patchProfile(updates) {
     setProfile(p => ({ ...p, ...updates }))
@@ -844,7 +953,7 @@ export default function ProfilePage() {
   }
 
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 0' }}>
       <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid var(--border)`, borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
     </div>
   )
@@ -941,40 +1050,16 @@ export default function ProfilePage() {
 
   return (
     <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} * {box-sizing:border-box}`}</style>
-
-      {/* ── DESKTOP ── */}
-      <div className="hidden lg:flex" style={{ flex:1, minWidth:0, flexDirection:'column' }}>
-        <DesktopTopbar name={dName}/>
-        {guestBanner}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20, alignItems:'flex-start' }}>
-          {/* Left column */}
-          <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-            <AvatarCard profile={profile} xp={xp} onEditInfo={() => setSheet('info')}/>
-            {subjectsSection}
-            {goalsSection}
-          </div>
-          {/* Right column — sticky */}
-          <div style={{ position:'sticky', top:20, display:'flex', flexDirection:'column', gap:16 }}>
-            {premiumCard}
-            {settingsSection}
-            {helpCard}
-          </div>
-        </div>
-      </div>
-
-      {/* ── MOBILE ── */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80 }}>
-        <MobileTopbar title="Profile"/>
-        <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:18 }}>
-          {guestBanner}
-          <AvatarCard profile={profile} xp={xp} onEditInfo={() => setSheet('info')}/>
-          {subjectsSection}
-          {goalsSection}
-          {premiumCard}
-          {settingsSection}
-          {helpCard}
-        </div>
+      {/* Main profile layout — single render, no responsive wrappers */}
+      {guestBanner}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:20 }}>
+        {/* Content */}
+        <AvatarCard profile={profile} xp={xp} onEditInfo={() => setSheet({ type:'info' })} onLinked={patchProfile}/>
+        {subjectsSection}
+        {goalsSection}
+        {premiumCard}
+        {settingsSection}
+        {helpCard}
       </div>
 
       {/* ── SHEETS ── */}

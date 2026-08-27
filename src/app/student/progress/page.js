@@ -7,10 +7,10 @@
 // Desktop: sidebar + 2-col layout. Mobile: topbar + single col + bottom nav.
 
 import { useState, useEffect } from 'react'
+import { usePoints } from '@/contexts/PointsContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useTheme } from '@/contexts/ThemeContext'
-import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
 import Link from 'next/link'
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
@@ -39,24 +39,6 @@ const getColor = n => SUBJ_COLOR[n] ?? SUBJ_COLOR.default
 const getIcon  = n => SUBJ_ICON[n]  ?? SUBJ_ICON.default
 
 // ─── BG ───────────────────────────────────────────────────────────────────────
-function AppBackground({ dark }) {
-  return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, backgroundImage: dark?'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)':'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-      {dark?(<>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-      </>):(<>
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
-        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(255,106,0,.04)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-      </>)}
-      {['📊','📈','🎯','✏️'].map((ic,i)=>{
-        const pos=[{top:'8%',right:'6%'},{top:'40%',left:'3%'},{bottom:'20%',right:'4%'},{top:'70%',left:'2%'}][i]
-        return <div key={i} style={{ position:'absolute', fontSize:18, opacity:dark?0.07:0.05, userSelect:'none', ...pos }}>{ic}</div>
-      })}
-    </div>
-  )
-}
 
 // ─── CARD ─────────────────────────────────────────────────────────────────────
 function Card({ children, style={} }) {
@@ -72,71 +54,7 @@ function SectionLabel({ children, right }) {
   )
 }
 
-// ─── DESKTOP TOPBAR ───────────────────────────────────────────────────────────
-function DesktopTopbar({ name, xp, dark, toggle }) {
-  const level    = Math.floor((xp||0)/2000)+1
-  const initials = (name||'EX').slice(0,2).toUpperCase()
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:18, borderBottom:'1px solid var(--border)', marginBottom:24 }}>
-      <div style={{ flex:1, maxWidth:420, position:'relative' }}>
-        <div style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="var(--text-tert)" strokeWidth="1.8"/><path d="M15 15l3 3" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/></svg>
-        </div>
-        <input placeholder="Search topics, subjects…" style={{ width:'100%', padding:'10px 14px 10px 40px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none' }}/>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
-          <span style={{ fontSize:16 }}>⚡</span>
-          <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()} XP</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
-          <span style={{ fontSize:16 }}>💗</span>
-          <span style={{ fontSize:13, fontWeight:900, color:RED }}>32</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer' }}>
-          <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
-          <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
-            <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
-          </div>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft:2 }}><path d="M3 4.5l3 3 3-3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <button onClick={toggle} style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
-// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
-function MobileTopbar({ name, xp, dark, toggle }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.93)':'rgba(249,250,255,.93)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-        <div style={{ width:32, height:32, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>EX</span>
-        </div>
-        <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>Progress</span>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
-          <span style={{ fontSize:13 }}>⚡</span>
-          <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()}</span>
-        </div>
-        <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ─── HERO BANNER ─────────────────────────────────────────────────────────────
 function HeroBanner({ name, dark }) {
@@ -454,58 +372,17 @@ function MotivationalBanner({ dark }) {
   )
 }
 
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-function getMockData(exam) {
-  const waec = [
-    {name:'Mathematics',    accuracy:82, completion:76, questions:320},
-    {name:'English Language',accuracy:76,completion:71, questions:280},
-    {name:'Physics',        accuracy:61, completion:58, questions:210},
-    {name:'Chemistry',      accuracy:58, completion:54, questions:190},
-    {name:'Biology',        accuracy:54, completion:49, questions:160},
-    {name:'Further Mathematics',accuracy:48,completion:42,questions:120},
-  ]
-  const jamb = [
-    {name:'Use of English', accuracy:79, completion:74, questions:340},
-    {name:'Mathematics',    accuracy:71, completion:68, questions:290},
-    {name:'Physics',        accuracy:64, completion:60, questions:220},
-    {name:'Chemistry',      accuracy:55, completion:51, questions:180},
-  ]
-  return exam==='JAMB'?jamb:waec
-}
-
-function getMockTopics() {
-  return [
-    {name:'Quadratic Equations', subject:'Mathematics',      accuracy:42},
-    {name:'Organic Chemistry',   subject:'Chemistry',        accuracy:38},
-    {name:'Waves & Optics',      subject:'Physics',          accuracy:35},
-    {name:'Cell Division',       subject:'Biology',          accuracy:44},
-  ]
-}
-
-function getMockActivity() {
-  return [120,98,160,140,180,110,70]
-}
-
-function getMockStats(exam) {
-  return {
-    questions:{ value:1248, delta:18 },
-    accuracy: { value:78,   delta:6  },
-    xp:       { value:12840,delta:22 },
-    streak:   { value:12,   best:21, delta:null },
-  }
-}
-
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function ProgressPage() {
   const router = useRouter()
-  const { dark, toggle } = useTheme()
+  const { dark } = useTheme()
 
   const [profile,   setProfile]   = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [exam,      setExam]      = useState('WAEC')
   const [exams,     setExams]     = useState(['WAEC','JAMB'])
   const [period,    setPeriod]    = useState('This Week')
-  const [xp,        setXp]        = useState(0)
+  const { totalPoints: xp } = usePoints()
   const [stats,     setStats]     = useState({})
   const [activity,  setActivity]  = useState([0,0,0,0,0,0,0])
   const [subjects,  setSubjects]  = useState([])
@@ -519,7 +396,6 @@ export default function ProgressPage() {
         const { data:prof } = await supabase.from('profiles').select('username,full_name,total_points,exam_types').eq('id',session.user.id).single()
         if (prof) {
           setProfile(prof)
-          setXp(prof.total_points||0)
           if (prof.exam_types?.length) setExams(prof.exam_types)
           setExam(prof.exam_types?.[0]||'WAEC')
         }
@@ -528,20 +404,20 @@ export default function ProgressPage() {
         const { data:att } = await supabase.from('question_attempts').select('created_at').eq('student_id',session.user.id).gte('created_at',mon.toISOString())
         if (att?.length) {
           const c=[0,0,0,0,0,0,0]; att.forEach(a=>{const d=new Date(a.created_at);c[(d.getDay()+6)%7]++}); setActivity(c)
-        } else setActivity(getMockActivity())
+        } else setActivity([0,0,0,0,0,0,0])
       }
     } catch(e){ console.error(e) }
     finally { setLoading(false) }
   }
 
   useEffect(()=>{ load() },[]) // eslint-disable-line
-  useEffect(()=>{ setSubjects(getMockData(exam)); setStats(getMockStats(exam)); setTopics(getMockTopics()); if(!activity.some(v=>v>0)) setActivity(getMockActivity()) },[exam]) // eslint-disable-line
+  // subjects, stats, topics populate from real Supabase data when available
 
   const name = profile?.username||profile?.full_name?.split(' ')[0]||'Evelyn'
   const cap  = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : ''
 
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 0' }}>
       <div style={{ width:32,height:32,borderRadius:'50%',border:`3px solid var(--border)`,borderTopColor:BLUE,animation:'spin .7s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -558,92 +434,21 @@ export default function ProgressPage() {
   const topicsEl    = <TopicToImprove topics={topics} exam={exam} dark={dark}/>
 
   return (
-    <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box} ::-webkit-scrollbar{display:none}`}</style>
-      <AppBackground dark={dark}/>
-
-      {/* ══ DESKTOP ══════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1380, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active="progress" xp={xp} dark={dark}/>
-
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 310px', gap:20, alignItems:'flex-start' }}>
-              {/* Centre feed */}
-              <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
-                {heroEl}
-                {/* Exam switcher row — only visible on desktop above stats */}
-                <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                  <ExamSwitcher exams={exams} active={exam} onChange={setExam} dark={dark}/>
-                  <span style={{ fontSize:12, color:'var(--text-tert)' }}>Showing data for <strong style={{ color:'var(--text-prim)' }}>{exam}</strong></span>
-                </div>
-                {/* 4 stat cards — 2 col on desktop becomes 4-col */}
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-                  {STATS_META.map(m=>{
-                    const s=stats[m.key]??{}
-                    const up=s.delta>=0
-                    return(
-                      <Card key={m.key} style={{ padding:'16px 18px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                          <div style={{ width:30, height:30, borderRadius:9, background:dark?m.darkBg:`${m.color}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>{m.icon}</div>
-                          <span style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)', lineHeight:1.2 }}>{m.label}</span>
-                        </div>
-                        <div style={{ fontSize:22, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', lineHeight:1, marginBottom:5 }}>
-                          {m.key==='accuracy'?`${s.value??78}%`:m.key==='streak'?`${s.value??12}`:(s.value??0).toLocaleString()}
-                          {m.key==='streak'&&<span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginLeft:3 }}>days</span>}
-                        </div>
-                        {s.delta!=null?(
-                          <div style={{ fontSize:10, fontWeight:800, color:up?GREEN:RED }}>
-                            {up?'↑':'↓'}{Math.abs(s.delta)}{m.key==='accuracy'?'%':''} vs last week
-                          </div>
-                        ):m.key==='streak'?(
-                          <div style={{ fontSize:10, color:'var(--text-tert)' }}>Best: {s.best??21} days</div>
-                        ):null}
-                      </Card>
-                    )
-                  })}
-                </div>
-                {activityEl}
-                {masteryEl}
-                {accuracyEl}
-                {motEl}
-              </div>
-
-              {/* Right col — sticky */}
-              <div style={{ position:'sticky', top:20, display:'flex', flexDirection:'column', gap:16 }}>
-                {buddyEl}
-                {topicsEl}
-              </div>
-            </div>
-          </div>
-        </div>
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+      {/* Exam switcher */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
+        <ExamSwitcher exams={exams} active={exam} onChange={setExam} dark={dark}/>
+        <span style={{ fontSize:11, color:'var(--text-tert)' }}>{exam} data</span>
       </div>
 
-      {/* ══ MOBILE ══════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
-
-        <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:18 }}>
-          {heroEl}
-
-          {/* Exam switcher (mobile — inline, pill style) */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <ExamSwitcher exams={exams} active={exam} onChange={setExam} dark={dark}/>
-            <span style={{ fontSize:11, color:'var(--text-tert)' }}>{exam} data</span>
-          </div>
-
-          {/* 4 stat cards — 2×2 on mobile */}
-          {statsEl}
-
-          {activityEl}
-          {masteryEl}
-          {motEl}
-        </div>
-
-        <StudentBottomNav active="progress" dark={dark}/>
-      </div>
-    </>
+      {heroEl}
+      {statsEl}
+      {activityEl}
+      {masteryEl}
+      {accuracyEl}
+      {buddyEl}
+      {topicsEl}
+      {motEl}
+    </div>
   )
 }

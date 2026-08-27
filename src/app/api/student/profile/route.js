@@ -1,6 +1,6 @@
 // src/app/api/student/profile/route.js
 // GET  — fetch full student profile
-// PATCH — update editable fields (name, username, bio, school, class, goals, subjects)
+// PATCH — update editable fields
 
 import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
@@ -11,6 +11,28 @@ const db = () => svcClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+// Columns that actually exist in the profiles table.
+// bio, first_name, last_name, state, country do NOT exist.
+const SELECT_COLS = [
+  'id', 'username', 'full_name', 'class_level', 'email',
+  'school_id', 'school_name',
+  'exam_type', 'exam_types',
+  'subjects', 'subjects_waec', 'subjects_jamb',
+  'total_points', 'streak_days',
+  'target_waec', 'target_jamb', 'target_jamb_breakdown',
+  'target_university', 'target_course',
+  'onboarded', 'created_at',
+].join(', ')
+
+const ALLOWED_PATCH = [
+  'username', 'full_name', 'class_level',
+  'school_name',
+  'exam_type', 'exam_types',
+  'subjects_waec', 'subjects_jamb',
+  'target_waec', 'target_jamb', 'target_jamb_breakdown',
+  'target_university', 'target_course',
+]
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -18,7 +40,7 @@ export async function GET() {
 
   const { data, error } = await db()
     .from('profiles')
-    .select('id, username, full_name, first_name, last_name, bio, email, country, state, school_id, class_level, exam_type, subjects, subjects_waec, subjects_jamb, total_points, streak_days, target_waec, target_jamb, target_university, target_course, created_at')
+    .select(SELECT_COLS)
     .eq('id', user.id)
     .single()
 
@@ -32,12 +54,11 @@ export async function PATCH(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body
-  try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  try { body = await request.json() }
+  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  // Whitelist of editable fields
-  const allowed = ['username','full_name','first_name','last_name','bio','country','state','school_id','class_level','exam_type','subjects_waec','subjects_jamb','target_waec','target_jamb','target_university','target_course']
   const updates = {}
-  for (const key of allowed) {
+  for (const key of ALLOWED_PATCH) {
     if (body[key] !== undefined) updates[key] = body[key]
   }
 

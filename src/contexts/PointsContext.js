@@ -49,10 +49,16 @@ const PointsContext = createContext({
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 export function PointsProvider({ children }) {
-  // Seed from localStorage immediately — no waiting for DB
-  const [totalPoints, _setTotal] = useState(readLS)
+  // Start at 0 (matches SSR) — load from localStorage after mount to avoid hydration mismatch
+  const [totalPoints, _setTotal] = useState(0)
   const [toast, setToast] = useState(null)   // { earned, label } | null
   const toastTimer = useRef(null)
+
+  // Seed from localStorage immediately after mount (client-only)
+  useEffect(() => {
+    const v = readLS()
+    if (v > 0) _setTotal(v)
+  }, [])
 
   // Wrapper: always keep localStorage in sync
   const setTotalPoints = useCallback((newTotal) => {

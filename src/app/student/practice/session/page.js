@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { formatQuestion, formatOption } from '@/lib/formatMath'
+import SessionResults from '@/components/student/SessionResults'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -544,9 +545,11 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
         </div>
       )}
 
-      {/* Explanation — hidden on desktop (shown in right col), shown inline on mobile */}
+      {/* Explanation — shown inline on mobile; CSS hides it on desktop in review mode */}
       {!hideExplanation && (revealed || reviewMode) && question.explanation && (
-        <ExplanationBlock explanation={question.explanation} isCorrect={reviewMode ? alreadyAnswered?.isCorrect : isCorrectSelected} dark={dark}/>
+        <div className="inline-explanation">
+          <ExplanationBlock explanation={question.explanation} isCorrect={reviewMode ? alreadyAnswered?.isCorrect : isCorrectSelected} dark={dark}/>
+        </div>
       )}
 
       {/* Navigation buttons */}
@@ -621,23 +624,50 @@ function ReviewSession({ questions, answers, onDone, dark }) {
         </div>
       </div>
 
-      {/* Question */}
-      <div style={{ flex:1, overflowY:'auto', padding:'20px 16px', maxWidth:640, width:'100%', margin:'0 auto' }}>
-        {q && (
-          <QuestionCard
-            key={q.id + '-review-' + rIndex}
-            question={q}
-            qIndex={rIndex}
-            total={questions.length}
-            onAnswer={() => {}}
-            onNext={handleNext}
-            onPrev={handlePrev}
-            sessionType="study"
-            dark={dark}
-            alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
-            reviewMode={true}
-          />
-        )}
+      {/* Body — side by side on desktop, stacked on mobile */}
+      <style>{`
+        @media (min-width: 1024px) {
+          .rev-body { flex-direction: row !important; }
+          .rev-q-col { max-width: 560px !important; padding: 24px 28px !important; }
+          .rev-exp-col { display: flex !important; width: 380px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; flex-direction: column; }
+          .rev-q-col .inline-explanation { display: none !important; }
+        }
+        @media (max-width: 1023px) {
+          .rev-exp-col { display: none !important; }
+        }
+      `}</style>
+      <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+        {/* Question column — mobile: full width + inline explanation. Desktop: left column, hideExplanation */}
+        <div className="rev-q-col" style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
+          {q && (
+            <QuestionCard
+              key={q.id + '-review-' + rIndex}
+              question={q}
+              qIndex={rIndex}
+              total={questions.length}
+              onAnswer={() => {}}
+              onNext={handleNext}
+              onPrev={handlePrev}
+              sessionType="study"
+              dark={dark}
+              alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
+              reviewMode={true}
+              hideExplanation={false}
+            />
+          )}
+        </div>
+
+        {/* Explanation column — desktop only (hidden on mobile, shown inline above) */}
+        <div className="rev-exp-col" style={{ display:'none' }}>
+          {q?.explanation ? (
+            <ExplanationBlock explanation={q.explanation} isCorrect={a?.isCorrect} dark={dark}/>
+          ) : (
+            <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:24, textAlign:'center' }}>
+              <div style={{ fontSize:13, color:'var(--text-tert)' }}>No explanation available</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Navigator */}
@@ -1034,7 +1064,7 @@ export default function PracticeSessionPage() {
   if (phase==='error')   return <ErrorScreen message={errMsg} onBack={() => router.push('/student/practice')}/>
   if (phase==='review')  return <ReviewSession questions={questions} answers={answersArray} onDone={() => setPhase('results')} dark={dark}/>
   if (phase==='results') return (
-    <ResultsScreen
+    <SessionResults
       questions={questions} answers={answersArray} config={config}
       xpAwarded={saveData?.xp_awarded??0} streakDays={saveData?.streak_days??0}
       durationSecs={saveData?.duration_secs ?? msToSecs(Date.now() - startTimeRef.current)}
@@ -1149,20 +1179,20 @@ export default function PracticeSessionPage() {
           {/* RIGHT: Explanation panel (desktop — shown after answer in study mode) */}
           {q?.explanation && (
             <div className="session-exp-col" style={{ overflowY:'auto' }}>
-              {(answerMap[qIndex] || (sessionType === 'study')) && answerMap[qIndex] ? (
+              {answerMap[qIndex] ? (
                 <ExplanationBlock
                   explanation={q.explanation}
                   isCorrect={answerMap[qIndex]?.isCorrect}
                   dark={dark}
                 />
-              ) : (
+              ) : sessionType === 'study' ? (
                 <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
                   <div style={{ textAlign:'center' }}>
                     <div style={{ fontSize:32, marginBottom:8 }}>💡</div>
                     <div style={{ fontSize:13, fontWeight:700, color:'var(--text-tert)', lineHeight:1.5 }}>Answer the question to see the explanation</div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>

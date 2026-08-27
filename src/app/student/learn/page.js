@@ -5,10 +5,11 @@
 // Desktop: shared sidebar + 2-col. Mobile: topbar + single col + bottom nav.
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePoints } from '@/contexts/PointsContext'
 import { useTheme } from '@/contexts/ThemeContext'
-import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
+import { useRouter } from 'next/navigation'
+import { useStudentUser } from '@/app/student/layout'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
@@ -36,99 +37,13 @@ const getColor = n => SUBJ_COLOR[n] ?? SUBJ_COLOR.default
 const getIcon  = n => SUBJ_ICON[n]  ?? SUBJ_ICON.default
 
 // ─── BG ───────────────────────────────────────────────────────────────────────
-function AppBackground({ dark }) {
-  return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, backgroundImage: dark?'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)':'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-      {dark?(<>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-      </>):(<>
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
-        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(124,58,237,.04)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-      </>)}
-      {['📖','🔬','⚡','🧬'].map((ic,i)=>{
-        const pos=[{top:'8%',right:'6%'},{top:'35%',left:'3%'},{bottom:'25%',right:'4%'},{top:'65%',left:'2%'}][i]
-        return <div key={i} style={{ position:'absolute', fontSize:18, opacity:dark?0.07:0.05, userSelect:'none', ...pos }}>{ic}</div>
-      })}
-    </div>
-  )
-}
 
 // ─── CARD ─────────────────────────────────────────────────────────────────────
 function Card({ children, style={} }) {
   return <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 2px 16px rgba(6,42,120,.06)', overflow:'hidden', ...style }}>{children}</div>
 }
 
-// ─── DESKTOP TOPBAR ───────────────────────────────────────────────────────────
-function DesktopTopbar({ name, xp, dark, toggle }) {
-  const level = Math.floor((xp||0)/2000)+1
-  const initials = (name||'EX').slice(0,2).toUpperCase()
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:18, borderBottom:'1px solid var(--border)', marginBottom:24 }}>
-      <div style={{ flex:1, maxWidth:420, position:'relative' }}>
-        <div style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="var(--text-tert)" strokeWidth="1.8"/><path d="M15 15l3 3" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/></svg>
-        </div>
-        <input placeholder="Search topics, lessons, formulas…" style={{ width:'100%', padding:'10px 14px 10px 40px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none' }}/>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
-          <span style={{ fontSize:16 }}>⚡</span>
-          <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||12840).toLocaleString()} XP</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
-          <span style={{ fontSize:16 }}>💗</span>
-          <span style={{ fontSize:13, fontWeight:900, color:RED }}>32</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer' }}>
-          <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
-          <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
-            <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
-          </div>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft:2 }}><path d="M3 4.5l3 3 3-3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <button onClick={toggle} style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
-// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
-function MobileTopbar({ name, xp, dark, toggle }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.93)':'rgba(249,250,255,.93)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ width:30, height:30, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>EX</span>
-        </div>
-        <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>Learn</span>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
-          <span style={{ fontSize:13 }}>⚡</span>
-          <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||12840).toLocaleString()}</span>
-        </div>
-        <div style={{ position:'relative', width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M11 3C7.7 3 5 5.7 5 9V14L3 16H19L17 14V9C17 5.7 14.3 3 11 3Z" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/><path d="M9 18C9 19.1 9.9 20 11 20C12.1 20 13 19.1 13 18" stroke="var(--text-tert)" strokeWidth="1.7" fill="none"/></svg>
-          <div style={{ position:'absolute', top:7, right:7, width:7, height:7, borderRadius:'50%', background:ORANGE, border:'2px solid var(--bg-card)' }}/>
-        </div>
-        <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ─── EXL LEARNING WORLD HERO ─────────────────────────────────────────────────
 function LearningWorldHero({ name, dark }) {
@@ -545,120 +460,71 @@ function MotivationalFooter({ dark }) {
   )
 }
 
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-const MOCK_SUBJECTS = ['Mathematics','Physics','Chemistry','Biology','English Language','Further Mathematics']
-const MOCK_LESSONS  = [
-  { id:'chem-reactions', subject:'Chemistry', topic:'Chemical Reactions and Equations', pct:75 },
-  { id:'phys-motion',    subject:'Physics',   topic:'Laws of Motion',                   pct:40 },
-  { id:'math-quadratic', subject:'Mathematics',topic:'Quadratic Equations',              pct:20 },
-]
-const MOCK_ACTIVITY = { lessons:3, questions:42, accuracy:78, xp:320 }
-
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function LearnPage() {
-  const router = useRouter()
-  const { dark, toggle } = useTheme()
+  const router              = useRouter()
+  const { dark }            = useTheme()
+  const { totalPoints: xp } = usePoints()
+  const layoutProfile       = useStudentUser()  // from layout context
 
-  const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
-  const [xp,       setXp]       = useState(12840)
-  const [subjects, setSubjects] = useState(MOCK_SUBJECTS)
-  const [lessons,  setLessons]  = useState(MOCK_LESSONS)
-  const [activity, setActivity] = useState(MOCK_ACTIVITY)
+  const [subjects, setSubjects] = useState([])
+  const [lessons,  setLessons]  = useState([])
 
   useEffect(()=>{
-    async function load() {
+    // Update subjects when profile arrives
+    if (layoutProfile?.subjects?.length) setSubjects(layoutProfile.subjects)
+    else if (layoutProfile?.subjects_waec?.length) setSubjects(layoutProfile.subjects_waec)
+
+    // Fetch lesson progress
+    ;(async () => {
       try {
         const supabase = createClient()
-        const { data:{session} } = await supabase.auth.getSession()
-        if (session?.user) {
-          const { data:prof } = await supabase.from('profiles').select('username,full_name,total_points,subjects').eq('id',session.user.id).single()
-          if (prof) { setProfile(prof); setXp(prof.total_points||0); if(prof.subjects?.length) setSubjects(prof.subjects) }
-          // Try activity
-          const today = new Date(); today.setHours(0,0,0,0)
-          const { data:att } = await supabase.from('question_attempts').select('is_correct,created_at').eq('student_id',session.user.id).gte('created_at',today.toISOString())
-          if (att?.length) {
-            const correct = att.filter(a=>a.is_correct).length
-            setActivity({ lessons:3, questions:att.length, accuracy:att.length>0?Math.round((correct/att.length)*100):0, xp:att.length*8 })
-          }
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: progress } = await supabase
+            .from('lesson_progress').select('lesson_id,subject,topic,pct_complete')
+            .eq('student_id', user.id).order('updated_at', { ascending: false }).limit(10)
+          if (progress?.length) setLessons(progress.map(p => ({ id:p.lesson_id, subject:p.subject, topic:p.topic, pct:p.pct_complete||0 })))
         }
-      } catch(e){ console.error(e) }
+      } catch {}
       finally { setLoading(false) }
-    }
-    load()
-  },[])
+    })()
+  }, [])  // run once on mount; subjects update via layoutProfile effect below
 
-  const name = profile?.username||profile?.full_name?.split(' ')[0]||'King'
+  // Update subjects when layout profile arrives later
+  useEffect(()=>{
+    if (!layoutProfile) return
+    if (layoutProfile?.subjects?.length) setSubjects(layoutProfile.subjects)
+    else if (layoutProfile?.subjects_waec?.length) setSubjects(layoutProfile.subjects_waec)
+  }, [layoutProfile])
+
   const cap  = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : ''
+  const name = layoutProfile?.full_name?.split(' ')[0] || layoutProfile?.username || 'Student'
 
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 0' }}>
       <div style={{ width:32,height:32,borderRadius:'50%',border:`3px solid var(--border)`,borderTopColor:BLUE,animation:'spin .7s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
   return (
-    <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box} ::-webkit-scrollbar{display:none}`}</style>
-      <AppBackground dark={dark}/>
+    <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
+      <LearningWorldHero name={cap(name)} dark={dark}/>
 
-      {/* ══ DESKTOP ══════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1380, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active="learn" xp={xp} dark={dark}/>
-
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
-
-            <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-              {/* Full-width hero */}
-              <LearningWorldHero name={cap(name)} dark={dark}/>
-
-              {/* Learn Tools section */}
-              <div>
-                <div style={{ marginBottom:4 }}>
-                  <div style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:4 }}>Learn Tools</div>
-                  <div style={{ fontSize:13, color:'var(--text-tert)' }}>Powerful tools to help you learn smarter and remember better.</div>
-                </div>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-                {TOOLS.map(tool=>(
-                  <LearnToolCard key={tool.key} tool={tool} subjects={subjects} dark={dark}/>
-                ))}
-              </div>
-
-              {/* Activity today — full width */}
-              <ActivityToday activity={activity} name={cap(name)} dark={dark}/>
-
-              {/* Continue learning */}
-              <ContinueLearning lessons={lessons} dark={dark}/>
-
-              <MotivationalFooter dark={dark}/>
-            </div>
-          </div>
+      <div>
+        <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', marginBottom:4 }}>Learn Tools</div>
+        <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:16 }}>Powerful tools to help you learn smarter and remember better.</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:16 }}>
+          {TOOLS.map(tool=>(
+            <LearnToolCard key={tool.key} tool={tool} subjects={subjects} dark={dark}/>
+          ))}
         </div>
       </div>
 
-      {/* ══ MOBILE ══════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar name={cap(name)} xp={xp} dark={dark} toggle={toggle}/>
-        <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:18 }}>
-          <MobileHero name={cap(name)} dark={dark}/>
-
-          {/* Learn Tools label */}
-          <div>
-            <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em', marginBottom:4 }}>Learn Tools</div>
-            <div style={{ fontSize:12, color:'var(--text-tert)' }}>Master concepts with smart, interactive tools.</div>
-          </div>
-          {TOOLS.map(tool=><MobileToolCard key={tool.key} tool={tool} dark={dark}/>)}
-
-          <MobileActivityToday activity={activity} dark={dark}/>
-          <MobileContinueLearning lessons={lessons} dark={dark}/>
-          <MotivationalFooter dark={dark}/>
-        </div>
-        <StudentBottomNav active="learn" dark={dark}/>
-      </div>
-    </>
+      <ContinueLearning lessons={lessons} dark={dark}/>
+      <MotivationalFooter dark={dark}/>
+    </div>
   )
 }

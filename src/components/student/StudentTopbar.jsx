@@ -1,28 +1,90 @@
 'use client'
 // src/components/student/StudentTopbar.jsx
-// Shared topbar for all student pages — desktop and mobile variants.
+// ─────────────────────────────────────────────────────────────────────────────
+// Uniform topbar for ALL student pages — desktop and mobile.
 //
-// XP is read from PointsContext — no xp prop needed.
-// Both variants update automatically when setTotalPoints() is called after a
-// practice session is saved.
+// Self-sufficient: fetches student name internally. No `name` prop needed.
+// Name is cached in localStorage (ep_student_name) so it shows instantly
+// on subsequent page loads with no flicker.
 //
-// Desktop props: name, searchPlaceholder?
-// Mobile props:  title, extraAction?
+// XP and rank come from PointsContext — live, no prop needed.
+// Both variants update automatically after practice sessions.
+//
+// Desktop: <DesktopTopbar searchPlaceholder?/>
+// Mobile:  <MobileTopbar title extraAction?/>
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useTheme } from '@/contexts/ThemeContext'
+import { useState, useEffect } from 'react'
+import { useTheme }  from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
 const NAVY = '#062A78'
 const BLUE = '#1264E5'
 const GOLD = '#FFB800'
-const RED  = '#f43f5e'
+
+// Inline rank helpers — same logic as src/lib/ranks.js
+const _RANK_XP = (() => {
+  const t = [0]
+  for (let i = 1; i < 10; i++) t.push(t[t.length-1] + 200 + i * 20)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 500 + i * 50)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 1200 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 2500 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 3800 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 5500 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 7500 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 9500 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 12000 + i * 100)
+  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 15000 + i * 100)
+  return t
+})()
+const _RANK_NAMES = ['Newcomer','Beginner','Learner','Explorer','Starter','Rookie','Apprentice','Trainee','Challenger','Initiate','Solver','Thinker','Problem Solver','Quick Mind','Sharp Mind','Brainiac','Strategist','Tactician','Scholar','Achiever','Specialist','Expert','Ace','Mastermind','Genius','Elite','Prodigy','Virtuoso','Grand Solver','Master Solver','Elite Mind','Mastermind','Top Scholar','Brain Master','Logic Master','Knowledge Master','Question Master','Challenge Master','Exam Master','Learning Master','Rising Star','Star Scholar','Academic Star','Brain Champion','Knowledge Champion','Quiz Champion','Challenge Champion','Exam Champion','Learning Champion','Grand Champion','Legend','Rising Legend','Scholar Legend','Brain Legend','Knowledge Legend','Master Legend','Exam Legend','Learning Legend','Grand Legend','Legendary Mind','Mythic Learner','Mythic Solver','Mythic Scholar','Mythic Mind','Mythic Master','Mythic Genius','Mythic Champion','Mythic Strategist','Mythic Legend','Mythic Grandmaster','Royal Scholar','Crowned Scholar','Scholar King','Scholar Elite','Knowledge Royalty','Brain Royalty','Grand Scholar','Supreme Scholar','Royal Grandmaster','Crown Master','Cosmic Learner','Cosmic Solver','Cosmic Scholar','Cosmic Mind','Cosmic Master','Infinity Scholar','Infinity Master','Eternal Scholar','Ultimate Mind','Ultimate Master','Grandmaster','Supreme Grandmaster','Legendary Grandmaster','Master of Masters','Immortal Scholar','Transcendent Mind','Apex Scholar','Apex Master','Ultimate Scholar','The EXL Legend']
+
+function getRankFromXp(xp) {
+  let r = 1
+  for (let i = _RANK_XP.length - 1; i >= 0; i--) { if (xp >= _RANK_XP[i]) { r = i + 1; break } }
+  return Math.min(r, 100)
+}
+
+// ── Shared name hook — fetches once, caches in localStorage ──────────────────
+function useStudentName() {
+  const [name, setName] = useState(() => {
+    try { return localStorage.getItem('ep_student_name') || '' } catch { return '' }
+  })
+
+  useEffect(() => {
+    // If already cached, show it immediately then refresh in background
+    async function fetchName() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', user.id)
+          .single()
+        const resolved = data?.full_name || data?.username || ''
+        if (resolved) {
+          setName(resolved)
+          try { localStorage.setItem('ep_student_name', resolved) } catch {}
+        }
+      } catch {}
+    }
+    fetchName()
+  }, [])
+
+  return name
+}
 
 // ─── DESKTOP TOPBAR ───────────────────────────────────────────────────────────
-export function DesktopTopbar({ name, searchPlaceholder = 'Search topics, questions, exams…' }) {
-  const { dark, toggle }     = useTheme()
-  const { totalPoints: xp }  = usePoints()
-  const level    = Math.floor((xp || 0) / 2000) + 1
+export function DesktopTopbar({ searchPlaceholder = 'Search topics, questions, exams…' }) {
+  const { dark, toggle }    = useTheme()
+  const { totalPoints: xp } = usePoints()
+  const name    = useStudentName()
+  const rank    = getRankFromXp(xp)
+  const rankName = _RANK_NAMES[rank - 1] ?? 'Newcomer'
   const initials = (name || 'EX').slice(0, 2).toUpperCase()
 
   return (
@@ -43,27 +105,21 @@ export function DesktopTopbar({ name, searchPlaceholder = 'Search topics, questi
 
       {/* Right cluster */}
       <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
-        {/* XP pill — live from context */}
+        {/* XP pill */}
         <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
           <span style={{ fontSize:16 }}>⚡</span>
           <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()} XP</span>
         </div>
 
-        {/* Hearts placeholder */}
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
-          <span style={{ fontSize:16 }}>💗</span>
-          <span style={{ fontSize:13, fontWeight:900, color:RED }}>32</span>
-        </div>
-
-        {/* Profile chip */}
+        {/* Profile chip — name + rank */}
         <Link href="/student/profile" style={{ textDecoration:'none' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer' }}>
             <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>
               {initials}
             </div>
             <div>
-              <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
-              <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
+              <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name || 'Student'}</div>
+              <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>{rankName}</div>
             </div>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft:2 }}>
               <path d="M3 4.5l3 3 3-3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -90,7 +146,7 @@ export function MobileTopbar({ title, extraAction }) {
 
   return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      {/* Left: logo + page title */}
+      {/* Left: logo + title */}
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
         <div style={{ width:30, height:30, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>EX</span>
@@ -98,9 +154,8 @@ export function MobileTopbar({ title, extraAction }) {
         <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>{title}</span>
       </div>
 
-      {/* Right: XP + optional action + profile + dark toggle */}
+      {/* Right: XP + extra + profile + dark toggle */}
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        {/* XP pill — live from context */}
         <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
           <span style={{ fontSize:13 }}>⚡</span>
           <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()}</span>
@@ -108,7 +163,6 @@ export function MobileTopbar({ title, extraAction }) {
 
         {extraAction}
 
-        {/* Profile icon */}
         <Link href="/student/profile" style={{ textDecoration:'none' }}>
           <div style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
             <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
@@ -118,7 +172,6 @@ export function MobileTopbar({ title, extraAction }) {
           </div>
         </Link>
 
-        {/* Dark mode toggle */}
         <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
           {dark
             ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>

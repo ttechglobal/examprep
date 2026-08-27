@@ -35,12 +35,17 @@ export const NAV = [
 // Props:
 //   active  — id string (e.g. 'home', 'practice')
 //   dark    — boolean from ThemeContext
+// Inline rank helpers (mirrors src/lib/ranks.js — no import needed here)
+const _RANK_NAMES = ['Newcomer','Beginner','Learner','Explorer','Starter','Rookie','Apprentice','Trainee','Challenger','Initiate','Solver','Thinker','Problem Solver','Quick Mind','Sharp Mind','Brainiac','Strategist','Tactician','Scholar','Achiever','Specialist','Expert','Ace','Mastermind','Genius','Elite','Prodigy','Virtuoso','Grand Solver','Master Solver','Elite Mind','Mastermind','Top Scholar','Brain Master','Logic Master','Knowledge Master','Question Master','Challenge Master','Exam Master','Learning Master','Rising Star','Star Scholar','Academic Star','Brain Champion','Knowledge Champion','Quiz Champion','Challenge Champion','Exam Champion','Learning Champion','Grand Champion','Legend','Rising Legend','Scholar Legend','Brain Legend','Knowledge Legend','Master Legend','Exam Legend','Learning Legend','Grand Legend','Legendary Mind','Mythic Learner','Mythic Solver','Mythic Scholar','Mythic Mind','Mythic Master','Mythic Genius','Mythic Champion','Mythic Strategist','Mythic Legend','Mythic Grandmaster','Royal Scholar','Crowned Scholar','Scholar King','Scholar Elite','Knowledge Royalty','Brain Royalty','Grand Scholar','Supreme Scholar','Royal Grandmaster','Crown Master','Cosmic Learner','Cosmic Solver','Cosmic Scholar','Cosmic Mind','Cosmic Master','Infinity Scholar','Infinity Master','Eternal Scholar','Ultimate Mind','Ultimate Master','Grandmaster','Supreme Grandmaster','Legendary Grandmaster','Master of Masters','Immortal Scholar','Transcendent Mind','Apex Scholar','Apex Master','Ultimate Scholar','The EXL Legend']
+const _TIER_COLORS = ['#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#22c55e','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#1264E5','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#7C3AED','#F97316','#F97316','#F97316','#F97316','#F97316','#F97316','#F97316','#F97316','#F97316','#F97316','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#EF4444','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#FFB800','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#18B7F2','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#9333EA','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#6366F1','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00','#FF6A00']
+const _TIER_NAMES = ['Rookie','Rookie','Rookie','Rookie','Rookie','Rookie','Rookie','Rookie','Rookie','Rookie','Skilled','Skilled','Skilled','Skilled','Skilled','Skilled','Skilled','Skilled','Skilled','Skilled','Advanced','Advanced','Advanced','Advanced','Advanced','Advanced','Advanced','Advanced','Advanced','Advanced','Elite','Elite','Elite','Elite','Elite','Elite','Elite','Elite','Elite','Elite','Champion','Champion','Champion','Champion','Champion','Champion','Champion','Champion','Champion','Champion','Legendary','Legendary','Legendary','Legendary','Legendary','Legendary','Legendary','Legendary','Legendary','Legendary','Mythic','Mythic','Mythic','Mythic','Mythic','Mythic','Mythic','Mythic','Mythic','Mythic','Royal','Royal','Royal','Royal','Royal','Royal','Royal','Royal','Royal','Royal','Endgame','Endgame','Endgame','Endgame','Endgame','Endgame','Endgame','Endgame','Endgame','Endgame','Prestige','Prestige','Prestige','Prestige','Prestige','Prestige','Prestige','Prestige','Prestige','Prestige']
+const _RANK_XP = (() => { const t=[0]; for(let i=1;i<10;i++)t.push(t[t.length-1]+200+i*20); for(let i=0;i<10;i++)t.push(t[t.length-1]+500+i*50); for(let i=0;i<10;i++)t.push(t[t.length-1]+1200+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+2500+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+3800+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+5500+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+7500+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+9500+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+12000+i*100); for(let i=0;i<10;i++)t.push(t[t.length-1]+15000+i*100); return t })()
+function _getRankFromXp(xp) { let r=1; for(let i=_RANK_XP.length-1;i>=0;i--){if(xp>=_RANK_XP[i]){r=i+1;break}} return Math.min(r,100) }
+function _getRankProgress(xp) { const rank=_getRankFromXp(xp); const xs=_RANK_XP[rank-1]??0; const xe=_RANK_XP[rank]??xs+1; const pct=rank===100?100:Math.min(100,Math.round(((xp-xs)/(xe-xs))*100)); return { rank, name:_RANK_NAMES[rank-1], tier:_TIER_NAMES[rank-1], color:_TIER_COLORS[rank-1], pct, xpToNext:rank===100?0:xe-xp } }
+
 export function StudentSidebar({ active = 'home', dark }) {
   const { totalPoints: xp } = usePoints()
-
-  const level   = Math.floor(xp / 2000) + 1
-  const xpInLvl = xp % 2000
-  const xpPct   = Math.min(100, Math.round((xpInLvl / 2000) * 100))
+  const { rank, name: rankName, tier, color: rankColor, pct: rankPct, xpToNext } = _getRankProgress(xp)
 
   return (
     <aside style={{
@@ -105,30 +110,24 @@ export function StudentSidebar({ active = 'home', dark }) {
         </Link>
       </div>
 
-      {/* Level / XP card — updates live via PointsContext */}
-      <div style={{
-        borderRadius:16, padding:'14px', marginTop:14,
+      {/* Rank card — live from PointsContext + 100-rank system */}
+      <div suppressHydrationWarning style={{
+        borderRadius:16, padding:'12px', marginTop:14,
         background: dark ? 'rgba(255,255,255,.04)' : 'rgba(18,100,229,.05)',
         border:     dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(18,100,229,.1)',
       }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-          <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)' }}>Level {level}</div>
-          <div style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${GOLD}18`, color:GOLD, border:`1px solid ${GOLD}30` }}>Scholar</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)' }}>Rank {rank}</div>
+          <div style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${rankColor}20`, color:rankColor, border:`1px solid ${rankColor}35` }}>{tier}</div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-          <svg width="28" height="28" viewBox="0 0 44 44" aria-hidden="true" style={{ flexShrink:0 }}>
-            <polygon points="22,2 40,12 40,32 22,42 4,32 4,12" fill={NAVY} stroke={GOLD} strokeWidth="2.5"/>
-            <text x="22" y="28" textAnchor="middle" fontSize="14" fill={GOLD} fontWeight="900">⚡</text>
-          </svg>
-          <div style={{ flex:1 }}>
-            <div style={{ height:7, borderRadius:999, background:'var(--border)', overflow:'hidden' }}>
-              <div style={{ height:'100%', width:`${xpPct}%`, borderRadius:999, background:`linear-gradient(90deg,${ORANGE},${GOLD})`, transition:'width .8s ease' }}/>
-            </div>
-          </div>
+        <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:6, lineHeight:1.2 }}>{rankName}</div>
+        <div style={{ height:6, borderRadius:999, background:'var(--border)', overflow:'hidden', marginBottom:6 }}>
+          <div style={{ height:'100%', width:`${rankPct}%`, borderRadius:999, background:`linear-gradient(90deg,${rankColor},${rankColor}99)`, transition:'width .8s ease' }}/>
         </div>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{xpInLvl.toLocaleString()} XP</span>
-          <span style={{ fontSize:10, color:'var(--text-tert)' }}>/ 2,000</span>
+          <span style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)' }}>{xp.toLocaleString()} XP</span>
+          {rank < 100 && <span style={{ fontSize:9, color:'var(--text-tert)' }}>{xpToNext.toLocaleString()} to next</span>}
+          {rank === 100 && <span style={{ fontSize:9, color:rankColor, fontWeight:800 }}>MAX 👑</span>}
         </div>
       </div>
     </aside>

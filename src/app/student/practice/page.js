@@ -5,11 +5,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useStudentUser } from '@/app/student/layout'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
-import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
+import { usePoints } from '@/contexts/PointsContext'
 import DailyQuests from '@/components/student/DailyQuests'
-import { DesktopTopbar, MobileTopbar } from '@/components/student/StudentTopbar'
+import SessionHistory from '@/components/student/SessionHistory'
+import Link from 'next/link'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -51,35 +53,8 @@ function pickDefault(subjects, exam) {
   return subjects[0]
 }
 
-function buildHistory(attempts) {
-  if (!attempts?.length) return []
-  const sessions = []; let sess = null
-  for (const a of attempts) {
-    const ts = new Date(a.created_at).getTime()
-    const subName = a.subjects?.name ?? 'Unknown'
-    const newSess = !sess || subName !== sess.subject || (sess.lastTs - ts) > 30*60*1000
-    if (newSess) { if (sess) sessions.push(sess); sess = { subject:subName, lastTs:ts, date:new Date(a.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}), count:0, correct:0, mode:'Practice' } }
-    sess.lastTs = ts; sess.count++; if (a.is_correct) sess.correct++
-  }
-  if (sess) sessions.push(sess)
-  return sessions.slice(0,8).map(s => ({ ...s, pct: s.count ? Math.round((s.correct/s.count)*100) : 0 }))
-}
 
 // ─── UI ATOMS ─────────────────────────────────────────────────────────────────
-function AppBackground({ dark }) {
-  return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, backgroundImage: dark ? 'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)' : 'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-      {dark ? (<>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-      </>) : (<>
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
-        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(255,106,0,.04)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-      </>)}
-    </div>
-  )
-}
 
 function Card({ children, style={} }) {
   return <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', overflow:'hidden', ...style }}>{children}</div>
@@ -94,205 +69,7 @@ function SecLabel({ children, right }) {
   )
 }
 
-// ─── SUBJECT PICKER SHEET ─────────────────────────────────────────────────────
-const COMPULSORY = {
-  WAEC: ['English Language', 'Mathematics'],
-  JAMB: ['Use of English', 'Mathematics'],
-}
 
-function SubjectPickerSheet({ exam, savedWaec, savedJamb, onClose, onSaved, dark }) {
-  const [allAvail,  setAllAvail]  = useState([])
-  const [selected,  setSelected]  = useState(new Set(exam === 'WAEC' ? savedWaec : savedJamb))
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [error,     setError]     = useState('')
-  const [activeTab, setActiveTab] = useState(exam)
-
-  const compulsory = COMPULSORY[activeTab] ?? []
-
-  useEffect(() => {
-    setLoading(true)
-    setSelected(new Set(activeTab === 'WAEC' ? savedWaec : savedJamb))
-    fetch('/api/admin/subjects')
-      .then(r => r.json())
-      .then(d => {
-        const all = Array.isArray(d) ? d : (d.subjects ?? [])
-        setAllAvail(all.filter(s => s.exam_type === activeTab && s.is_active !== false))
-      })
-      .catch(() => setAllAvail([]))
-      .finally(() => setLoading(false))
-  }, [activeTab])
-
-  useEffect(() => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      compulsory.forEach(s => next.add(s))
-      return next
-    })
-  }, [activeTab])
-
-  function toggle(name) {
-    if (compulsory.includes(name)) return
-    setSelected(prev => { const s = new Set(prev); s.has(name) ? s.delete(name) : s.add(name); return s })
-  }
-
-  async function save() {
-    if (selected.size === 0) { setError('Select at least one subject.'); return }
-    setSaving(true); setError('')
-    try {
-      const r = await fetch('/api/student/subjects', {
-        method:'PATCH', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ exam: activeTab, subjects: [...selected] }),
-      })
-      const body = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(body.error ?? 'Save failed')
-      onSaved(activeTab, [...selected])
-    } catch(e) { setError(e.message || 'Could not save.') }
-    finally { setSaving(false) }
-  }
-
-  const selCount = selected.size
-
-  return (
-    <>
-      <style>{`.spb{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:flex-end;flex-direction:column}.sps{width:100%;max-width:540px;background:var(--bg-card);border-radius:26px 26px 0 0;border-top:1px solid var(--border);max-height:92vh;display:flex;flex-direction:column;animation:su .28s cubic-bezier(.22,.61,.36,1)}@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}@media(min-width:768px){.spb{justify-content:center}.sps{border-radius:22px;border:1px solid var(--border);max-height:84vh;animation:fi .22s ease}}@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      <div className="spb" onClick={e => e.target===e.currentTarget&&onClose()}>
-        <div className="sps">
-          <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 0' }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
-          </div>
-          <div style={{ padding:'14px 22px 0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div>
-              <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>My subjects</div>
-              <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>
-                {selCount > 0 ? <><span style={{ fontWeight:800, color:BLUE }}>{selCount}</span> selected for {activeTab}</> : `Choose your ${activeTab} subjects`}
-              </div>
-            </div>
-            <button onClick={onClose} style={{ width:32, height:32, borderRadius:'50%', background:'var(--bg-subtle)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text-tert)', fontFamily:'inherit' }}>×</button>
-          </div>
-          <div style={{ padding:'12px 22px 0' }}>
-            <div style={{ display:'flex', background:'var(--bg-subtle)', borderRadius:12, padding:3, border:'1px solid var(--border)' }}>
-              {['WAEC','JAMB'].map(e => (
-                <button key={e} onClick={() => setActiveTab(e)} style={{ flex:1, padding:'8px 0', borderRadius:9, fontSize:13, fontWeight:800, border:'none', cursor:'pointer', fontFamily:'inherit', background:activeTab===e?BLUE:'transparent', color:activeTab===e?'#fff':'var(--text-tert)', transition:'all .15s' }}>{e}</button>
-              ))}
-            </div>
-            <div style={{ marginTop:8, padding:'7px 10px', borderRadius:9, background:dark?'rgba(255,184,0,.08)':'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.2)', fontSize:11, color:'var(--text-tert)' }}>
-              🔒 <strong style={{ color:'var(--text-prim)' }}>Compulsory:</strong> {compulsory.join(' · ')}
-            </div>
-          </div>
-          <div style={{ flex:1, overflowY:'auto', padding:'14px 22px' }}>
-            {loading ? (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                {[...Array(8)].map((_,i) => <div key={i} style={{ height:88, borderRadius:16, background:'var(--bg-subtle)', animation:'pulse2 1.4s infinite' }}/>)}
-              </div>
-            ) : !allAvail.length ? (
-              <div style={{ textAlign:'center', padding:'32px 0' }}>
-                <div style={{ fontSize:32, marginBottom:10 }}>📚</div>
-                <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)' }}>No {activeTab} subjects yet</div>
-              </div>
-            ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                {allAvail.map(sub => {
-                  const a = getAccent(sub.name); const on = selected.has(sub.name); const locked = compulsory.includes(sub.name)
-                  return (
-                    <button key={sub.id??sub.name} onClick={() => toggle(sub.name)}
-                      style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'14px 13px', borderRadius:16, border:`2px solid ${on?a:'var(--border)'}`, background:on?`${a}10`:'var(--bg-subtle)', cursor:locked?'default':'pointer', textAlign:'left', fontFamily:'inherit', transition:'all .12s', position:'relative' }}>
-                      {locked && <div style={{ position:'absolute', top:7, right:7, fontSize:10 }}>🔒</div>}
-                      {on && !locked && (
-                        <div style={{ position:'absolute', top:9, right:9, width:20, height:20, borderRadius:'50%', background:a, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </div>
-                      )}
-                      <div style={{ fontSize:22, marginBottom:8 }}>{getIcon(sub.name)}</div>
-                      <div style={{ fontSize:12, fontWeight:800, color:on?a:'var(--text-prim)', lineHeight:1.3, paddingRight:locked||on?20:0 }}>{sub.name}</div>
-                      <div style={{ fontSize:10, marginTop:3, color:(sub.topic_count??0)>0?'var(--text-tert)':ORANGE, fontWeight:600 }}>
-                        {locked ? 'Compulsory' : (sub.topic_count??0)>0 ? `${sub.topic_count} topics` : 'Coming soon'}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          {error && <div style={{ margin:'0 22px', padding:'10px 14px', borderRadius:11, background:`${RED}12`, border:`1px solid ${RED}30`, fontSize:13, color:RED }}>{error}</div>}
-          <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)' }}>
-            <button onClick={save} disabled={saving||selCount===0}
-              style={{ width:'100%', padding:'14px 0', borderRadius:14, border:'none', cursor:saving||selCount===0?'not-allowed':'pointer', background:selCount===0?'var(--border)':BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:selCount>0?`0 5px 0 #0a3fa0,0 8px 20px ${BLUE}40`:'none', transition:'all .12s' }}>
-              {saving ? 'Saving…' : selCount===0 ? 'Select at least one subject' : `Save ${selCount} subject${selCount!==1?'s':''} for ${activeTab} →`}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ─── GOALS SHEET ──────────────────────────────────────────────────────────────
-function GoalsSheet({ profile, onClose, onSaved, dark }) {
-  const [waecAs,    setWaecAs]   = useState(profile?.target_waec ?? '')
-  const [jambScore, setJambScore]= useState(profile?.target_jamb ? String(profile.target_jamb) : '')
-  const [saving,    setSaving]   = useState(false)
-  const [saved,     setSaved]    = useState(false)
-  const [error,     setError]    = useState('')
-
-  const WAEC_OPTIONS = ["1 A","2 A's","3 A's","4 A's","5 A's","6 A's","7 A's","8 A's","9 A's"]
-  const JAMB_OPTIONS = ['180','200','220','240','250','260','270','280','300','320','350']
-
-  async function save() {
-    setSaving(true); setError('')
-    try {
-      const supabase = createClient()
-      const { data:{ user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not logged in')
-      const { error:err } = await supabase.from('profiles').update({ target_waec: waecAs||null, target_jamb: jambScore?parseInt(jambScore):null }).eq('id', user.id)
-      if (err) throw new Error(err.message)
-      setSaved(true)
-      setTimeout(() => { onSaved({ target_waec:waecAs, target_jamb:jambScore }); onClose() }, 900)
-    } catch { setError('Could not save. Please try again.') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <>
-      <style>{`.gb{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:flex-end;flex-direction:column}.gs{width:100%;max-width:540px;background:var(--bg-card);border-radius:26px 26px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;animation:gsu .28s cubic-bezier(.22,.61,.36,1)}@keyframes gsu{from{transform:translateY(100%)}to{transform:translateY(0)}}@media(min-width:768px){.gb{justify-content:center}.gs{border-radius:22px;border:1px solid var(--border);animation:gfi .22s ease}}@keyframes gfi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      <div className="gb" onClick={e => e.target===e.currentTarget&&onClose()}>
-        <div className="gs">
-          <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 0' }}><div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/></div>
-          <div style={{ padding:'14px 22px 12px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid var(--border)' }}>
-            <div><div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>My exam goals</div><div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>Set what you want to achieve</div></div>
-            <button onClick={onClose} style={{ width:32, height:32, borderRadius:'50%', background:'var(--bg-subtle)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text-tert)', fontFamily:'inherit' }}>×</button>
-          </div>
-          <div style={{ padding:'22px', display:'flex', flexDirection:'column', gap:28 }}>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                <div style={{ width:28, height:28, borderRadius:8, background:`${BLUE}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>🎓</div>
-                <div><div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>WAEC target</div><div style={{ fontSize:11, color:'var(--text-tert)' }}>How many A grades?</div></div>
-              </div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {WAEC_OPTIONS.map(opt => { const on=waecAs===opt; return <button key={opt} onClick={() => setWaecAs(on?'':opt)} style={{ padding:'9px 15px', borderRadius:999, border:`2px solid ${on?BLUE:'var(--border)'}`, background:on?`${BLUE}12`:'var(--bg-subtle)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:on?800:600, color:on?BLUE:'var(--text-sec)', transition:'all .12s' }}>{opt}</button> })}
-              </div>
-            </div>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                <div style={{ width:28, height:28, borderRadius:8, background:`${ORANGE}14`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>📋</div>
-                <div><div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>JAMB target</div><div style={{ fontSize:11, color:'var(--text-tert)' }}>Out of 400</div></div>
-              </div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {JAMB_OPTIONS.map(score => { const on=jambScore===score; return <button key={score} onClick={() => setJambScore(on?'':score)} style={{ padding:'9px 15px', borderRadius:999, border:`2px solid ${on?ORANGE:'var(--border)'}`, background:on?`${ORANGE}12`:'var(--bg-subtle)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:on?800:600, color:on?ORANGE:'var(--text-sec)', transition:'all .12s' }}>{score}+</button> })}
-              </div>
-            </div>
-          </div>
-          {error && <div style={{ margin:'0 22px', padding:'10px 14px', borderRadius:11, background:`${RED}12`, border:`1px solid ${RED}30`, fontSize:13, color:RED }}>{error}</div>}
-          <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)' }}>
-            <button onClick={save} disabled={saving} style={{ width:'100%', padding:'14px 0', borderRadius:14, border:'none', cursor:saving?'not-allowed':'pointer', background:saved?GREEN:GOLD, color:saved?'#fff':NAVY, fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:saved?'0 5px 0 #16a34a':`0 5px 0 #b45309,0 8px 20px ${GOLD}40`, transition:'all .15s', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-              {saved ? '✓ Saved!' : saving ? 'Saving…' : '⚡ Save my goals'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
 
 // ─── HERO BANNER ──────────────────────────────────────────────────────────────
 function HeroBanner({ dark }) {
@@ -590,7 +367,7 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
                     <div style={{ fontSize:13, fontWeight:700, color:'var(--text-tert)' }}>No {exam} subjects set up yet</div>
                   </div>
                 ) : (
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:8 }}>
                     {subjects.map(sub => {
                       const a = getAccent(sub.name)
                       const currentSubj = mode==='quick5' ? q5Subject : mode==='timed' ? spSubject : subject
@@ -745,10 +522,8 @@ export default function PracticePage() {
   const [loading,         setLoading]        = useState(true)
   const [showSheet,       setShowSheet]      = useState(false)
   const [sheetMode,       setSheetMode]      = useState('custom')
-  const [history,         setHistory]        = useState([])
-  const [xp,              setXp]             = useState(0)
-  const [showSubjects,    setShowSubjects]   = useState(false)
-  const [showGoals,       setShowGoals]      = useState(false)
+
+  const { totalPoints: xp } = usePoints()
 
   function openSheet(mode='custom') { setSheetMode(mode); setShowSheet(true) }
 
@@ -767,18 +542,7 @@ export default function PracticePage() {
 
   function handleExamChange(e) { setExam(e); fetchSubjects(e) }
 
-  function handleSubjectsSaved(savedExam) {
-    delete subjectCache.current[savedExam]
-    setShowSubjects(false)
-    fetchSubjects(savedExam)
-  }
 
-  async function loadHistory(uid) {
-    const { data:attempts } = await supabase.from('question_attempts')
-      .select('created_at,is_correct,subject_id,subjects(name)')
-      .eq('student_id', uid).order('created_at', {ascending:false}).limit(200)
-    setHistory(buildHistory(attempts))
-  }
 
   async function load() {
     const { data:{user} } = await supabase.auth.getUser()
@@ -787,11 +551,9 @@ export default function PracticePage() {
       .select('id,exam_type,full_name,username,total_points,target_waec,target_jamb')
       .eq('id', user.id).single()
     setProfile(prof)
-    setXp(prof?.total_points ?? 0)
     const examTab = prof?.exam_type==='JAMB' ? 'JAMB' : 'WAEC'
     setExam(examTab)
     await fetchSubjects(examTab)
-    await loadHistory(user.id)
     setLoading(false)
   }
 
@@ -812,57 +574,34 @@ export default function PracticePage() {
   }
 
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 0' }}>
       <div style={{ width:32, height:32, borderRadius:'50%', border:`3px solid var(--border)`, borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
-  const name = profile?.username || profile?.full_name?.split(' ')[0] || 'Student'
-  const cap  = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
-
-  const mainContent = (
-    <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
-      <HeroBanner dark={dark}/>
-      <DailyQuests onStart={openSheet}/>
-      <PracticeModeCards onStart={openSheet} dark={dark}/>
-      <RecentSessions history={history} dark={dark}/>
-    </div>
-  )
-
-  const rightCol = null
 
   return (
     <>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}} @keyframes pulse2{0%,100%{opacity:.6}50%{opacity:.3}} *{box-sizing:border-box}`}</style>
-      <AppBackground dark={dark}/>
 
-      {/* DESKTOP */}
-      <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1340, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active="practice" xp={xp} dark={dark}/>
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={cap(name)} xp={xp} searchPlaceholder="Search topics, questions, exams…"/>
-            <div style={{ display:'flex', gap:8, marginBottom:18 }}>
-              <button onClick={() => setShowSubjects(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:999, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:'var(--text-tert)' }}>📚 Edit subjects</button>
-              <button onClick={() => setShowGoals(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:999, border:`1px solid ${GOLD}35`, background:`${GOLD}10`, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:GOLD }}>
-                🎯 My goals{profile?.target_waec ? ` · ${profile.target_waec} WAEC` : ''}{profile?.target_jamb ? ` · ${profile.target_jamb}+ JAMB` : ''}
-              </button>
-            </div>
-            <div>{mainContent}</div>
-          </div>
-        </div>
+
+      {/* Quick links — right-aligned */}
+      <div style={{ display:'flex', justifyContent:'flex-end', gap:8, flexWrap:'wrap', marginBottom:18 }}>
+        <Link href="/student/profile" style={{ textDecoration:'none' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:999, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', fontSize:12, fontWeight:700, color:'var(--text-tert)' }}>📚 Edit subjects</div>
+        </Link>
+        <Link href="/student/profile" style={{ textDecoration:'none' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:999, border:`1px solid ${GOLD}35`, background:`${GOLD}10`, cursor:'pointer', fontSize:12, fontWeight:700, color:GOLD }}>🎯 Goals</div>
+        </Link>
       </div>
 
-      {/* MOBILE */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar title="Practice" xp={xp}/>
-        <div style={{ padding:'12px 16px 0', display:'flex', gap:8 }}>
-          <button onClick={() => setShowSubjects(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:'var(--text-tert)' }}>📚 Subjects</button>
-          <button onClick={() => setShowGoals(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, border:`1px solid ${GOLD}35`, background:`${GOLD}10`, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700, color:GOLD }}>🎯 Goals</button>
-        </div>
-        <div style={{ padding:'14px 16px 0' }}>{mainContent}</div>
-        <StudentBottomNav active="practice" dark={dark}/>
+      {/* Main content */}
+      <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
+        <HeroBanner dark={dark}/>
+        <DailyQuests onStart={openSheet} profile={profile}/>
+        <PracticeModeCards onStart={openSheet} dark={dark}/>
+        <SessionHistory/>
       </div>
 
       {showSheet && (
@@ -873,25 +612,6 @@ export default function PracticePage() {
           onClose={() => setShowSheet(false)}
           onStart={handleStart}
           onMockExam={() => { setShowSheet(false); router.push('/student/exam') }}
-        />
-      )}
-
-      {showSubjects && (
-        <SubjectPickerSheet
-          exam={exam}
-          savedWaec={subjectCache.current['WAEC']?.map(s=>s.name) ?? []}
-          savedJamb={subjectCache.current['JAMB']?.map(s=>s.name) ?? []}
-          dark={dark}
-          onClose={() => setShowSubjects(false)}
-          onSaved={handleSubjectsSaved}
-        />
-      )}
-
-      {showGoals && profile && (
-        <GoalsSheet
-          profile={profile} dark={dark}
-          onClose={() => setShowGoals(false)}
-          onSaved={updated => setProfile(p => ({...p,...updated}))}
         />
       )}
     </>

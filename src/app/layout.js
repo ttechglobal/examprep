@@ -37,12 +37,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head>
-        {/* Prevent flash of wrong theme — must run before first paint */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
-          }}
-        />
+        {/* Theme script moved to next/script beforeInteractive below */}
       </head>
       <body className="font-jakarta antialiased bg-base text-primary">
         <ThemeProvider>
@@ -57,6 +52,11 @@ export default function RootLayout({ children }) {
             {children}
           </PointsProvider>
         </ThemeProvider>
+
+        {/* Prevent flash of wrong theme — runs before first paint */}
+        <Script id="theme-init" strategy="beforeInteractive">{`
+          (function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();
+        `}</Script>
 
         {/* Register service worker for PWA / offline support */}
         <Script id="sw-register" strategy="afterInteractive">{`

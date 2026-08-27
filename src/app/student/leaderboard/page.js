@@ -5,10 +5,11 @@
 // Mobile: sticky topbar + school/national tabs + podium + table + motivational footer
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePoints } from '@/contexts/PointsContext'
 import { useTheme } from '@/contexts/ThemeContext'
-import { StudentSidebar, StudentBottomNav } from '@/components/student/StudentNav'
+import { useRouter } from 'next/navigation'
+import { useStudentUser } from '@/app/student/layout'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
 // ─── BRAND ────────────────────────────────────────────────────────────────────
@@ -20,94 +21,13 @@ const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
 
 // ─── BACKGROUND ───────────────────────────────────────────────────────────────
-function AppBackground({ dark }) {
-  return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
-      <div style={{ position:'absolute', inset:0, backgroundImage: dark ? 'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)' : 'radial-gradient(circle,rgba(6,42,120,.06) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-      {dark ? (<>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-      </>) : (<>
-        <div style={{ position:'absolute', width:320, height:320, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', top:-60, right:-40 }}/>
-        <div style={{ position:'absolute', width:240, height:240, borderRadius:'50%', background:'rgba(255,184,0,.06)', filter:'blur(50px)', bottom:-40, left:-50 }}/>
-      </>)}
-    </div>
-  )
-}
 
 // ─── CARD ─────────────────────────────────────────────────────────────────────
 function Card({ children, style={} }) {
   return <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 2px 16px rgba(6,42,120,.06)', overflow:'hidden', ...style }}>{children}</div>
 }
 
-// ─── DESKTOP TOPBAR ───────────────────────────────────────────────────────────
-function DesktopTopbar({ name, xp, dark, toggle }) {
-  const level = Math.floor((xp||0)/2000)+1
-  const initials = (name||'EX').slice(0,2).toUpperCase()
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingBottom:18, borderBottom:'1px solid var(--border)', marginBottom:24 }}>
-      <div style={{ flex:1, maxWidth:420, position:'relative' }}>
-        <div style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="var(--text-tert)" strokeWidth="1.8"/><path d="M15 15l3 3" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round"/></svg>
-        </div>
-        <input placeholder="Search players, schools…" style={{ width:'100%', padding:'10px 14px 10px 40px', borderRadius:13, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:13, fontFamily:'inherit', outline:'none' }}/>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginLeft:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)', border:`1px solid ${GOLD}30` }}>
-          <span style={{ fontSize:16 }}>⚡</span>
-          <span style={{ fontSize:13, fontWeight:900, color:GOLD }}>{(xp||2840).toLocaleString()} XP</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(244,63,94,.12)':'rgba(244,63,94,.08)', border:'1px solid rgba(244,63,94,.25)' }}>
-          <span style={{ fontSize:16 }}>💗</span>
-          <span style={{ fontSize:13, fontWeight:900, color:'#f43f5e' }}>32</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px 6px 6px', borderRadius:999, background:'var(--bg-card)', border:'1px solid var(--border)', cursor:'pointer' }}>
-          <div style={{ width:30, height:30, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:GOLD }}>{initials}</div>
-          <div>
-            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', lineHeight:1 }}>{name}</div>
-            <div style={{ fontSize:9, color:'var(--text-tert)', marginTop:1 }}>Level {level} 👑</div>
-          </div>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft:2 }}><path d="M3 4.5l3 3 3-3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <button onClick={toggle} style={{ width:36, height:36, borderRadius:11, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
-// ─── MOBILE TOPBAR ────────────────────────────────────────────────────────────
-function MobileTopbar({ xp, dark, toggle }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.93)':'rgba(249,250,255,.93)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ width:30, height:30, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>EX</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>Leaderboard</span>
-          <span style={{ fontSize:15 }}>🏆</span>
-        </div>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
-          <span style={{ fontSize:13 }}>⚡</span>
-          <span style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||2840).toLocaleString()}</span>
-        </div>
-        <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ─── DESKTOP HERO BANNER ──────────────────────────────────────────────────────
 function HeroBanner({ dark }) {
@@ -415,28 +335,13 @@ function MotivationalFooter({ name, dark }) {
   )
 }
 
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-function getMockBoard(scope, period, myName) {
-  const schools = ['Queen\'s College, Lagos','King\'s College, Lagos','CMS Grammar School','Methodist Boys\' H.S.']
-  const names = ['Chisom O.','Jane E.',myName||'You','David M.','Daniel A.','Mercy T.','Ifeanyi K.','Tobi L.','Praise A.','Amara N.','Emeka C.','Uche B.']
-  const xps   = [4850,4320,5240,3980,3450,3120,2980,2760,2600,2480,2380,2280]
-  return names.map((name,i)=>({
-    student_id: i===2?'me':String(i),
-    name,
-    school: schools[i%schools.length],
-    xp: xps[i]||(2000-i*80),
-    points: xps[i]||(2000-i*80),
-    isMe: i===2,
-  }))
-}
-
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 const SCOPE_TABS  = [{key:'school',label:'School'},{key:'national',label:'National'}]
 const PERIOD_TABS = [{key:'week',label:'This Week'},{key:'lastWeek',label:'Last Week'},{key:'month',label:'This Month'},{key:'lastMonth',label:'Last Month'},{key:'all',label:'All Time'}]
 
 export default function LeaderboardPage() {
   const router  = useRouter()
-  const { dark, toggle } = useTheme()
+  const { dark } = useTheme()
 
   const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
@@ -444,184 +349,122 @@ export default function LeaderboardPage() {
   const [period,   setPeriod]   = useState('week')
   const [board,    setBoard]    = useState([])
   const [myId,     setMyId]     = useState('me')
-  const [xp,       setXp]       = useState(2840)
+  const { totalPoints: xp } = usePoints()
   const [hasSchool,setHasSchool]= useState(false)
 
-  async function load() {
+  async function loadProfile() {
     try {
       const supabase = createClient()
       const { data:{session} } = await supabase.auth.getSession()
       if (session?.user) {
         setMyId(session.user.id)
         const { data:prof } = await supabase.from('profiles').select('username,full_name,total_points,school_id').eq('id',session.user.id).single()
-        if (prof) {
-          setProfile(prof)
-          setXp(prof.total_points||0)
-          setHasSchool(!!prof.school_id)
-        }
-        // Try to fetch real leaderboard
-        try {
-          const res = await fetch(`/api/leaderboard/global?limit=12&period=${period}&scope=${scope}`)
-          if (res.ok) { const d = await res.json(); if(d.leaderboard?.length) { setBoard(d.leaderboard); setLoading(false); return } }
-        } catch {}
+        if (prof) { setProfile(prof); setHasSchool(!!prof.school_id) }
       }
     } catch(e) { console.error(e) }
-    // Fallback mock
-    const name = profile?.username || profile?.full_name?.split(' ')[0] || 'You'
-    setBoard(getMockBoard(scope, period, name))
-    setLoading(false)
   }
 
-  useEffect(()=>{ load() },[]) // eslint-disable-line
-  useEffect(()=>{
-    const name = profile?.username || profile?.full_name?.split(' ')[0] || 'You'
-    setBoard(getMockBoard(scope, period, name))
-  },[scope, period]) // eslint-disable-line
+  async function fetchBoard() {
+    try {
+      const res = await fetch(`/api/leaderboard/global?limit=12&period=${period}&scope=${scope}`)
+      if (res.ok) { const d = await res.json(); if(d.leaderboard?.length) setBoard(d.leaderboard) }
+    } catch {} finally { setLoading(false) }
+  }
+
+  useEffect(()=>{ loadProfile() },[]) // eslint-disable-line
+  useEffect(()=>{ fetchBoard() },[scope, period]) // eslint-disable-line
 
   const name      = profile?.username || profile?.full_name?.split(' ')[0] || 'King'
   const champion  = board[0] ? { name:board[0].name, school:board[0].school, xp:board[0].xp||board[0].points||0 } : null
   const weekNum   = 18
 
   if (loading) return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'80px 0' }}>
       <div style={{ width:32,height:32,borderRadius:'50%',border:`3px solid var(--border)`,borderTopColor:BLUE,animation:'spin .7s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
   return (
-    <>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} *{box-sizing:border-box}`}</style>
-      <AppBackground dark={dark}/>
+    <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
 
-      {/* ══ DESKTOP ══════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1340, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active="leaderboard" xp={xp} dark={dark}/>
-
-          {/* Main col */}
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={name} xp={xp} dark={dark} toggle={toggle}/>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20, alignItems:'flex-start' }}>
-
-              {/* Left feed */}
-              <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-                <HeroBanner dark={dark}/>
-
-                {/* Scope + Period filters */}
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
-                  <TabRow tabs={SCOPE_TABS} active={scope} onChange={setScope} pill={true} dark={dark}/>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <TabRow tabs={PERIOD_TABS} active={period} onChange={setPeriod} pill={false} dark={dark}/>
-                    <button style={{ width:34, height:34, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="13" rx="2" stroke="var(--text-tert)" strokeWidth="1.5"/><path d="M5 1v3M11 1v3M1 6h14" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Champion */}
-                <ChampionCard champion={champion} weekNum={weekNum} dark={dark}/>
-
-                {/* Podium */}
-                {board.length >= 3 && <Podium entries={board} myId={myId} dark={dark}/>}
-
-                {/* Table */}
-                {board.length > 0 && (
-                  <div>
-                    {/* Table headers only for desktop */}
-                    <LeaderboardTable entries={board} myId={myId} period={period} dark={dark}/>
-                  </div>
-                )}
-
-                <MotivationalFooter name={name} dark={dark}/>
-              </div>
-
-              {/* Right col — sticky */}
-              <div style={{ position:'sticky', top:20, display:'flex', flexDirection:'column', gap:16 }}>
-                {!hasSchool && <JoinSchoolCard dark={dark}/>}
-                <AboutLeaderboard dark={dark}/>
-                <ChallengesCard dark={dark}/>
-              </div>
-            </div>
-          </div>
+      {/* Scope + Period filters */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
+        <div style={{ display:'flex', gap:0, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', borderRadius:13, padding:3, border:'1px solid var(--border)' }}>
+          {SCOPE_TABS.map(t=>{
+            const on=t.key===scope
+            return(
+              <button key={t.key} onClick={()=>setScope(t.key)} style={{ padding:'9px 18px', borderRadius:10, fontSize:13, fontWeight:on?800:600, border:'none', cursor:'pointer', fontFamily:'inherit', background:on?BLUE:'transparent', color:on?'#fff':'var(--text-tert)', boxShadow:on?`0 2px 8px ${BLUE}40`:'none', transition:'all .15s' }}>{t.label}</button>
+            )
+          })}
+        </div>
+        <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:2, scrollbarWidth:'none' }}>
+          {PERIOD_TABS.map(t=>{
+            const on=t.key===period
+            return(
+              <button key={t.key} onClick={()=>setPeriod(t.key)} style={{ padding:'8px 14px', borderRadius:999, fontSize:12, fontWeight:on?800:600, border:`1px solid ${on?BLUE:'var(--border)'}`, background:on?`${BLUE}14`:'transparent', color:on?BLUE:'var(--text-tert)', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', transition:'all .15s' }}>{t.label}</button>
+            )
+          })}
         </div>
       </div>
 
-      {/* ══ MOBILE ══════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
-        <MobileTopbar xp={xp} dark={dark} toggle={toggle}/>
-
-        <div style={{ padding:'16px 16px 0', display:'flex', flexDirection:'column', gap:18 }}>
-
-          {/* Scope tabs */}
-          <div style={{ display:'flex', gap:0, background:dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.04)', borderRadius:13, padding:3, border:'1px solid var(--border)' }}>
-            {SCOPE_TABS.map(t=>{
-              const on=t.key===scope
-              return(
-                <button key={t.key} onClick={()=>setScope(t.key)} style={{ flex:1, padding:'9px 0', borderRadius:10, fontSize:13, fontWeight:on?800:600, border:'none', cursor:'pointer', fontFamily:'inherit', background:on?BLUE:'transparent', color:on?'#fff':'var(--text-tert)', boxShadow:on?`0 2px 8px ${BLUE}40`:'none', transition:'all .15s' }}>{t.label}</button>
-              )
-            })}
+      {/* No school banner */}
+      {!hasSchool && (
+        <div style={{ borderRadius:16, padding:'14px 16px', background:dark?`${NAVY}cc`:`linear-gradient(135deg,${BLUE}15,${NAVY}10)`, border:`1px solid ${BLUE}25`, display:'flex', gap:12, alignItems:'center' }}>
+          <div style={{ fontSize:28, flexShrink:0 }}>🏫</div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:3 }}>You're not part of a school yet</div>
+            <div style={{ fontSize:11, color:'var(--text-tert)' }}>Join your school to see your school leaderboard.</div>
           </div>
+        </div>
+      )}
 
-          {/* No school banner — mobile */}
-          {!hasSchool && (
-            <div style={{ borderRadius:16, padding:'14px 16px', background:dark?`${NAVY}cc`:`linear-gradient(135deg,${BLUE}15,${NAVY}10)`, border:`1px solid ${BLUE}25`, display:'flex', gap:12, alignItems:'center' }}>
-              <div style={{ fontSize:28, flexShrink:0 }}>🏫</div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:3 }}>You're not part of a school yet</div>
-                <div style={{ fontSize:11, color:'var(--text-tert)' }}>Join your school to see your school leaderboard.</div>
-              </div>
-            </div>
-          )}
+      <HeroBanner dark={dark}/>
+      <ChampionCard champion={champion} weekNum={weekNum} dark={dark}/>
 
-          {/* Champion */}
-          <ChampionCard champion={champion} weekNum={weekNum} dark={dark}/>
-
-          {/* Period filter — horizontal scroll */}
-          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:2, scrollbarWidth:'none' }}>
-            {PERIOD_TABS.map(t=>{
-              const on=t.key===period
-              return(
-                <button key={t.key} onClick={()=>setPeriod(t.key)} style={{ padding:'7px 14px', borderRadius:999, fontSize:12, fontWeight:on?800:600, border:`1.5px solid ${on?BLUE:'var(--border)'}`, cursor:'pointer', fontFamily:'inherit', background:on?BLUE:'var(--bg-card)', color:on?'#fff':'var(--text-tert)', boxShadow:on?`0 2px 8px ${BLUE}40`:'none', transition:'all .15s', whiteSpace:'nowrap', flexShrink:0 }}>{t.label}</button>
-              )
-            })}
-          </div>
-
-          {/* Podium */}
-          {board.length >= 3 && <Podium entries={board} myId={myId} dark={dark}/>}
-
-          {/* Table — mobile (no school column) */}
-          {board.length > 0 && (
-            <Card>
-              {board.slice(3).map((entry, i) => {
-                const rank = i+4
-                const isMe = entry.student_id===myId||entry.isMe
-                return (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', borderBottom:'1px solid var(--border)', background:isMe?(dark?`${BLUE}12`:`${BLUE}06`):'transparent' }}>
-                    <div style={{ width:28, fontSize:12, fontWeight:800, color:'var(--text-tert)', flexShrink:0 }}>{rank}</div>
-                    <Avatar name={entry.name||entry.first_name||'?'} size={34} idx={i} isMe={isMe}/>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:isMe?800:600, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {isMe?'You':(entry.name||entry.first_name)}
-                      </div>
-                      <div style={{ fontSize:10, color:'var(--text-tert)' }}>{entry.school||'—'}</div>
+      {/* Board */}
+      {board.length === 0 ? (
+        <Card style={{ padding:'28px 18px', textAlign:'center' }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>🏆</div>
+          <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:6 }}>No rankings yet</div>
+          <div style={{ fontSize:12, color:'var(--text-tert)' }}>Start practising to appear on the leaderboard!</div>
+          <Link href="/student/practice" style={{ textDecoration:'none' }}>
+            <div style={{ marginTop:14, display:'inline-block', padding:'10px 22px', borderRadius:999, background:BLUE, color:'#fff', fontSize:13, fontWeight:800 }}>Start Practising →</div>
+          </Link>
+        </Card>
+      ) : (
+        <Card>
+          {/* Top 3 podium */}
+          {board.length >= 1 && <Podium entries={board.slice(0,3)} myId={myId} dark={dark}/>}
+          {/* Rest of board */}
+          {board.length > 3 && (
+            <div style={{ padding:'0 0 8px' }}>
+              {board.slice(3).map((entry,i)=>{
+                const isMe=entry.student_id===myId
+                return(
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 18px', borderTop:'1px solid var(--border)', background:isMe?`${BLUE}08`:'transparent' }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', width:22, textAlign:'center', flexShrink:0 }}>{i+4}</span>
+                    <div style={{ width:30, height:30, borderRadius:'50%', flexShrink:0, background:`${BLUE}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:BLUE }}>
+                      {(entry.first_name||'S').charAt(0)}
                     </div>
-                    <div style={{ fontSize:13, fontWeight:900, color:isMe?GOLD:'var(--text-tert)', flexShrink:0 }}>
-                      {(entry.xp||entry.points||0).toLocaleString()} XP
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:isMe?800:600, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{isMe?'You':entry.first_name}</div>
+                      {entry.school && <div style={{ fontSize:11, color:'var(--text-tert)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.school}</div>}
+                    </div>
+                    <div style={{ textAlign:'right', flexShrink:0 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:isMe?GOLD:'var(--text-prim)' }}>{(entry.xp||entry.points||0).toLocaleString()}</div>
+                      <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--text-tert)' }}>XP</div>
                     </div>
                   </div>
                 )
               })}
-            </Card>
+            </div>
           )}
+        </Card>
+      )}
 
-          <MotivationalFooter name={name} dark={dark}/>
-          <ChallengesCard dark={dark}/>
-        </div>
-
-        <StudentBottomNav active="leaderboard" dark={dark}/>
-      </div>
-    </>
+      <MotivationalFooter name={name} dark={dark}/>
+      <ChallengesCard dark={dark}/>
+    </div>
   )
 }
