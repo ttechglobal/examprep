@@ -440,14 +440,21 @@ function StepMascot({ data, onFinish }) {
     const subjectsWaec = exams.includes('WAEC') ? subjects : []
     const subjectsJamb = exams.includes('JAMB') ? subjects : []
     const setup = {
-      local_id: localId,
-      username, exams, subjects,
+      local_id:      localId,
+      username,
+      full_name:     username,          // so layout name display works immediately
+      exams,
+      exam_type:     exams[0] ?? 'WAEC', // singular — what pages read
+      exam_types:    exams,             // array — matches Supabase shape
+      subjects,
       subjects_waec: subjectsWaec,
       subjects_jamb: subjectsJamb,
-      onboarded: true,
-      createdAt: Date.now(),
+      onboarded:     true,
+      createdAt:     Date.now(),
     }
     localStorage.setItem('ep_guest', JSON.stringify(setup))
+    // Also store name for topbar instant display
+    try { localStorage.setItem('ep_student_name', username) } catch {}
 
     // Try to persist to Supabase (anonymous session)
     try {
@@ -455,11 +462,14 @@ function StepMascot({ data, onFinish }) {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
         await supabase.from('profiles').upsert({
-          id: session.user.id,
+          id:            session.user.id,
           username,
-          exam_types: exams,
+          full_name:     username,
+          exam_types:    exams,
           subjects,
-          onboarded: true,
+          subjects_waec: subjectsWaec,
+          subjects_jamb: subjectsJamb,
+          onboarded:     true,
         })
       }
     } catch {

@@ -9,6 +9,7 @@ import { usePoints }     from '@/contexts/PointsContext'
 import { PointsProvider } from '@/contexts/PointsContext'
 import { StudentSidebar, StudentBottomNav, NAV } from '@/components/student/StudentNav'
 import { createClient } from '@/lib/supabase/client'
+import { cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
 
 const NAVY = '#062A78'
@@ -176,7 +177,27 @@ function StudentLayoutInner({ children }) {
         if (!user) {
           try {
             const g = JSON.parse(localStorage.getItem('ep_guest') || '{}')
-            setProfile({ ...g, isGuest: true })
+            // Normalise guest profile: ep_guest saves 'exams' array, pages expect 'exam_type' singular
+            const examType = g.exam_type ?? g.exams?.[0] ?? 'WAEC'
+            // Resolve subjects — handle both old ep_guest (subjects[]) and new (subjects_waec/jamb)
+            const legacySubjects = g.subjects ?? []
+            const waecSubs = g.subjects_waec?.length ? g.subjects_waec
+              : (g.exams?.includes?.('WAEC') || g.exam_types?.includes?.('WAEC') || examType === 'WAEC')
+                ? legacySubjects : []
+            const jambSubs = g.subjects_jamb?.length ? g.subjects_jamb
+              : (g.exams?.includes?.('JAMB') || g.exam_types?.includes?.('JAMB'))
+                ? legacySubjects : []
+
+            const guestProfile = {
+              ...g,
+              exam_type:     examType,
+              exam_types:    g.exams ?? (g.exam_type ? [g.exam_type] : ['WAEC']),
+              subjects:      legacySubjects,
+              subjects_waec: waecSubs,
+              subjects_jamb: jambSubs,
+              isGuest: true,
+            }
+            setProfile(guestProfile)
             if (g.full_name || g.username) {
               try { localStorage.setItem('ep_student_name', g.full_name || g.username) } catch {}
             }
@@ -185,10 +206,15 @@ function StudentLayoutInner({ children }) {
         }
         const { data } = await supabase
           .from('profiles')
-          .select('id,full_name,username,total_points,exam_types,subjects,subjects_waec,subjects_jamb,target_university,target_course,target_waec,target_jamb,onboarded,school_id,class_level')
+          .select('id,full_name,username,total_points,exam_types,subjects,subjects_waec,subjects_jamb,onboarded,school_id')
           .eq('id', user.id).single()
         if (data) {
-          setProfile(data)
+          // Normalise: add exam_type (singular) so all pages use the same field
+          // regardless of whether they came from Supabase (exam_types[]) or ep_guest (exams[])
+          const examType = data.exam_types?.[0] ?? 'WAEC'
+          const normalised = { ...data, exam_type: examType }
+          setProfile(normalised)
+          cacheAuthProfile(normalised)
           try { localStorage.setItem('ep_student_name', data.full_name || data.username || '') } catch {}
         }
       } catch (e) { console.error('layout profile:', e) }
@@ -212,7 +238,7 @@ function StudentLayoutInner({ children }) {
 
       {/* ── DESKTOP — Tailwind hides this on mobile ── */}
       <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ maxWidth:1340, width:'100%', margin:'0 auto', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
+        <div style={{ width:'100%', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
           <StudentSidebar active={active.id} dark={dark} />
           <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
             <DesktopTopbar name={name} />

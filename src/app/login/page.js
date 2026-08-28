@@ -38,7 +38,7 @@ function LoginForm() {
     if (role === 'school_admin') { router.push('/school/dashboard'); return }
     if (role === 'admin')        { router.push('/admin/dashboard');  return }
     if (role === 'reviewer')     { router.push('/reviewer');         return }
-    router.push('/student/dashboard')
+    router.push('/student/home')
   }
 
   const isSchool = accountType === 'school'

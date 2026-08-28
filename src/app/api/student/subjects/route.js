@@ -1,14 +1,22 @@
-// src/app/api/student/subjects/route.js — v7
-// GET  /api/student/subjects?exam=WAEC  — returns student's saved subjects for that exam
-// PATCH /api/student/subjects            — saves { exam, subjects: string[] } to profile
+// src/app/api/student/subjects/route.js — v8
+// GET  /api/student/subjects?exam=WAEC&names=Math,Physics
+//   → Returns subject rows for the given names + exam.
+//   → Does NOT require auth. Names are passed by the client from local profile.
+//   → Single DB query. Cached aggressively.
 //
-// The subjects table has ONE ROW PER EXAM per subject name.
-// e.g. Mathematics exists twice: { name:'Mathematics', exam_type:'WAEC' } and { name:'Mathematics', exam_type:'JAMB' }
-// The student profile stores subject NAMES (not IDs) in subjects_waec[] and subjects_jamb[].
+// PATCH /api/student/subjects
+//   → Saves subject selections to profile (auth required).
+//
+// Why name-based instead of auth-based:
+//   The old version did auth → profile fetch → subject names → subject rows = 3 round trips.
+//   This version receives names directly from the client (already in local profile),
+//   does ONE query, and returns rows. Guests work too — no auth needed for GET.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+
+const CACHE_SECS = 300 // 5 min — subjects don't change often
 
 function svc() {
   return createServiceClient(
@@ -18,68 +26,83 @@ function svc() {
 }
 
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const url       = new URL(request.url)
+  const examParam = (url.searchParams.get('exam') ?? 'WAEC').toUpperCase()
+  const namesParam = url.searchParams.get('names') // comma-separated subject names
 
-  const db       = svc()
-  const url      = new URL(request.url)
-  const examParam = url.searchParams.get('exam') ?? 'WAEC'
+  // ── Path A: client sends subject names directly (local-first) ──────────────
+  if (namesParam) {
+    const names = namesParam.split(',').map(n => n.trim()).filter(Boolean)
+    if (!names.length) return NextResponse.json([], {
+      headers: { 'Cache-Control': `public, max-age=${CACHE_SECS}, stale-while-revalidate=600` }
+    })
 
-  const { data: profile } = await db
-    .from('profiles')
-    .select('subjects, subjects_waec, subjects_jamb, exam_type')
-    .eq('id', user.id)
-    .single()
-
-  // Pick the right list — prefer exam-specific, fall back to legacy subjects[]
-  let subjectNames = []
-  if (examParam === 'WAEC') {
-    subjectNames = profile?.subjects_waec?.length ? profile.subjects_waec : (profile?.subjects ?? [])
-  } else {
-    subjectNames = profile?.subjects_jamb?.length ? profile.subjects_jamb : (profile?.subjects ?? [])
-  }
-
-  if (!subjectNames.length) return NextResponse.json([])
-
-  // Fetch subject rows matching both name AND exam_type
-  // This avoids returning duplicate rows when the same subject exists for multiple exams
-  const { data: subjectRows } = await db
-    .from('subjects')
-    .select('id, name, slug, exam_type, is_active')
-    .in('name', subjectNames)
-    .eq('exam_type', examParam)
-    .eq('is_active', true)
-
-  const rows = subjectRows ?? []
-
-  // Count questions per subject
-  const ids = rows.map(s => s.id)
-  let countMap = {}
-  if (ids.length) {
-    const { data: counts } = await db
-      .from('questions')
-      .select('subject_id')
-      .in('subject_id', ids)
+    const db = svc()
+    const { data: rows } = await db
+      .from('subjects')
+      .select('id, name, slug, exam_type')
+      .in('name', names)
+      .eq('exam_type', examParam)
       .eq('is_active', true)
-    ;(counts ?? []).forEach(q => { countMap[q.subject_id] = (countMap[q.subject_id] ?? 0) + 1 })
+
+    const nameOrder = {}
+    names.forEach((n, i) => { nameOrder[n] = i })
+
+    return NextResponse.json(
+      (rows ?? [])
+        .map(s => ({ id: s.id, name: s.name, slug: s.slug, exam_type: s.exam_type }))
+        .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99)),
+      { headers: { 'Cache-Control': `public, max-age=${CACHE_SECS}, stale-while-revalidate=600` } }
+    )
   }
 
-  const nameOrder = {}
-  subjectNames.forEach((n, i) => { nameOrder[n] = i })
+  // ── Path B: legacy — auth-based lookup (authenticated users, no names param) ─
+  // Kept for backward compatibility. Fetches names from profile then resolves rows.
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json([], { status: 200 }) // guests return empty, not 401
 
-  return NextResponse.json(
-    rows
-      .map(s => ({
-        id:             s.id,
-        name:           s.name,
-        slug:           s.slug,
-        exam_type:      s.exam_type,
-        question_count: countMap[s.id] ?? 0,
-      }))
-      .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99)),
-    { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' } }
-  )
+    const db = svc()
+
+    // Single query — get profile + resolve in parallel
+    const [{ data: profile }] = await Promise.all([
+      db.from('profiles')
+        .select('subjects, subjects_waec, subjects_jamb')
+        .eq('id', user.id)
+        .single()
+    ])
+
+    let subjectNames = []
+    if (examParam === 'WAEC') {
+      subjectNames = profile?.subjects_waec?.length ? profile.subjects_waec : (profile?.subjects ?? [])
+    } else {
+      subjectNames = profile?.subjects_jamb?.length ? profile.subjects_jamb : (profile?.subjects ?? [])
+    }
+
+    if (!subjectNames.length) return NextResponse.json([], {
+      headers: { 'Cache-Control': `private, max-age=60` }
+    })
+
+    const { data: rows } = await db
+      .from('subjects')
+      .select('id, name, slug, exam_type')
+      .in('name', subjectNames)
+      .eq('exam_type', examParam)
+      .eq('is_active', true)
+
+    const nameOrder = {}
+    subjectNames.forEach((n, i) => { nameOrder[n] = i })
+
+    return NextResponse.json(
+      (rows ?? [])
+        .map(s => ({ id: s.id, name: s.name, slug: s.slug, exam_type: s.exam_type }))
+        .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99)),
+      { headers: { 'Cache-Control': `private, max-age=60, stale-while-revalidate=120` } }
+    )
+  } catch {
+    return NextResponse.json([], { status: 200 })
+  }
 }
 
 export async function PATCH(request) {
@@ -88,7 +111,9 @@ export async function PATCH(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body
-  try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
 
   const { exam, subjects } = body
 
@@ -99,9 +124,7 @@ export async function PATCH(request) {
     return NextResponse.json({ error: 'subjects must be an array of strings' }, { status: 400 })
   }
 
-  // Deduplicate subject names just in case
   const uniqueSubjects = [...new Set(subjects.filter(s => typeof s === 'string' && s.trim()))]
-
   const db  = svc()
   const col = exam === 'WAEC' ? 'subjects_waec' : 'subjects_jamb'
 
@@ -111,10 +134,9 @@ export async function PATCH(request) {
     .eq('id', user.id)
 
   if (error) {
-    // Column may not exist yet — tell the client clearly
-    if (error.message?.includes('subjects_waec') || error.message?.includes('subjects_jamb') || error.code === '42703') {
+    if (error.code === '42703') {
       return NextResponse.json({
-        error: `The ${col} column does not exist yet. Run the migration: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ${col} text[] DEFAULT '{}';`
+        error: `Column ${col} missing. Run: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ${col} text[] DEFAULT '{}';`
       }, { status: 500 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })

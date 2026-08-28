@@ -15,6 +15,8 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import SessionResults from '@/components/student/SessionResults'
+import { appendLocalSession } from '@/components/student/SessionHistory'
+import { recordLocalActivity } from '@/app/student/home/page'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -509,7 +511,6 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
   // Study mode: track attempts for "try again" before full reveal
   const [studyAttempts, setStudyAttempts] = useState(0)
   const [studyWrong,    setStudyWrong]    = useState(false)  // first wrong attempt shown
-  const [copied,        setCopied]        = useState(false)
 
   useEffect(() => { injectMathStyles() }, [])
 
@@ -554,14 +555,6 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
     const opts = shuffledOptions.map(o => o.text)
     const isCorrect = selected !== null ? checkCorrect(opts, selected, question.correct_answer) : false
     onNext?.({ selectedIdx: selected, isCorrect })
-  }
-
-  function copyQuestion() {
-    const text = question.text ?? question.question_text ?? ''
-    navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
   }
 
   function getState(idx) {
@@ -613,19 +606,11 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
             <QuestionCountdown key={qIndex} secs={speedSecs} onTimeUp={onSpeedTimeUp}/>
           )}
           {question.year && <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'var(--bg-subtle)', border:'1px solid var(--border)', color:'var(--text-tert)' }}>{question.year}</span>}
-          {/* Copy question button */}
-          <button onClick={copyQuestion} title="Copy question"
-            style={{ width:28, height:28, borderRadius:8, background: copied?`${GREEN}15`:'var(--bg-subtle)', border:`1px solid ${copied?GREEN:'var(--border)'}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: copied?GREEN:'var(--text-tert)', transition:'all .15s' }}>
-            {copied
-              ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              : <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2"/></svg>
-            }
-          </button>
         </div>
       </div>
 
       {/* Question text */}
-      <div style={{ fontSize:18, fontWeight:700, color:'var(--text-prim)', lineHeight:1.75, marginBottom:22 }}>
+      <div style={{ fontSize:18, fontWeight:700, color:'var(--text-prim)', lineHeight:1.75, marginBottom:22, userSelect:'none', WebkitUserSelect:'none' }}>
         <MathText text={question.text ?? question.question_text ?? ''} as="span" className=""/>
       </div>
 
@@ -1171,9 +1156,22 @@ export default function PracticeSessionPage() {
       const data = await res.json()
       if (data.ok) {
         try { localStorage.removeItem('ep_pending_session') } catch {}
-        // Update XP context — sidebar XP bar, home topbar, profile rank all update immediately
+        // Update XP context immediately
         setTotalPoints(data.new_total_xp)
         showXPToast(data.xp_awarded, 'Practice session done!')
+        // Keep local session history cache fresh — SessionHistory reads this first
+        const correct = Object.values(map).filter(a => a?.isCorrect).length
+        appendLocalSession({
+          id:              data.session_id ?? null,
+          mode:            config?.mode ?? 'practice',
+          questions_count: questions.length,
+          correct_count:   correct,
+          subject_name:    config?.subjects?.[0] ?? 'Mixed',
+          created_at:      new Date().toISOString(),
+          duration_secs:   durationSecs,
+        })
+        // Record activity for home page chart (works for guests and auth users)
+        recordLocalActivity(questions.length)
       }
       setSaveData(data.ok ? { ...data, duration_secs: durationSecs } : { xp_awarded:0, streak_days:0, duration_secs: durationSecs })
     } catch {
@@ -1232,6 +1230,7 @@ export default function PracticeSessionPage() {
       <style>{`
         * { box-sizing: border-box }
         @keyframes spin { to { transform: rotate(360deg) } }
+        .session-q-col, .rev-q-col { user-select: none; -webkit-user-select: none; }
         /* Desktop session layout */
         @media (min-width: 1024px) {
           .session-body { flex-direction: row !important; align-items: flex-start !important; }

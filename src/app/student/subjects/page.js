@@ -7,7 +7,7 @@
 // The page fetches all available subjects from the DB for the selected exam,
 // lets the student pick theirs, and saves via PATCH /api/student/subjects.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -124,7 +124,7 @@ function ExamTabs({ exams, active, onChange }) {
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function SubjectSetupPage() {
+function SubjectSetupPageInner() {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const { dark }    = useTheme()
@@ -381,5 +381,18 @@ export default function SubjectSetupPage() {
         </div>
       </div>
     </>
+  )
+}
+
+export default function SubjectSetupPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-base)' }}>
+        <div style={{ width:32, height:32, borderRadius:'50%', border:'3px solid var(--border)', borderTopColor:'#1264E5', animation:'spin .7s linear infinite' }}/>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    }>
+      <SubjectSetupPageInner/>
+    </Suspense>
   )
 }

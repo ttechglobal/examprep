@@ -1,12 +1,11 @@
 // src/app/api/auth/callback/route.js
 //
-// FIX: Profile data is now written HERE — after exchangeCodeForSession()
-// establishes a real session — not in the signup form where no session exists.
+// Called after email confirmation. Exchanges the code for a session,
+// writes any pending profile data, then redirects to the dashboard.
 //
-// URL params written by /register and /school/signup:
-//   ?exam_type=WAEC&subjects=Chemistry,Physics   (student)
-//   ?role=school_admin                            (school)
-//   ?next=/some/path                              (post-confirm redirect)
+// URL params written by /register:
+//   ?exam_type=WAEC&subjects=Chemistry,Physics
+//   ?next=/some/path  (optional override)
 
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -22,11 +21,11 @@ function svc() {
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url)
 
-  const code      = searchParams.get('code')
-  const next      = searchParams.get('next') ?? '/student/dashboard'
-  const examType  = searchParams.get('exam_type')
-  const subjects  = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
-  const role      = searchParams.get('role')       // 'school_admin' for school signup
+  const code     = searchParams.get('code')
+  const next     = searchParams.get('next') ?? '/student/home'
+  const examType = searchParams.get('exam_type')
+  const subjects = searchParams.get('subjects')?.split(',').filter(Boolean) ?? []
+  const role     = searchParams.get('role')
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
@@ -41,16 +40,13 @@ export async function GET(request) {
 
   const db = svc()
 
-  // ── Write profile data that couldn't be saved at signup time ──────────────
-  const updates = {}
+  // Always mark as onboarded on confirmation, plus any profile data
+  const updates = { onboarded: true }
+  if (examType)        updates.exam_type = examType
+  if (subjects.length) updates.subjects  = subjects
+  if (role)            updates.role      = role
 
-  if (examType)         updates.exam_type = examType
-  if (subjects.length)  updates.subjects  = subjects
-  if (role)             updates.role      = role
-
-  if (Object.keys(updates).length > 0) {
-    await db.from('profiles').update(updates).eq('id', user.id)
-  }
+  await db.from('profiles').update(updates).eq('id', user.id)
 
   return NextResponse.redirect(`${origin}${next}`)
 }

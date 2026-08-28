@@ -8,7 +8,6 @@
 //   4. topics join simplified — subject already available via direct subject_id FK
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
 
@@ -27,10 +26,6 @@ function shuffle(arr) {
 
 export async function GET(request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     const { searchParams } = new URL(request.url)
     const exam       = searchParams.get('exam') ?? 'WAEC'
     const subjectStr = searchParams.get('subjects') ?? ''

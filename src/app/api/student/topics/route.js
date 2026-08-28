@@ -2,7 +2,6 @@
 // GET /api/student/topics?subject_id=<uuid>&exam=WAEC
 // Returns topics for a subject, with question counts, for topic practice mode.
 
-import { createClient } from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -13,10 +12,6 @@ const db = () => svcClient(
 
 export async function GET(request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     const { searchParams } = new URL(request.url)
     const subjectId = searchParams.get('subject_id')
     const exam      = searchParams.get('exam') ?? 'WAEC'

@@ -438,7 +438,7 @@ function StepAccount({ name, examType, subjects, topicSelections, onSkip }) {
       exam_type: examType,
       subjects:  subjects.join(','),
       full_name: name,
-      next:      '/student/dashboard',
+      next:      '/student/home',
     })
 
     const { error: signUpError } = await supabase.auth.signUp({
@@ -467,7 +467,7 @@ function StepAccount({ name, examType, subjects, topicSelections, onSkip }) {
           We sent a confirmation link to <strong style={{ color: C.text }}>{email}</strong>.
           Click it to activate your account. Your subjects and topics are already saved.
         </p>
-        <Btn3D onClick={() => { router.push('/student/dashboard') }}>
+        <Btn3D onClick={() => { router.push('/student/home') }}>
           Go to dashboard anyway →
         </Btn3D>
       </div>
@@ -575,7 +575,7 @@ export default function SignupPage() {
   // Redirect logged-in users immediately
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) router.replace('/student/dashboard')
+      if (user) router.replace('/student/home')
     })
 
     // Pre-set JAMB compulsory subjects
@@ -599,7 +599,7 @@ export default function SignupPage() {
   function handleSkip() {
     const setup = { name: name || 'Student', examType, subjects, topicSelections }
     sessionStorage.setItem('onboarding_setup', JSON.stringify(setup))
-    router.push('/student/dashboard')
+    router.push('/student/home')
   }
 
   return (
