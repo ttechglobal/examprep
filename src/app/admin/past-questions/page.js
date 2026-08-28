@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 
 function Spinner({ size = 'md' }) {
   const sz = size === 'sm' ? 'w-4 h-4 border-2' : 'w-7 h-7 border-[3px]'
@@ -26,11 +27,10 @@ function Badge({ children, color = 'gray' }) {
   )
 }
 
-const DIFF_COLORS = { easy: 'green', medium: 'amber', hard: 'red' }
-
 // ── Question detail modal ─────────────────────────────────────────────────────
 
 function QuestionModal({ question, onClose, onMarkCore }) {
+  useEffect(() => { injectMathStyles() }, [])
   if (!question) return null
   const opts   = question.options ?? {}
   const expl   = question.explanation ?? {}
@@ -47,7 +47,6 @@ function QuestionModal({ question, onClose, onMarkCore }) {
           <div className="flex items-center gap-2 flex-wrap">
             <Badge color={question.exam_type === 'WAEC' ? 'indigo' : 'blue'}>{question.exam_type ?? '—'}</Badge>
             {question.year && <Badge color="gray">{question.year}</Badge>}
-            <Badge color={DIFF_COLORS[question.difficulty] ?? 'gray'}>{question.difficulty}</Badge>
             {question.topics?.name && <span className="text-xs text-gray-500">{question.topics.name}</span>}
             {question.subtopics?.name && <><span className="text-xs text-gray-300">→</span><span className="text-xs text-gray-400">{question.subtopics.name}</span></>}
           </div>
@@ -68,7 +67,9 @@ function QuestionModal({ question, onClose, onMarkCore }) {
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          <p className="text-base font-medium text-gray-900 leading-relaxed">{question.question_text}</p>
+          <div className="text-base font-medium text-gray-900 leading-relaxed">
+            <MathText text={question.question_text ?? ''} as="span" className=""/>
+          </div>
 
           {question.has_image && question.image_url && (
             <div className="rounded-2xl overflow-hidden border border-gray-200">
@@ -86,7 +87,9 @@ function QuestionModal({ question, onClose, onMarkCore }) {
               return (
                 <div key={key} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 ${isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{key}</span>
-                  <p className={`text-sm leading-relaxed flex-1 ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`}>{text}</p>
+                  <div className={`text-sm leading-relaxed flex-1 ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`}>
+                    <MathText text={String(text ?? '')} as="span" className=""/>
+                  </div>
                   {isCorrect && <span className="text-green-600 text-sm">✓</span>}
                 </div>
               )
@@ -96,7 +99,7 @@ function QuestionModal({ question, onClose, onMarkCore }) {
           {(expl.correct || (expl.workings?.length ?? 0) > 0) && (
             <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
               <p className="text-xs font-black text-indigo-700 uppercase tracking-wide">Explanation</p>
-              {expl.correct && <p className="text-sm text-gray-800 leading-relaxed">{expl.correct}</p>}
+              {expl.correct && <div className="text-sm text-gray-800 leading-relaxed"><MathText text={expl.correct} as="span" className=""/></div>}
               {expl.workings?.length > 0 && (
                 <div className="bg-white rounded-xl p-3 space-y-1.5">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Workings</p>
@@ -132,16 +135,17 @@ function QuestionRow({ question, onOpen }) {
       onClick={() => onOpen(question)}
       className="flex items-start gap-3 px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors group last:border-0"
     >
-      <div className="flex flex-col gap-1 flex-shrink-0 w-[72px] pt-0.5">
+      <div className="flex flex-col gap-1 flex-shrink-0 w-[60px] pt-0.5">
         <Badge color={question.exam_type === 'WAEC' ? 'indigo' : question.exam_type === 'JAMB' ? 'blue' : 'purple'}>
           {question.exam_type ?? '?'}
         </Badge>
         {question.year && <Badge color="gray">{question.year}</Badge>}
-        <Badge color={DIFF_COLORS[question.difficulty] ?? 'gray'}>{question.difficulty}</Badge>
       </div>
 
       <div className="flex-1 min-w-0 space-y-1">
-        <p className="text-sm text-gray-900 leading-snug line-clamp-2">{question.question_text}</p>
+        <div className="text-sm text-gray-900 leading-snug line-clamp-2">
+          <MathText text={question.question_text ?? ''} as="span" className=""/>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {question.topics?.name && <span className="text-[11px] text-gray-400">{question.topics.name}</span>}
           {question.subtopics?.name && <><span className="text-[11px] text-gray-300">→</span><span className="text-[11px] text-gray-400">{question.subtopics.name}</span></>}
@@ -150,7 +154,7 @@ function QuestionRow({ question, onOpen }) {
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
           {optKeys.slice(0, 4).map(k => (
             <span key={k} className={`text-[11px] px-2 py-0.5 rounded-full ${k === question.correct_answer ? 'bg-green-100 text-green-700 font-bold' : 'bg-gray-100 text-gray-500'}`}>
-              {k}: {String(opts[k]).slice(0, 18)}{String(opts[k]).length > 18 ? '…' : ''}
+              {k}: <MathText text={String(opts[k] ?? '').slice(0, 30)} as="span" className=""/>
             </span>
           ))}
         </div>

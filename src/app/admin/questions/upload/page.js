@@ -7,11 +7,6 @@ import { uploadQuestionImage, buildImageImprovementPrompt } from '@/lib/question
 import QuestionStudentPreview from '@/components/admin/QuestionStudentPreview'
 import Link from 'next/link'
 
-const DIFFICULTY_COLORS = {
-  easy:   'bg-green-100 text-green-700',
-  medium: 'bg-amber-100 text-amber-700',
-  hard:   'bg-red-100 text-red-700',
-}
 
 const EXAM_STYLE = {
   WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
@@ -248,11 +243,6 @@ function QuestionPreviewCard({ question, topics, examType, subjectName, onUpdate
             {question.question_text}
           </p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {question.difficulty && (
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[question.difficulty] ?? 'bg-gray-100 text-gray-600'}`}>
-                {question.difficulty}
-              </span>
-            )}
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>
               {badge.label}
             </span>
@@ -728,7 +718,6 @@ export default function QuestionUploadPage() {
                     {parseResult.stats?.withPassage > 0 && ` · ${parseResult.stats.withPassage} with shared passage`}
                   </p>
                   <p className="text-xs text-green-600 mt-0.5">
-                    {parseResult.stats?.easy} easy · {parseResult.stats?.medium} medium · {parseResult.stats?.hard} hard
                   </p>
                 </div>
               ) : (
@@ -843,9 +832,6 @@ export default function QuestionUploadPage() {
                 <div key={q._index} className="border border-gray-200 rounded-2xl overflow-hidden">
                   <div className="flex items-center gap-3 flex-wrap px-4 py-3 bg-gray-50 border-b border-gray-200">
                     <span className="text-xs font-black text-gray-400">Q{i + 1}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DIFFICULTY_COLORS[q.difficulty] ?? 'bg-gray-100 text-gray-500'}`}>
-                      {q.difficulty}
-                    </span>
                     <span className="text-xs text-gray-500">{topicName}</span>
                     <span className="text-gray-300 text-xs">→</span>
                     <span className="text-xs text-gray-600 font-medium">{subtopicName}</span>

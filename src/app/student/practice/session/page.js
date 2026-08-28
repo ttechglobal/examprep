@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 // src/app/student/practice/session/page.js — v4
 // Changes from v3:
 //   • Explanation: no tabs — one unified flowing layout (concept → text → steps inline)
@@ -12,7 +13,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { formatQuestion, formatOption } from '@/lib/formatMath'
+import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import SessionResults from '@/components/student/SessionResults'
 
 const NAVY   = '#062A78'
@@ -37,27 +38,6 @@ function checkCorrect(options, idx, correctAnswer) {
   return options[idx] === correctAnswer || LETTERS[idx] === correctAnswer || idx === correctAnswer
 }
 
-// ── Inline fraction renderer ──────────────────────────────────────────────────
-// Turns "19/4" into a stacked fraction, leaves other text in monospace
-function MathLine({ text }) {
-  if (!text) return null
-  const parts = text.split(/(\b\d+\/\d+\b)/g)
-  if (parts.length === 1) return <span>{text}</span>
-  return (
-    <>
-      {parts.map((part, i) => {
-        const m = part.match(/^(\d+)\/(\d+)$/)
-        if (m) return (
-          <span key={i} style={{ display:'inline-flex', flexDirection:'column', alignItems:'center', verticalAlign:'middle', margin:'0 2px', lineHeight:1.1 }}>
-            <span style={{ fontSize:'0.82em', borderBottom:'1.5px solid currentColor', paddingBottom:1, textAlign:'center', minWidth:14 }}>{m[1]}</span>
-            <span style={{ fontSize:'0.82em', paddingTop:1, textAlign:'center' }}>{m[2]}</span>
-          </span>
-        )
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
-}
 
 // ─── LOADING ──────────────────────────────────────────────────────────────────
 function LoadingScreen() {
@@ -239,115 +219,198 @@ function SessionTimer({ durationSecs, onTimeUp }) {
   )
 }
 
-// ─── EXPLANATION BLOCK — matches mockup exactly ──────────────────────────────
-// New schema: { concept, intro, steps:[{title,lines[]}], answer_note, study_tip, wrong_option_note }
-// Legacy compat: falls back to { correct, workings:string[] } if new fields absent
+// ─── FORMULA BOX ─────────────────────────────────────────────────────────────
+// Renders the key formula + variables key above the steps.
+// formulaBox: "$V = IR$"
+// variablesKey: ["$V$ = voltage (V)", "$I$ = current (A)", "$R$ = resistance (Ω)"]
+function FormulaBox({ formulaBox, variablesKey }) {
+  if (!formulaBox || !formulaBox.trim()) return null
+  const vars = Array.isArray(variablesKey) ? variablesKey.filter(Boolean) : []
+  return (
+    <div style={{ marginBottom:14, borderRadius:14, overflow:'hidden', border:`1.5px solid ${BLUE}35`, background:`${BLUE}07` }}>
+      {/* Header */}
+      <div style={{ padding:'7px 14px', background:`${BLUE}12`, borderBottom:`1px solid ${BLUE}25`, display:'flex', alignItems:'center', gap:7 }}>
+        <span style={{ fontSize:13 }}>📐</span>
+        <span style={{ fontSize:10, fontWeight:900, color:BLUE, textTransform:'uppercase', letterSpacing:'.1em' }}>Formula</span>
+      </div>
+      {/* The formula itself — large, centred */}
+      <div style={{ padding:'12px 16px 10px', textAlign:'center' }}>
+        <MathText text={formulaBox} as="div" className="" style={{ fontSize:18, fontWeight:700, color:'var(--text-prim)', lineHeight:1.6 }}/>
+      </div>
+      {/* Variables key — only if present */}
+      {vars.length > 0 && (
+        <div style={{ padding:'0 14px 12px', display:'flex', flexDirection:'column', gap:4, borderTop:`1px solid ${BLUE}20`, paddingTop:8, marginTop:2 }}>
+          {vars.map((v, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+              <span style={{ fontSize:11, color:`${BLUE}80`, flexShrink:0 }}>·</span>
+              <MathText text={v} as="span" className="" style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.5 }}/>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── HINT BLOCK ───────────────────────────────────────────────────────────────
+// Shown before the student answers — collapsible, single level.
+// Designed for students who are stuck: one tap to reveal a genuine nudge.
+function HintBlock({ hint }) {
+  const [open, setOpen] = React.useState(false)
+  if (!hint || !hint.trim()) return null
+  return (
+    <div style={{
+      marginBottom:12, borderRadius:14, overflow:'hidden',
+      border:`1.5px solid ${GOLD}50`,
+      background: open ? `${GOLD}10` : `${GOLD}06`,
+      transition:'background .2s',
+    }}>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'11px 14px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}
+        >
+          <span style={{ fontSize:16, lineHeight:1 }}>💡</span>
+          <span style={{ fontSize:13, fontWeight:700, color:GOLD }}>Need a hint?</span>
+          <span style={{ marginLeft:'auto', fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>Tap to reveal</span>
+        </button>
+      ) : (
+        <div style={{ padding:'12px 14px' }}>
+          <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:7, display:'flex', alignItems:'center', gap:5 }}>
+            <span>💡</span>
+            <span>Hint</span>
+          </div>
+          <MathText
+            text={hint}
+            as="p"
+            className=""
+            style={{ fontSize:13, color:'var(--text-prim)', lineHeight:1.65, margin:0, fontWeight:500 }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── EXPLANATION BLOCK ────────────────────────────────────────────────────────
+// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, study_tip }
+// All math rendered via MathText (KaTeX). No legacy schema.
 function ExplanationBlock({ explanation, isCorrect, dark }) {
   if (!explanation) return null
   const exp = explanation
 
-  // ── Resolve fields — new schema first, legacy fallback ───────────────────
-  const concept     = exp.concept      ?? ''
-  const intro       = exp.intro        ?? (typeof exp === 'string' ? exp : (exp.correct ?? ''))
-  const answerNote  = exp.answer_note  ?? exp.correct ?? ''
-  const studyTip    = exp.study_tip    ?? ''
+  const concept      = exp.concept       ?? ''
+  const formulaBox   = exp.formula_box   ?? ''
+  const variablesKey = exp.variables_key ?? []
+  const intro        = exp.intro         ?? ''
+  const answerNote   = exp.answer_note   ?? exp.correct ?? ''
+  const studyTip     = exp.study_tip     ?? ''
+  const svgDiagram   = exp.svg_diagram   ?? ''
 
-  // New schema: steps is [{title, lines:[]}]
-  // Legacy schema: workings is string[] — group into steps by detecting headers
-  let steps = []
-
-  if (Array.isArray(exp.steps) && exp.steps.length > 0) {
-    // New structured schema
-    steps = exp.steps.filter(s => s && (s.title || (Array.isArray(s.lines) && s.lines.length)))
-  } else if (Array.isArray(exp.workings) && exp.workings.length > 0) {
-    // Legacy flat array — group by header detection
-    let cur = null
-    for (const raw of exp.workings) {
-      const text = typeof raw === 'string' ? raw : (raw?.instruction ?? '')
-      if (!text.trim()) continue
-      const isHeader = /^(Step\s*\d|Given|Formula|Substitute|Solve|Answer|Check|Result|Expand|Collect|Simplify|Find|Calculate|Note|Therefore|Hence)/i.test(text.trim())
-      if (isHeader || cur === null) {
-        cur = { title: isHeader ? text : '', lines: isHeader ? [] : [text] }
-        steps.push(cur)
-      } else {
-        cur.lines.push(text)
-      }
-    }
-  }
+  const steps = Array.isArray(exp.steps)
+    ? exp.steps.filter(s => s && (s.title || (Array.isArray(s.lines) && s.lines.length)))
+    : []
 
   const hasSteps = steps.length > 0
-  const bgColor = dark ? 'rgba(255,255,255,.04)' : '#fff'
+  const bgColor  = dark ? 'rgba(255,255,255,.04)' : '#fff'
 
   return (
     <div style={{ marginTop:14, borderRadius:16, border:`1px solid var(--border)`, background:bgColor, overflow:'hidden', boxShadow: dark ? 'none' : '0 2px 12px rgba(6,42,120,.06)' }}>
 
-      {/* ── HEADER: "Explanation" label + concept ── */}
-      <div style={{ padding:'14px 16px 0' }}>
-        <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom: concept ? 6 : 8 }}>Explanation</div>
+      {/* ── HEADER: "Explanation" label + concept pill ── */}
+      <div style={{ padding:'16px 18px 14px', borderBottom: (formulaBox || hasSteps || svgDiagram) ? `1px solid var(--border)` : 'none' }}>
+        <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom: concept ? 6 : 0 }}>
+          Explanation
+        </div>
         {concept && (
-          <div style={{ fontSize:12, fontWeight:800, color:BLUE, marginBottom:8 }}>{concept}</div>
+          <div style={{ fontSize:14, fontWeight:800, color:BLUE }}>{concept}</div>
         )}
-        {/* Intro line — e.g. "Let's solve the equation step by step." */}
         {intro && (
-          <p style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6, margin:'0 0 12px' }}>{intro}</p>
+          <p style={{ fontSize:14, color:'var(--text-sec)', lineHeight:1.65, margin:`${concept ? 8 : 4}px 0 0` }}>{intro}</p>
         )}
       </div>
 
-      {/* ── STEPS ── */}
-      {hasSteps && (
-        <div style={{ borderTop:`1px solid var(--border)` }}>
-          {steps.map((step, si) => {
-            const lines = Array.isArray(step.lines) ? step.lines : []
-            return (
-              <div key={si} style={{ borderBottom: si < steps.length - 1 ? `1px solid var(--border)` : 'none', padding:'11px 14px' }}>
-                <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                  {/* Step N pill — matches mockup green/blue badge */}
-                  <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, marginTop:1 }}>
-                    <div style={{ height:20, borderRadius:999, background:`${BLUE}18`, border:`1px solid ${BLUE}35`, padding:'0 8px', display:'flex', alignItems:'center' }}>
-                      <span style={{ fontSize:10, fontWeight:900, color:BLUE, whiteSpace:'nowrap' }}>Step {si + 1}</span>
+      <div style={{ padding:'16px 18px', display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* ── FORMULA BOX — above the steps ── */}
+        <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>
+
+        {/* ── SVG DIAGRAM ── */}
+        {svgDiagram && svgDiagram.trim().toLowerCase().startsWith('<svg') && (
+          <div style={{ borderRadius:12, overflow:'hidden', border:`1px solid var(--border)`, background:'#fff' }}>
+            <div style={{ padding:'6px 12px', background:'var(--bg-subtle)', borderBottom:`1px solid var(--border)` }}>
+              <span style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em' }}>Diagram</span>
+            </div>
+            <div
+              style={{ display:'flex', justifyContent:'center', padding:12, overflowX:'auto' }}
+              dangerouslySetInnerHTML={{
+                __html: svgDiagram
+                  .replace(/<script[\s\S]*?<\/script>/gi, '')
+                  .replace(/\son\w+="[^"]*"/gi, '')
+              }}
+            />
+          </div>
+        )}
+
+        {/* ── STEPS ── */}
+        {hasSteps && (
+          <div style={{ borderRadius:12, border:`1px solid var(--border)`, overflow:'hidden' }}>
+            {steps.map((step, si) => {
+              const lines = Array.isArray(step.lines) ? step.lines : []
+              return (
+                <div
+                  key={si}
+                  style={{
+                    borderBottom: si < steps.length - 1 ? `1px solid var(--border)` : 'none',
+                    padding:'13px 16px',
+                    background: dark ? 'rgba(255,255,255,.02)' : 'rgba(6,42,120,.015)',
+                  }}
+                >
+                  <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                    <div style={{ height:22, borderRadius:999, background:`${BLUE}18`, border:`1px solid ${BLUE}35`, padding:'0 10px', display:'flex', alignItems:'center', flexShrink:0, marginTop:2 }}>
+                      <span style={{ fontSize:11, fontWeight:900, color:BLUE, whiteSpace:'nowrap' }}>Step {si + 1}</span>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      {step.title && (
+                        <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom: lines.length ? 6 : 0, lineHeight:1.4 }}>
+                          {step.title}
+                        </div>
+                      )}
+                      {lines.map((line, li) => (
+                        <div key={li} style={{ fontSize:15, lineHeight:2.2, overflowX:'auto' }}>
+                          <MathText text={line} as="span" className=""/>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div style={{ flex:1 }}>
-                    {/* Step title — bold action label */}
-                    {step.title && (
-                      <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom: lines.length ? 5 : 0, lineHeight:1.4 }}>
-                        {step.title}
-                      </div>
-                    )}
-                    {/* Math lines */}
-                    {lines.map((line, li) => (
-                      <div key={li} style={{ fontSize:14, fontWeight:500, color:'var(--text-sec)', lineHeight:1.9 }}>
-                        <MathLine text={line}/>
-                      </div>
-                    ))}
-                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── ANSWER NOTE — green checkmark box ── */}
-      {answerNote && (
-        <div style={{ margin:'12px 14px', padding:'12px 14px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10 }}>
-          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-            <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
+              )
+            })}
           </div>
-          <span style={{ fontSize:13, fontWeight:600, color:'var(--text-prim)', lineHeight:1.6 }}>{answerNote}</span>
-        </div>
-      )}
+        )}
 
-      {/* ── STUDY TIP (optional) ── */}
-      {studyTip && (
-        <div style={{ margin:'0 14px 14px', padding:'10px 13px', borderRadius:11, background: dark?'rgba(255,184,0,.08)':'rgba(255,184,0,.07)', border:`1px solid rgba(255,184,0,.25)`, display:'flex', alignItems:'flex-start', gap:9 }}>
-          <span style={{ fontSize:14, flexShrink:0 }}>💡</span>
-          <div>
-            <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
-            <span style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.5 }}>{studyTip}</span>
+        {/* ── ANSWER NOTE ── */}
+        {answerNote && (
+          <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10 }}>
+            <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+              <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
+            </div>
+            <span style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', lineHeight:1.65 }}>{answerNote}</span>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── STUDY TIP ── */}
+        {studyTip && (
+          <div style={{ padding:'11px 14px', borderRadius:11, background: dark?'rgba(255,184,0,.08)':'rgba(255,184,0,.07)', border:`1px solid rgba(255,184,0,.25)`, display:'flex', alignItems:'flex-start', gap:9 }}>
+            <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
+            <div>
+              <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
+              <span style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6 }}>{studyTip}</span>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }
@@ -392,16 +455,16 @@ function Calculator({ onClose, dark }) {
   ]
 
   return (
-    <div style={{ position:'fixed', bottom:84, right:14, zIndex:400, width:252, background:'var(--bg-card)', borderRadius:18, border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,.35)', overflow:'hidden' }}>
+    <div style={{ position:'fixed', bottom:84, right:14, zIndex:400, width:'clamp(252px, 320px, 340px)', background:'var(--bg-card)', borderRadius:18, border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,.35)', overflow:'hidden' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 13px', borderBottom:'1px solid var(--border)' }}>
         <span style={{ fontSize:11, fontWeight:800, color:'var(--text-tert)' }}>Calculator</span>
         <button onClick={onClose} style={{ width:22, height:22, borderRadius:5, background:'var(--bg-subtle)', border:'none', cursor:'pointer', fontSize:14, color:'var(--text-tert)' }}>×</button>
       </div>
       <div style={{ padding:'10px 12px 6px', textAlign:'right' }}>
         {op && memory!==null && <div style={{ fontSize:10, color:'var(--text-tert)', marginBottom:1 }}>{memory} {op==='+'?'+':op==='-'?'−':op==='×'?'×':op==='÷'?'÷':op}</div>}
-        <div style={{ fontSize:26, fontWeight:900, color:'var(--text-prim)', fontFamily:"'Courier New',monospace", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{display}</div>
+        <div style={{ fontSize:30, fontWeight:900, color:'var(--text-prim)', fontFamily:"'Courier New',monospace", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{display}</div>
       </div>
-      <div style={{ padding:'6px 10px 12px', display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:5 }}>
+      <div style={{ padding:'6px 10px 12px', display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:6 }}>
         {rows.flat().map((v,i) => {
           const isOp  = ['+','-','×','÷'].includes(v)
           const isSci = ['log','ln','xʸ','√','x²','π'].includes(v)
@@ -409,10 +472,10 @@ function Calculator({ onClose, dark }) {
           const isDel = v==='⌫'||v==='C'
           return (
             <button key={i} onClick={() => v && press(v)}
-              style={{ padding:'11px 4px', borderRadius:10, border:`1px solid ${isEq?BLUE:isOp?`${BLUE}40`:'var(--border)'}`,
+              style={{ padding:'13px 4px', borderRadius:10, border:`1px solid ${isEq?BLUE:isOp?`${BLUE}40`:'var(--border)'}`,
                 background: isEq?BLUE:isOp?`${BLUE}12`:isSci?`${ORANGE}10`:isDel?`${RED}10`:'var(--bg-subtle)',
                 color: isEq?'#fff':isOp?BLUE:isSci?ORANGE:isDel?RED:'var(--text-prim)',
-                fontSize: v&&v.length>2?11:14, fontWeight:800, cursor:v?'pointer':'default', fontFamily:'inherit',
+                fontSize: v&&v.length>2?12:15, fontWeight:800, cursor:v?'pointer':'default', fontFamily:'inherit',
                 opacity:v?1:0, pointerEvents:v?'all':'none' }}>
               {v}
             </button>
@@ -426,104 +489,193 @@ function Calculator({ onClose, dark }) {
 // ─── QUESTION CARD ────────────────────────────────────────────────────────────
 // reviewMode=true: show correct answer, no interaction, full explanation visible
 function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessionType, speedSecs, onSpeedTimeUp, dark, alreadyAnswered, reviewMode, hideExplanation=false }) {
+  const isStudy  = sessionType === 'study'
+
+  // Shuffle options once per question mount
+  const [shuffledOptions, setShuffledOptions] = useState([])
+  useEffect(() => {
+    const raw = normaliseOptions(question.options)
+    // Build array of {text, originalIdx} then shuffle
+    const withIdx = raw.map((text, i) => ({ text, originalIdx: i }))
+    for (let i = withIdx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [withIdx[i], withIdx[j]] = [withIdx[j], withIdx[i]]
+    }
+    setShuffledOptions(withIdx)
+  }, [question.id])
+
   const [selected, setSelected] = useState(alreadyAnswered?.selectedIdx ?? null)
   const [revealed, setRevealed] = useState(reviewMode || alreadyAnswered !== null)
+  // Study mode: track attempts for "try again" before full reveal
+  const [studyAttempts, setStudyAttempts] = useState(0)
+  const [studyWrong,    setStudyWrong]    = useState(false)  // first wrong attempt shown
+  const [copied,        setCopied]        = useState(false)
+
+  useEffect(() => { injectMathStyles() }, [])
 
   useEffect(() => {
     setSelected(alreadyAnswered?.selectedIdx ?? null)
     setRevealed(reviewMode || alreadyAnswered !== null)
+    setStudyAttempts(0)
+    setStudyWrong(false)
   }, [qIndex, question.id, reviewMode])
 
-  const options  = normaliseOptions(question.options)
-  const isStudy  = sessionType === 'study'
-
   function handleSelect(opt, idx) {
-    if (revealed || reviewMode) return
-    setSelected(idx)
-    // Study mode: show explanation immediately — user still presses Next to move on
-    if (isStudy) setRevealed(true)
-    // Practice mode: just highlight the choice — nothing else. Next button advances.
+    if (reviewMode) return
+    if (isStudy) {
+      if (revealed) return  // already finalised
+      setSelected(idx)
+      const correct = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)
+      if (correct) {
+        // Correct on any attempt — reveal fully
+        setRevealed(true)
+        setStudyWrong(false)
+      } else {
+        const attempts = studyAttempts + 1
+        setStudyAttempts(attempts)
+        if (attempts >= 2) {
+          // Second wrong attempt — reveal answer
+          setRevealed(true)
+          setStudyWrong(false)
+        } else {
+          // First wrong attempt — show nudge, don't reveal
+          setStudyWrong(true)
+        }
+      }
+    } else {
+      // Practice mode — just highlight selection
+      if (revealed) return
+      setSelected(idx)
+    }
   }
 
   function handleNextClick() {
     if (reviewMode) { onNext?.(); return }
-    // Record the answer (or null if unanswered) and let the parent handle navigation
-    const isCorrect = selected !== null ? checkCorrect(options, selected, question.correct_answer) : false
+    const opts = shuffledOptions.map(o => o.text)
+    const isCorrect = selected !== null ? checkCorrect(opts, selected, question.correct_answer) : false
     onNext?.({ selectedIdx: selected, isCorrect })
   }
 
+  function copyQuestion() {
+    const text = question.text ?? question.question_text ?? ''
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   function getState(idx) {
+    const opts = shuffledOptions.map(o => o.text)
     if (reviewMode) {
-      const isCorrectOpt = options[idx] === question.correct_answer || LETTERS[idx] === question.correct_answer
+      const isCorrectOpt = opts[idx] === question.correct_answer || LETTERS[idx] === question.correct_answer
       const wasSelected  = alreadyAnswered?.selectedIdx === idx
       if (isCorrectOpt) return 'correct'
       if (wasSelected && !isCorrectOpt) return 'wrong'
       return 'idle'
     }
-    if (!revealed || (!isStudy)) {
-      // Practice: only tint the selected option with a neutral "chosen" state
-      return selected === idx ? 'chosen' : 'idle'
+    if (isStudy) {
+      if (!revealed && !studyWrong) return selected === idx ? 'chosen' : 'idle'
+      if (studyWrong && !revealed) {
+        // Show selected as wrong, others idle
+        return selected === idx ? 'wrong' : 'idle'
+      }
+      // Fully revealed in study mode
+      const isCorrectOpt = opts[idx] === question.correct_answer || LETTERS[idx] === question.correct_answer
+      if (isCorrectOpt) return 'correct'
+      if (idx === selected && !isCorrectOpt) return 'wrong'
+      return 'idle'
     }
-    // Study mode revealed
-    const isCorrectOpt = options[idx] === question.correct_answer || LETTERS[idx] === question.correct_answer
-    if (isCorrectOpt) return 'correct'
-    if (idx === selected && !isCorrectOpt) return 'wrong'
-    return 'idle'
+    // Practice mode: neutral chosen state only
+    return selected === idx ? 'chosen' : 'idle'
   }
 
   const SS = {
     idle:    { bg: dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.025)', border:'var(--border)',   text:'var(--text-prim)', pill: dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.07)' },
-    // chosen: thick blue border + tinted bg — unmistakably selected
     chosen:  { bg:`${BLUE}12`, border:BLUE, text:BLUE, pill:BLUE },
     correct: { bg:`${GREEN}10`, border:GREEN, text:GREEN, pill:`${GREEN}35` },
     wrong:   { bg:`${RED}08`,  border:RED,   text:RED,   pill:`${RED}28`  },
   }
 
-  const isCorrectSelected = selected !== null && checkCorrect(options, selected, question.correct_answer)
+  const opts = shuffledOptions.map(o => o.text)
+  const isCorrectSelected = selected !== null && checkCorrect(opts, selected, question.correct_answer)
   const isLast = qIndex >= total - 1
   const hasPrev = qIndex > 0
 
   return (
     <div style={{ display:'flex', flexDirection:'column' }}>
-      {/* Meta */}
+      {/* Meta + copy button */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
         <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {question.topic_name ?? ''}
         </span>
-        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
           {speedSecs && !revealed && !reviewMode && (
             <QuestionCountdown key={qIndex} secs={speedSecs} onTimeUp={onSpeedTimeUp}/>
           )}
           {question.year && <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'var(--bg-subtle)', border:'1px solid var(--border)', color:'var(--text-tert)' }}>{question.year}</span>}
-          <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, background:'var(--bg-subtle)', border:'1px solid var(--border)', color:'var(--text-tert)', textTransform:'capitalize' }}>{question.difficulty}</span>
+          {/* Copy question button */}
+          <button onClick={copyQuestion} title="Copy question"
+            style={{ width:28, height:28, borderRadius:8, background: copied?`${GREEN}15`:'var(--bg-subtle)', border:`1px solid ${copied?GREEN:'var(--border)'}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: copied?GREEN:'var(--text-tert)', transition:'all .15s' }}>
+            {copied
+              ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              : <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2"/></svg>
+            }
+          </button>
         </div>
       </div>
 
       {/* Question text */}
-      <div style={{ fontSize:17, fontWeight:700, color:'var(--text-prim)', lineHeight:1.7, marginBottom:20 }}>
-        {formatQuestion(question.text ?? question.question_text ?? '')}
+      <div style={{ fontSize:18, fontWeight:700, color:'var(--text-prim)', lineHeight:1.75, marginBottom:22 }}>
+        <MathText text={question.text ?? question.question_text ?? ''} as="span" className=""/>
       </div>
+
+      {/* Hint — always available before answer is finalised (both study and practice) */}
+      {!revealed && !studyWrong && !reviewMode && question.hint && (
+        <HintBlock hint={question.hint}/>
+      )}
+      {/* Study wrong attempt — show nudge, keep hint available */}
+      {studyWrong && !revealed && (
+        <div style={{ marginBottom:12, padding:'12px 14px', borderRadius:14, background:`${RED}08`, border:`1.5px solid ${RED}30`, display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{ fontSize:18, flexShrink:0 }}>❌</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:800, color:RED, marginBottom:2 }}>Not quite — try again!</div>
+            <div style={{ fontSize:11, color:'var(--text-tert)' }}>One more attempt before the answer is revealed.</div>
+          </div>
+        </div>
+      )}
+      {studyWrong && !revealed && question.hint && (
+        <HintBlock hint={question.hint}/>
+      )}
+      {/* Practice mode: no hint data — still show nudge linking to lesson */}
+      {!revealed && !reviewMode && !question.hint && !isStudy && (
+        <div style={{ marginBottom:12, display:'flex', alignItems:'center', gap:6, padding:'8px 12px', borderRadius:12, border:`1px dashed ${GOLD}40`, background:`${GOLD}05` }}>
+          <span style={{ fontSize:14 }}>💡</span>
+          <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}>Need a hint? Study this topic in </span>
+          <span style={{ fontSize:12, fontWeight:800, color:GOLD }}>Lesson Mode</span>
+          <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}> for guided explanations.</span>
+        </div>
+      )}
 
       {/* Options */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {options.map((opt, idx) => {
+        {opts.map((opt, idx) => {
           const state = getState(idx)
           const s = SS[state]
           const isDisabled = reviewMode || (revealed && isStudy && state === 'idle')
           return (
             <button key={idx} onClick={() => handleSelect(opt, idx)}
               disabled={isDisabled}
-              style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:14, border:`2px solid ${s.border}`, background:s.bg, cursor:isDisabled?'default':'pointer', textAlign:'left', fontFamily:'inherit', transition:'all .14s', width:'100%' }}>
+              style={{ display:'flex', alignItems:'center', gap:14, padding:'16px 18px', borderRadius:14, border:`2px solid ${s.border}`, background:s.bg, cursor:isDisabled?'default':'pointer', textAlign:'left', fontFamily:'inherit', transition:'all .14s', width:'100%' }}>
               <div style={{ width:32, height:32, borderRadius:10, background: state==='idle'?s.pill:s.border, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color: state==='idle'?'var(--text-tert)':'#fff', fontSize:13, fontWeight:900, transition:'all .14s' }}>
-                {(state==='correct'&&(reviewMode||isStudy)) ? '✓' : (state==='wrong'&&(reviewMode||isStudy)) ? '✗' : LETTERS[idx]}
+                {(state==='correct'&&(reviewMode||isStudy)) ? '✓' : (state==='wrong'&&(reviewMode||isStudy)&&revealed) ? '✗' : LETTERS[idx]}
               </div>
-              <span style={{ fontSize:14, fontWeight: state==='correct'?700:600, color:s.text, lineHeight:1.45, flex:1 }}>{formatOption(opt)}</span>
+              <span style={{ fontSize:15, fontWeight: state==='correct'?700:600, color:s.text, lineHeight:1.5, flex:1 }}><MathText text={String(opt ?? '')} as="span" className=""/></span>
             </button>
           )
         })}
       </div>
 
-      {/* Study mode: result banner after reveal */}
+      {/* Study mode: result banner after full reveal */}
       {revealed && isStudy && !reviewMode && (
         <div style={{ marginTop:14, padding:'13px 16px', borderRadius:14, background: isCorrectSelected?`${GREEN}12`:`${RED}08`, border:`1px solid ${isCorrectSelected?GREEN+'40':RED+'30'}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -545,7 +697,7 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
         </div>
       )}
 
-      {/* Explanation — shown inline on mobile; CSS hides it on desktop in review mode */}
+      {/* Explanation — inline (mobile + non-desktop review) */}
       {!hideExplanation && (revealed || reviewMode) && question.explanation && (
         <div className="inline-explanation">
           <ExplanationBlock explanation={question.explanation} isCorrect={reviewMode ? alreadyAnswered?.isCorrect : isCorrectSelected} dark={dark}/>
@@ -562,12 +714,12 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
           </button>
         )}
 
-        {/* Main next / submit button — always shown */}
         <button onClick={handleNextClick}
           style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0,0 6px 16px ${BLUE}40`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
           {reviewMode
             ? (isLast ? 'Back to Results' : 'Next →')
-            : (isLast ? 'Submit' : 'Next')
+            : (isStudy && !revealed && studyAttempts === 0 && selected !== null ? 'Check Answer'
+              : isLast ? 'Submit' : 'Next')
           }
           {!reviewMode && <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </button>
@@ -596,7 +748,7 @@ function ReviewSession({ questions, answers, onDone, dark }) {
   }
 
   return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column' }}>
+    <div style={{ height:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`*{box-sizing:border-box}`}</style>
 
       {/* Top bar */}
@@ -628,15 +780,15 @@ function ReviewSession({ questions, answers, onDone, dark }) {
       <style>{`
         @media (min-width: 1024px) {
           .rev-body { flex-direction: row !important; }
-          .rev-q-col { max-width: 560px !important; padding: 24px 28px !important; }
-          .rev-exp-col { display: flex !important; width: 380px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; flex-direction: column; }
+          .rev-q-col { max-width: 640px !important; padding: 32px 40px !important; }
+          .rev-exp-col { display: flex !important; flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; flex-direction: column; padding: 32px 28px !important; }
           .rev-q-col .inline-explanation { display: none !important; }
         }
         @media (max-width: 1023px) {
           .rev-exp-col { display: none !important; }
         }
       `}</style>
-      <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
 
         {/* Question column — mobile: full width + inline explanation. Desktop: left column, hideExplanation */}
         <div className="rev-q-col" style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
@@ -1084,15 +1236,15 @@ export default function PracticeSessionPage() {
         @media (min-width: 1024px) {
           .session-body { flex-direction: row !important; align-items: flex-start !important; }
           .session-nav-col {
-            width: 220px !important; flex-shrink: 0 !important;
+            width: 200px !important; flex-shrink: 0 !important;
             position: sticky !important; top: 0 !important;
             height: calc(100dvh - 78px) !important;
             overflow-y: auto !important;
             border-right: 1px solid var(--border) !important;
             padding: 16px 12px !important;
           }
-          .session-q-col { flex: 1 !important; min-width: 0 !important; max-width: 560px !important; padding: 24px 28px !important; }
-          .session-exp-col { width: 380px !important; flex-shrink: 0 !important; padding: 24px 20px 24px 0 !important; }
+          .session-q-col { flex: 1 !important; min-width: 0 !important; max-width: 680px !important; padding: 32px 40px !important; }
+          .session-exp-col { flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; padding: 32px 28px 32px 0 !important; border-left: 1px solid var(--border); }
           .session-nav-bottom { display: none !important; }
         }
         @media (max-width: 1023px) {
@@ -1104,7 +1256,7 @@ export default function PracticeSessionPage() {
       {showEnd && <EndDialog answered={answeredCount} total={questions.length} mode={dialogMode} onConfirm={() => { setShowEnd(false); saveSession() }} onCancel={() => setShowEnd(false)}/>}
       {showCalc && <Calculator onClose={() => setShowCalc(false)} dark={dark}/>}
 
-      <div style={{ minHeight:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column' }}>
+      <div style={{ height:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
         {/* ── TOP BAR ── */}
         <div style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
@@ -1139,7 +1291,7 @@ export default function PracticeSessionPage() {
         </div>
 
         {/* ── BODY — flex row on desktop, column on mobile ── */}
-        <div className="session-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <div className="session-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
 
           {/* LEFT: Question navigator (desktop only) */}
           <div className="session-nav-col" style={{ background:'var(--bg-card)' }}>
@@ -1178,7 +1330,7 @@ export default function PracticeSessionPage() {
 
           {/* RIGHT: Explanation panel (desktop — shown after answer in study mode) */}
           {q?.explanation && (
-            <div className="session-exp-col" style={{ overflowY:'auto' }}>
+            <div className="session-exp-col" style={{ overflowY:'auto', background:'var(--bg-base)' }}>
               {answerMap[qIndex] ? (
                 <ExplanationBlock
                   explanation={q.explanation}

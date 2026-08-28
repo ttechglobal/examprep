@@ -1,32 +1,53 @@
 'use client'
 // src/components/student/QuestionStudentPreview.jsx
 //
-// Renders a single question the way a student sees it — handling all the
-// rich content that can be attached to a question:
+// Renders a single question the way a student sees it.
 //
-//   passage_text        — a reading passage shown above the question (English)
-//   passage_image_url   — an image that IS the passage (e.g. a diagram)
-//   instruction_text    — an italicised instruction line above the question stem
-//   question_text       — the main question stem
-//   has_image / image_url / image_description — a diagram embedded in the question
-//   options             — { A, B, C, D, E } answer choices
-//   correct_answer      — correct key (shown only when showAnswer=true)
-//   explanation         — { correct, workings[] }
-//
-// Props
-//   question            — the question object (required)
-//   showAnswer          — show correct answer highlight + explanation (default false)
-//   selectedAnswer      — key the student picked, for highlighting
-//   onSelectAnswer(key) — called when student taps an option
-//   showRawTab          — show a "Raw JSON" debug tab for admin previews (default false)
-//   compact             — tighter spacing for list views (default false)
+// Changes vs previous version:
+//   • MathText used for question stem + option text → proper KaTeX rendering,
+//     no raw \dfrac / \$ leaking through to students
+//   • SVG diagram support: if question.svg_diagram (or explanation.svg_diagram)
+//     is a string starting with "<svg", it is rendered inline as a safe diagram
+//   • Hint block: shown on request in practice/study sessions (not exam mode)
+//     via showHint prop — renders question.hint without revealing the answer
+//   • "correct answer is X - text" → normalised to use em dash via cleanLatex
+//     (handled upstream), displayed via MathText
 
 import { useState } from 'react'
+import { MathText, WorkingsBlock } from '@/lib/mathRenderer'
 
-// ── Passage block ─────────────────────────────────────────────────────────────
-// Displayed above the question when passage_text or passage_image_url is present.
-// English comprehension questions share a passage across several questions,
-// so this is visually distinct from the question itself.
+// ── SVG diagram renderer ───────────────────────────────────────────────────────
+// Renders an SVG string safely. We set innerHTML via dangerouslySetInnerHTML
+// inside a sandboxed container; scripts inside SVG cannot run in this context.
+// Only called when the string begins with the literal "<svg".
+
+function SvgDiagram({ svg, label = 'Diagram', className = '' }) {
+  if (!svg || typeof svg !== 'string') return null
+  const trimmed = svg.trim()
+  if (!trimmed.toLowerCase().startsWith('<svg')) return null
+
+  return (
+    <div className={`rounded-xl overflow-hidden border border-gray-200 bg-white ${className}`}>
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide px-3 py-1.5 border-b border-gray-100">
+        {label}
+      </p>
+      <div
+        className="flex items-center justify-center p-3 overflow-x-auto"
+        // Safe: SVG scripts cannot access parent document or make network requests
+        // when rendered this way without an <iframe>. We strip script tags below.
+        dangerouslySetInnerHTML={{
+          __html: trimmed
+            // strip any script tags that might appear in malformed SVGs
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/on\w+="[^"]*"/gi, '')
+            .replace(/on\w+='[^']*'/gi, ''),
+        }}
+      />
+    </div>
+  )
+}
+
+// ── Passage block ──────────────────────────────────────────────────────────────
 
 function PassageBlock({ text, imageUrl, imageDescription }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -35,7 +56,6 @@ function PassageBlock({ text, imageUrl, imageDescription }) {
 
   return (
     <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 overflow-hidden">
-      {/* header */}
       <button
         onClick={() => setCollapsed(c => !c)}
         className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-100 border-b border-blue-200 hover:bg-blue-200/60 transition-colors"
@@ -53,7 +73,6 @@ function PassageBlock({ text, imageUrl, imageDescription }) {
 
       {!collapsed && (
         <div className="px-4 py-3 space-y-3">
-          {/* Passage image (e.g. a printed extract scanned from paper) */}
           {imageUrl && (
             <div className="rounded-xl overflow-hidden border border-blue-200 bg-white">
               <img
@@ -68,8 +87,6 @@ function PassageBlock({ text, imageUrl, imageDescription }) {
               )}
             </div>
           )}
-
-          {/* Passage text */}
           {text && (
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-serif italic">
               {text}
@@ -81,25 +98,59 @@ function PassageBlock({ text, imageUrl, imageDescription }) {
   )
 }
 
-// ── Option button ─────────────────────────────────────────────────────────────
+// ── Hint block ─────────────────────────────────────────────────────────────────
+// Shown only in practice / study sessions (not exam mode).
+// The hint nudges the student without revealing the answer.
 
-function OptionButton({ letterKey, text, state, onClick, disabled }) {
-  // state: 'default' | 'selected' | 'correct' | 'wrong' | 'reveal-correct'
+function HintBlock({ hint }) {
+  const [revealed, setRevealed] = useState(false)
+
+  if (!hint || typeof hint !== 'string' || !hint.trim()) return null
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+      {!revealed ? (
+        <button
+          onClick={() => setRevealed(true)}
+          className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-amber-100 transition-colors"
+        >
+          <span className="text-amber-500 text-sm">💡</span>
+          <span className="text-xs font-black text-amber-700 uppercase tracking-wide">
+            Need a hint?
+          </span>
+          <span className="ml-auto text-xs text-amber-500 font-medium">Tap to reveal</span>
+        </button>
+      ) : (
+        <div className="px-4 py-3">
+          <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1 flex items-center gap-1">
+            <span>💡</span> Hint
+          </p>
+          <MathText text={hint} className="text-sm text-amber-900 leading-relaxed" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Option button ──────────────────────────────────────────────────────────────
+
+function OptionButton({ letterKey, text, svgDiagram, state, onClick, disabled }) {
   const styles = {
-    default:        'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50',
-    selected:       'border-indigo-400 bg-indigo-50 text-indigo-900',
-    correct:        'border-green-400 bg-green-50 text-green-900',
-    wrong:          'border-red-400 bg-red-50 text-red-900',
+    default:          'border-gray-200 bg-white text-gray-700 hover:border-indigo-300 hover:bg-indigo-50',
+    selected:         'border-indigo-400 bg-indigo-50 text-indigo-900',
+    correct:          'border-green-400 bg-green-50 text-green-900',
+    wrong:            'border-red-400 bg-red-50 text-red-900',
     'reveal-correct': 'border-green-300 bg-green-50/60 text-green-800',
   }
-
   const letterStyles = {
-    default:        'bg-gray-100 text-gray-500',
-    selected:       'bg-indigo-600 text-white',
-    correct:        'bg-green-600 text-white',
-    wrong:          'bg-red-500 text-white',
+    default:          'bg-gray-100 text-gray-500',
+    selected:         'bg-indigo-600 text-white',
+    correct:          'bg-green-600 text-white',
+    wrong:            'bg-red-500 text-white',
     'reveal-correct': 'bg-green-400 text-white',
   }
+
+  const hasSvg = svgDiagram && typeof svgDiagram === 'string' && svgDiagram.trim().toLowerCase().startsWith('<svg')
 
   return (
     <button
@@ -113,7 +164,13 @@ function OptionButton({ letterKey, text, state, onClick, disabled }) {
       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 transition-colors ${letterStyles[state] ?? letterStyles.default}`}>
         {letterKey}
       </span>
-      <span className="text-sm leading-relaxed flex-1">{text}</span>
+      <span className="text-sm leading-relaxed flex-1">
+        {hasSvg ? (
+          <SvgDiagram svg={svgDiagram} label="" className="border-0 bg-transparent" />
+        ) : (
+          <MathText text={text} />
+        )}
+      </span>
       {state === 'correct' && (
         <span className="text-green-600 text-sm flex-shrink-0 mt-0.5">✓</span>
       )}
@@ -124,32 +181,89 @@ function OptionButton({ letterKey, text, state, onClick, disabled }) {
   )
 }
 
-// ── Explanation block ─────────────────────────────────────────────────────────
+// ── Explanation block ──────────────────────────────────────────────────────────
 
 function ExplanationBlock({ explanation, explanationImageUrl }) {
   if (!explanation) return null
-  const { correct, workings } = explanation
-  if (!correct && !workings?.length && !explanationImageUrl) return null
+
+  // Support both old schema (correct / workings) and new schema (answer_note / steps / concept)
+  const answerNote = explanation.answer_note || explanation.correct
+  const steps      = explanation.steps ?? []
+  const workings   = explanation.workings ?? []
+  const concept    = explanation.concept ?? ''
+  const intro      = explanation.intro ?? ''
+  const studyTip   = explanation.study_tip ?? ''
+  const svgDiagram = explanation.svg_diagram ?? ''
+
+  const hasContent = answerNote || steps.length || workings.length || explanationImageUrl || svgDiagram
+
+  if (!hasContent) return null
 
   return (
     <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 overflow-hidden">
       <div className="px-4 py-2.5 bg-indigo-100 border-b border-indigo-200">
         <p className="text-xs font-black text-indigo-700 uppercase tracking-wide">Explanation</p>
-      </div>
-      <div className="px-4 py-3 space-y-3">
-        {correct && (
-          <p className="text-sm text-gray-800 leading-relaxed">{correct}</p>
+        {concept && (
+          <p className="text-[11px] text-indigo-500 mt-0.5">{concept}</p>
         )}
-        {workings?.length > 0 && (
-          <div className="bg-white rounded-xl p-3 space-y-1.5 border border-indigo-100">
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        {/* Intro sentence */}
+        {intro && (
+          <MathText text={intro} className="text-sm text-gray-700 leading-relaxed" />
+        )}
+
+        {/* New-style steps (array of { title, lines[] }) */}
+        {steps.length > 0 && (
+          <div className="bg-white rounded-xl p-3 space-y-2 border border-indigo-100">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1">Workings</p>
-            {workings.map((w, i) => (
-              <p key={i} className="text-xs text-gray-700 font-mono leading-relaxed">
-                {i + 1}. {typeof w === 'string' ? w : w.instruction ?? JSON.stringify(w)}
-              </p>
+            {steps.map((step, si) => (
+              <div key={si}>
+                {step.title && (
+                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-wider mb-0.5">
+                    {step.title}
+                  </p>
+                )}
+                {(step.lines ?? []).map((line, li) => (
+                  <MathText
+                    key={li}
+                    text={line}
+                    className="text-xs text-gray-700 font-mono leading-relaxed block"
+                  />
+                ))}
+              </div>
             ))}
           </div>
         )}
+
+        {/* Legacy workings array */}
+        {steps.length === 0 && workings.length > 0 && (
+          <div className="bg-white rounded-xl p-3 space-y-1.5 border border-indigo-100">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1">Workings</p>
+            {workings.map((w, i) => (
+              <MathText
+                key={i}
+                text={`${i + 1}. ${typeof w === 'string' ? w : (w.instruction ?? JSON.stringify(w))}`}
+                className="text-xs text-gray-700 font-mono leading-relaxed block"
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Answer note — the green confirmation box */}
+        {answerNote && (
+          <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+            <MathText text={answerNote} className="text-sm text-green-900 leading-relaxed font-medium" />
+          </div>
+        )}
+
+        {/* SVG diagram in explanation */}
+        {svgDiagram && (
+          <SvgDiagram svg={svgDiagram} label="Solution diagram" />
+        )}
+
+        {/* Image in explanation */}
         {explanationImageUrl && (
           <div className="rounded-xl overflow-hidden border border-indigo-200 bg-white">
             <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wide px-3 py-1.5 border-b border-indigo-100">
@@ -162,16 +276,25 @@ function ExplanationBlock({ explanation, explanationImageUrl }) {
             />
           </div>
         )}
+
+        {/* Study tip */}
+        {studyTip && (
+          <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+            <span className="text-blue-400 text-sm flex-shrink-0">📌</span>
+            <p className="text-xs text-blue-700 leading-relaxed">{studyTip}</p>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Main export ────────────────────────────────────────────────────────────────
 
 export default function QuestionStudentPreview({
   question,
   showAnswer      = false,
+  showHint        = false,   // true in practice/study sessions; false in exam mode
   selectedAnswer  = null,
   onSelectAnswer  = null,
   showRawTab      = false,
@@ -185,7 +308,6 @@ export default function QuestionStudentPreview({
   const optKeys = Object.keys(opts).sort()
   const correct = question.correct_answer
 
-  // Determine per-option display state
   function optionState(key) {
     if (!showAnswer && !selectedAnswer) return 'default'
     if (showAnswer) {
@@ -193,12 +315,14 @@ export default function QuestionStudentPreview({
       if (key === selectedAnswer && key !== correct) return 'wrong'
       return 'default'
     }
-    // selectedAnswer only (student mid-question, answer not revealed yet)
     if (key === selectedAnswer) return 'selected'
     return 'default'
   }
 
   const answeredOrShowing = showAnswer || !!selectedAnswer
+
+  // Per-option SVG diagrams: stored as options_svg: { A: '<svg...>', B: '...' }
+  const optsSvg = question.options_svg ?? {}
 
   return (
     <div className={compact ? 'space-y-3' : 'space-y-4'}>
@@ -242,12 +366,18 @@ export default function QuestionStudentPreview({
             </p>
           )}
 
-          {/* ── QUESTION STEM ── */}
-          <p className={`font-semibold text-gray-900 leading-relaxed ${compact ? 'text-sm' : 'text-base'}`}>
-            {question.question_text}
-          </p>
+          {/* ── QUESTION STEM (with KaTeX math rendering) ── */}
+          <MathText
+            text={question.question_text}
+            className={`font-semibold text-gray-900 leading-relaxed ${compact ? 'text-sm' : 'text-base'}`}
+          />
 
-          {/* ── QUESTION IMAGE (diagram embedded in the question) ── */}
+          {/* ── QUESTION SVG DIAGRAM (AI-generated inline diagram) ── */}
+          {question.svg_diagram && (
+            <SvgDiagram svg={question.svg_diagram} label="Diagram" />
+          )}
+
+          {/* ── QUESTION IMAGE (uploaded photo/scan) ── */}
           {question.has_image && question.image_url && (
             <div className="rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
               <div className="px-3 py-2 bg-gray-100 border-b border-gray-200">
@@ -264,6 +394,11 @@ export default function QuestionStudentPreview({
             </div>
           )}
 
+          {/* ── HINT (practice / study sessions only) ── */}
+          {showHint && !showAnswer && (
+            <HintBlock hint={question.hint} />
+          )}
+
           {/* ── OPTIONS ── */}
           {optKeys.length > 0 && (
             <div className="space-y-2">
@@ -272,6 +407,7 @@ export default function QuestionStudentPreview({
                   key={key}
                   letterKey={key}
                   text={opts[key]}
+                  svgDiagram={optsSvg[key]}
                   state={optionState(key)}
                   disabled={answeredOrShowing || !onSelectAnswer}
                   onClick={() => onSelectAnswer?.(key)}

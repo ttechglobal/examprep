@@ -884,7 +884,6 @@ export default function SdashImportPage() {
           year:           q.year || year,
           topic_title:    q.topic_title ?? '',
           subtopic_title: q.subtopic_title ?? '',
-          difficulty:     q.difficulty ?? 'medium',
           hide_reason:    'manual_review',
           sdash_id:       q.sdash_id ?? null,
         }),
@@ -1475,11 +1474,6 @@ export default function SdashImportPage() {
                           {isHidden && <span className="text-xs text-gray-400 italic">Hidden — will not be saved</span>}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          {!isHidden && (
-                            <Badge color={q.difficulty === 'easy' ? 'green' : q.difficulty === 'hard' ? 'red' : 'amber'}>
-                              {q.difficulty ?? 'medium'}
-                            </Badge>
-                          )}
                           <Badge color="gray">{q.year || year}</Badge>
                           {!isHidden && (
                             <button
@@ -1977,7 +1971,7 @@ export default function SdashImportPage() {
               {
                 step: '6',
                 title: 'Difficulty is inferred automatically',
-                body: 'SdashAPI doesn\'t provide difficulty ratings. The import engine classifies each question as easy / medium / hard based on keyword patterns in the question text (e.g. "define" → easy, "calculate" → hard). You can adjust this in the question editor.',
+                body: 'Questions are automatically tagged to topics and subtopics from the curriculum tree.',
               },
             ].map(({ step, title, body }) => (
               <div key={step} className="flex gap-4">

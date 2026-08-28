@@ -93,6 +93,15 @@ function HeroBanner({ dark }) {
 // ─── PRACTICE MODE CARDS ──────────────────────────────────────────────────────
 const MODES = [
   {
+    key:'topic',
+    iconBg:`linear-gradient(135deg,#0891b2,#0e7490)`,
+    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h12M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>,
+    label:'Topic Practice',
+    desc:'Drill a specific topic',
+    body:'Choose a subject and topic, then practise only questions from that topic. Great for targeted revision.',
+    xp:'+XP', color:'#0891b2', shadow:'#065f7a',
+  },
+  {
     key:'custom',
     iconBg:`linear-gradient(135deg,${BLUE},#0a4fc8)`,
     icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#fff" strokeWidth="2"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>,
@@ -135,7 +144,7 @@ function PracticeModeCards({ onStart, dark }) {
   return (
     <div>
       <SecLabel>Practice Modes</SecLabel>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, gridAutoRows:'auto' }}>
         {MODES.map(m => (
           <div key={m.key} onClick={() => onStart(m.key)}
             onMouseEnter={() => setHov(m.key)} onMouseLeave={() => setHov(null)}
@@ -218,15 +227,39 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
   const [spCount,    setSpCount]   = useState(20)
   const [spTime,     setSpTime]    = useState(30)  // seconds per question
 
+  // Topic mode
+  const [tpSubject,  setTpSubject] = useState(() => pickDefault(subjects, exam))
+  const [tpTopics,   setTpTopics]  = useState([])
+  const [tpTopic,    setTpTopic]   = useState(null)
+  const [loadingTopics, setLoadingTopics] = useState(false)
+
   useEffect(() => {
     const def = pickDefault(subjects, exam)
-    setSubject(def); setQ5Subject(def); setSpSubject(def)
+    setSubject(def); setQ5Subject(def); setSpSubject(def); setTpSubject(def)
   }, [subjects, exam])
+
+  // Fetch topics when topic mode subject changes
+  useEffect(() => {
+    if (mode !== 'topic' || !tpSubject?.id) return
+    setTpTopics([]); setTpTopic(null); setLoadingTopics(true)
+    fetch(`/api/student/topics?subject_id=${tpSubject.id}&exam=${exam}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setTpTopics(Array.isArray(d) ? d : []); setLoadingTopics(false) })
+      .catch(() => setLoadingTopics(false))
+  }, [tpSubject?.id, mode, exam])
 
   const accent = getAccent(subject?.name ?? '')
 
   function go() {
     if (mode === 'mock') { onMockExam?.(); return }
+    if (mode === 'topic') {
+      const s = tpSubject || subjects[0]
+      if (!s || !tpTopic) return
+      saveLastSubject(s)
+      const cfg = { subjects:[s.name], subject_id:s.id, examType:exam, count:20, mode:'practice', sessionType:'practice', topic_id:tpTopic.id, topicName:tpTopic.name }
+      sessionStorage.setItem('practice_config', JSON.stringify(cfg))
+      onStart?.(cfg); return
+    }
     if (mode === 'quick5') {
       const s = q5Subject || subjects[0]
       if (!s) return
@@ -258,6 +291,10 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
   function nextStep() {
     if (mode === 'mock') { onMockExam?.(); return }
     if (mode === 'quick5' || mode === 'timed') { go(); return }
+    if (mode === 'topic') {
+      if (step === 1) { setStep(2); return }  // step 1: pick subject → step 2: pick topic
+      go(); return
+    }
     // Custom: step 1 → step 2
     if (step === 1) { setStep(2); return }
     go()
@@ -266,20 +303,26 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
   function prevStep() { if (step > 1) setStep(s => s - 1) }
 
   const isCustom = mode === 'custom'
-  const totalSteps = isCustom ? 2 : 1
-  const canNext = mode === 'mock' ? true : mode === 'quick5' ? !!q5Subject : mode === 'timed' ? !!spSubject : step===1 ? !!subject : true
+  const isTopic  = mode === 'topic'
+  const totalSteps = (isCustom || isTopic) ? 2 : 1
+  const canNext = mode === 'mock' ? true
+    : mode === 'quick5' ? !!q5Subject
+    : mode === 'timed' ? !!spSubject
+    : mode === 'topic' ? (step === 1 ? !!tpSubject : !!tpTopic)
+    : step===1 ? !!subject : true
 
-  const modeAccent = { custom:BLUE, quick5:GREEN, timed:ORANGE, mock:PURPLE }[mode] ?? BLUE
-  const modeShadow = { custom:'#0a3fa0', quick5:'#166534', timed:'#b84200', mock:'#3b0764' }[mode] ?? '#0a3fa0'
+  const modeAccent = { topic:'#0891b2', custom:BLUE, quick5:GREEN, timed:ORANGE, mock:PURPLE }[mode] ?? BLUE
+  const modeShadow = { topic:'#065f7a', custom:'#0a3fa0', quick5:'#166534', timed:'#b84200', mock:'#3b0764' }[mode] ?? '#0a3fa0'
 
   const btnLabel = mode === 'mock' ? '📝 Start Mock Exam' :
                    mode === 'quick5' ? '⚡ Start Quick 5' :
                    mode === 'timed' ? '⏱ Start Speed Round' :
+                   mode === 'topic' ? (step === 1 ? 'Choose Topic →' : '📚 Start Topic Practice') :
                    step === 1 ? 'Continue →' : `🚀 Start ${sessionType === 'study' ? 'Study' : 'Practice'} Session`
 
   return (
     <>
-      <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}@keyframes sheet-in{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}.ps-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.ps-sheet{width:100%;max-width:560px;background:var(--bg-card);border-radius:28px 28px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:92vh;box-shadow:0 -20px 60px rgba(0,0,0,.4);animation:sheet-up .3s cubic-bezier(.22,.61,.36,1)}@media(min-width:768px){.ps-backdrop{justify-content:center}.ps-sheet{border-radius:24px;border:1px solid var(--border);max-height:86vh;animation:sheet-in .25s ease}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}@keyframes sheet-in{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}.ps-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.ps-sheet{width:100%;max-width:560px;background:var(--bg-card);border-radius:28px 28px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:88vh;box-shadow:0 -20px 60px rgba(0,0,0,.4);animation:sheet-up .3s cubic-bezier(.22,.61,.36,1)}.ps-cta{padding:14px 22px;padding-bottom:max(76px,calc(env(safe-area-inset-bottom) + 68px));border-top:1px solid var(--border);background:var(--bg-card)}@media(min-width:768px){.ps-backdrop{justify-content:center}.ps-sheet{border-radius:24px;border:1px solid var(--border);max-height:86vh;animation:sheet-in .25s ease}.ps-cta{padding:14px 22px !important;padding-bottom:18px !important}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div className="ps-backdrop" onClick={e => e.target===e.currentTarget&&onClose()}>
         <div className="ps-sheet">
           {/* Handle */}
@@ -320,6 +363,7 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.1em' }}>Mode</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {[
+                    { key:'topic',  emoji:'📋',  label:'Topic Practice',   tag:'Targeted', color:'#0891b2', desc:'Drill questions from one specific topic.' },
                     { key:'custom', emoji:'🎛️', label:'Custom Practice', tag:'You choose', color:BLUE,   desc:'Pick subject, question count, time limit and mode.' },
                     { key:'quick5', emoji:'⚡',  label:'Quick 5',         tag:'~4 min',   color:GREEN,  desc:'5 random questions. Fast and focused.' },
                     { key:'timed',  emoji:'⏱️',  label:'Speed Round',     tag:'Race it',  color:ORANGE, desc:'Race through questions under a time limit.' },
@@ -346,6 +390,7 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
 
               {/* Subject + Exam type (shown for all non-mock modes) */}
               {mode !== 'mock' && (<>
+                {/* Topic mode step 1 is handled below — same subject grid reused */}
                 <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.1em' }}>Exam · Subject</div>
 
                 {/* Exam toggle */}
@@ -370,12 +415,13 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:8 }}>
                     {subjects.map(sub => {
                       const a = getAccent(sub.name)
-                      const currentSubj = mode==='quick5' ? q5Subject : mode==='timed' ? spSubject : subject
+                      const currentSubj = mode==='quick5' ? q5Subject : mode==='timed' ? spSubject : mode==='topic' ? tpSubject : subject
                       const on = currentSubj?.id === sub.id
                       return (
                         <button key={sub.id} onClick={() => {
                           if (mode==='quick5') setQ5Subject(sub)
                           else if (mode==='timed') setSpSubject(sub)
+                          else if (mode==='topic') setTpSubject(sub)
                           else setSubject(sub)
                         }}
                           style={{ display:'flex', alignItems:'center', gap:9, padding:'11px 13px', borderRadius:14, cursor:'pointer', fontFamily:'inherit', background:on?`${a}12`:'var(--bg-subtle)', border:`2px solid ${on?a:'var(--border)'}`, transition:'all .12s', textAlign:'left' }}>
@@ -491,10 +537,51 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode='cus
                 ))}
               </div>
             </>)}
+
+            {/* ── STEP 2: Topic picker ── */}
+            {step === 2 && isTopic && (<>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)', marginBottom:4, textTransform:'uppercase', letterSpacing:'.1em' }}>
+                  {tpSubject?.name} — Pick a topic
+                </div>
+                <div style={{ fontSize:12, color:'var(--text-tert)', marginBottom:14 }}>
+                  Choose the topic you want to drill. Questions will be drawn only from that topic.
+                </div>
+                {loadingTopics ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'16px 0' }}>
+                    <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid #0891b2`, borderTopColor:'transparent', animation:'spin .7s linear infinite' }}/>
+                    <span style={{ fontSize:13, color:'var(--text-tert)' }}>Loading topics…</span>
+                  </div>
+                ) : tpTopics.length === 0 ? (
+                  <div style={{ textAlign:'center', padding:'20px 0', fontSize:13, color:'var(--text-tert)' }}>
+                    No topics found for this subject yet.
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {tpTopics.map(topic => {
+                      const on = tpTopic?.id === topic.id
+                      return (
+                        <button key={topic.id} onClick={() => setTpTopic(topic)}
+                          style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 15px', borderRadius:14, border:`2px solid ${on?'#0891b2':'var(--border)'}`, background:on?'#0891b210':'var(--bg-subtle)', cursor:'pointer', textAlign:'left', fontFamily:'inherit', transition:'all .14s' }}>
+                          <div style={{ width:32, height:32, borderRadius:10, background:on?'#0891b220':'var(--bg-card)', border:`1.5px solid ${on?'#0891b240':'var(--border)'}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            <span style={{ fontSize:13, fontWeight:900, color:on?'#0891b2':'var(--text-tert)' }}>{topic.order_index ?? '·'}</span>
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:13, fontWeight:800, color:on?'#0891b2':'var(--text-prim)', lineHeight:1.3 }}>{topic.name}</div>
+                            {topic.question_count > 0 && <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:2 }}>{topic.question_count} questions</div>}
+                          </div>
+                          {on && <div style={{ width:20, height:20, borderRadius:'50%', background:'#0891b2', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>)}
           </div>
 
           {/* CTA */}
-          <div style={{ padding:'14px 22px', paddingBottom:'max(18px,env(safe-area-inset-bottom))', borderTop:'1px solid var(--border)', background:'var(--bg-card)' }}>
+          <div className="ps-cta">
             <button onClick={nextStep} disabled={!canNext}
               style={{ width:'100%', padding:'15px 0', borderRadius:14, border:'none', cursor:canNext?'pointer':'not-allowed', background:canNext?modeAccent:'var(--border)', color:'#fff', fontSize:15, fontWeight:900, fontFamily:'inherit', letterSpacing:'-.01em', boxShadow:canNext?`0 5px 0 ${modeShadow},0 8px 24px ${modeAccent}40`:'none', transition:'all .12s', position:'relative', overflow:'hidden' }}>
               <div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,transparent,rgba(255,255,255,.13),transparent)', backgroundSize:'200% 100%', animation:'shimmer 2.5s infinite', pointerEvents:'none' }}/>

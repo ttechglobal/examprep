@@ -116,9 +116,13 @@ export function toLatex(expr) {
   // Inverse trig: sin^{-1} → \sin^{-1}
   s = s.replace(/\b(sin|cos|tan)\^{?-1}?\b/gi, (_, fn) => `\\${fn}^{-1}`)
 
-  // x^{n} or x^n — already valid LaTeX, but ensure braces for multi-char exp
-  // x^23 → x^{23}
+  // Exponent bracing: x^23 → x^{23}, (1.03)^3 → (1.03)^{3}
+  // Single digit already valid; multi-char must be braced
   s = s.replace(/\^([A-Za-z0-9]{2,})/g, (_, exp) => `^{${exp}}`)
+  // Decimal base: 1.03^3 → 1.03^{3} so KaTeX renders it
+  s = s.replace(/(\d+\.\d+)\^(\d+)/g, (_, base, exp) => `${base}^{${exp}}`)
+  // Closing-paren base: (1+r)^n → already valid LaTeX when inside $
+  // Strip any stray ^ that aren't inside $ — these come from plain-text AI output
 
   // Therefore
   s = s.replace(/\btherefore\b/gi, '\\therefore')
@@ -234,17 +238,20 @@ function autoDetect(text) {
     /\([^()]+\)\s*\/\s*\([^()]+\)/,
     // algebraic fraction: letter/something or something/letter
     /[A-Za-z][A-Za-z0-9]*\s*\/\s*[A-Za-z0-9]/,
-    // pure fraction where denominator > 1 digit (so we catch 3/4 but not "1/2 cup")
-    /\b\d+\s*\/\s*\d{2,}\b/,
-    /\b\d{2,}\s*\/\s*\d+\b/,
+    // ALL simple numeric fractions: 1/2, 3/4, 22/7
+    /\b\d+\s*\/\s*\d+\b/,
     // sqrt(...)
     /sqrt\s*\(/i,
-    // x^2 style exponents
-    /[A-Za-z]\^{?\d/,
+    // bare caret exponents: x^2, n^3, 10^5, (1.03)^3 — catches all ^n patterns
+    /[A-Za-z0-9)]\^[A-Za-z0-9{\-]/,
+    // decimal base exponents: 1.03^3, 0.95^2
+    /\d+\.\d+\^\d/,
     // mixed fraction 2 1/3
     /\b\d+\s+\d+\/\d+\b/,
     // log base
     /log_\d/i,
+    // equation lines: letter/number = something
+    /[A-Za-z0-9}]\s*=\s*[\d\-A-Za-z(\\\\]/,
   ]
 
   const hasMath = MATH_PATTERNS.some(p => p.test(text))
@@ -350,12 +357,24 @@ export function MathText({ text, className = '', as: Tag = 'span' }) {
 export function WorkingsBlock({ workings, className = '' }) {
   if (!workings) return null
 
-  const lines = Array.isArray(workings)
+  // Normalise to array of strings
+  const rawLines = Array.isArray(workings)
     ? workings.map(w => {
         if (typeof w === 'string') return w
         return w?.instruction ?? w?.text ?? String(w)
       }).filter(Boolean)
     : String(workings).split(/\n+/).map(s => s.trim()).filter(Boolean)
+
+  // Pre-wrap equation/expression lines in $...$ so KaTeX renders them properly.
+  // Catches: x = 10 + 3, v = u + at, 22/7, x^2 etc. in step lines.
+  const EQ_RE = /[A-Za-z0-9})]\s*=|[A-Za-z0-9)]\^|\d+\.\d+\^|\d+\s*\/\s*\d|[+\-×]\s*\d.*=|\(\d/
+  const lines = rawLines.map(line => {
+    if (!line) return line
+    if (line.includes('$')) return line
+    if (line.startsWith('\\\\')) return line
+    if (EQ_RE.test(line)) return `$${line}$`
+    return line
+  })
 
   if (!lines.length) return null
 
@@ -423,15 +442,17 @@ export function scoreQuestion(question) {
 
   const qText = question?.question_text ?? ''
   const opts  = question?.options ?? {}
-  const expl  = question?.explanation ?? {}
+  const expl  = typeof question?.explanation === 'string'
+    ? (() => { try { return JSON.parse(question.explanation) } catch { return {} } })()
+    : (question?.explanation ?? {})
 
-  // Raw fraction pattern still present (not wrapped in $)
+  // Unformatted fractions in question text
   if (/[A-Za-z0-9]\s*\/\s*[A-Za-z0-9]/.test(qText) && !qText.includes('$')) {
     issues.push('Fractions not wrapped in $ — will not render as proper fractions')
     score -= 20
   }
 
-  // Raw exponent outside $ delimiters
+  // Unformatted exponents
   if (/[A-Za-z0-9]\^[0-9]/.test(qText) && !qText.includes('$')) {
     issues.push('Exponent notation (^) found outside $ delimiters')
     score -= 15
@@ -444,33 +465,61 @@ export function scoreQuestion(question) {
     score -= 20 * emptyOpts.length
   }
 
-  // Missing explanation
-  if (!expl.correct?.trim()) {
-    issues.push('No correct-answer explanation provided')
-    score -= 20
+  // Missing answer_note — the primary explanation students read
+  const answerNote = expl.answer_note ?? expl.correct ?? ''
+  if (!answerNote.trim()) {
+    issues.push('No answer_note — students will see nothing after answering')
+    score -= 25
   }
 
-  // Prose workings instead of steps
-  if (expl.workings) {
-    const lines = Array.isArray(expl.workings)
-      ? expl.workings
-      : String(expl.workings).split('\n').filter(Boolean)
-    if (lines.length === 1 && String(lines[0]).length > 120) {
-      issues.push('Explanation is a single long paragraph — should be broken into steps')
-      score -= 15
-    }
-  }
-
-  // No workings on a calculation question
-  const isMathLike = /\d/.test(qText) && /[+\-=]/.test(qText)
-  if (isMathLike && !expl.workings?.length) {
-    issues.push('No step-by-step workings — consider adding for calculation questions')
+  // answer_note format check
+  if (answerNote && !/^The correct answer is [A-E]/i.test(answerNote.trim())) {
+    issues.push('answer_note should start with "The correct answer is [letter] —"')
     score -= 10
   }
 
-  // Image reference without image
-  if (/diagram|figure|table|graph|above|below/i.test(qText) && !question?.image_url) {
-    issues.push('Question refers to a diagram but no image is attached')
+  // Missing hint
+  if (!question.hint?.trim()) {
+    issues.push('No hint — students have no help when stuck')
+    score -= 5
+  }
+
+  // Missing concept
+  if (!expl.concept?.trim()) {
+    issues.push('No concept label — concept pill will be blank in explanation')
+    score -= 5
+  }
+
+  // Calculation question with no steps
+  const isCalcLike = /\d/.test(qText) && /[+\-=×÷]/.test(qText)
+  if (isCalcLike && !(expl.steps?.length > 0)) {
+    issues.push('Calculation question has no step-by-step workings')
+    score -= 15
+  }
+
+  // Refers to diagram but no visual attached
+  const refsDiagram = /diagram|figure|table|graph|above|below/i.test(qText)
+  const hasVisual   = question?.image_url || question?.svg_diagram
+  if (refsDiagram && !hasVisual) {
+    issues.push('Question refers to a diagram but no image or SVG is attached')
+    score -= 20
+  }
+
+  // English fill-gap / synonym question missing instruction_text
+  const isEnglish   = /english|use of english|literature/i.test(question?.subject ?? '')
+  const needsInstr  = /fill.*gap|nearest.*meaning|opposite.*meaning|stress.*pattern/i.test(qText)
+  if (isEnglish && needsInstr && !question.instruction_text?.trim()) {
+    issues.push('Fill-gap or synonym question missing instruction_text')
+    score -= 15
+  }
+
+  // Raw LaTeX leaking into display text
+  const allText = [
+    qText, answerNote,
+    ...(expl.steps ?? []).flatMap(s => s.lines ?? []),
+  ].join(' ')
+  if (/\dfrac|\text\{|\$\d/.test(allText)) {
+    issues.push('Raw LaTeX found in text — may display as code instead of formatted math')
     score -= 20
   }
 

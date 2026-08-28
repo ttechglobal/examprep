@@ -69,6 +69,20 @@ export function cleanLatex(text) {
   // 6. Double-escaped dollar inside $: $\$500$ → $500
   s = s.replace(/(\$)\\\$(\d)/g, '$1$2')
 
+  // 7. Stray LaTeX display/inline delimiters that leaked into plain text
+  //    e.g. \$ appearing as literal text (not inside math), \text{...}, \dfrac leaked
+  //    Strip backslash-dollar that isn't part of a $ math block
+  s = s.replace(/\\dfrac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')
+  s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')
+  s = s.replace(/\\text\{([^}]*)\}/g, '$1')
+
+  // 8. "The correct answer is X - text" → use em dash instead of hyphen
+  //    Normalise hyphen-minus used as separator after answer letter
+  s = s.replace(
+    /((?:The )?correct answer is\s+[A-Ea-e])\s*-\s*/gi,
+    (_, prefix) => `${prefix} — `
+  )
+
   return s
 }
 
@@ -190,27 +204,35 @@ For every question:
 PART 2 — WRITE THE EXPLANATION
 ═══════════════════════════════════════════════
 
-"correct" field: 1–2 sentences explaining WHY the correct answer is right.
+"concept" field: One short phrase naming the principle tested.
+  e.g. "Curved surface area of a cylinder" / "Linear equations" / "Osmosis vs diffusion"
 
-"workings" field:
+"correct" field: 1–2 plain-English sentences explaining WHY the correct answer is right. No math notation here.
 
-  FOR MATHS / SCIENCE / QUANTITATIVE SUBJECTS (Mathematics, Physics, Chemistry,
-  Further Mathematics, Economics calculations, etc.):
-    MUST be a JSON array of strings, one calculation step per string.
-    GOOD: ["Given: u = 0, a = 10, t = 5", "v = u + at", "v = 0 + 50", "v = 50 m/s"]
-    BAD:  ["We substitute u=0 into v=u+at to get v=50 m/s"]
+"steps" field — CALCULATION QUESTIONS (Maths, Physics, Chemistry, Further Maths,
+  Economics, Geography, Biology magnification/genetics, Commerce %):
 
-  FOR ENGLISH / LANGUAGE / COMPREHENSION SUBJECTS (English Language, Use of English,
-  Literature in English, Yoruba, Igbo, Hausa, etc.):
-    Do NOT write step-by-step workings. These subjects have no calculation steps.
-    Instead write 1–2 plain sentences explaining the grammar rule, vocabulary meaning,
-    or literary device that makes the answer correct.
-    Set "workings" to [] (empty array) for all English/language questions.
-    GOOD correct: "The word \"garrulous\" means excessively talkative. Option A \"talkative\" is the nearest synonym."
-    BAD: ["Step 1: identify root word", "Step 2: match synonym"] — never write steps for language questions.
+  Array of step objects: { "title": "Short action label", "lines": ["..."] }
+  EVERY equation line MUST be wrapped in $...$:
+    GOOD: { "title": "Apply the formula", "lines": ["$v = u + at$", "$v = 0 + 10 \\times 5$", "$v = 50$ m/s"] }
+    BAD:  { "title": "Solve", "lines": ["v = u + at", "v = 50 m/s"] }  ← no $ = caret shows, fractions break
+  ONE operation per line — never combine substitution + calculation on the same line.
+  Powers: $(1.03)^{3}$ not 1.03^3. Fractions: $\\frac{22}{7}$ not 22/7.
+  Pure recall questions (no calculation): "steps": []
 
-"wrong_options": for EACH wrong option (B, C, D), write one sentence explaining the specific mistake. Include ALL — the UI will show only the one the student picked.
-Only include the option the student picked — not all wrong options.
+"steps" field — ENGLISH / LANGUAGE / HUMANITIES (English Language, Use of English,
+  Literature, Yoruba, Igbo, Hausa, Government, CRK, History, Commerce concepts):
+
+  Set "steps": [] always. Explain in the "correct" field instead:
+  GOOD: "The word 'garrulous' means excessively talkative. 'Talkative' is the nearest synonym."
+  GOOD: "Section 14 of the 1999 Nigerian Constitution defines Nigeria as a democratic state. Option C quotes this correctly."
+  BAD: ["Step 1: identify root word", "Step 2: match synonym"] — never steps for language/humanities.
+
+"wrong_options": for EACH wrong option (B, C, D — and E if present), explain the specific mistake.
+Always include ALL wrong options — the UI shows only the one the student picked, but we store all of them.
+Each explanation: (1) what the student was probably thinking, (2) why that is wrong, (3) the correct principle.
+BAD: "This option is incorrect."
+GOOD: "A student choosing B has confused osmotic pressure with turgor pressure — osmosis depends on water potential difference, not pressure alone."
 
 ═══════════════════════════════════════════════
 PART 3 — TEXT & MATHEMATICAL FORMATTING (CRITICAL)
@@ -275,12 +297,14 @@ SPACING — CRITICAL:
   Always keep spaces between all words.
   Never join words that were on separate lines in the PDF.
 
-SYMBOLS:
+SYMBOLS (inside $ only — these are KaTeX commands, not plain text characters):
   × → \\times    ÷ → \\div    ± → \\pm    ∴ → \\therefore
   ≤ → \\leq      ≥ → \\geq    ≠ → \\neq   ∞ → \\infty
   π → \\pi       α → \\alpha  β → \\beta  θ → \\theta
 
 EVERY mathematical expression — no matter how short — goes inside $...$
+Plain prose text (question_text, answer_note, hint, study_tip) uses Unicode directly:
+  Write × ÷ π √ as characters. Write "3 squared" or "x²". Do NOT use \\times or \\pi in prose.
 
 ═══════════════════════════════════════════════
 PART 4 — TAG TO CURRICULUM
@@ -288,12 +312,63 @@ PART 4 — TAG TO CURRICULUM
 
 - topic_title: main topic (specific, match the curriculum tree)
 - subtopic_title: specific subtopic (match the curriculum tree exactly if possible)
-- difficulty:
-    easy   = direct recall or single substitution
-    medium = 2–3 step application
-    hard   = multi-step reasoning or unfamiliar context
 
 ═══════════════════════════════════════════════
+
+═════════════════════════════════════════════
+PART 5 — SVG DIAGRAMS (STEM SUBJECTS)
+═════════════════════════════════════════════
+
+For Mathematics, Physics, Chemistry, Further Mathematics, Biology, Geography:
+Whenever a question involves a geometric shape, graph, circuit, force diagram,
+molecular structure, coordinate axis, or any spatial concept — CREATE AN SVG.
+
+QUESTION-LEVEL svg_diagram: (top-level field)
+  Draw the described setup. Label all given values. Accent the unknown in #4f46e5.
+  e.g. "A cylinder of radius 3.5 cm and height 10 cm…" → draw the labelled cylinder
+  e.g. "Forces P and Q act at 60° to each other…" → draw the force diagram
+  e.g. "ABCD is a rectangle with AB = 8 cm, BC = 5 cm…" → draw the labelled rectangle
+
+EXPLANATION-LEVEL svg_diagram: (inside explanation object)
+  ALWAYS add to the explanation of any geometric/spatial calculation.
+  Show the worked solution: label the values used, highlight the answer.
+
+SVG RULES:
+  - viewBox="0 0 280 200" · scales to the mobile card width
+  - stroke="#1e293b" fill="none" for outlines · fill="#1e293b" for labels
+  - Accent colour #4f46e5 for the key measurement or answer
+  - font-size="13" font-family="system-ui,sans-serif" on all <text> elements
+  - Include <title> describing what it shows
+  - Clean and minimal — label clearly, avoid clutter
+  - If no diagram is useful: svg_diagram: "" (empty string — never force one)
+
+EXAMPLE — cylinder with r=3.5cm h=10cm:
+  "svg_diagram": "<svg viewBox=\"0 0 280 200\" xmlns=\"http://www.w3.org/2000/svg\"><title>Cylinder r=3.5cm h=10cm</title><ellipse cx=\"140\" cy=\"48\" rx=\"72\" ry=\"22\" stroke=\"#1e293b\" stroke-width=\"1.5\" fill=\"#f1f5f9\"/><rect x=\"68\" y=\"48\" width=\"144\" height=\"112\" fill=\"#f1f5f9\" stroke=\"none\"/><line x1=\"68\" y1=\"48\" x2=\"68\" y2=\"160\" stroke=\"#1e293b\" stroke-width=\"1.5\"/><line x1=\"212\" y1=\"48\" x2=\"212\" y2=\"160\" stroke=\"#1e293b\" stroke-width=\"1.5\"/><ellipse cx=\"140\" cy=\"160\" rx=\"72\" ry=\"22\" stroke=\"#1e293b\" stroke-width=\"1.5\" fill=\"#f1f5f9\"/><line x1=\"140\" y1=\"48\" x2=\"212\" y2=\"48\" stroke=\"#4f46e5\" stroke-width=\"2\" stroke-dasharray=\"5,3\"/><text x=\"148\" y=\"43\" font-size=\"12\" fill=\"#4f46e5\" font-family=\"system-ui\">r = 3.5 cm</text><line x1=\"220\" y1=\"48\" x2=\"220\" y2=\"160\" stroke=\"#64748b\" stroke-width=\"1.5\"/><text x=\"225\" y=\"108\" font-size=\"12\" fill=\"#64748b\" font-family=\"system-ui\">h = 10 cm</text></svg>"
+
+═════════════════════════════════════════════
+PART 6 — ENGLISH / LANGUAGE INSTRUCTION TEXT
+═════════════════════════════════════════════
+
+For English Language, Use of English, Literature in English, Yoruba, Igbo, Hausa, French:
+Many exam questions depend on a section instruction printed once that applies to
+a group of questions. Students CANNOT answer without it. Each question MUST carry
+its own instruction_text since they appear in random CBT order.
+
+RULE: Set instruction_text when the question is any of these types:
+  Fill-the-blank/cloze:   "Choose the option that best fills the gap."
+  Synonym/nearest meaning:"Choose the word nearest in meaning to the underlined word."
+  Antonym/opposite:       "Choose the word opposite in meaning to the underlined word."
+  Sentence completion:    "Choose the option that best completes the sentence."
+  Word stress/phonetics:  "Identify the word with the same stress pattern as the given word."
+  Rhyme:                  "Which word rhymes with the word given?"
+  Grammar correction:     "Choose the option that correctly fills the gap."
+  Comprehension:          "Answer based on the passage above." (passage goes in passage_text)
+
+  If the instruction appears verbatim in the PDF: copy it exactly.
+  If the instruction is missing from the PDF but the question type is clear: write it
+  yourself using the standard WAEC/JAMB phrasing above.
+  If the question is self-contained (no instruction needed): instruction_text: null
+
 RETURN FORMAT — JSON ARRAY ONLY
 ═══════════════════════════════════════════════
 
@@ -316,21 +391,23 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
     },
     "correct_answer": "A",
     "explanation": {
-      "correct": "",
-      "workings": [
-        "Step one — one line only",
-        "Step two — one line only",
-        "Answer"
-      ],
+      "concept": "one-line name of the principle tested",
+      "correct": "why the correct answer is right — 1-2 sentences",
+      "answer_note": "The correct answer is [LETTER] — [option text]. 1-2 warm sentences.",
+      "steps": [],
+      "svg_diagram": "",
+      "hint": "one sentence nudging toward solution without revealing the answer",
+      "study_tip": "",
       "wrong_options": {
-        "B": "one sentence explaining why B is wrong",
-        "C": "one sentence explaining why C is wrong",
-        "D": "one sentence explaining why D is wrong"
+        "B": "one sentence: specific misconception behind option B",
+        "C": "one sentence: specific misconception behind option C",
+        "D": "one sentence: specific misconception behind option D"
       }
     },
+    "svg_diagram": "",
+    "instruction_text": null,
     "topic_title": "",
-    "subtopic_title": "",
-    "difficulty": "medium"
+    "subtopic_title": ""
   }
 ]`
 }
@@ -406,8 +483,7 @@ Return ONLY valid JSON:
     "wrong_options": { "B": "...", "C": "...", "D": "..." }
   },
   "topic_title": "",
-  "subtopic_title": "",
-  "difficulty": "medium"
+  "subtopic_title": ""
 }`
 }
 
@@ -483,7 +559,6 @@ export function parseQuestions(rawText) {
     if (!q.options?.C?.trim())     errors.push(`${label}: missing option C`)
     if (!q.options?.D?.trim())     errors.push(`${label}: missing option D`)
     if (!q.correct_answer)         errors.push(`${label}: missing correct_answer`)
-    if (!q.difficulty)             errors.push(`${label}: missing difficulty`)
     // question_type intentionally not validated — column dropped from DB
   })
 
@@ -497,9 +572,6 @@ export function parseQuestions(rawText) {
     questions: parsed,
     stats: {
       total:        parsed.length,
-      easy:         parsed.filter(q => q.difficulty === 'easy').length,
-      medium:       parsed.filter(q => q.difficulty === 'medium').length,
-      hard:         parsed.filter(q => q.difficulty === 'hard').length,
       withWorkings: parsed.filter(q => q.explanation?.workings?.length > 0).length,
       withImages:   parsed.filter(q => q.has_image).length,
       withPassage:  parsed.filter(q => q.passage_text).length,
@@ -618,7 +690,7 @@ function stringSimilarity(a, b) {
 //   - The curriculum topic list (names only — short numbered list)
 //
 // What the AI returns (small JSON — enrichment delta only):
-//   [{ index, explanation: { correct, workings[], wrong_options:{} }, topic_title, subtopic_title, difficulty }]
+//   [{ index, explanation: { correct, workings[], wrong_options:{} }, topic_title, subtopic_title }]
 //
 // The original question data (text, options, answer) stays in fetchedQuestions
 // on the client. mergeSdashEnrichment() joins them together before save.
@@ -657,8 +729,11 @@ export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topi
     ? topics.map((t, i) => `${i + 1}. ${t.name}`).join('\n')
     : '(use the most accurate topic name you know)'
 
-  const isCalc = /physics|chemistry|mathematics|further math|economics/i.test(subjectName)
-  const isBio  = /biology/i.test(subjectName)
+  // Subjects that need step-by-step calculation workings
+  // isCalc: subjects that need step-by-step calculation workings
+  // Covers all STEM + commercial calculation subjects
+  const isCalc = /physics|chemistry|mathematics|further math|economics|geography|biology|commerce|agricultural/i.test(subjectName)
+  const isBio  = false  // biology is now included in isCalc — kept for backwards compat
 
   // ── Format questions inline into the prompt ──────────────────────────────
   const questionLines = rawQuestions.map((q, i) => {
@@ -671,38 +746,108 @@ export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topi
   }).join('\n\n')
 
   const calcWorkingsGuide = `
-"steps": REQUIRED for every calculation, algebra, or numeric question. Array of step objects.
-Each step: { "title": "Short action label", "lines": ["working line 1", "working line 2", ...] }
+"steps": REQUIRED for every STEM calculation question. Array of step objects.
+Each step: { "title": "Short action label", "lines": ["$equation 1$", "$equation 2$"] }
 
-RULES FOR STEPS — READ CAREFULLY:
-- "title" is a short action phrase: "Write down what we know", "Apply the formula", "Expand the brackets", "Collect like terms", "Solve for x", "Check the answer"
-- "lines" = actual working, one equation or expression per line
-- ⚠️ NEVER skip intermediate steps. Show every single line of working.
-  BAD:  { "title": "Solve", "lines": ["x = 4.75"] }    ← skips all working
-  GOOD: { "title": "Collect like terms", "lines": ["6x - 2x = 8 + 11", "4x = 19"] }
-        { "title": "Divide both sides", "lines": ["x = 19 ÷ 4", "x = 4.75"] }
-- The first step should always state the given values or write down the formula used
-- Substitution is its own step — show the numbers going in before you calculate
-- Each arithmetic operation (expansion, collection, division, evaluation) is its own step
-- Write equations in plain text — no LaTeX, no markdown
-- Use × for multiply, ÷ for divide, plain fractions like 19/4
-- Last line of the last step = the clean final answer with units if applicable
-- A student should be able to reproduce the answer by following your steps alone
+══════════════════════════════════════════════════════
+THE SINGLE MOST IMPORTANT RULE — READ THIS CAREFULLY
+══════════════════════════════════════════════════════
 
-STEP COUNT GUIDE (minimum steps expected):
-  Simple substitution (e.g. v = u + at): 3 steps — write formula / substitute values / evaluate
-  Algebra (solve for x): 4–6 steps — set up / expand / collect / simplify / solve / verify
-  Geometry/mensuration: 4–5 steps — identify shape / write formula / find unknowns / substitute / compute
-  Physics/Chemistry calculation: 4–6 steps — state given / write equation / rearrange / substitute / compute / state answer with units
-  Word problem: 5+ steps — define variables / set up equations / solve step by step / interpret answer
+Every line inside "lines" MUST be wrapped in $...$
+This is not optional. This is how the app renders math. Without $, the student sees raw text.
 
-EXAMPLE (3(2x-5)+4 = 2(x+7)-6, answer A — x = 4.75):
-"steps": [
-  { "title": "Write down the equation",   "lines": ["3(2x - 5) + 4 = 2(x + 7) - 6"] },
-  { "title": "Expand the brackets",       "lines": ["6x - 15 + 4 = 2x + 14 - 6", "6x - 11 = 2x + 8"] },
-  { "title": "Collect like terms",        "lines": ["6x - 2x = 8 + 11", "4x = 19"] },
-  { "title": "Divide both sides by 4",   "lines": ["x = 19 ÷ 4", "x = 4.75"] }
+  CORRECT: { "title": "Apply the formula", "lines": ["$v = u + at$", "$v = 0 + (10 \\times 5)$", "$v = 50$ m/s"] }
+  WRONG:   { "title": "Apply the formula", "lines": ["v = u + at", "v = 0 + 50", "v = 50 m/s"] }
+
+  CORRECT: { "title": "Substitute values", "lines": ["$A = 3000 \\times (1.03)^{3}$"] }
+  WRONG:   { "title": "Substitute values", "lines": ["A = 3000 × (1.03)^3"] }
+
+POWERS — always brace multi-char exponents and use $ delimiters:
+  CORRECT: "$x^{2}$"   "$a^{n+1}$"   "$(1.03)^{3}$"   "$P(1+r)^{n}$"
+  WRONG:   "x^2"       "a^n+1"       "1.03^3"          "P(1+r)^n"    ← raw carets always show
+
+FRACTIONS — always use \frac inside $:
+  CORRECT: "$\\frac{1}{2}$"   "$\\frac{22}{7}$"   "$\\frac{x+1}{2}$"
+  WRONG:   "1/2"               "22/7"               "(x+1)/2"        ← renders as plain slash
+
+MIXED FRACTIONS:
+  CORRECT: "$4\\frac{7}{9}$"   "$2\\frac{1}{3}$"
+  WRONG:   "4 7/9"              "2 1/3"
+
+MULTIPLICATION in equations: use \times inside $
+  CORRECT: "$3000 \\times 1.0927$"   "$2 \\times \\pi \\times r$"
+  WRONG:   "3000 × 1.0927"            "2 × π × r"
+
+SQUARE ROOTS:
+  CORRECT: "$\\sqrt{100}$"   "$\\sqrt{b^{2} - 4ac}$"
+  WRONG:   "√100"             "sqrt(b²-4ac)"
+
+SPECIAL VALUES: π → $\\pi$  · θ → $\\theta$  · ° → $90^{\\circ}$  · ≈ → $\\approx$
+
+══════════════════════════════════════════════════════
+ONE OPERATION PER LINE — NO SKIPPING STEPS
+══════════════════════════════════════════════════════
+
+Every single algebraic move gets its own line. Students must be able to follow each transition.
+
+  WRONG: ["$x - 3 = 10$", "$x = 7$"]                         ← what happened?
+  RIGHT: ["$x - 3 = 10$", "$x = 10 + 3$", "$x = 13$"]       ← every move shown
+
+  WRONG: ["$v^{2} = u^{2} + 2as = 0 + 100 = 100$", "$v = 10$ m/s"]  ← three operations merged
+  RIGHT: ["$v^{2} = u^{2} + 2as$", "$v^{2} = 0 + 2 \\times 10 \\times 5$", "$v^{2} = 100$", "$v = \\sqrt{100}$", "$v = 10$ m/s"]
+
+  WRONG: ["$CSA = 2 \\times \\frac{22}{7} \\times 4 \\times 14 = 352$ cm²"]  ← substitution + answer combined
+  RIGHT: ["$CSA = 2 \\times \\pi \\times r \\times h$", "$CSA = 2 \\times \\frac{22}{7} \\times 4 \\times 14$", "$CSA = 2 \\times 176$", "$CSA = 352$ cm²"]
+
+Test: could a student who just finished the previous line do this line themselves?
+If yes → one step. If they need to do two things mentally → split it.
+
+══════════════════════════════════════════════════════
+STEP STRUCTURE GUIDE
+══════════════════════════════════════════════════════
+
+Step titles should be clear action phrases:
+  "Write down what we know" / "Identify the formula" / "Substitute the values" /
+  "Expand the brackets" / "Collect like terms" / "Solve for x" / "Check the answer"
+
+Minimum steps by question type:
+  Substitution (e.g. v = u + at):     3 steps — identify given / write formula / substitute and evaluate
+  Algebra (solve for x):              4–5 steps — write equation / expand / collect / solve
+  Mensuration (area, volume, CSA):    4–5 steps — formula / find unknowns / substitute / compute / state with units
+  Physics / Chemistry calculation:    4–6 steps — state given values / write equation / rearrange if needed / substitute / compute / state answer with units
+  Compound growth/decay:              5 steps — identify P, r, n / write formula / substitute / expand step by step / final answer
+  Quadratic equations:                5–6 steps — write in standard form / identify a,b,c / apply formula / simplify / evaluate both roots
+  Word problems:                      5+ steps — define variables / set up equation / expand / solve / interpret answer
+
+══════════════════════════════════════════════════════
+WORKED EXAMPLES — COPY THIS FORMAT EXACTLY
+══════════════════════════════════════════════════════
+
+ALGEBRA EXAMPLE (3(2x−5)+4 = 2(x+7)−6 → x = 4.75):
+[
+  { "title": "Write down the equation",  "lines": ["$3(2x - 5) + 4 = 2(x + 7) - 6$"] },
+  { "title": "Expand the brackets",      "lines": ["$6x - 15 + 4 = 2x + 14 - 6$", "$6x - 11 = 2x + 8$"] },
+  { "title": "Collect like terms",       "lines": ["$6x - 2x = 8 + 11$", "$4x = 19$"] },
+  { "title": "Divide both sides by 4",  "lines": ["$x = \\frac{19}{4}$", "$x = 4.75$"] }
 ]
+
+COMPOUND INTEREST EXAMPLE (P=3000, r=3%, n=3 years → A≈3278):
+[
+  { "title": "Write down what we know",   "lines": ["$P = 3000$", "$r = 3\\% = 0.03$", "$n = 3$ years"] },
+  { "title": "Identify the formula",      "lines": ["$A = P(1 + r)^{n}$"] },
+  { "title": "Substitute the values",     "lines": ["$A = 3000 \\times (1 + 0.03)^{3}$", "$A = 3000 \\times (1.03)^{3}$"] },
+  { "title": "Evaluate $(1.03)^{3}$",     "lines": ["$(1.03)^{2} = 1.0609$", "$(1.03)^{3} = 1.0609 \\times 1.03$", "$(1.03)^{3} = 1.0927$"] },
+  { "title": "Calculate the final answer","lines": ["$A = 3000 \\times 1.0927$", "$A \\approx 3278$"] }
+]
+
+MENSURATION EXAMPLE (CSA of cylinder, r=4cm, h=14cm → 352cm²):
+[
+  { "title": "Write down the formula",    "lines": ["$CSA = 2 \\times \\pi \\times r \\times h$"] },
+  { "title": "Find the radius",           "lines": ["$\\text{diameter} = 8$ cm", "$r = 8 \\div 2 = 4$ cm"] },
+  { "title": "Substitute the values",     "lines": ["$CSA = 2 \\times \\frac{22}{7} \\times 4 \\times 14$"] },
+  { "title": "Simplify step by step",    "lines": ["$CSA = 2 \\times \\frac{22}{7} \\times 56$", "$CSA = 2 \\times 176$", "$CSA = 352$ cm²"] }
+]
+
 For pure recall with NO calculation: "steps": []`
 
   const nonCalcWorkingsGuide = `"steps": [] — no calculation steps needed for this subject.`
@@ -743,6 +888,25 @@ Each explanation object has these fields:
 
 "intro"        — One sentence introducing the solution. For calculation: "Let's work through this step by step." For recall: brief context sentence.
 
+"formula_box"  — The key formula for this question, rendered in a highlighted box ABOVE the steps.
+                 WHEN TO INCLUDE: any question where a named formula is applied.
+                 This means: kinematics (v=u+at, s=ut+½at²), electricity (V=IR, P=IV),
+                 mensuration (A=πr², V=½bh), logarithms (logₐ(xy)=logₐx+logₐy),
+                 compound interest (A=P(1+r)^n), quadratic formula, trigonometric ratios,
+                 pressure (P=F/A), density (ρ=m/V), wave speed (v=fλ), and so on.
+                 Write the formula in $...$ KaTeX: e.g. "$V = IR$" or "$A = P(1+r)^{n}$"
+                 WHEN NOT TO INCLUDE: pure recall/definition questions, English, humanities.
+                 Set to "" when no named formula applies.
+
+"variables_key" — Array of strings that decode each symbol in the formula.
+                 REQUIRED whenever formula_box is non-empty.
+                 Each entry: "Symbol = what it means (unit if applicable)"
+                 Example for V = IR: ["$V$ = voltage (volts, V)", "$I$ = current (amperes, A)", "$R$ = resistance (ohms, Ω)"]
+                 Example for A = P(1+r)^n: ["$A$ = final amount", "$P$ = principal (starting amount)", "$r$ = rate per period (as a decimal)", "$n$ = number of periods"]
+                 Example for CSA = 2πrh: ["$CSA$ = curved surface area (cm²)", "$r$ = radius (cm)", "$h$ = height (cm)"]
+                 Keep each entry short. Use the exact symbol that appears in the formula.
+                 Set to [] when formula_box is empty.
+
 "steps"        — ${isCalc || isBio ? 'REQUIRED for calculation questions' : 'leave as []'}
 ${isCalc || isBio ? calcWorkingsGuide : nonCalcWorkingsGuide}
 
@@ -752,20 +916,49 @@ ${isCalc || isBio ? calcWorkingsGuide : nonCalcWorkingsGuide}
                  Then 1–2 plain-English sentences saying why.
                  No LaTeX. No bold. Keep it warm and clear.
 
+"formula_box"  — (see above)
+
+"variables_key" — (see above)
+
+"hint"         — One sentence, max 20 words. Nudges the student without revealing the answer.
+                 This hint appears when a student is STUCK — they chose wrong and need direction.
+                 A student who reads it should feel "I know what to try next."
+                 For calculations: name the exact formula or the first step to take.
+                 For recall: name the principle, law, or category without giving the answer.
+                 NEVER say "the answer is", give the option letter, or restate the question.
+
+                 For CALCULATION questions — these are your priority:
+                   The best hint names the formula to use OR identifies the first value to isolate.
+                   Ask yourself: what is the one thing a stuck student needs to get started?
+
+                   Mensuration:      "Start by identifying the formula for curved surface area of a cylinder."
+                   Kinematics:       "Which SUVAT equation connects the values you have been given?"
+                   Compound growth:  "Identify P, r and n from the question, then apply the compound formula."
+                   Algebra:          "Try expanding the brackets on both sides before collecting like terms."
+                   Quadratic:        "Write the equation in the form $ax^2 + bx + c = 0$ first."
+                   Logarithm:        "Think about which log law lets you separate the terms."
+                   Trigonometry:     "Identify which sides of the triangle are given and which trig ratio connects them."
+                   Fractions:        "Find the lowest common denominator before adding the fractions."
+                   Word problem:     "Define your variable first — what is the unknown you need to find?"
+
+                 For RECALL questions:
+                   Name the principle or law being tested without stating the answer.
+                   e.g. "Think about what Newton’s second law says about the relationship between force and acceleration."
+
 "study_tip"    — One short exam technique tip. Only include if genuinely useful. Otherwise "".
 
 "correct"      — Repeat answer_note here exactly (legacy field).
 
 ═══════════════════════════════════════
-STYLE
+TONE & LANGUAGE
 ═══════════════════════════════════════
 
-- Plain English. Smart older sibling, not a textbook.
-- Equations in plain text — never LaTeX
-- × not *   ÷ not /   ² not ^2   fractions as 19/4
-- No filler. Every word earns its place.
-
-DIFFICULTY: easy = direct recall / one step · medium = 2-3 steps · hard = multi-step deep reasoning
+- You are a brilliant, warm older sibling explaining to a younger one. Not a textbook. Not a lecturer.
+- Plain English at all times. If a 15-year-old cannot follow it, rewrite it.
+- Never say "hence", "thus", "it can be deduced". Say "so", "this means", "that gives us".
+- answer_note and hint: prose only. NO math symbols, NO $ delimiters, NO LaTeX.
+  Write numbers as words or simple numerals: "using r equals 4 cm" not "$r = 4$".
+- No filler. Every sentence must help the student. Cut anything that does not.
 
 TOPIC TAGGING — pick the single closest name from this list:
 ${topicList}
@@ -784,16 +977,24 @@ The array must have EXACTLY ${rawQuestions.length} objects.
     "question_snippet": "COPY the first 8 words of Q1 here",
     "topic_title": "exact topic name from the list",
     "subtopic_title": "specific subtopic or empty string",
-    "difficulty": "medium",
     "explanation": {
       "concept": "Curved surface area of a cylinder",
+      "formula_box": "$CSA = 2 \\times \\pi \\times r \\times h$",
+      "variables_key": [
+        "$CSA$ = curved surface area (cm²)",
+        "$r$ = radius of the circular end (cm)",
+        "$h$ = height of the cylinder (cm)",
+        "$\\pi \\approx \\frac{22}{7}$"
+      ],
       "intro": "Let's work through this step by step.",
       "steps": [
-        { "title": "Write down the formula", "lines": ["CSA = 2 × π × r × h"] },
-        { "title": "Find the radius",         "lines": ["diameter = 8cm", "radius = 8 ÷ 2 = 4cm"] },
-        { "title": "Substitute and calculate","lines": ["CSA = 2 × 22/7 × 4 × 14", "CSA = 2 × 22/7 × 56", "CSA = 2 × 176", "CSA = 352 cm²"] }
+        { "title": "Write down the formula",  "lines": ["$CSA = 2 \\times \\pi \\times r \\times h$"] },
+        { "title": "Find the radius",          "lines": ["$\\text{diameter} = 8$ cm", "$r = 8 \\div 2 = 4$ cm"] },
+        { "title": "Substitute the values",   "lines": ["$CSA = 2 \\times \\frac{22}{7} \\times 4 \\times 14$"] },
+        { "title": "Simplify step by step",   "lines": ["$CSA = 2 \\times \\frac{22}{7} \\times 56$", "$CSA = 2 \\times 176$", "$CSA = 352$ cm²"] }
       ],
       "answer_note": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm².",
+      "hint": "Think about which formula links curved surface area, radius and height.",
       "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
       "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm²."
     }
@@ -878,13 +1079,17 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
         ...(q.option?.e || q.option?.E ? { E: q.option.e ?? q.option.E } : {}),
       },
       correct_answer: (q.answer ?? '').toUpperCase(),
+      hint:           e.explanation?.hint ?? '',
       explanation: e.explanation
         ? {
             // New schema fields
             concept:          e.explanation.concept          ?? '',
+            formula_box:      e.explanation.formula_box      ?? '',
+            variables_key:    e.explanation.variables_key    ?? [],
             intro:            e.explanation.intro            ?? '',
             steps:            e.explanation.steps            ?? [],
             answer_note:      e.explanation.answer_note      ?? e.explanation.correct ?? '',
+            hint:             e.explanation.hint             ?? '',
             study_tip:        e.explanation.study_tip        ?? '',
             wrong_option_note:e.explanation.wrong_option_note ?? '',
             // Legacy compat
@@ -893,13 +1098,14 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
             wrong_options:    e.explanation.wrong_options    ?? {},
           }
         : {
-            concept: '', intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
+            concept: '', formula_box: '', variables_key: [],
+            intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
+            hint: '',
             study_tip: '', wrong_option_note: '',
-            correct: q.solution?.trim() ?? '', workings: [], wrong_options: {},
+            correct: q.solution?.trim() ?? '', wrong_options: {},
           },
       topic_title:    e.topic_title    ?? '',
       subtopic_title: e.subtopic_title ?? '',
-      difficulty:     e.difficulty     ?? 'medium',
       _mismatch,   // true if explanation may not match this question
     }
   })
@@ -947,7 +1153,8 @@ export function parseEnrichment(rawText) {
   cleaned = cleaned
     .replace(/[\u2018\u2019\u02BC]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\u2013|\u2014/g, '-')
+    // Note: em dash (\u2014) is intentionally kept in answer_note text; only en dash normalised
+    .replace(/\u2013/g, '-')
     .replace(/\u2026/g, '...')
     .replace(/\u00A0/g, ' ')
 
@@ -985,7 +1192,6 @@ export function parseEnrichment(rawText) {
     const hasExplanation = e.explanation?.answer_note?.trim() || e.explanation?.correct?.trim()
     if (!hasExplanation) errors.push(`Question ${n}: explanation.answer_note (or correct) is empty`)
     if (!e.topic_title?.trim())          errors.push(`Question ${n}: topic_title is missing`)
-    if (!['easy','medium','hard'].includes(e.difficulty)) errors.push(`Question ${n}: difficulty must be easy / medium / hard`)
   })
 
   return { valid: errors.length === 0, errors, enrichments: parsed }}
