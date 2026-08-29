@@ -1,8 +1,9 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/[id]/route.js
 // PATCH — edit a question's fields
 // DELETE — archive (soft) or hard-delete (?hard=true)
 
-import { createClient } from '@/lib/supabase/server'
+
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -13,18 +14,14 @@ function svc() {
   )
 }
 
-async function requireAdmin(supabase) {
-  const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
   return user
-}
+
 
 // ── PATCH — update question fields ───────────────────────────────────────────
 export async function PATCH(request, { params }) {
-  const supabase = await createClient()
-  try { await requireAdmin(supabase) } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { id } = await params
   const body   = await request.json()
@@ -71,10 +68,8 @@ export async function PATCH(request, { params }) {
 
 // ── DELETE — archive (soft) or hard delete ───────────────────────────────────
 export async function DELETE(request, { params }) {
-  const supabase = await createClient()
-  try { await requireAdmin(supabase) } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { id }   = await params
   const hardDelete = new URL(request.url).searchParams.get('hard') === 'true'

@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // FIX: this file had been corrupted/overwritten with the content of
@@ -18,7 +19,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 const svc = () => createServiceClient(
@@ -27,21 +27,20 @@ const svc = () => createServiceClient(
 )
 
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
 
-  const subjectId   = searchParams.get('subject')      // matches caller param name
+  const subjectId   = searchParams.get('subject')
   const topicId     = searchParams.get('topic')
   const subtopicId  = searchParams.get('subtopic')
-  const examType    = searchParams.get('exam')          // 'ALL' or omitted = no filter
+  const examType    = searchParams.get('exam')
   const difficulty  = searchParams.get('difficulty')
-  const source      = searchParams.get('source')        // 'past_paper' | 'ai_generated' | omitted = both
-  const untagged    = searchParams.get('untagged')       // 'true' = subtopic_id IS NULL
-  const inactive    = searchParams.get('inactive')       // 'true' = is_active IS FALSE
-  const flagged     = searchParams.get('flagged')        // 'true' = is_flagged IS TRUE
+  const source      = searchParams.get('source')
+  const untagged    = searchParams.get('untagged')
+  const inactive    = searchParams.get('inactive')
+  const flagged     = searchParams.get('flagged')
   const hasImage    = searchParams.get('has_image')
   const missingImg  = searchParams.get('missing_image')
   const year        = searchParams.get('year')
@@ -52,10 +51,6 @@ export async function GET(request) {
 
   const db = svc()
 
-  // NOTE: explanation_has_image and explanation_image_url omitted from select —
-  // these columns don't exist on every environment and previously caused 500s
-  // on this list. They're still available on the single-question GET route
-  // (/api/admin/questions/[id]) which selects all columns explicitly.
   const selectClause = `
     id, question_text, correct_answer, difficulty,
     has_image, image_url, image_description,
@@ -89,8 +84,6 @@ export async function GET(request) {
     query = query.eq('has_image', true).is('image_url', null)
   }
 
-  // Exam filter — legacy exam_type column, BOTH always included alongside
-  // the requested exam type. 'ALL' (or omitted) means no exam filter.
   if (examType && examType !== 'ALL') {
     query = examType === 'BOTH'
       ? query.eq('exam_type', 'BOTH')
@@ -99,10 +92,6 @@ export async function GET(request) {
 
   let { data, error, count } = await query
 
-  // Fallback: if exam_types[] array column lookup ever gets introduced and
-  // errors on environments where it doesn't exist yet, retry without it.
-  // (Kept defensive even though this route currently only uses exam_type —
-  // matches the resilience pattern used throughout the rest of this codebase.)
   if (error) {
     console.error('[admin/questions] query error:', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -125,9 +114,8 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const db = svc()
   const { questions, examType, subjectId, batchId, defaultYear } = await request.json()
@@ -145,23 +133,19 @@ export async function POST(request) {
   for (const q of questions) {
     try {
       const row = {
-        // Core content
         question_text:      q.question_text?.trim() ?? '',
         options:            q.options ?? {},
         correct_answer:     q.correct_answer ?? '',
         explanation:        q.explanation ?? {},
         difficulty:         q.difficulty ?? 'medium',
 
-        // Passage / shared context — new fields
         passage_text:       q.passage_text     ?? null,
         passage_image_url:  q.passage_image_url ?? null,
 
-        // Images
         has_image:          q.has_image         ?? false,
         image_url:          q.image_url         ?? null,
         image_description:  q.image_description ?? null,
 
-        // Classification
         exam_type:    examType,
         subject_id:   subjectId,
         topic_id:     q.topic_id    ?? null,
@@ -169,7 +153,6 @@ export async function POST(request) {
         year:         q.year || defaultYear || null,
         source:       q.source ?? 'past_paper',
 
-        // State
         is_active:  true,
         is_flagged: false,
       }
@@ -190,7 +173,6 @@ export async function POST(request) {
     }
   }
 
-  // Update batch record with final counts
   if (batchId) {
     await db
       .from('upload_batches')

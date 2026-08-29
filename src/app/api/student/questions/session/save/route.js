@@ -1,31 +1,31 @@
-// src/app/api/student/questions/session/save/route.js — v3
+// src/app/api/student/mastery/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Local-first session save. Works for guests AND authenticated users.
+// GET /api/student/mastery?exam=WAEC&subject=uuid&period=30
 //
-// Flow:
-//   Client always saves locally first (via localSessionSync.saveSessionLocally).
-//   Then calls this endpoint. This endpoint:
-//     • Guest (no Supabase session): returns computed XP — no DB writes.
-//       The client queues the payload and will retry when the user logs in.
-//     • Auth user: writes question_attempts, mastery, streak, XP, summary.
-//       Returns the authoritative server state.
+// Returns performance insight for a subject over a time window.
+// Queries question_attempts directly — the source of truth.
 //
-// The client flushes its sync queue on login (syncOnLogin from localSessionSync).
-// So a user who practised as a guest and then creates an account gets their
-// full history synced automatically.
+// params:
+//   exam     — 'WAEC' | 'JAMB'  (required)
+//   subject  — subject UUID      (optional — omit for subject overview)
+//   period   — days: 7|14|30|90|0 (0 = all time, default 30)
 //
-// Body:
+// Response (subject drill-in):
 // {
-//   session_id:    string  (uuid — client generates before session starts)
-//   exam:          'WAEC' | 'JAMB'
-//   mode:          'quick5' | 'weak' | 'mixed' | 'timed' | 'mock' | 'practice' | 'study'
-//   subject_name:  string  (e.g. 'Mathematics')
-//   results:       [{ question_id, topic_id, subject_id, is_correct, time_taken_ms? }]
-//   duration_secs: number
+//   subject_name, period_days, weeks_of_data, total_attempts, subject_score,
+//   weekly_trend: [{ week, score, attempts }],        // oldest first
+//   topics: [{
+//     topic_id, topic_name, correct, total, score,    // score null = not enough data
+//     enough_data, attempts_needed
+//   }]
 // }
 //
-// Returns:
-// { ok, guest?, xp_awarded, new_total_xp, streak_days, mastery_updated, correct, total, accuracy }
+// Response (overview — no subject param):
+// {
+//   subjects: [{
+//     subject_id, subject_name, total_attempts, subject_score, topic_count
+//   }]
+// }
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }              from '@/lib/supabase/server'
@@ -37,268 +37,169 @@ const db = () => svcClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-function today() { return new Date().toISOString().slice(0, 10) }
+const MIN_ATTEMPTS_TO_SCORE = 5
 
-// ── EMA mastery scoring ───────────────────────────────────────────────────────
-// α = 0.7 for new topics (< 3 attempts) — trust recent data heavily
-// α = 0.4 for established topics — blend history with recent
-function emaScore(prevScore, prevCount, sessionScore) {
-  const alpha = prevCount < 3 ? 0.7 : 0.4
-  return Math.round(prevScore * (1 - alpha) + sessionScore * alpha)
+function mondayOf(dateStr) {
+  const d   = new Date(dateStr)
+  const dow = d.getDay()
+  d.setDate(d.getDate() - ((dow + 6) % 7))
+  return d.toISOString().slice(0, 10)
 }
 
-// ── XP formula ────────────────────────────────────────────────────────────────
-// Always rewards the attempt — minimum 5 XP even with zero correct answers.
-function calcXP(results, mode) {
-  const attempted  = results.filter(r => r.selectedIdx !== null && r.selectedIdx !== undefined).length
-  const correct    = results.filter(r => r.is_correct).length
-  const total      = results.length
-  if (!total) return 5
-  const pctRight   = Math.round((correct / total) * 100)
-  const attemptXP  = attempted * 5
-  const correctXP  = correct   * 10
-  const accuracyXP = pctRight >= 80 ? 50 : pctRight >= 60 ? 25 : 0
-  const modeBonus  = { quick5:10, weak:20, mixed:10, timed:30, mock:100, practice:0, study:0 }[mode] ?? 0
-  return Math.max(5, attemptXP + correctXP + accuracyXP + modeBonus)
+function weeksOfData(rows) {
+  if (!rows.length) return 0
+  const oldest  = rows.reduce((min, r) => r.created_at < min ? r.created_at : min, rows[0].created_at)
+  const diffMs  = Date.now() - new Date(oldest).getTime()
+  return Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)))
 }
 
-export async function POST(request) {
+export async function GET(request) {
   try {
-    // Parse body first — same for guests and auth users
-    let body
-    try { body = await request.json() }
-    catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-
-    const {
-      session_id    = null,
-      exam          = 'WAEC',
-      mode          = 'practice',
-      subject_name  = null,
-      results       = [],
-      duration_secs = 0,
-    } = body ?? {}
-
-    // Pre-compute stats used by both paths
-    const correctCount = results.filter(r => r.is_correct).length
-    const accuracy     = results.length > 0
-      ? Math.round((correctCount / results.length) * 100)
-      : 0
-    const xpAwarded    = calcXP(results, mode)
-
-    // ── Auth check ────────────────────────────────────────────────────────────
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // ── GUEST PATH ────────────────────────────────────────────────────────────
-    // No DB writes. Return computed XP so the client can:
-    //   1. Display the results screen correctly
-    //   2. Update local XP via PointsContext
-    // The client keeps the payload in ep_sync_queue and will re-POST when
-    // the user creates an account and calls syncOnLogin().
-    if (!user) {
-      return NextResponse.json({
-        ok:              true,
-        guest:           true,         // signals client to accumulate, not replace XP
-        xp_awarded:      xpAwarded,
-        new_total_xp:    null,         // client adds xp_awarded to its own local total
-        streak_days:     0,
-        mastery_updated: 0,
-        correct:         correctCount,
-        total:           results.length,
-        accuracy,
-        duration_secs,
-      })
-    }
+    const { searchParams } = new URL(request.url)
+    const exam      = searchParams.get('exam')    ?? 'WAEC'
+    const subjectId = searchParams.get('subject') ?? null
+    const period    = parseInt(searchParams.get('period') ?? '30', 10)
 
-    // ── AUTH PATH ─────────────────────────────────────────────────────────────
-    if (!results.length) {
-      return NextResponse.json({ error: 'results array is empty' }, { status: 400 })
-    }
+    const service   = db()
+    const userId    = user.id
 
-    const service  = db()
-    const userId   = user.id
-    const todayStr = today()
+    const sinceDate = period > 0
+      ? new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString()
+      : null
 
-    // ── Deduplication — idempotent saves ─────────────────────────────────────
-    if (session_id) {
-      const { data: existing } = await service
-        .from('practice_sessions')
-        .select('id')
-        .eq('session_id', session_id)
-        .maybeSingle()
-
-      if (existing) {
-        const { data: prof } = await service
-          .from('profiles')
-          .select('total_points, streak_days')
-          .eq('id', userId)
-          .single()
-        return NextResponse.json({
-          ok:              true,
-          duplicate:       true,
-          xp_awarded:      0,
-          new_total_xp:    prof?.total_points ?? 0,
-          streak_days:     prof?.streak_days  ?? 0,
-          mastery_updated: 0,
-          correct:         correctCount,
-          total:           results.length,
-          accuracy,
-        })
-      }
-    }
-
-    // ── WRITE 1: question_attempts ────────────────────────────────────────────
-    const attemptRows = results.map(r => ({
-      student_id:    userId,
-      question_id:   r.question_id,
-      topic_id:      r.topic_id    ?? null,
-      subject_id:    r.subject_id  ?? null,
-      subject_name:  subject_name  ?? null,
-      exam_type:     exam,
-      is_correct:    r.is_correct  ?? false,
-      time_taken_ms: r.time_taken_ms ?? null,
-      created_at:    new Date().toISOString(),
-    }))
-
-    const { error: attErr } = await service
-      .from('question_attempts')
-      .insert(attemptRows)
-
-    if (attErr) console.error('[session/save] attempts error:', attErr.message)
-
-    // ── WRITE 2: student_topic_mastery ────────────────────────────────────────
-    const byTopic = {}
-    for (const r of results) {
-      if (!r.topic_id) continue
-      if (!byTopic[r.topic_id]) {
-        byTopic[r.topic_id] = { correct: 0, total: 0, subject_id: r.subject_id ?? null }
-      }
-      byTopic[r.topic_id].total++
-      if (r.is_correct) byTopic[r.topic_id].correct++
-    }
-
-    const topicIds = Object.keys(byTopic)
-    let masteryUpdated = 0
-
-    if (topicIds.length) {
-      const { data: existingRows } = await service
-        .from('student_topic_mastery')
-        .select('topic_id, score, attempt_count')
+    // ── OVERVIEW — no subject param ───────────────────────────────────────────
+    if (!subjectId) {
+      let query = service
+        .from('question_attempts')
+        .select('subject_id, subject_name, is_correct')
         .eq('student_id', userId)
         .eq('exam_type', exam)
-        .in('topic_id', topicIds)
 
-      const existingMap = {}
-      for (const row of existingRows ?? []) {
-        existingMap[row.topic_id] = { score: row.score ?? 0, count: row.attempt_count ?? 0 }
+      if (sinceDate) query = query.gte('created_at', sinceDate)
+
+      const { data: rows, error } = await query
+      if (error) {
+        console.error('[mastery] overview error:', error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
       }
 
-      const upsertRows = topicIds.map(tid => {
-        const { correct, total, subject_id } = byTopic[tid]
-        const sessionScore = total > 0 ? Math.round((correct / total) * 100) : 0
-        const prev         = existingMap[tid] ?? { score: 0, count: 0 }
-        return {
-          student_id:        userId,
-          topic_id:          tid,
-          subject_id,
-          exam_type:         exam,
-          score:             emaScore(prev.score, prev.count, sessionScore),
-          attempt_count:     prev.count + 1,
-          last_practiced_at: new Date().toISOString(),
-        }
-      })
-
-      const { error: mastErr } = await service
-        .from('student_topic_mastery')
-        .upsert(upsertRows, { onConflict: 'student_id,topic_id,exam_type' })
-
-      if (mastErr) {
-        // Fallback: exam_type column may not exist yet on older DB schemas
-        if (mastErr.code === '42703' || mastErr.message?.includes('exam_type')) {
-          const fallbackRows = upsertRows.map(({ exam_type: _drop, ...row }) => row)
-          const { error: retryErr } = await service
-            .from('student_topic_mastery')
-            .upsert(fallbackRows, { onConflict: 'student_id,topic_id' })
-          if (!retryErr) masteryUpdated = fallbackRows.length
-          else console.error('[session/save] mastery fallback error:', retryErr.message)
-        } else {
-          console.error('[session/save] mastery error:', mastErr.message)
-        }
-      } else {
-        masteryUpdated = upsertRows.length
+      // Group by subject
+      const subjectMap = {}
+      for (const r of rows ?? []) {
+        const sid = r.subject_id
+        if (!sid) continue
+        if (!subjectMap[sid]) subjectMap[sid] = { subject_id: sid, subject_name: r.subject_name ?? '', correct: 0, total: 0 }
+        subjectMap[sid].total++
+        if (r.is_correct) subjectMap[sid].correct++
       }
+
+      const subjects = Object.values(subjectMap).map(s => ({
+        subject_id:    s.subject_id,
+        subject_name:  s.subject_name,
+        total_attempts: s.total,
+        subject_score:  s.total >= MIN_ATTEMPTS_TO_SCORE
+          ? Math.round((s.correct / s.total) * 100)
+          : null,
+      })).sort((a, b) => (a.subject_score ?? -1) - (b.subject_score ?? -1))
+
+      return NextResponse.json(
+        { subjects, exam, period_days: period },
+        { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' } }
+      )
     }
 
-    // ── WRITE 3: streak ───────────────────────────────────────────────────────
-    const yesterday    = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().slice(0, 10)
-
-    const { data: streakRow } = await service
-      .from('student_streaks')
-      .select('streak_days, last_practice_date')
+    // ── DRILL-IN — specific subject ───────────────────────────────────────────
+    let query = service
+      .from('question_attempts')
+      .select('topic_id, subject_name, is_correct, created_at, topics(name)')
       .eq('student_id', userId)
-      .maybeSingle()
+      .eq('exam_type',  exam)
+      .eq('subject_id', subjectId)
+      .order('created_at', { ascending: false })
 
-    let streakDays = 1
-    if (streakRow) {
-      if      (streakRow.last_practice_date === todayStr)     streakDays = streakRow.streak_days
-      else if (streakRow.last_practice_date === yesterdayStr) streakDays = (streakRow.streak_days ?? 0) + 1
-      else                                                    streakDays = 1
+    if (sinceDate) query = query.gte('created_at', sinceDate)
+
+    const { data: rows, error } = await query
+    if (error) {
+      console.error('[mastery] drill-in error:', error.message)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    await service.from('student_streaks').upsert(
-      { student_id: userId, streak_days: streakDays, last_practice_date: todayStr },
-      { onConflict: 'student_id' }
+    const attempts = rows ?? []
+
+    // ── Topic breakdown ───────────────────────────────────────────────────────
+    const topicMap = {}
+    for (const r of attempts) {
+      const tid = r.topic_id
+      if (!tid) continue
+      if (!topicMap[tid]) topicMap[tid] = { topic_id: tid, topic_name: r.topics?.name ?? '', correct: 0, total: 0 }
+      topicMap[tid].total++
+      if (r.is_correct) topicMap[tid].correct++
+    }
+
+    const topics = Object.values(topicMap).map(t => {
+      const enough = t.total >= MIN_ATTEMPTS_TO_SCORE
+      return {
+        topic_id:        t.topic_id,
+        topic_name:      t.topic_name,
+        correct:         t.correct,
+        total:           t.total,
+        score:           enough ? Math.round((t.correct / t.total) * 100) : null,
+        enough_data:     enough,
+        attempts_needed: enough ? 0 : MIN_ATTEMPTS_TO_SCORE - t.total,
+      }
+    }).sort((a, b) => {
+      if (a.enough_data && !b.enough_data) return -1
+      if (!a.enough_data && b.enough_data) return  1
+      if (a.enough_data && b.enough_data)  return (a.score ?? 0) - (b.score ?? 0)
+      return b.total - a.total
+    })
+
+    // ── Weekly trend ──────────────────────────────────────────────────────────
+    const weekMap = {}
+    for (const r of attempts) {
+      const mon = mondayOf(r.created_at.slice(0, 10))
+      if (!weekMap[mon]) weekMap[mon] = { correct: 0, total: 0 }
+      weekMap[mon].total++
+      if (r.is_correct) weekMap[mon].correct++
+    }
+
+    const weekly_trend = Object.entries(weekMap)
+      .map(([week, { correct, total }]) => ({
+        week,
+        score:    Math.round((correct / total) * 100),
+        attempts: total,
+      }))
+      .sort((a, b) => a.week.localeCompare(b.week))
+
+    // ── Subject score — average of scored topics ──────────────────────────────
+    const scored       = topics.filter(t => t.enough_data)
+    const subjectScore = scored.length
+      ? Math.round(scored.reduce((s, t) => s + t.score, 0) / scored.length)
+      : null
+
+    const subjectName = attempts[0]?.subject_name ?? ''
+
+    return NextResponse.json(
+      {
+        subject_name:   subjectName,
+        period_days:    period,
+        weeks_of_data:  weeksOfData(attempts),
+        total_attempts: attempts.length,
+        subject_score:  subjectScore,
+        weekly_trend,
+        topics,
+        exam,
+      },
+      { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' } }
     )
 
-    // ── WRITE 4: XP + streak on profiles ─────────────────────────────────────
-    const { data: profRow } = await service
-      .from('profiles')
-      .select('total_points')
-      .eq('id', userId)
-      .single()
-
-    const currentXP  = profRow?.total_points ?? 0
-    const newTotalXP = currentXP + xpAwarded
-
-    await service
-      .from('profiles')
-      .update({ total_points: newTotalXP, streak_days: streakDays })
-      .eq('id', userId)
-
-    // ── WRITE 5: practice_sessions summary ────────────────────────────────────
-    const sessionSubjectId = results.find(r => r.subject_id)?.subject_id ?? null
-
-    await service.from('practice_sessions').insert({
-      id:              session_id ?? undefined,
-      session_id:      session_id ?? null,
-      student_id:      userId,
-      subject_id:      sessionSubjectId,
-      subject_name:    subject_name ?? null,
-      exam_type:       exam,
-      mode,
-      questions_count: results.length,
-      correct_count:   correctCount,
-      accuracy,
-      duration_secs,
-      xp_awarded:      xpAwarded,
-      created_at:      new Date().toISOString(),
-    })
-
-    return NextResponse.json({
-      ok:              true,
-      xp_awarded:      xpAwarded,
-      new_total_xp:    newTotalXP,
-      streak_days:     streakDays,
-      mastery_updated: masteryUpdated,
-      correct:         correctCount,
-      total:           results.length,
-      accuracy,
-    })
-
   } catch (err) {
-    console.error('[session/save] unexpected error:', err)
+    console.error('[student/mastery] unexpected error:', err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

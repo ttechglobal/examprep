@@ -421,3 +421,20 @@ button, a, [role="button"] {
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   SCHOOL ADMIN LAYOUT
+   Mobile-first: sidebar hidden, header + bottom nav visible.
+   Desktop (≥1024px): sidebar shown, mobile chrome hidden, content offset.
+   ══════════════════════════════════════════════════════════════════════════ */
+.school-sidebar                { display: none; }
+.school-mobile-header          { display: flex; }
+.school-mobile-bottom          { display: flex; }
+.school-mobile-bottom > button { flex: 1; }
+.school-content                { margin-left: 0; }
+
+@media (min-width: 1024px) {
+  .school-sidebar       { display: flex; }
+  .school-mobile-header { display: none !important; }
+  .school-mobile-bottom { display: none !important; }
+  .school-content       { margin-left: 240px; }
+}

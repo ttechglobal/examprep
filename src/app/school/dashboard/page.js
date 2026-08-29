@@ -1,367 +1,413 @@
 'use client'
-// src/app/school/dashboard/page.js — v3
-// ─────────────────────────────────────────────────────────────────────────────
-// KEY IMPROVEMENTS:
-//   1. Overview: Subject mastery breakdown is the HERO section — subjects
-//      expand inline to show per-topic accuracy, colour-coded weak/fair/strong.
-//   2. At-risk students use the 3-tier segmentation (dropped/inactive/struggling)
-//      with distinct visual treatment and actionable copy per tier.
-//   3. Students tab: expanded view shows per-topic mastery per subject.
-//   4. Topics tab: redesigned with cleaner cards, drill-down.
-//   5. Analytics section: engagement trend sparkline + improvement metrics.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/school/dashboard/page.js
+// Full redesign — inspired by the reference dashboard.
+// Tab state lives in URL: /school/dashboard?tab=overview
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams }                  from 'next/navigation'
+import { createClient }                                from '@/lib/supabase/client'
 
-// ── Colour helpers ────────────────────────────────────────────────────────────
-function pctColor(pct) {
-  if (pct === null || pct === undefined) return { fg: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', label: '—', ring: '#d1d5db' }
-  if (pct >= 70) return { fg: '#059669', bg: '#ecfdf5', border: '#a7f3d0', label: 'Strong',    ring: '#34d399' }
-  if (pct >= 45) return { fg: '#d97706', bg: '#fffbeb', border: '#fde68a', label: 'Fair',      ring: '#fbbf24' }
-  return            { fg: '#dc2626', bg: '#fef2f2', border: '#fecaca', label: 'Weak',      ring: '#f87171' }
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const NAVY    = '#062A78'
+const BLUE    = '#1264E5'
+const EMERALD = '#059669'
+const AMBER   = '#d97706'
+const RED     = '#dc2626'
+const TEXT    = '#071B49'
+const SEC     = '#3a4870'
+const DIM     = '#7a8aaa'
+const FAINT   = '#b0bada'
+const BORDER  = '#e4eaf5'
+const BG      = '#f4f7ff'
+const CARD    = '#ffffff'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function pct(n) { return n == null ? '—' : `${n}%` }
+function pctColor(n) {
+  if (n == null) return { fg: DIM,     bg: '#f4f7ff', border: BORDER,    label: '—'      }
+  if (n >= 70)   return { fg: EMERALD, bg: '#ecfdf5', border: '#a7f3d0', label: 'Strong' }
+  if (n >= 45)   return { fg: AMBER,   bg: '#fffbeb', border: '#fde68a', label: 'Fair'   }
+  return               { fg: RED,     bg: '#fef2f2', border: '#fecaca', label: 'Weak'   }
 }
-function AccBar({ pct, height = 6 }) {
-  const c = pctColor(pct)
+function getGreeting() {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+}
+function firstName(name) { return (name ?? '').split(' ')[0] || 'there' }
+
+// ── Primitives ────────────────────────────────────────────────────────────────
+function Card({ children, style = {} }) {
   return (
-    <div style={{ height, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
-      <div style={{ height: '100%', borderRadius: 99, background: c.ring, width: `${pct ?? 0}%`, transition: 'width .7s' }} />
+    <div style={{ background: CARD, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden', ...style }}>
+      {children}
     </div>
   )
 }
 
-// ── At-risk tier config ───────────────────────────────────────────────────────
-const TIER_CONFIG = {
-  dropped:    { label: 'Dropped off',    color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: '📉', message: 'Was active last week — follow up today' },
-  inactive:   { label: 'Long inactive',  color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', icon: '😴', message: 'Hasn\'t studied in 2+ weeks' },
-  struggling: { label: 'Struggling',     color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '⚠️', message: 'Active but accuracy < 40%' },
+function SectionTitle({ children, action }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-.02em', margin: 0 }}>{children}</h2>
+      {action}
+    </div>
+  )
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, emoji, accent = 'indigo' }) {
-  const ACCENT = {
-    indigo:  { iconBg: '#eef2ff', iconColor: '#4f46e5' },
-    emerald: { iconBg: '#ecfdf5', iconColor: '#059669' },
-    amber:   { iconBg: '#fffbeb', iconColor: '#d97706' },
-    red:     { iconBg: '#fef2f2', iconColor: '#dc2626' },
-  }
-  const a = ACCENT[accent] ?? ACCENT.indigo
+function ViewAll({ onClick }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 10, background: a.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-        {emoji}
+    <button onClick={onClick} style={{ fontSize: 12, fontWeight: 700, color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+      View all
+    </button>
+  )
+}
+
+function AccBar({ pct: p, height = 6, color }) {
+  const c = color ?? pctColor(p).fg
+  return (
+    <div style={{ height, background: BG, borderRadius: 99, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+      <div style={{ height: '100%', width: `${Math.min(100, p ?? 0)}%`, background: c, borderRadius: 99, transition: 'width .7s ease' }}/>
+    </div>
+  )
+}
+
+function Badge({ children, color = DIM, bg = BG, border = BORDER }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: bg, color, border: `1px solid ${border}`, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  )
+}
+
+function FieldLabel({ children, hint }) {
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: TEXT }}>{children}</label>
+      {hint && <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{hint}</p>}
+    </div>
+  )
+}
+
+function TextInput({ value, onChange, placeholder, autoFocus }) {
+  return (
+    <input value={value} onChange={onChange} placeholder={placeholder} autoFocus={autoFocus}
+      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 13, color: TEXT, background: CARD, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s' }}
+    />
+  )
+}
+
+function Btn({ children, onClick, disabled, loading, variant = 'primary', small = false }) {
+  const styles = {
+    primary:   { bg: BLUE,    color: '#fff', border: 'none' },
+    emerald:   { bg: EMERALD, color: '#fff', border: 'none' },
+    navy:      { bg: NAVY,    color: '#fff', border: 'none' },
+    outline:   { bg: 'transparent', color: DIM, border: `1px solid ${BORDER}` },
+    danger:    { bg: RED,     color: '#fff', border: 'none' },
+  }
+  const s = styles[variant] ?? styles.primary
+  return (
+    <button onClick={onClick} disabled={disabled || loading} style={{
+      padding: small ? '7px 14px' : '10px 18px',
+      borderRadius: 10, border: s.border,
+      background: (disabled || loading) ? '#e2e8f0' : s.bg,
+      color: (disabled || loading) ? DIM : s.color,
+      fontSize: small ? 12 : 13, fontWeight: 700,
+      cursor: (disabled || loading) ? 'not-allowed' : 'pointer',
+      fontFamily: 'inherit', transition: 'all .15s', whiteSpace: 'nowrap',
+    }}>
+      {loading ? 'Loading…' : children}
+    </button>
+  )
+}
+
+// ── Stat card (top row) ───────────────────────────────────────────────────────
+const STAT_THEMES = {
+  blue:    { icon: '👥', iconBg: 'rgba(18,100,229,.1)',   iconColor: BLUE    },
+  orange:  { icon: '🔥', iconBg: 'rgba(234,88,12,.1)',    iconColor: '#ea580c' },
+  green:   { icon: '🎯', iconBg: 'rgba(5,150,105,.1)',    iconColor: EMERALD },
+  purple:  { icon: '✏️', iconBg: 'rgba(124,58,237,.1)',   iconColor: '#7c3aed' },
+}
+
+function StatCard({ label, value, sub, delta, theme = 'blue', icon }) {
+  const t = STAT_THEMES[theme] ?? STAT_THEMES.blue
+  const positive = delta != null && delta > 0
+  return (
+    <Card style={{ padding: '18px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: t.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19 }}>
+          {icon ?? t.icon}
+        </div>
       </div>
+      <p style={{ fontSize: 28, fontWeight: 900, color: TEXT, lineHeight: 1, letterSpacing: '-.03em', marginBottom: 4 }}>{value ?? '—'}</p>
+      <p style={{ fontSize: 11, fontWeight: 700, color: DIM, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: delta != null ? 6 : 0 }}>{label}</p>
+      {delta != null && (
+        <p style={{ fontSize: 11, fontWeight: 700, color: positive ? EMERALD : RED }}>
+          {positive ? '↑' : '↓'} {Math.abs(delta)} {sub}
+        </p>
+      )}
+      {sub && delta == null && <p style={{ fontSize: 11, color: FAINT }}>{sub}</p>}
+    </Card>
+  )
+}
+
+// ── Topbar ────────────────────────────────────────────────────────────────────
+function Topbar({ adminName, cohort, onInvite }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
       <div>
-        <p style={{ fontSize: 24, fontWeight: 900, color: '#111827', lineHeight: 1 }}>{value ?? '—'}</p>
-        <p style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginTop: 3 }}>{label}</p>
-        {sub && <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sub}</p>}
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: TEXT, letterSpacing: '-.03em', margin: 0 }}>
+          {getGreeting()}, {firstName(adminName)}! 👋
+        </h1>
+        <p style={{ fontSize: 13, color: DIM, marginTop: 4 }}>
+          Here's how your school is performing today.
+        </p>
       </div>
+      <button onClick={onInvite} style={{
+        display: 'flex', alignItems: 'center', gap: 7,
+        padding: '10px 18px', borderRadius: 11,
+        background: BLUE, color: '#fff', border: 'none',
+        fontSize: 13, fontWeight: 800, cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(18,100,229,.3)',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 15 }}>+</span> Invite Students
+      </button>
     </div>
   )
 }
 
-// ── Subject mastery card — expandable to show topics ─────────────────────────
-function SubjectMasteryCard({ subj, defaultExpanded = false }) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
-  const c = pctColor(subj.accuracy)
-  const weakTopics = subj.topics.filter(t => t.accuracy < 50).slice(0, 5)
+// ── Weekly engagement sparkline ───────────────────────────────────────────────
+function SparkLine({ data }) {
+  if (!data?.length) return null
+  const max = Math.max(...data.map(d => d.active), 1)
+  const W = 260, H = 80
+  const pts = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * (W - 20) + 10
+    const y = H - 10 - ((d.active / max) * (H - 20))
+    return [x, y]
+  })
+  const pathD = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x},${y}`).join(' ')
+  const areaD = `${pathD} L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H} Z`
+  const lastPt = pts[pts.length - 1]
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${expanded ? '#d1d5db' : '#e5e7eb'}`, overflow: 'hidden', transition: 'border-color .2s' }}>
-      {/* Header row — clickable */}
-      <button
-        onClick={() => setExpanded(e => !e)}
-        style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{subj.subjectName}</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {subj.avgMastery !== null && subj.avgMastery !== undefined && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: '#f0fdf4', color: '#059669', border: '1px solid #86efac' }}>
-                    {subj.avgMastery}% mastery
-                  </span>
-                )}
-                <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>
-                  {subj.accuracy !== null ? `${subj.accuracy}%` : '—'} {c.label}
-                </span>
-              </div>
-              <span style={{ fontSize: 11, color: '#9ca3af', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
-            </div>
-          </div>
-          <AccBar pct={subj.accuracy} />
-          <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{subj.topics.length} topics · {subj.topics.reduce((a, t) => a + t.total, 0)} attempts</p>
-        </div>
-      </button>
-
-      {/* Expanded: topic list */}
-      {expanded && (
-        <div style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa' }}>
-          {/* Quick summary: weak topics */}
-          {weakTopics.length > 0 && (
-            <div style={{ padding: '10px 16px', background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
-              <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#dc2626', marginBottom: 6 }}>
-                ⚠ {weakTopics.length} weak topic{weakTopics.length > 1 ? 's' : ''} — class needs help here
-              </p>
-              {weakTopics.slice(0, 3).map(t => (
-                <div key={t.topicId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626' }}>{t.topicName}</span>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#dc2626' }}>{t.accuracy}%</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* All topics */}
-          <div style={{ padding: '8px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {subj.topics.map(t => {
-              const tc = pctColor(t.accuracy)
-              return (
-                <div key={t.topicId}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{t.topicName}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 10, color: '#9ca3af' }}>{t.total} attempts</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: tc.fg }}>{t.accuracy}%</span>
-                    </div>
-                  </div>
-                  <AccBar pct={t.accuracy} height={4} />
-                </div>
-              )
-            })}
-            {subj.topics.length === 0 && (
-              <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>No practice attempts yet</p>
-            )}
-          </div>
-        </div>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={BLUE} stopOpacity=".2"/>
+          <stop offset="100%" stopColor={BLUE} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill="url(#sparkGrad)"/>
+      <path d={pathD} stroke={BLUE} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+      {pts.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={i === pts.length - 1 ? 4 : 2.5}
+          fill={i === pts.length - 1 ? BLUE : CARD}
+          stroke={BLUE} strokeWidth="1.5"/>
+      ))}
+      {lastPt && (
+        <g>
+          <rect x={lastPt[0] - 20} y={lastPt[1] - 22} width={40} height={18} rx="5" fill={BLUE}/>
+          <text x={lastPt[0]} y={lastPt[1] - 10} textAnchor="middle" fontSize="10" fill="#fff" fontWeight="800">{data[data.length-1].active}</text>
+        </g>
       )}
-    </div>
+    </svg>
   )
 }
 
-// ── At-risk students — 3-tier segmented ──────────────────────────────────────
-function AtRiskSection({ students, atRiskSegmented, onViewStudents }) {
-  const [expanded, setExpanded] = useState(true)
-  if (!atRiskSegmented?.length) return null
-
-  // Group students by tier
-  const byTier = { dropped: [], inactive: [], struggling: [] }
-  for (const s of atRiskSegmented) {
-    if (byTier[s.tier]) byTier[s.tier].push(s.id)
-  }
-
-  const tiers = Object.entries(byTier).filter(([, ids]) => ids.length > 0)
-
-  return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #fecaca', overflow: 'hidden' }}>
-      <button
-        onClick={() => setExpanded(e => !e)}
-        style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fef2f2', border: 'none', borderBottom: expanded ? '1px solid #fecaca' : 'none', cursor: 'pointer' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>🚨</span>
-          <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#dc2626' }}>Students needing attention ({atRiskSegmented.length})</p>
-            <p style={{ fontSize: 11, color: '#ef4444', marginTop: 1 }}>Review and follow up with these students</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={e => { e.stopPropagation(); onViewStudents?.() }} style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>View all →</button>
-          <span style={{ fontSize: 11, color: '#dc2626', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
-        </div>
-      </button>
-
-      {expanded && (
-        <div>
-          {tiers.map(([tier, ids]) => {
-            const cfg = TIER_CONFIG[tier]
-            const tierStudents = students.filter(s => ids.includes(s.id))
-            return (
-              <div key={tier} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ padding: '8px 16px', background: cfg.bg, borderBottom: `1px solid ${cfg.border}`, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 13 }}>{cfg.icon}</span>
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: cfg.color }}>{cfg.label} ({ids.length})</span>
-                    <span style={{ fontSize: 10, color: cfg.color, opacity: .75, marginLeft: 6 }}>— {cfg.message}</span>
-                  </div>
-                </div>
-                {tierStudents.slice(0, 4).map(s => (
-                  <div key={s.id} style={{ padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f9fafb' }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: cfg.bg, border: `1px solid ${cfg.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: cfg.color, flexShrink: 0 }}>
-                      {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{s.full_name}</p>
-                      <p style={{ fontSize: 10, color: '#9ca3af' }}>
-                        {tier === 'struggling' && s.accuracy !== null ? `${s.accuracy}% accuracy` : s.lastActive ? `Last active ${new Date(s.lastActive).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}` : 'Never active'}
-                      </p>
-                    </div>
-                    {s.subjects?.length > 0 && (
-                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {s.subjects.slice(0, 2).map(sub => {
-                          const sa = s.subjectAcc?.[sub]
-                          const sacc = sa && sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
-                          const sc = pctColor(sacc)
-                          return sacc !== null ? (
-                            <span key={sub} style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: sc.bg, color: sc.fg, border: `1px solid ${sc.border}` }}>
-                              {sub.slice(0, 4)} {sacc}%
-                            </span>
-                          ) : null
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {tierStudents.length > 4 && (
-                  <button onClick={() => onViewStudents?.()} style={{ width: '100%', padding: '8px', fontSize: 11, fontWeight: 600, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'center' }}>
-                    +{tierStudents.length - 4} more — View all
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Overview section ──────────────────────────────────────────────────────────
-function OverviewSection({ data, onTabChange, onCohortCreated }) {
+// ── Overview tab ──────────────────────────────────────────────────────────────
+function OverviewTab({ data, adminName, onTabChange, onCohortCreated }) {
   const { summary, subjectTopics, weeklyEngagement, atRisk, atRiskSegmented, students, cohort } = data
-  const engRate = summary.totalStudents > 0 ? Math.round((summary.activeThisWeek / summary.totalStudents) * 100) : 0
-  const streakLeaders = [...students].filter(s => s.currentStreak > 0).sort((a, b) => b.currentStreak - a.currentStreak).slice(0, 3)
+  const engRate = summary.totalStudents > 0
+    ? Math.round((summary.activeThisWeek / summary.totalStudents) * 100) : 0
+  const streakLeaders = [...students].filter(s => s.currentStreak > 0)
+    .sort((a, b) => b.currentStreak - a.currentStreak).slice(0, 5)
+  const topPerformers = [...students].filter(s => s.accuracy != null)
+    .sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0)).slice(0, 5)
 
   return (
-    <div id="overview" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* No cohort CTA */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      <Topbar adminName={adminName} cohort={cohort} onInvite={() => onTabChange('cohort')}/>
+
+      {/* No cohort warning */}
       {!cohort && (
-        <div style={{ background: 'linear-gradient(135deg,#059669 0%,#0d9488 100%)', borderRadius: 16, padding: 20, color: '#fff' }}>
-          <p style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Get started</p>
-          <p style={{ fontSize: 13, opacity: .85, marginBottom: 16 }}>Create a cohort to get your invite code and start tracking your students.</p>
-          <CreateCohortInline currentCohort={null} onCreated={onCohortCreated} />
+        <div style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #1a3a8f 100%)`, borderRadius: 16, padding: '20px 24px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 15, fontWeight: 900, marginBottom: 4 }}>Set up your first cohort</p>
+            <p style={{ fontSize: 13, opacity: .8, lineHeight: 1.55 }}>Create a cohort to get an invite code and start tracking your students.</p>
+          </div>
+          <button onClick={() => onTabChange('cohort')} style={{ padding: '10px 20px', borderRadius: 10, background: '#fff', color: NAVY, fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+            Create Cohort →
+          </button>
         </div>
       )}
 
-      {/* Stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-        <StatCard label="Total Students"   value={summary.totalStudents} emoji="👥" accent="indigo" />
-        <StatCard label="Active This Week" value={summary.activeThisWeek} sub={`${engRate}% engagement`} emoji="🔥" accent={engRate >= 60 ? 'emerald' : engRate >= 30 ? 'amber' : 'red'} />
-        <StatCard label="Avg Accuracy"     value={summary.avgAccuracy !== null ? `${summary.avgAccuracy}%` : '—'} sub="30-day practice" emoji="🎯" accent={summary.avgAccuracy >= 70 ? 'emerald' : 'indigo'} />
-        <StatCard label="Questions Done"   value={summary.totalQuestionsThisWeek} sub="this week" emoji="❓" accent="indigo" />
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }} className="stats-grid">
+        <StatCard label="Total Students"   value={summary.totalStudents}   theme="blue"   delta={null} sub={null} />
+        <StatCard label="Active This Week" value={summary.activeThisWeek}  theme="orange" delta={null} sub={`${engRate}% engagement`}/>
+        <StatCard label="Avg Accuracy"     value={pct(summary.avgAccuracy)} theme="green" delta={null} sub="30-day average"/>
+        <StatCard label="Questions Done"   value={summary.totalQuestionsThisWeek} theme="purple" delta={null} sub="this week"/>
       </div>
 
-      {/* Engagement banner */}
-      {summary.totalStudents > 0 && (
-        <div style={{
-          padding: '12px 16px', borderRadius: 12,
-          background: engRate >= 60 ? '#ecfdf5' : engRate >= 30 ? '#fffbeb' : '#fef2f2',
-          border: `1px solid ${engRate >= 60 ? '#a7f3d0' : engRate >= 30 ? '#fde68a' : '#fecaca'}`,
-        }}>
-          <p style={{ fontSize: 13, fontWeight: 700, color: engRate >= 60 ? '#059669' : engRate >= 30 ? '#d97706' : '#dc2626' }}>
-            {engRate >= 60 ? `🎉 Great engagement — ${summary.activeThisWeek} of ${summary.totalStudents} students active this week`
-              : engRate >= 30 ? `📢 ${summary.totalStudents - summary.activeThisWeek} students haven't studied this week`
-              : `⚠️ Only ${summary.activeThisWeek} students active this week — ${summary.totalStudents - summary.activeThisWeek} need a nudge`}
-          </p>
-        </div>
-      )}
+      {/* Two column: engagement chart + subject accuracy */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="two-col">
 
-      {/* ── SUBJECT MASTERY BREAKDOWN (the hero section) ── */}
-      {subjectTopics.length > 0 && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>Subject Mastery</h3>
-              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>Tap any subject to see topic-level breakdown</p>
-            </div>
-            <button onClick={() => onTabChange('topics')} style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Full breakdown →</button>
+        {/* Engagement trend */}
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>Activity Trend</p>
+            <p style={{ fontSize: 11, color: DIM }}>Active students / week</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {subjectTopics.map((s, i) => (
-              <SubjectMasteryCard key={s.subjectName} subj={s} defaultExpanded={i === 0} />
+          <p style={{ fontSize: 11, color: DIM, marginBottom: 16 }}>Last 4 weeks</p>
+          <SparkLine data={weeklyEngagement}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            {weeklyEngagement.map((w, i) => (
+              <span key={i} style={{ fontSize: 9, color: FAINT }}>{w.label}</span>
             ))}
           </div>
-        </div>
-      )}
+        </Card>
 
-      {/* ── AT-RISK STUDENTS (segmented) ── */}
-      {atRiskSegmented?.length > 0 && (
-        <AtRiskSection
-          students={students}
-          atRiskSegmented={atRiskSegmented}
-          onViewStudents={() => onTabChange('students')}
-        />
-      )}
-
-      {/* Weekly engagement chart */}
-      {weeklyEngagement.length > 0 && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>Weekly Engagement</p>
-            <p style={{ fontSize: 10, color: '#9ca3af' }}>Active students per week</p>
+        {/* Accuracy by subject */}
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>Accuracy by Subject</p>
+            <ViewAll onClick={() => onTabChange('topics')}/>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
-            {weeklyEngagement.map((w, i) => {
-              const maxA = Math.max(...weeklyEngagement.map(x => x.active), 1)
-              const h    = Math.max(4, Math.round((w.active / maxA) * 64))
-              const isLast = i === weeklyEngagement.length - 1
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {subjectTopics.slice(0, 6).map(s => {
+              const c = pctColor(s.accuracy)
               return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <p style={{ fontSize: 10, fontWeight: 800, color: isLast ? '#059669' : '#9ca3af' }}>{w.active}</p>
-                  <div style={{ width: '100%', height: 64, display: 'flex', alignItems: 'flex-end' }}>
-                    <div style={{ width: '100%', background: isLast ? '#059669' : '#a7f3d0', borderRadius: '4px 4px 0 0', height: h, transition: 'height .7s' }} />
+                <div key={s.subjectName}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.fg, flexShrink: 0 }}/>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: SEC }}>{s.subjectName}</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: c.fg }}>{pct(s.accuracy)}</span>
                   </div>
-                  <p style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center' }}>{w.label}</p>
+                  <AccBar pct={s.accuracy} height={6} color={c.fg}/>
+                </div>
+              )
+            })}
+            {subjectTopics.length === 0 && (
+              <p style={{ fontSize: 12, color: DIM, textAlign: 'center', padding: '20px 0' }}>No practice data yet</p>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Two column: at-risk + top performers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="two-col">
+
+        {/* At-risk */}
+        <Card>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>Needs Attention</p>
+              <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{atRiskSegmented?.length ?? 0} students flagged</p>
+            </div>
+            {(atRiskSegmented?.length ?? 0) > 0 && <ViewAll onClick={() => onTabChange('students')}/>}
+          </div>
+          <div>
+            {!atRiskSegmented?.length ? (
+              <div style={{ padding: '32px 18px', textAlign: 'center' }}>
+                <p style={{ fontSize: 24, marginBottom: 6 }}>✅</p>
+                <p style={{ fontSize: 12, color: DIM }}>All students are on track</p>
+              </div>
+            ) : atRiskSegmented.slice(0, 5).map(({ id, tier }) => {
+              const s = students.find(st => st.id === id)
+              if (!s) return null
+              const tierColors = {
+                dropped:    { color: RED,   label: 'Dropped off' },
+                inactive:   { color: DIM,   label: 'Inactive'    },
+                struggling: { color: AMBER, label: 'Struggling'  },
+              }
+              const tc = tierColors[tier] ?? tierColors.inactive
+              return (
+                <div key={id} style={{ padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${BG}` }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: BG, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: tc.color, flexShrink: 0 }}>
+                    {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.full_name}</p>
+                    <p style={{ fontSize: 10, color: tc.color }}>{tc.label}</p>
+                  </div>
+                  {s.accuracy != null && <Badge color={pctColor(s.accuracy).fg} bg={pctColor(s.accuracy).bg} border={pctColor(s.accuracy).border}>{s.accuracy}%</Badge>}
                 </div>
               )
             })}
           </div>
-        </div>
-      )}
+        </Card>
 
-      {/* Streak leaders */}
-      {streakLeaders.length > 0 && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid #f3f4f6' }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>🔥 Streak Leaders</p>
+        {/* Top performers */}
+        <Card>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>Top Performers</p>
+              <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>This week · by accuracy</p>
+            </div>
+            <ViewAll onClick={() => onTabChange('students')}/>
           </div>
-          {streakLeaders.map((s, i) => (
-            <div key={s.id} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: i < streakLeaders.length - 1 ? '1px solid #f9fafb' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#d1d5db', width: 16 }}>{i + 1}</span>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#ea580c' }}>
+          <div>
+            {!topPerformers.length ? (
+              <div style={{ padding: '32px 18px', textAlign: 'center' }}>
+                <p style={{ fontSize: 12, color: DIM }}>No data yet</p>
+              </div>
+            ) : topPerformers.map((s, i) => (
+              <div key={s.id} style={{ padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: i < topPerformers.length - 1 ? `1px solid ${BG}` : 'none' }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: i === 0 ? '#FFB800' : i === 1 ? FAINT : FAINT, width: 18, textAlign: 'center', flexShrink: 0 }}>
+                  {i + 1}
+                </span>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg, ${NAVY}, ${BLUE})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
                   {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
                 </div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{s.full_name}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.full_name}</p>
+                  {s.currentStreak > 0 && <p style={{ fontSize: 10, color: '#ea580c' }}>{s.currentStreak}d streak 🔥</p>}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 900, color: pctColor(s.accuracy).fg }}>{pct(s.accuracy)}</span>
               </div>
-              <span style={{ fontSize: 13, fontWeight: 900, color: '#ea580c' }}>{s.currentStreak}d 🔥</span>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* Engagement status banner */}
+      {summary.totalStudents > 0 && (() => {
+        const c = engRate >= 60
+          ? { bg: '#ecfdf5', border: '#a7f3d0', color: EMERALD, msg: `🎉 ${summary.activeThisWeek} of ${summary.totalStudents} students active this week — great engagement!` }
+          : engRate >= 30
+            ? { bg: '#fffbeb', border: '#fde68a', color: AMBER,   msg: `📢 ${summary.totalStudents - summary.activeThisWeek} students haven't studied this week — consider sending a reminder.` }
+            : { bg: '#fef2f2', border: '#fecaca', color: RED,     msg: `⚠️ Only ${summary.activeThisWeek} of ${summary.totalStudents} students active — ${summary.totalStudents - summary.activeThisWeek} need a nudge.` }
+        return (
+          <div style={{ padding: '13px 18px', borderRadius: 12, background: c.bg, border: `1px solid ${c.border}` }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: c.color }}>{c.msg}</p>
+          </div>
+        )
+      })()}
     </div>
   )
 }
 
-// ── Students section — with per-topic mastery in expanded view ────────────────
-function StudentsSection({ students, atRisk, atRiskSegmented }) {
+// ── Students tab ──────────────────────────────────────────────────────────────
+function StudentsTab({ students, atRisk, atRiskSegmented }) {
   const [search,     setSearch]     = useState('')
-  const [sortBy,     setSortBy]     = useState('name')
   const [filter,     setFilter]     = useState('all')
+  const [sortBy,     setSortBy]     = useState('name')
   const [expandedId, setExpandedId] = useState(null)
-  const [topicFilter, setTopicFilter] = useState(null) // filter by subject in expanded
 
-  const segMap = {} // id → tier
+  const segMap = {}
   for (const s of atRiskSegmented ?? []) segMap[s.id] = s.tier
+
+  const tierLabel = { dropped: 'Dropped off', inactive: 'Inactive', struggling: 'Struggling' }
+  const tierColor = { dropped: RED, inactive: DIM, struggling: AMBER }
 
   const filtered = students
     .filter(s => {
       if (filter === 'at_risk')    return atRisk.includes(s.id)
       if (filter === 'active')     return s.isActiveThisWeek
       if (filter === 'inactive')   return !s.isActiveThisWeek
-      if (filter === 'dropped')    return segMap[s.id] === 'dropped'
-      if (filter === 'struggling') return segMap[s.id] === 'struggling'
       return true
     })
     .filter(s => !search || s.full_name?.toLowerCase().includes(search.toLowerCase()))
@@ -372,149 +418,129 @@ function StudentsSection({ students, atRisk, atRiskSegmented }) {
     })
 
   return (
-    <div id="students" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Search */}
-      <input value={search} onChange={e => setSearch(e.target.value)}
-        placeholder="Search students…"
-        style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', outline: 'none' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <SectionTitle>{students.length} Students</SectionTitle>
 
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
-        {[
-          { id: 'all',        label: `All (${students.length})` },
-          { id: 'at_risk',    label: `⚠ At risk (${atRisk.length})` },
-          { id: 'dropped',    label: `📉 Dropped (${Object.values(segMap).filter(t => t === 'dropped').length})` },
-          { id: 'struggling', label: `😓 Struggling (${Object.values(segMap).filter(t => t === 'struggling').length})` },
-          { id: 'active',     label: 'Active' },
-          { id: 'inactive',   label: 'Inactive' },
-        ].filter(f => {
-          // Hide empty tiers
-          if (f.id === 'dropped')    return Object.values(segMap).some(t => t === 'dropped')
-          if (f.id === 'struggling') return Object.values(segMap).some(t => t === 'struggling')
-          return true
-        }).map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: `1px solid ${filter === f.id ? '#059669' : '#e5e7eb'}`, background: filter === f.id ? '#059669' : '#fff', color: filter === f.id ? '#fff' : '#6b7280', transition: 'all .15s' }}>
-            {f.label}
-          </button>
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
-          {[{ id: 'name', l: 'Name' }, { id: 'accuracy', l: 'Acc' }, { id: 'streak', l: '🔥' }].map(s => (
-            <button key={s.id} onClick={() => setSortBy(s.id)}
-              style={{ padding: '6px 8px', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: 'pointer', border: 'none', background: sortBy === s.id ? '#e5e7eb' : 'transparent', color: sortBy === s.id ? '#111827' : '#9ca3af' }}>
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name…"
+          style={{ flex: 1, minWidth: 180, padding: '9px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 13, color: TEXT, background: CARD, outline: 'none', fontFamily: 'inherit' }}/>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { id: 'all',      label: `All (${students.length})` },
+            { id: 'at_risk',  label: `⚠ At risk (${atRisk.length})` },
+            { id: 'active',   label: 'Active' },
+            { id: 'inactive', label: 'Inactive' },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              padding: '8px 12px', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              border: `1px solid ${filter === f.id ? NAVY : BORDER}`,
+              background: filter === f.id ? NAVY : CARD,
+              color: filter === f.id ? '#fff' : DIM,
+              transition: 'all .15s',
+            }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          <span style={{ fontSize: 11, color: DIM, alignSelf: 'center' }}>Sort:</span>
+          {[{ id:'name',l:'Name'},{ id:'accuracy',l:'Accuracy'},{ id:'streak',l:'Streak'}].map(s => (
+            <button key={s.id} onClick={() => setSortBy(s.id)} style={{
+              padding: '6px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+              border: 'none', cursor: 'pointer',
+              background: sortBy === s.id ? BG : 'transparent',
+              color: sortBy === s.id ? TEXT : DIM,
+            }}>
               {s.l}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Student list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Table header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px', gap: 8, padding: '8px 16px', background: BG, borderRadius: 10, border: `1px solid ${BORDER}` }}>
+        {['Student', 'Accuracy', 'Streak', 'Questions', 'Status'].map(h => (
+          <span key={h} style={{ fontSize: 10, fontWeight: 800, color: FAINT, textTransform: 'uppercase', letterSpacing: '.08em', textAlign: h === 'Student' ? 'left' : 'center' }}>{h}</span>
+        ))}
+      </div>
+
+      {/* Rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px 20px', background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb' }}>
+          <Card style={{ padding: '48px 24px', textAlign: 'center' }}>
             <p style={{ fontSize: 24, marginBottom: 8 }}>👥</p>
-            <p style={{ fontSize: 13, color: '#9ca3af' }}>No students match</p>
-          </div>
+            <p style={{ fontSize: 13, color: DIM }}>No students match</p>
+          </Card>
         )}
         {filtered.map(s => {
-          const c         = pctColor(s.accuracy)
-          const tier      = segMap[s.id]
-          const tierCfg   = tier ? TIER_CONFIG[tier] : null
-          const isExpanded = expandedId === s.id
-          const subjectEntries = Object.entries(s.subjectAcc ?? {})
-
+          const c      = pctColor(s.accuracy)
+          const tier   = segMap[s.id]
+          const isOpen = expandedId === s.id
           return (
-            <div key={s.id} style={{ background: '#fff', borderRadius: 16, border: `1px solid ${tierCfg ? tierCfg.border : '#e5e7eb'}`, overflow: 'hidden' }}>
-              <button onClick={() => setExpandedId(isExpanded ? null : s.id)}
-                style={{ width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: tierCfg ? tierCfg.bg : s.isActiveThisWeek ? '#ecfdf5' : '#f9fafb', border: `1px solid ${tierCfg ? tierCfg.border : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: tierCfg?.color ?? (s.isActiveThisWeek ? '#059669' : '#9ca3af'), flexShrink: 0 }}>
-                  {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{s.full_name}</p>
-                    {s.currentStreak > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#ea580c' }}>{s.currentStreak}d 🔥</span>}
-                    {tier && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tierCfg?.bg, color: tierCfg?.color, border: `1px solid ${tierCfg?.border}` }}>{TIER_CONFIG[tier]?.label}</span>}
+            <div key={s.id}>
+              <button onClick={() => setExpandedId(isOpen ? null : s.id)} style={{
+                width: '100%', display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
+                gap: 8, padding: '12px 16px', alignItems: 'center',
+                background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12,
+                cursor: 'pointer', textAlign: 'left', transition: 'border-color .15s',
+                borderColor: isOpen ? BLUE : BORDER,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: BG, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: TEXT, flexShrink: 0 }}>
+                    {s.full_name?.charAt(0)?.toUpperCase() ?? '?'}
                   </div>
-                  <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{s.isActiveThisWeek ? '✓ Active this week' : 'Inactive this week'}</p>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.full_name}</p>
+                    {tier && <p style={{ fontSize: 10, color: tierColor[tier] }}>{tierLabel[tier]}</p>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {s.accuracy !== null && (
-                    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>
-                      {s.accuracy}%
-                    </span>
-                  )}
-                  <span style={{ color: '#d1d5db', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: c.fg, textAlign: 'center' }}>{pct(s.accuracy)}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: s.currentStreak > 0 ? '#ea580c' : DIM, textAlign: 'center' }}>
+                  {s.currentStreak > 0 ? `${s.currentStreak}d 🔥` : '—'}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: SEC, textAlign: 'center' }}>{s.total ?? 0}</span>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <Badge color={s.isActiveThisWeek ? EMERALD : DIM} bg={s.isActiveThisWeek ? '#ecfdf5' : BG} border={s.isActiveThisWeek ? '#a7f3d0' : BORDER}>
+                    {s.isActiveThisWeek ? 'Active' : 'Inactive'}
+                  </Badge>
                 </div>
               </button>
 
-              {isExpanded && (
-                <div style={{ borderTop: '1px solid #f3f4f6', padding: '12px 14px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {/* Quick stats */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+              {isOpen && (
+                <div style={{ margin: '2px 0 6px 0', padding: '14px 16px', background: BG, border: `1px solid ${BLUE}`, borderRadius: '0 0 12px 12px', borderTop: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                     {[
-                      { l: 'Accuracy',    v: s.accuracy !== null ? `${s.accuracy}%` : '—', color: c.fg },
-                      { l: 'Streak',      v: s.currentStreak > 0 ? `${s.currentStreak}d 🔥` : '—',  color: '#ea580c' },
-                      { l: 'Avg time/Q',  v: s.avgTimeSecs != null ? (s.avgTimeSecs >= 60 ? `${Math.floor(s.avgTimeSecs/60)}m${s.avgTimeSecs%60}s` : `${s.avgTimeSecs}s`) : '—', color: s.avgTimeSecs > 90 ? '#dc2626' : s.avgTimeSecs > 45 ? '#d97706' : '#059669' },
-                      { l: 'Questions',   v: s.total,               color: '#4f46e5' },
+                      { l: 'Accuracy',  v: pct(s.accuracy),       color: c.fg },
+                      { l: 'Streak',    v: s.currentStreak > 0 ? `${s.currentStreak}d` : '—', color: '#ea580c' },
+                      { l: 'Time / Q',  v: s.avgTimeSecs != null ? (s.avgTimeSecs >= 60 ? `${Math.floor(s.avgTimeSecs/60)}m${s.avgTimeSecs%60}s` : `${s.avgTimeSecs}s`) : '—', color: s.avgTimeSecs > 90 ? RED : EMERALD },
+                      { l: 'Questions', v: s.total ?? 0,           color: BLUE },
                     ].map(stat => (
-                      <div key={stat.l} style={{ background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #f3f4f6' }}>
-                        <p style={{ fontSize: 14, fontWeight: 900, color: stat.color }}>{stat.v}</p>
-                        <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 1 }}>{stat.l}</p>
+                      <div key={stat.l} style={{ background: CARD, borderRadius: 10, padding: '10px 8px', textAlign: 'center', border: `1px solid ${BORDER}` }}>
+                        <p style={{ fontSize: 16, fontWeight: 900, color: stat.color }}>{stat.v}</p>
+                        <p style={{ fontSize: 9, color: DIM, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.05em' }}>{stat.l}</p>
                       </div>
                     ))}
                   </div>
-
-                  {/* Per-subject mastery — uses EMA mastery scores from student_topic_mastery */}
-                  {(() => {
-                    const masteryEntries = Object.entries(s.subjectMastery ?? {})
-                    const fallbackEntries = Object.entries(s.subjectAcc ?? {})
-                    const hasMastery = masteryEntries.length > 0
-                    const hasAttempts = fallbackEntries.length > 0
-
-                    if (!hasMastery && !hasAttempts) return (
-                      <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '8px 0' }}>No practice data yet</p>
-                    )
-
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9ca3af' }}>Subject mastery</p>
-                          {hasMastery && <span style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>● Live mastery scores</span>}
-                        </div>
-                        {hasMastery ? masteryEntries.map(([subjectId, score]) => {
-                          // Try to get subject name from subjectAcc keys or attempts
-                          const subName = Object.keys(s.subjectAcc ?? {}).find(n => n) ?? `Subject`
-                          const sc = pctColor(score)
-                          return (
-                            <div key={subjectId} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sc.border}`, padding: '9px 11px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{subName}</p>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ fontSize: 9, color: '#9ca3af' }}>mastery</span>
-                                  <span style={{ fontSize: 11, fontWeight: 800, color: sc.fg }}>{score}%</span>
-                                </div>
-                              </div>
-                              <AccBar pct={score} height={4} />
+                  {Object.entries(s.subjectAcc ?? {}).length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <p style={{ fontSize: 10, fontWeight: 800, color: FAINT, textTransform: 'uppercase', letterSpacing: '.08em' }}>Subject accuracy</p>
+                      {Object.entries(s.subjectAcc ?? {}).map(([sub, sa]) => {
+                        const sacc = sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
+                        const sc   = pctColor(sacc)
+                        return (
+                          <div key={sub} style={{ background: CARD, borderRadius: 10, border: `1px solid ${BORDER}`, padding: '9px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                              <p style={{ fontSize: 12, fontWeight: 600, color: SEC }}>{sub}</p>
+                              <span style={{ fontSize: 12, fontWeight: 800, color: sc.fg }}>{pct(sacc)}</span>
                             </div>
-                          )
-                        }) : fallbackEntries.map(([sub, sa]) => {
-                          const sacc = sa.total > 0 ? Math.round((sa.correct / sa.total) * 100) : null
-                          const sc   = pctColor(sacc)
-                          return (
-                            <div key={sub} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sc.border}`, padding: '9px 11px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <p style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{sub}</p>
-                                <span style={{ fontSize: 11, fontWeight: 800, color: sc.fg }}>{sacc !== null ? `${sacc}%` : '—'}</span>
-                              </div>
-                              <AccBar pct={sacc} height={4} />
-                              <p style={{ fontSize: 9, color: '#9ca3af', marginTop: 3 }}>{sa.total} attempts</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
+                            <AccBar pct={sacc} height={4} color={sc.fg}/>
+                            <p style={{ fontSize: 9, color: DIM, marginTop: 3 }}>{sa.total} attempts</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -525,35 +551,39 @@ function StudentsSection({ students, atRisk, atRiskSegmented }) {
   )
 }
 
-// ── Topics section — cleaner cards with drill-down ────────────────────────────
-function TopicsSection({ subjectTopics }) {
+// ── Topics tab ────────────────────────────────────────────────────────────────
+function TopicsTab({ subjectTopics }) {
   const [selected, setSelected] = useState(subjectTopics[0]?.subjectName ?? '')
   const subject = subjectTopics.find(s => s.subjectName === selected)
 
   if (!subjectTopics.length) return (
-    <div id="topics" style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb' }}>
-      <p style={{ fontSize: 24, marginBottom: 8 }}>📚</p>
-      <p style={{ fontSize: 13, color: '#9ca3af' }}>Topic performance appears once students start practising</p>
-    </div>
+    <Card style={{ padding: '48px 24px', textAlign: 'center' }}>
+      <p style={{ fontSize: 36, marginBottom: 10 }}>📚</p>
+      <p style={{ fontSize: 14, fontWeight: 800, color: TEXT, marginBottom: 4 }}>No topic data yet</p>
+      <p style={{ fontSize: 12, color: DIM }}>Topic performance appears once students start practising</p>
+    </Card>
   )
 
   return (
-    <div id="topics" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div>
-        <h3 style={{ fontSize: 14, fontWeight: 800, color: '#111827', marginBottom: 2 }}>Topic Mastery Breakdown</h3>
-        <p style={{ fontSize: 11, color: '#9ca3af' }}>Sorted weakest first · Last 30 days</p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionTitle>Topic Mastery <span style={{ fontSize: 12, fontWeight: 500, color: DIM }}>· weakest first · last 30 days</span></SectionTitle>
 
-      {/* Subject selector */}
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+      {/* Subject tabs */}
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
         {subjectTopics.map(s => {
-          const c = pctColor(s.accuracy)
+          const on = selected === s.subjectName
+          const c  = pctColor(s.accuracy)
           return (
-            <button key={s.subjectName} onClick={() => setSelected(s.subjectName)}
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s', border: `1px solid ${selected === s.subjectName ? '#059669' : '#e5e7eb'}`, background: selected === s.subjectName ? '#059669' : '#fff', color: selected === s.subjectName ? '#fff' : '#374151' }}>
+            <button key={s.subjectName} onClick={() => setSelected(s.subjectName)} style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700,
+              cursor: 'pointer', border: `1.5px solid ${on ? NAVY : BORDER}`,
+              background: on ? NAVY : CARD, color: on ? '#fff' : SEC,
+              transition: 'all .15s',
+            }}>
               {s.subjectName}
-              {s.accuracy !== null && (
-                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 999, background: selected === s.subjectName ? 'rgba(255,255,255,.2)' : c.bg, color: selected === s.subjectName ? '#fff' : c.fg }}>
+              {s.accuracy != null && (
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 999, background: on ? 'rgba(255,255,255,.2)' : c.bg, color: on ? '#fff' : c.fg }}>
                   {s.accuracy}%
                 </span>
               )}
@@ -562,38 +592,41 @@ function TopicsSection({ subjectTopics }) {
         })}
       </div>
 
-      {/* Subject overview banner */}
-      {subject && (
-        <div style={{ padding: '12px 16px', borderRadius: 14, background: pctColor(subject.accuracy).bg, border: `1px solid ${pctColor(subject.accuracy).border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{subject.subjectName}</p>
-            <p style={{ fontSize: 11, color: '#6b7280' }}>{subject.topics.length} topics · {subject.topics.reduce((a, t) => a + t.total, 0)} total attempts</p>
+      {/* Subject summary banner */}
+      {subject && (() => {
+        const c = pctColor(subject.accuracy)
+        return (
+          <div style={{ padding: '14px 18px', borderRadius: 14, background: c.bg, border: `1px solid ${c.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{subject.subjectName}</p>
+              <p style={{ fontSize: 12, color: DIM }}>{subject.topics.length} topics · {subject.topics.reduce((a,t) => a+t.total, 0)} attempts</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: 26, fontWeight: 900, color: c.fg, letterSpacing: '-.03em' }}>{pct(subject.accuracy)}</p>
+              <p style={{ fontSize: 10, color: DIM }}>class average</p>
+            </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: 22, fontWeight: 900, color: pctColor(subject.accuracy).fg }}>{subject.accuracy ?? '—'}%</p>
-            <p style={{ fontSize: 10, color: '#9ca3af' }}>class avg</p>
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Topic cards */}
       {subject && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {subject.topics.map((t, i) => {
+          {subject.topics.map(t => {
             const c = pctColor(t.accuracy)
             return (
-              <div key={t.topicId} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${c.border}`, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div key={t.topicId} style={{ background: CARD, borderRadius: 12, border: `1px solid ${c.border}`, padding: '12px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
                   <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>{t.topicName}</p>
-                    <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{t.total} attempts · {t.correct} correct</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{t.topicName}</p>
+                    <p style={{ fontSize: 11, color: DIM, marginTop: 1 }}>{t.total} attempts · {t.correct} correct</p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>{c.label}</span>
-                    <span style={{ fontSize: 14, fontWeight: 900, color: c.fg }}>{t.accuracy}%</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <Badge color={c.fg} bg={c.bg} border={c.border}>{c.label}</Badge>
+                    <span style={{ fontSize: 15, fontWeight: 900, color: c.fg }}>{t.accuracy}%</span>
                   </div>
                 </div>
-                <AccBar pct={t.accuracy} height={5} />
+                <AccBar pct={t.accuracy} height={5} color={c.fg}/>
               </div>
             )
           })}
@@ -603,125 +636,178 @@ function TopicsSection({ subjectTopics }) {
   )
 }
 
-// ── Cohort section (unchanged) ────────────────────────────────────────────────
-function CohortSection({ cohort, allCohorts, totalStudents, onCohortCreated }) {
-  const [copied,      setCopied]      = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const inviteLink = cohort && typeof window !== 'undefined' ? `${window.location.origin}/join/${cohort.invite_code}` : ''
+// ── Cohort tab ────────────────────────────────────────────────────────────────
+function CohortTab({ cohort, allCohorts, totalStudents, onCohortCreated }) {
+  const [copied,  setCopied]  = useState(false)
+  const [showNew, setShowNew] = useState(!cohort)
+
+  // Cohort create form state
+  const [cohortName,    setCohortName]    = useState('')
+  const [cohortSession, setCohortSession] = useState('')
+  const [saving,        setSaving]        = useState(false)
+  const [saveError,     setSaveError]     = useState(null)
 
   function copyCode() {
     if (!cohort) return
     navigator.clipboard.writeText(cohort.invite_code)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
-
-  return (
-    <div id="cohort" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {cohort ? (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: 15, fontWeight: 900, color: '#111827' }}>{cohort.name}</p>
-              {cohort.session && <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{cohort.session}</p>}
-            </div>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 999, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}>Active</span>
-          </div>
-          <div style={{ padding: '20px 16px', background: 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)', textAlign: 'center' }}>
-            <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: '#059669', marginBottom: 8 }}>Student invite code</p>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-              <p style={{ fontSize: 40, fontWeight: 900, color: '#065f46', letterSpacing: '.3em', fontFamily: 'monospace' }}>{cohort.invite_code}</p>
-              <button onClick={copyCode} style={{ padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', border: '1.5px solid #a7f3d0', background: copied ? '#ecfdf5' : '#fff', color: '#059669', transition: 'all .15s' }}>
-                {copied ? '✓ Copied!' : 'Copy'}
-              </button>
-            </div>
-            <p style={{ fontSize: 11, color: '#6ee7b7', marginTop: 8 }}>Students enter this in ExamPrep → Community → Join School</p>
-          </div>
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <p style={{ fontSize: 13, color: '#374151' }}><strong style={{ color: '#111827' }}>{totalStudents}</strong> student{totalStudents !== 1 ? 's' : ''} joined</p>
-            <button onClick={() => navigator.share?.({ title: `Join ${cohort.name} on ExamPrep`, url: inviteLink }) ?? copyCode()}
-              style={{ padding: '8px 14px', borderRadius: 10, background: '#059669', color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer' }}>
-              📤 Share invite
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ background: 'linear-gradient(135deg,#ecfdf5,#f0fdfa)', border: '1px solid #a7f3d0', borderRadius: 16, padding: '24px 20px', textAlign: 'center' }}>
-          <p style={{ fontSize: 32, marginBottom: 8 }}>🎓</p>
-          <p style={{ fontSize: 15, fontWeight: 900, color: '#111827', marginBottom: 4 }}>No active cohort</p>
-          <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55, marginBottom: 16 }}>Create a cohort to get an invite code for your students.</p>
-        </div>
-      )}
-      <CreateCohortInline currentCohort={cohort} onCreated={onCohortCreated} />
-      {allCohorts.length > 1 && (
-        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <button onClick={() => setShowHistory(h => !h)}
-            style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: '#374151', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <span>Past cohorts ({allCohorts.filter(c => !c.is_active).length})</span>
-            <span style={{ color: '#d1d5db', transform: showHistory ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
-          </button>
-          {showHistory && (
-            <div style={{ borderTop: '1px solid #f3f4f6' }}>
-              {allCohorts.filter(c => !c.is_active).map(c => (
-                <div key={c.id} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f9fafb' }}>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{c.name}</p>
-                    {c.session && <p style={{ fontSize: 10, color: '#9ca3af' }}>{c.session}</p>}
-                  </div>
-                  <span style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace' }}>{c.invite_code}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Create cohort form (preserved from v2) ────────────────────────────────────
-function CreateCohortInline({ currentCohort, onCreated }) {
-  const [open,    setOpen]    = useState(false)
-  const [name,    setName]    = useState('')
-  const [session, setSession] = useState('')
-  const [saving,  setSaving]  = useState(false)
-  const [error,   setError]   = useState(null)
 
   async function handleCreate() {
-    if (!name.trim()) return
-    setSaving(true); setError(null)
+    if (!cohortName.trim()) return
+    setSaving(true)
+    setSaveError(null)
     try {
-      const res  = await fetch('/api/school/cohort', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), session: session.trim() }) })
+      const res  = await fetch('/api/school/cohort', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cohortName.trim(), session: cohortSession.trim() }),
+      })
       const data = await res.json()
-      if (data.error) { setError(data.error); return }
-      onCreated?.(data.cohort); setOpen(false); setName(''); setSession('')
-    } catch { setError('Failed — try again') }
-    finally { setSaving(false) }
+      if (data.error) { setSaveError(data.error); return }
+      onCohortCreated?.(data.cohort)
+      setShowNew(false)
+      setCohortName('')
+      setCohortSession('')
+    } catch { setSaveError('Failed — try again') }
+    finally  { setSaving(false) }
   }
 
+  const currentYear   = new Date().getFullYear()
+  const sessionSuggest = `${currentYear}/${currentYear + 1}`
+
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16 }}>🎓</span>
-          <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{currentCohort ? `New cohort (archives "${currentCohort.name}")` : 'Create your first cohort'}</p>
-            <p style={{ fontSize: 11, color: '#9ca3af' }}>{currentCohort ? 'Start fresh for a new set of students' : 'Get a code to share with your students'}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600 }}>
+      <SectionTitle>Cohort Management</SectionTitle>
+
+      {/* Active cohort */}
+      {cohort && (
+        <Card>
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 900, color: TEXT }}>{cohort.name}</p>
+              {cohort.session && <p style={{ fontSize: 12, color: DIM, marginTop: 2 }}>{cohort.session}</p>}
+            </div>
+            <Badge color={EMERALD} bg="#ecfdf5" border="#a7f3d0">Active</Badge>
           </div>
-        </div>
-        <span style={{ color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
-      </button>
-      {open && (
-        <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {currentCohort && <p style={{ fontSize: 11, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>⚠ "{currentCohort.name}" will be archived. Student data is preserved.</p>}
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Cohort name (e.g. SS3 Science 2026)" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', outline: 'none' }} />
-          <input value={session} onChange={e => setSession(e.target.value)} placeholder="Session (e.g. 2025/2026) — optional" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', outline: 'none' }} />
-          {error && <p style={{ fontSize: 12, color: '#dc2626' }}>{error}</p>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setOpen(false)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#fff', cursor: 'pointer' }}>Cancel</button>
-            <button onClick={handleCreate} disabled={saving || !name.trim()} style={{ flex: 1, padding: '10px', borderRadius: 10, background: '#059669', color: '#fff', fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', opacity: saving || !name.trim() ? .4 : 1 }}>
-              {saving ? 'Creating…' : 'Create cohort →'}
+
+          <div style={{ padding: '24px 20px', background: `linear-gradient(135deg, #ecfdf5, #f0fdfa)`, textAlign: 'center' }}>
+            <p style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: EMERALD, marginBottom: 10 }}>
+              Student Invite Code
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 10 }}>
+              <p style={{ fontSize: 44, fontWeight: 900, color: '#065f46', letterSpacing: '.35em', fontFamily: 'monospace' }}>
+                {cohort.invite_code}
+              </p>
+              <button onClick={copyCode} style={{
+                padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                border: '1.5px solid #a7f3d0', background: copied ? '#ecfdf5' : CARD, color: EMERALD, transition: 'all .15s',
+              }}>
+                {copied ? '✓ Copied!' : 'Copy code'}
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: '#6ee7b7' }}>
+              Students enter this code in ExamPrep → Profile → Connect your school
+            </p>
+          </div>
+
+          <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <p style={{ fontSize: 13, color: SEC }}>
+              <strong style={{ color: TEXT }}>{totalStudents}</strong> student{totalStudents !== 1 ? 's' : ''} joined
+            </p>
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}/join/${cohort.invite_code}`
+                if (navigator.share) navigator.share({ title: `Join ${cohort.name} on ExamPrep`, url: link })
+                else { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+              }}
+              style={{ padding: '9px 16px', borderRadius: 10, background: EMERALD, color: '#fff', fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer' }}
+            >
+              📤 Share invite link
             </button>
+          </div>
+        </Card>
+      )}
+
+      {/* Create new cohort */}
+      <Card>
+        <button
+          onClick={() => setShowNew(o => !o)}
+          style={{ width: '100%', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+        >
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>
+              {cohort ? 'Create a new cohort' : 'Create your first cohort'}
+            </p>
+            <p style={{ fontSize: 12, color: DIM, marginTop: 2 }}>
+              {cohort ? `Archives "${cohort.name}" and starts fresh` : 'Get an invite code for your students'}
+            </p>
+          </div>
+          <span style={{ fontSize: 18, color: DIM, transform: showNew ? 'rotate(45deg)' : 'none', transition: 'transform .2s', display: 'inline-block' }}>+</span>
+        </button>
+
+        {showNew && (
+          <div style={{ borderTop: `1px solid ${BORDER}`, padding: '20px' }}>
+            {cohort && (
+              <div style={{ padding: '11px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, marginBottom: 20 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: AMBER }}>⚠ Heads up</p>
+                <p style={{ fontSize: 12, color: AMBER, marginTop: 3, lineHeight: 1.55 }}>
+                  "{cohort.name}" will be archived when you create a new cohort. All student data is kept — they just won't appear in the new cohort unless they rejoin.
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <FieldLabel hint="e.g. SS3 Science, Year 11 Arts, WAEC Prep Class">Cohort name *</FieldLabel>
+                <TextInput
+                  value={cohortName}
+                  onChange={e => setCohortName(e.target.value)}
+                  placeholder="e.g. SS3 Science 2026"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <FieldLabel hint={`The academic session this cohort covers. e.g. ${sessionSuggest}`}>
+                  Academic session <span style={{ fontWeight: 500, color: FAINT }}>(optional)</span>
+                </FieldLabel>
+                <TextInput
+                  value={cohortSession}
+                  onChange={e => setCohortSession(e.target.value)}
+                  placeholder={`e.g. ${sessionSuggest}`}
+                />
+              </div>
+
+              {saveError && (
+                <p style={{ fontSize: 12, color: RED, padding: '10px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>{saveError}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+                <Btn variant="outline" onClick={() => { setShowNew(false); setSaveError(null) }}>Cancel</Btn>
+                <Btn variant="emerald" onClick={handleCreate} loading={saving} disabled={!cohortName.trim()}>
+                  Create cohort →
+                </Btn>
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Past cohorts */}
+      {allCohorts.filter(c => !c.is_active).length > 0 && (
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: DIM, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.06em' }}>Past Cohorts</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {allCohorts.filter(c => !c.is_active).map(c => (
+              <div key={c.id} style={{ padding: '12px 16px', background: CARD, borderRadius: 12, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: SEC }}>{c.name}</p>
+                  {c.session && <p style={{ fontSize: 11, color: DIM }}>{c.session}</p>}
+                </div>
+                <span style={{ fontSize: 12, color: FAINT, fontFamily: 'monospace' }}>{c.invite_code}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -729,8 +815,8 @@ function CreateCohortInline({ currentCohort, onCreated }) {
   )
 }
 
-// ── Reports section (preserved from v2) ──────────────────────────────────────
-function ReportsSection({ schoolName, cohortName }) {
+// ── Reports tab ───────────────────────────────────────────────────────────────
+function ReportsTab({ schoolName }) {
   const [generating, setGenerating] = useState(null)
   const [period,     setPeriod]     = useState('month')
 
@@ -740,7 +826,7 @@ function ReportsSection({ schoolName, cohortName }) {
       const res  = await fetch(`/api/school/report?type=${type}&period=${period}`)
       const data = await res.json()
       if (data.error) { alert(data.error); return }
-      const html = buildReportHTML(type, data)
+      const html   = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{margin:20mm}body{font-family:system-ui,sans-serif;font-size:12px;color:#111}*{box-sizing:border-box}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><h1>${data.schoolName ?? schoolName}</h1><p>${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p></body></html>`
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:210mm;height:297mm;border:none;'
       document.body.appendChild(iframe)
@@ -751,60 +837,68 @@ function ReportsSection({ schoolName, cohortName }) {
     finally { setGenerating(null) }
   }
 
-  function buildReportHTML(type, data) {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{margin:20mm;size:A4}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#111827;margin:0}*{box-sizing:border-box}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><h1>${data.schoolName ?? schoolName}</h1><p>${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p></body></html>`
-  }
-
   async function downloadCSV() {
     setGenerating('csv')
     try {
       const res  = await fetch(`/api/school/report?type=students&period=${period}&format=csv`)
       const blob = await res.blob()
       const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a'); a.href = url; a.download = `students_report_${period}.csv`; a.click()
+      const a    = document.createElement('a')
+      a.href = url; a.download = `students_${period}.csv`; a.click()
       URL.revokeObjectURL(url)
     } catch { alert('Download failed') }
     finally { setGenerating(null) }
   }
 
   const REPORTS = [
-    { type: 'management', label: 'Management Report',   sub: 'Executive summary for school board',          emoji: '📊', bg: '#eef2ff', border: '#c7d2fe', btnBg: '#4f46e5' },
-    { type: 'subjects',   label: 'Subject Report',      sub: 'Per-subject topic breakdown for teachers',     emoji: '📚', bg: '#ecfdf5', border: '#a7f3d0', btnBg: '#059669' },
-    { type: 'students',   label: 'Student Progress',    sub: 'Full student table — lessons, accuracy, streak', emoji: '👥', bg: '#f5f3ff', border: '#ddd6fe', btnBg: '#7c3aed' },
+    { type: 'management', label: 'Management Report',   sub: 'Executive summary for school board or principal', icon: '📊', color: NAVY    },
+    { type: 'subjects',   label: 'Subject Report',      sub: 'Per-subject topic breakdown for class teachers',  icon: '📚', color: EMERALD },
+    { type: 'students',   label: 'Student Progress',    sub: 'Individual student table — accuracy, streak, lessons', icon: '👥', color: BLUE },
   ]
 
   return (
-    <div id="reports" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: '#6b7280' }}>Report period:</p>
-        {[{ id: 'week', l: 'Last 7 days' }, { id: 'month', l: 'Last 30 days' }].map(p => (
-          <button key={p.id} onClick={() => setPeriod(p.id)}
-            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: '1px solid #e5e7eb', background: period === p.id ? '#111827' : '#fff', color: period === p.id ? '#fff' : '#6b7280', transition: 'all .15s' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600 }}>
+      <SectionTitle>Reports & Exports</SectionTitle>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: DIM }}>Period:</p>
+        {[{ id:'week', l:'Last 7 days' },{ id:'month', l:'Last 30 days' }].map(p => (
+          <button key={p.id} onClick={() => setPeriod(p.id)} style={{
+            padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            border: `1px solid ${BORDER}`, background: period === p.id ? NAVY : CARD,
+            color: period === p.id ? '#fff' : DIM, transition: 'all .15s',
+          }}>
             {p.l}
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {REPORTS.map(r => (
-          <div key={r.type} style={{ padding: 16, borderRadius: 14, background: r.bg, border: `1px solid ${r.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 24 }}>{r.emoji}</span>
+          <div key={r.type} style={{ padding: '16px 18px', borderRadius: 14, background: CARD, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ fontSize: 26, flexShrink: 0 }}>{r.icon}</span>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{r.label}</p>
-              <p style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>{r.sub}</p>
+              <p style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>{r.label}</p>
+              <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{r.sub}</p>
             </div>
-            <button onClick={() => generatePDF(r.type)} disabled={!!generating}
-              style={{ padding: '9px 14px', borderRadius: 10, background: r.btnBg, color: '#fff', fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer', opacity: generating ? .4 : 1, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <button onClick={() => generatePDF(r.type)} disabled={!!generating} style={{
+              padding: '9px 16px', borderRadius: 10, background: r.color, color: '#fff',
+              fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer',
+              opacity: generating ? .4 : 1, flexShrink: 0,
+            }}>
               {generating === r.type ? '…' : '⬇ PDF'}
             </button>
           </div>
         ))}
-        <div style={{ padding: '12px 16px', borderRadius: 14, background: '#fff', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '16px 18px', borderRadius: 14, background: CARD, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Export to CSV</p>
-            <p style={{ fontSize: 11, color: '#9ca3af' }}>Open in Excel or Google Sheets</p>
+            <p style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>Export to CSV</p>
+            <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>Open in Excel, Google Sheets, or Numbers</p>
           </div>
-          <button onClick={downloadCSV} disabled={!!generating}
-            style={{ padding: '9px 14px', borderRadius: 10, background: '#111827', color: '#fff', fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer', opacity: generating ? .4 : 1 }}>
+          <button onClick={downloadCSV} disabled={!!generating} style={{
+            padding: '9px 16px', borderRadius: 10, background: TEXT, color: '#fff',
+            fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer', opacity: generating ? .4 : 1,
+          }}>
             {generating === 'csv' ? '…' : '⬇ CSV'}
           </button>
         </div>
@@ -813,72 +907,160 @@ function ReportsSection({ schoolName, cohortName }) {
   )
 }
 
-// ── Mobile bottom tabs ────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'overview', label: 'Overview', emoji: '📊' },
-  { id: 'students', label: 'Students', emoji: '👥' },
-  { id: 'topics',   label: 'Topics',   emoji: '📚' },
-  { id: 'cohort',   label: 'Cohort',   emoji: '🎓' },
-  { id: 'reports',  label: 'Reports',  emoji: '📄' },
-]
+// ── Settings tab ──────────────────────────────────────────────────────────────
+function SettingsTab({ school, onSaved }) {
+  const [name,    setName]    = useState(school?.name    ?? '')
+  const [city,    setCity]    = useState(school?.city    ?? '')
+  const [state,   setState]   = useState(school?.state   ?? '')
+  const [saving,  setSaving]  = useState(false)
+  const [saved,   setSaved]   = useState(false)
+  const [error,   setError]   = useState(null)
 
-function MobileBottomTabs({ active, onChange }) {
+  const NIGERIAN_STATES = ['Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara']
+
+  async function handleSave() {
+    if (!name.trim()) { setError('School name is required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const res  = await fetch('/api/school/setup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schoolName: name.trim(), city: city.trim(), state }),
+      })
+      const data = await res.json()
+      if (data.error) { setError(data.error); return }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      onSaved?.({ name: name.trim(), city: city.trim(), state })
+    } catch { setError('Failed to save — try again') }
+    finally { setSaving(false) }
+  }
+
   return (
-    <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid #e5e7eb', display: 'flex' }} className="lg:hidden">
-      {TABS.map(t => (
-        <button key={t.id} onClick={() => onChange(t.id)}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 0', background: 'none', border: 'none', cursor: 'pointer', color: active === t.id ? '#059669' : '#9ca3af' }}>
-          <span style={{ fontSize: 18, lineHeight: 1 }}>{t.emoji}</span>
-          <span style={{ fontSize: 9, fontWeight: 700 }}>{t.label}</span>
-        </button>
-      ))}
-    </nav>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
+      <SectionTitle>School Information</SectionTitle>
+
+      <Card style={{ padding: '24px' }}>
+        <p style={{ fontSize: 13, color: DIM, marginBottom: 24, lineHeight: 1.6 }}>
+          Update your school's details. This information appears on reports and is visible to your students.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <FieldLabel hint="The official name of your school">School name *</FieldLabel>
+            <TextInput value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Queen's College Lagos"/>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <FieldLabel hint="City or town your school is in">City</FieldLabel>
+              <TextInput value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Lagos"/>
+            </div>
+            <div>
+              <FieldLabel>State</FieldLabel>
+              <select value={state} onChange={e => setState(e.target.value)} style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
+                fontSize: 13, color: state ? TEXT : DIM, background: CARD, outline: 'none',
+                fontFamily: 'inherit', boxSizing: 'border-box',
+              }}>
+                <option value="">Select state</option>
+                {NIGERIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {error && (
+            <p style={{ fontSize: 12, color: RED, padding: '10px 12px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>{error}</p>
+          )}
+
+          {saved && (
+            <p style={{ fontSize: 12, color: EMERALD, padding: '10px 12px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0' }}>
+              ✓ School info saved successfully
+            </p>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+            <Btn variant="navy" onClick={handleSave} loading={saving} disabled={!name.trim()}>
+              Save changes
+            </Btn>
+          </div>
+        </div>
+      </Card>
+    </div>
   )
 }
 
+// ── Responsive grid CSS injected once ─────────────────────────────────────────
+const GRID_CSS = `
+  .stats-grid { grid-template-columns: repeat(4,1fr) !important; }
+  .two-col    { grid-template-columns: 1fr 1fr !important; }
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2,1fr) !important; }
+  }
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: 1fr 1fr !important; }
+    .two-col    { grid-template-columns: 1fr !important; }
+  }
+`
+
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function SchoolDashboardPage() {
-  const router   = useRouter()
+function DashboardInner() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const tab          = searchParams.get('tab') ?? 'overview'
+
   const supabase = createClient()
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
-  const [tab,     setTab]     = useState('overview')
+  const [data,      setData]      = useState(null)
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState(null)
+  const [adminName, setAdminName] = useState('')
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-    const res = await fetch('/api/school/dashboard')
-    const d   = await res.json()
+    if (!user) { router.push('/school-login'); return }
+
+    const [res, profileRes] = await Promise.all([
+      fetch('/api/school/dashboard'),
+      supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+    ])
+
+    const d = await res.json()
     if (d.error) { setError(d.error); setLoading(false); return }
-    setData(d); setLoading(false)
+    setData(d)
+    setAdminName(profileRes.data?.full_name ?? '')
+    setLoading(false)
   }, [router, supabase])
 
   useEffect(() => { load() }, [load])
 
-  useEffect(() => {
-    function onSidebarTab(e) { setTab(e.detail) }
-    window.addEventListener('school-tab-change', onSidebarTab)
-    return () => window.removeEventListener('school-tab-change', onSidebarTab)
-  }, [])
+  function goTab(id) {
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', id)
+    router.push(`/school/dashboard?${p.toString()}`)
+  }
 
   function handleCohortCreated(newCohort) {
-    setData(prev => prev ? { ...prev, cohort: newCohort, allCohorts: [newCohort, ...(prev.allCohorts ?? [])], summary: { ...prev.summary, totalStudents: 0 } } : prev)
+    setData(prev => prev ? {
+      ...prev, cohort: newCohort,
+      allCohorts: [newCohort, ...(prev.allCohorts ?? [])],
+      summary: { ...prev.summary, totalStudents: 0 },
+    } : prev)
   }
 
   if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 12 }}>
-      <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-      <p style={{ fontSize: 13, color: '#9ca3af' }}>Loading school data…</p>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 0', gap: 14 }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', border: `3px solid ${EMERALD}`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }}/>
+      <p style={{ fontSize: 13, color: DIM }}>Loading school data…</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 
   if (error) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 16px', textAlign: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px 16px', textAlign: 'center' }}>
       <div>
-        <p style={{ fontSize: 32, marginBottom: 10 }}>⚠️</p>
-        <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>{error}</p>
-        <button onClick={load} style={{ color: '#059669', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Try again</button>
+        <p style={{ fontSize: 36, marginBottom: 12 }}>⚠️</p>
+        <p style={{ fontSize: 14, fontWeight: 700, color: SEC, marginBottom: 10 }}>{error}</p>
+        <button onClick={load} style={{ color: EMERALD, fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Try again</button>
       </div>
     </div>
   )
@@ -887,25 +1069,21 @@ export default function SchoolDashboardPage() {
 
   return (
     <>
-      {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111827' }}>{TABS.find(t => t.id === tab)?.label ?? 'Dashboard'}</h1>
-          <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
-            {cohort ? `${cohort.name}${cohort.session ? ` · ${cohort.session}` : ''}` : 'No active cohort yet'}
-          </p>
-        </div>
-      </div>
-
-      <div style={{ paddingBottom: 80 }}>
-        {tab === 'overview' && <OverviewSection data={data} onTabChange={setTab} onCohortCreated={handleCohortCreated} />}
-        {tab === 'students' && <StudentsSection students={students} atRisk={atRisk} atRiskSegmented={atRiskSegmented ?? []} />}
-        {tab === 'topics'   && <TopicsSection   subjectTopics={subjectTopics} />}
-        {tab === 'cohort'   && <CohortSection   cohort={cohort} allCohorts={allCohorts} totalStudents={summary.totalStudents} onCohortCreated={handleCohortCreated} />}
-        {tab === 'reports'  && <ReportsSection  schoolName={school?.name ?? ''} cohortName={cohort?.name ?? ''} />}
-      </div>
-
-      <MobileBottomTabs active={tab} onChange={setTab} />
+      <style>{GRID_CSS}</style>
+      {tab === 'overview'  && <OverviewTab  data={data} adminName={adminName} onTabChange={goTab} onCohortCreated={handleCohortCreated}/>}
+      {tab === 'students'  && <StudentsTab  students={students} atRisk={atRisk} atRiskSegmented={atRiskSegmented ?? []}/>}
+      {tab === 'topics'    && <TopicsTab    subjectTopics={subjectTopics}/>}
+      {tab === 'cohort'    && <CohortTab    cohort={cohort} allCohorts={allCohorts} totalStudents={summary.totalStudents} onCohortCreated={handleCohortCreated}/>}
+      {tab === 'reports'   && <ReportsTab   schoolName={school?.name ?? ''}/>}
+      {tab === 'settings'  && <SettingsTab  school={school} onSaved={info => setData(d => d ? { ...d, school: { ...d.school, ...info } } : d)}/>}
     </>
+  )
+}
+
+export default function SchoolDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardInner/>
+    </Suspense>
   )
 }

@@ -765,11 +765,12 @@ function ReviewSession({ questions, answers, onDone, dark }) {
         @media (min-width: 1024px) {
           .rev-body { flex-direction: row !important; }
           .rev-q-col { max-width: 640px !important; padding: 32px 40px !important; }
-          .rev-exp-col { display: flex !important; flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; flex-direction: column; padding: 32px 28px !important; }
+          .rev-exp-col { display: flex !important; flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; min-height: 0 !important; flex-direction: column; padding: 32px 28px !important; }
           .rev-q-col .inline-explanation { display: none !important; }
         }
         @media (max-width: 1023px) {
           .rev-exp-col { display: none !important; }
+          .rev-q-col { padding-bottom: 20px !important; }
         }
       `}</style>
       <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
@@ -1271,6 +1272,7 @@ export default function PracticeSessionPage() {
         @media (max-width: 1023px) {
           .session-nav-col { display: none !important; }
           .session-exp-col { display: none !important; }
+          .session-q-col { padding-bottom: 20px !important; }
         }
       `}</style>
 

@@ -9,7 +9,7 @@
 //   • Returns 404 as a clean {noData:true} response instead of 502
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/adminAuth'
 import { NextResponse } from 'next/server'
 
 const SDASH_BASE = 'https://sdashapi.com/api'
@@ -65,9 +65,8 @@ async function sdashGetQuestions(params) {
 }
 
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const mode    = searchParams.get('mode') ?? 'questions'

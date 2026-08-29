@@ -216,6 +216,12 @@ function StudentLayoutInner({ children }) {
           setProfile(normalised)
           cacheAuthProfile(normalised)
           try { localStorage.setItem('ep_student_name', data.full_name || data.username || '') } catch {}
+
+          // Flush guest session queue — handles Google OAuth path where
+          // syncOnLogin() isn't called explicitly after the callback redirect.
+          import('@/lib/localSessionSync')
+            .then(({ syncOnLogin }) => syncOnLogin())
+            .catch(() => {})
         }
       } catch (e) { console.error('layout profile:', e) }
     })()

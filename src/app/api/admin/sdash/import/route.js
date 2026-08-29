@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/adminAuth'
 import { NextResponse } from 'next/server'
 
 const SDASH_BASE = 'https://sdashapi.com/api'
@@ -197,9 +197,8 @@ async function deduplicateQuestions(db, questions, subjectId, examType) {
 // ── POST handler ──────────────────────────────────────────────────────────────
 export async function POST(request) {
   // Auth check
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   let body
   try {

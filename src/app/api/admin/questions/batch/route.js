@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -8,9 +8,8 @@ const service = () => createServiceClient(
 )
 
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const db = service()
   const { examType, subjectId, total } = await request.json()
@@ -23,7 +22,6 @@ export async function POST(request) {
       total,
       saved: 0,
       errors: 0,
-      created_by: user.id,
     })
     .select()
     .single()

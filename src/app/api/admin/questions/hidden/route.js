@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/hidden/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Hidden Questions API
@@ -33,7 +34,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+
 import { NextResponse } from 'next/server'
 
 const svc = () =>
@@ -44,9 +45,8 @@ const svc = () =>
 
 // ── POST — save a question as hidden ─────────────────────────────────────────
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   let body
   try { body = await request.json() }
@@ -109,9 +109,8 @@ export async function POST(request) {
 
 // ── GET — list hidden questions ────────────────────────────────────────────────
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const exam_type   = searchParams.get('exam_type')
@@ -142,9 +141,8 @@ export async function GET(request) {
 
 // ── PATCH — restore a hidden question (move to main questions table) ──────────
 export async function PATCH(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   let body
   try { body = await request.json() }
@@ -200,9 +198,8 @@ export async function PATCH(request) {
 
 // ── DELETE — permanently remove a hidden question ─────────────────────────────
 export async function DELETE(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')

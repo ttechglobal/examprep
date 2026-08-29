@@ -23,6 +23,8 @@
 //   flushSyncQueue()
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { updateLocalMastery } from '@/lib/localMastery'
+
 const HISTORY_KEY  = 'ep_session_history'
 const ACTIVITY_KEY = 'ep_activity'
 const QUEUE_KEY    = 'ep_sync_queue'
@@ -33,6 +35,15 @@ const MAX_QUEUE    = 100
 const SYNC_ENDPOINT = '/api/student/questions/session/save'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Returns 'YYYY-MM-DD' in the device's local timezone — never UTC.
+// toISOString() is UTC and causes wrong-day bugs for evening sessions.
+function localDateStr(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
 
 function safeRead(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
@@ -90,13 +101,13 @@ export function readHistory() {
  */
 export function recordActivity(questionCount = 1) {
   try {
-    const today   = new Date().toISOString().slice(0, 10)
+    const today   = localDateStr()
     const data    = safeRead(ACTIVITY_KEY, {})
     data[today]   = (data[today] || 0) + questionCount
     // Prune entries older than 30 days
     const cutoff  = new Date()
     cutoff.setDate(cutoff.getDate() - 30)
-    const cutStr  = cutoff.toISOString().slice(0, 10)
+    const cutStr  = localDateStr(cutoff)
     for (const k of Object.keys(data)) {
       if (k < cutStr) delete data[k]
     }
@@ -115,7 +126,7 @@ export function readWeeklyActivity() {
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday)
       d.setDate(monday.getDate() + i)
-      counts[i] = data[d.toISOString().slice(0, 10)] || 0
+      counts[i] = data[localDateStr(d)] || 0
     }
     return counts
   } catch { return [0, 0, 0, 0, 0, 0, 0] }
@@ -172,7 +183,12 @@ export function saveSessionLocally(sessionData, xpAwarded = 0) {
     ?? 0
   if (questionCount > 0) recordActivity(questionCount)
 
-  // 3. Queue for server sync
+  // 3. Update local mastery — instant, per-exam, per-topic
+  if (sessionData.exam && sessionData.results?.length) {
+    updateLocalMastery(sessionData.exam, sessionData.results, sessionData.subject_name)
+  }
+
+  // 4. Queue for server sync
   enqueue(sessionData)
 }
 

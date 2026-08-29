@@ -26,7 +26,9 @@ const SELECT_COLS = [
 
 const ALLOWED_PATCH = [
   'username', 'full_name', 'class_level',
-  'school_name',
+  // school_name is intentionally excluded — it must only be set by the
+  // access-code redeem route or /api/school/join, not by the student directly.
+  // Allowing free-text here breaks the school dashboard's data integrity.
   'exam_type', 'exam_types',
   'subjects_waec', 'subjects_jamb',
   'target_waec', 'target_jamb', 'target_jamb_breakdown',

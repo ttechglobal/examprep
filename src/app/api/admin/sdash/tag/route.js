@@ -20,7 +20,7 @@
 //   suggestions: [{ questionId, matches: [{ topicId, topicName, subtopicId?, subtopicName?, score }] }]
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/adminAuth'
 import { NextResponse } from 'next/server'
 
 // Simple keyword-overlap scorer (no Claude API call needed for MVP)
@@ -40,9 +40,8 @@ function scoreTopicMatch(questionText, topicName, subtopicName = '') {
 }
 
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   let body
   try { body = await request.json() }

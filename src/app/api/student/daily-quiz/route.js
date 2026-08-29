@@ -1,46 +1,12 @@
-// src/app/api/student/daily-quiz/route.js
+// src/app/api/student/daily-quiz/route.js — v3
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/student/daily-quiz
 //
-// Returns today's daily challenge question for the authenticated student.
-// Works for guests too — they get a question but attempts aren't stored in DB.
-//
-// SELECTION LOGIC
-// ───────────────
-// 1. Read the student's subjects from their profile (or from the ?subjects= param for guests).
-// 2. Group subjects into a "subject group" — sciences (Physics, Chemistry, Biology),
-//    social sciences (Economics, Government, Commerce, Geography), languages
-//    (English, Literature), and maths (Mathematics, Further Maths).
-// 3. Use today's date as a seed to deterministically pick:
-//    a) Which group to use today (rotates daily across groups present in the student's subjects)
-//    b) Which specific subject from that group
-//    c) Which question from that subject (hard or medium difficulty only)
-// 4. The same seed means every student taking the SAME subject sees the SAME question
-//    on the same day — creates a shared "today's challenge" feeling.
-//
-// ATTEMPT STATE
-// ─────────────
-// If authenticated, check daily_quiz_attempts for today. Return attempt state
-// (attempts_used, completed, correct, selected_indices) so the client can
-// restore the card to the right state without the student losing progress on refresh.
-//
-// Response:
-// {
-//   question: {
-//     id, text, options, hint, explanation, difficulty,
-//     subject_name, topic_name, year, exam_type
-//   },
-//   state: {
-//     attempts_used: 0-3,
-//     max_attempts: 3,
-//     completed: bool,
-//     correct: bool | null,
-//     selected_indices: number[],
-//     xp_awarded: number,
-//     answered_today: bool,
-//   },
-//   date: 'YYYY-MM-DD'
-// }
+// Returns TWO daily challenge questions. Key fixes vs v2:
+//   - subjects table has duplicate names per exam_type → use .limit(1) not .maybeSingle()
+//   - fallback: if no subject match, query questions directly by subject name text
+//   - fallback: if still nothing, pull any 2 active questions from the DB
+//   - board: show all students who attempted today (not just completed)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }              from '@/lib/supabase/server'
@@ -52,30 +18,119 @@ const db = () => svcClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// Subject groups for rotation
 const SUBJECT_GROUPS = {
-  sciences:       ['Physics', 'Chemistry', 'Biology'],
-  social:         ['Economics', 'Government', 'Commerce', 'Geography'],
-  languages:      ['English Language', 'Use of English', 'Literature in English'],
-  maths:          ['Mathematics', 'Further Mathematics'],
-  agricultural:   ['Agricultural Science'],
+  sciences:     ['Physics', 'Chemistry', 'Biology'],
+  social:       ['Economics', 'Government', 'Commerce', 'Geography'],
+  maths:        ['Mathematics', 'Further Mathematics'],
+  languages:    ['English Language', 'Use of English', 'Literature in English'],
+  agricultural: ['Agricultural Science'],
 }
 
-// ── Deterministic seed from date string ───────────────────────────────────────
-// Simple but stable: sum of char codes + day-of-year offset
 function dateSeed(dateStr) {
-  const d = new Date(dateStr)
+  const d   = new Date(dateStr)
   const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000)
-  return (d.getFullYear() * 1000 + doy)
+  return d.getFullYear() * 1000 + doy
 }
-
 function seededPick(arr, seed) {
-  if (!arr.length) return null
-  return arr[seed % arr.length]
+  if (!arr?.length) return null
+  return arr[Math.abs(seed) % arr.length]
+}
+function todayStr() { return new Date().toISOString().slice(0, 10) }
+
+// ── Fetch a question pool for a subject, robust to duplicate exam_type rows ──
+async function pickQuestion(service, subjectName, seed) {
+  // Step 1: resolve subject_id. Use limit(1) — NOT maybeSingle() — because
+  // the subjects table may have the same name under WAEC and JAMB exam_types.
+  const { data: subjectRows } = await service
+    .from('subjects')
+    .select('id')
+    .eq('name', subjectName)
+    .eq('is_active', true)
+    .limit(1)
+
+  let pool = null
+
+  if (subjectRows?.length) {
+    // Step 2a: query by subject_id
+    const subjectId = subjectRows[0].id
+    const { data } = await service
+      .from('questions')
+      .select(`
+        id, question_text, options, correct_answer, explanation, hint,
+        difficulty, year, exam_type, subject_id, topic_id,
+        subjects ( id, name ),
+        topics   ( id, name )
+      `)
+      .eq('subject_id', subjectId)
+      .eq('is_active', true)
+      .limit(200)
+    pool = data
+  }
+
+  // Step 2b: fallback — match by subject name stored on the question itself
+  // (some pipelines store subject name directly rather than via FK)
+  if (!pool?.length) {
+    const { data } = await service
+      .from('questions')
+      .select(`
+        id, question_text, options, correct_answer, explanation, hint,
+        difficulty, year, exam_type, subject_id, topic_id,
+        subjects ( id, name ),
+        topics   ( id, name )
+      `)
+      .ilike('question_text', `%${subjectName.split(' ')[0]}%`)
+      .eq('is_active', true)
+      .limit(50)
+    pool = data
+  }
+
+  if (!pool?.length) return null
+  return pool[Math.abs(seed) % pool.length]
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+// ── Absolute fallback — any two active questions ──────────────────────────────
+async function pickAnyQuestion(service, seed, excludeId = null) {
+  let q = service
+    .from('questions')
+    .select(`
+      id, question_text, options, correct_answer, explanation, hint,
+      difficulty, year, exam_type, subject_id, topic_id,
+      subjects ( id, name ),
+      topics   ( id, name )
+    `)
+    .eq('is_active', true)
+    .limit(100)
+
+  if (excludeId) q = q.neq('id', excludeId)
+  const { data: pool } = await q
+  if (!pool?.length) return null
+  return pool[Math.abs(seed) % pool.length]
+}
+
+function shapeQuestion(q, subjectName) {
+  if (!q) return null
+  const LETTERS = ['A','B','C','D','E']
+  let optionsArr = []
+  if (Array.isArray(q.options)) {
+    optionsArr = q.options
+  } else if (q.options && typeof q.options === 'object') {
+    optionsArr = LETTERS.map(l => q.options[l]).filter(v => v != null)
+  }
+  if (!optionsArr.length) return null   // question unusable without options
+  return {
+    id:             q.id,
+    text:           q.question_text,
+    options:        optionsArr,
+    hint:           q.hint ?? null,
+    explanation:    null,
+    correct_answer: null,
+    difficulty:     q.difficulty ?? 'medium',
+    subject_name:   q.subjects?.name ?? subjectName ?? '',
+    topic_name:     q.topics?.name  ?? null,
+    year:           q.year          ?? null,
+    exam_type:      q.exam_type     ?? null,
+    subject_id:     q.subject_id    ?? null,
+  }
 }
 
 export async function GET(request) {
@@ -85,203 +140,135 @@ export async function GET(request) {
     const today   = todayStr()
     const seed    = dateSeed(today)
 
-    // ── Auth check (optional — guests get a question, no state tracking) ───────
-    let userId    = null
+    // ── Auth (optional) ───────────────────────────────────────────────────────
+    let userId       = null
     let userSubjects = []
 
     try {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
-
       if (user) {
         userId = user.id
         const { data: prof } = await service
           .from('profiles')
-          .select('subjects_waec, subjects_jamb, subjects, exam_types')
+          .select('subjects_waec, subjects_jamb, subjects')
           .eq('id', userId)
           .single()
-
-        // Collect all subjects the student is taking
-        const all = [
+        userSubjects = [...new Set([
           ...(prof?.subjects_waec ?? []),
           ...(prof?.subjects_jamb ?? []),
           ...(prof?.subjects      ?? []),
-        ]
-        userSubjects = [...new Set(all)]
+        ])]
       }
-    } catch {
-      // Non-auth path
-    }
+    } catch {}
 
-    // Guest fallback — accept subjects from query param
+    // Guest fallback: subjects from URL param
     if (!userSubjects.length) {
-      const paramSubs = searchParams.get('subjects') ?? ''
-      userSubjects = paramSubs.split(',').map(s => s.trim()).filter(Boolean)
+      const p = searchParams.get('subjects') ?? ''
+      userSubjects = p.split(',').map(s => s.trim()).filter(Boolean)
     }
 
-    // Absolute fallback — serve a general science question
-    if (!userSubjects.length) {
-      userSubjects = ['Physics', 'Chemistry', 'Biology', 'Mathematics']
-    }
-
-    // ── Check existing attempt for today (auth users only) ─────────────────────
-    let existingAttempt = null
+    // ── Existing attempts for today ───────────────────────────────────────────
+    const existingBySlot = {}
     if (userId) {
-      const { data } = await service
+      const { data: rows } = await service
         .from('daily_quiz_attempts')
         .select('*')
         .eq('student_id', userId)
         .eq('quiz_date', today)
-        .maybeSingle()
-      existingAttempt = data ?? null
+      for (const row of rows ?? []) {
+        existingBySlot[row.slot ?? 1] = row
+      }
     }
 
-    // ── If completed today, we still need the question for display ─────────────
-    // (so the student can review the explanation)
-    let questionId = existingAttempt?.question_id ?? null
+    // ── Pick two subjects ─────────────────────────────────────────────────────
+    let subject1 = null
+    let subject2 = null
 
-    // ── Determine today's subject from the student's subjects ──────────────────
-    let targetSubjectName = null
-
-    if (!questionId) {
-      // Build groups that intersect the student's actual subjects
+    if (userSubjects.length) {
       const availableGroups = Object.entries(SUBJECT_GROUPS)
-        .map(([key, members]) => ({
-          key,
-          subjects: members.filter(m => userSubjects.includes(m)),
-        }))
+        .map(([key, members]) => ({ key, subjects: members.filter(m => userSubjects.includes(m)) }))
         .filter(g => g.subjects.length > 0)
 
-      // Rotate group by day
-      const group   = seededPick(availableGroups, seed)
-      // Rotate subject within group by day+1 (different offset so subject != group)
-      targetSubjectName = group ? seededPick(group.subjects, seed + 1) : userSubjects[0]
+      if (availableGroups.length >= 2) {
+        const g1 = seededPick(availableGroups, seed)
+        const g2 = seededPick(availableGroups.filter(g => g.key !== g1.key), seed + 3)
+        subject1 = seededPick(g1.subjects, seed + 1)
+        subject2 = seededPick(g2.subjects, seed + 7)
+      } else if (availableGroups.length === 1) {
+        const subs = availableGroups[0].subjects
+        subject1 = seededPick(subs, seed)
+        subject2 = seededPick(subs, seed + 5) ?? subject1
+      } else {
+        // subjects don't match any group — use them directly
+        subject1 = seededPick(userSubjects, seed)
+        subject2 = seededPick(userSubjects, seed + 5) ?? subject1
+      }
     }
 
-    // ── Fetch the question ─────────────────────────────────────────────────────
-    let question = null
+    // ── Build challenge slots ─────────────────────────────────────────────────
+    const challenges = []
+    let firstQuestionId = null
 
-    if (questionId) {
-      // Returning to an already-started or completed question — fetch by ID
-      const { data } = await service
-        .from('questions')
-        .select(`
-          id, question_text, options, correct_answer, explanation, hint,
-          difficulty, year, exam_type,
-          subject_id, topic_id,
-          subjects ( id, name ),
-          topics   ( id, name )
-        `)
-        .eq('id', questionId)
-        .eq('is_active', true)
-        .single()
-      question = data
-    } else {
-      // Fresh selection — fetch hard/medium questions for the target subject
-      const { data: subjectRow } = await service
-        .from('subjects')
-        .select('id')
-        .eq('name', targetSubjectName)
-        .maybeSingle()
+    for (const [slot, subjectName, slotSeed] of [
+      [1, subject1, seed],
+      [2, subject2, seed + 13],
+    ]) {
+      const existing   = existingBySlot[slot] ?? null
+      const questionId = existing?.question_id ?? null
 
-      if (subjectRow) {
-        // Get a pool of challenging questions, seed-select one
-        const { data: pool } = await service
+      let rawQ = null
+
+      if (questionId) {
+        // Returning to an already-started question
+        const { data } = await service
           .from('questions')
           .select(`
             id, question_text, options, correct_answer, explanation, hint,
-            difficulty, year, exam_type,
-            subject_id, topic_id,
+            difficulty, year, exam_type, subject_id, topic_id,
             subjects ( id, name ),
             topics   ( id, name )
           `)
-          .eq('subject_id', subjectRow.id)
+          .eq('id', questionId)
           .eq('is_active', true)
-          .in('difficulty', ['hard', 'medium'])
-          .limit(200)
-
-        if (pool?.length) {
-          // Stable daily selection — same question for same subject on same day
-          question = pool[seed % pool.length]
-        }
+          .maybeSingle()
+        rawQ = data
+      } else if (subjectName) {
+        rawQ = await pickQuestion(service, subjectName, slotSeed)
       }
 
-      // Fallback: any active question from any of the student's subjects
-      if (!question) {
-        const { data: subjRows } = await service
-          .from('subjects')
-          .select('id')
-          .in('name', userSubjects)
-
-        const subjectIds = (subjRows ?? []).map(s => s.id)
-
-        if (subjectIds.length) {
-          const { data: fallbackPool } = await service
-            .from('questions')
-            .select(`
-              id, question_text, options, correct_answer, explanation, hint,
-              difficulty, year, exam_type,
-              subject_id, topic_id,
-              subjects ( id, name ),
-              topics   ( id, name )
-            `)
-            .in('subject_id', subjectIds)
-            .eq('is_active', true)
-            .limit(100)
-
-          if (fallbackPool?.length) {
-            question = fallbackPool[seed % fallbackPool.length]
-          }
-        }
+      // Absolute fallback: any question (exclude slot 1's question for slot 2)
+      if (!rawQ) {
+        rawQ = await pickAnyQuestion(service, slotSeed, firstQuestionId)
       }
-    }
 
-    if (!question) {
-      return NextResponse.json({ error: 'No question available today' }, { status: 404 })
-    }
+      if (slot === 1 && rawQ) firstQuestionId = rawQ.id
 
-    // ── Shape the response — NEVER send correct_answer unless completed ────────
-    const isCompleted   = existingAttempt?.completed ?? false
-    const attemptsUsed  = existingAttempt?.attempts_used ?? 0
-    const maxAttempts   = existingAttempt?.max_attempts  ?? 2
+      const shaped      = shapeQuestion(rawQ, subjectName)
+      const isCompleted = existing?.completed ?? false
 
-    // Normalise options: DB stores as object {A, B, C, D} or array
-    const LETTERS = ['A', 'B', 'C', 'D', 'E']
-    let optionsArr = []
-    if (Array.isArray(question.options)) {
-      optionsArr = question.options
-    } else if (question.options && typeof question.options === 'object') {
-      optionsArr = LETTERS.map(l => question.options[l]).filter(v => v != null)
-    }
+      if (shaped && isCompleted && rawQ) {
+        shaped.correct_answer = rawQ.correct_answer
+        shaped.explanation    = rawQ.explanation ?? null
+      }
 
-    const shaped = {
-      id:           question.id,
-      text:         question.question_text,
-      options:      optionsArr,
-      hint:         question.hint ?? null,
-      // Only expose explanation and correct answer after completion
-      explanation:  isCompleted ? (question.explanation ?? null) : null,
-      correct_answer: isCompleted ? question.correct_answer : null,
-      difficulty:   question.difficulty ?? 'medium',
-      subject_name: question.subjects?.name ?? targetSubjectName ?? '',
-      topic_name:   question.topics?.name  ?? null,
-      year:         question.year ?? null,
-      exam_type:    question.exam_type ?? null,
-    }
-
-    const state = {
-      attempts_used:    attemptsUsed,
-      max_attempts:     maxAttempts,
-      completed:        isCompleted,
-      correct:          existingAttempt?.correct ?? null,
-      selected_indices: existingAttempt?.selected_indices ?? [],
-      xp_awarded:       existingAttempt?.xp_awarded ?? 0,
-      answered_today:   isCompleted,
+      challenges.push({
+        slot,
+        question: shaped,
+        state: {
+          attempts_used:    existing?.attempts_used    ?? 0,
+          max_attempts:     existing?.max_attempts     ?? 2,
+          completed:        isCompleted,
+          correct:          existing?.correct          ?? null,
+          selected_indices: existing?.selected_indices ?? [],
+          xp_awarded:       existing?.xp_awarded       ?? 0,
+        },
+      })
     }
 
     return NextResponse.json(
-      { question: shaped, state, date: today },
-      { headers: { 'Cache-Control': 'private, max-age=60' } }
+      { challenges, date: today },
+      { headers: { 'Cache-Control': 'private, no-store' } }
     )
 
   } catch (err) {
