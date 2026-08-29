@@ -22,8 +22,6 @@ const GOLD  = '#FFB800'
 const RED   = '#f43f5e'
 const BLUE  = '#1264E5'
 
-const LOCAL_KEY  = 'ep_session_history'
-const MAX_LOCAL  = 20   // keep last 20 sessions in localStorage
 const CACHE_SECS = 300  // only re-fetch from Supabase every 5 min
 
 function scoreColor(pct) {
@@ -36,30 +34,17 @@ function modeIcon(mode) {
   return { study: '📖', practice: '📝', timed: '⏱️', quick5: '⚡', mock: '📋' }[mode] ?? '📝'
 }
 
-// ── Local storage helpers (exported so session page can call them) ─────────────
+// ── Local storage helpers — delegate to localSessionSync ──────────────────────
+// localSessionSync owns the ep_session_history key and write logic.
+// We re-export readLocalSessions so existing callers (progress page etc.) work.
 
-export function readLocalSessions() {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
+import { readHistory, appendToHistory } from '@/lib/localSessionSync'
 
-export function appendLocalSession(session) {
-  // session shape: { id?, mode, questions_count, correct_count, subject_name, created_at, duration_secs }
-  try {
-    const existing = readLocalSessions()
-    const entry = normalise(session)
-    // Deduplicate by id if present
-    const filtered = session.id ? existing.filter(s => s.id !== session.id) : existing
-    const updated = [entry, ...filtered].slice(0, MAX_LOCAL)
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(updated))
-    return updated
-  } catch { return [] }
-}
+export function readLocalSessions() { return readHistory() }
+export function appendLocalSession(session) { return appendToHistory(session) }
 
 function writeLocalSessions(sessions) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(sessions.slice(0, MAX_LOCAL))) } catch {}
+  try { localStorage.setItem('ep_session_history', JSON.stringify(sessions.slice(0, 20))) } catch {}
 }
 
 function normalise(s) {

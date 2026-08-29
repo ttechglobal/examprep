@@ -28,8 +28,9 @@ const CYAN   = '#18B7F2'
 
 const BOARD_CACHE_KEY   = 'ep_leaderboard_cache'
 const BOARD_CACHE_SECS  = 600   // 10 min
-const ACTIVITY_KEY      = 'ep_activity'  // written by session save page
-const QUESTS_KEY        = 'ep_quests'
+
+import { recordLocalActivity, readWeeklyActivity } from '@/lib/localSessionSync'
+import DailyChallenge from '@/components/student/DailyChallenge'
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
 function getGreeting() {
@@ -38,65 +39,12 @@ function getGreeting() {
 }
 
 const MSGS = [
-  (n, l) => l > 0 ? `Just ${l} more ${l === 1 ? 'quest' : 'quests'} to go, ${n}!` : `All done today, ${n}. Excellent work!`,
-  (n)    => `You are on track, ${n}. Keep the momentum going.`,
-  (n, l) => l > 0 ? `${n}, knock out those quests and earn your XP.` : `Every quest done. You owned today, ${n}.`,
-  (n)    => `Consistent effort every day is what separates you, ${n}.`,
+  (n) => `Good to see you, ${n}. Let's get to work.`,
+  (n) => `You are on track, ${n}. Keep the momentum going.`,
+  (n) => `Consistent effort every day is what separates you, ${n}.`,
+  (n) => `Ready to practise, ${n}? Your goals are waiting.`,
 ]
 
-// ── Local activity helpers (exported so session page can call them) ────────────
-// Activity is stored as { YYYY-MM-DD: count } — we read the current week's 7 days.
-export function recordLocalActivity(count = 1) {
-  try {
-    const today = new Date().toISOString().slice(0, 10)
-    const data  = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '{}')
-    data[today] = (data[today] || 0) + count
-    // Prune entries older than 30 days to keep storage lean
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 30)
-    const cutoffStr = cutoff.toISOString().slice(0, 10)
-    Object.keys(data).forEach(k => { if (k < cutoffStr) delete data[k] })
-    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(data))
-  } catch {}
-}
-
-function readWeeklyActivity() {
-  try {
-    const data   = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '{}')
-    const counts = [0, 0, 0, 0, 0, 0, 0]
-    // Build Mon–Sun for the current ISO week
-    const today  = new Date()
-    const monday = new Date(today)
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-    monday.setHours(0, 0, 0, 0)
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday)
-      d.setDate(monday.getDate() + i)
-      const key = d.toISOString().slice(0, 10)
-      counts[i] = data[key] || 0
-    }
-    return counts
-  } catch { return [0, 0, 0, 0, 0, 0, 0] }
-}
-
-function buildQuests(profile) {
-  const today = new Date().toISOString().slice(0, 10)
-  try {
-    const cached = JSON.parse(localStorage.getItem(QUESTS_KEY) || '{}')
-    if (cached.date === today && cached.quests?.length) return cached.quests
-  } catch {}
-
-  const subs = profile?.subjects_waec ?? profile?.subjects ?? []
-  const [s0 = 'Mathematics', s1 = 'English', s2 = 'a subject'] = subs
-  const pool = [
-    { id: 1, title: `Solve 8 ${s0} questions`,  subtitle: 'Keep your streak going!', xp: 20, completed: false },
-    { id: 2, title: `${s1} speed round`,         subtitle: '10 questions · 60 sec',  xp: 15, completed: false },
-    { id: 3, title: `Score 60%+ in ${s2}`,       subtitle: 'Practice set',           xp: 25, completed: false },
-    { id: 4, title: "Revise today's lesson",      subtitle: 'Quick recap',            xp: 10, completed: false },
-  ]
-  try { localStorage.setItem(QUESTS_KEY, JSON.stringify({ date: today, quests: pool })) } catch {}
-  return pool
-}
 
 
 // ─── UI PRIMITIVES ────────────────────────────────────────────────────────────
@@ -118,10 +66,9 @@ function SectionLabel({ children, right }) {
 
 
 // ─── HERO BANNER ─────────────────────────────────────────────────────────────
-function HeroBanner({ name, quests, xp, dark }) {
-  const leftCount = quests.filter(q => !q.completed).length
-  const msg       = MSGS[Math.floor(Date.now() / 86400000) % MSGS.length](name, leftCount)
-  const level     = Math.floor((xp || 0) / 2000) + 1
+function HeroBanner({ name, xp, dark }) {
+  const msg   = MSGS[Math.floor(Date.now() / 86400000) % MSGS.length](name)
+  const level = Math.floor((xp || 0) / 2000) + 1
   const xpInLvl   = (xp || 0) % 2000
   const xpPct     = Math.min(100, Math.round((xpInLvl / 2000) * 100))
 
@@ -198,56 +145,6 @@ function PageGrid({ left, right }) {
 }
 
 
-// ─── TODAY'S QUESTS ───────────────────────────────────────────────────────────
-function TodaysQuests({ quests, dark }) {
-  const done = quests.filter(q => q.completed).length
-
-  if (!quests.length) return (
-    <div>
-      <SectionLabel>Today's Quests</SectionLabel>
-      <Card style={{ padding: '28px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>🎯</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 6 }}>No quests yet</div>
-        <div style={{ fontSize: 13, color: 'var(--text-tert)', marginBottom: 16 }}>Set up your subjects to unlock daily quests and start earning XP.</div>
-        <Link href="/student/profile">
-          <div style={{ display: 'inline-block', padding: '10px 22px', borderRadius: 999, background: BLUE, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Set up subjects →</div>
-        </Link>
-      </Card>
-    </div>
-  )
-
-  return (
-    <div>
-      <SectionLabel right={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 16 }}>🔥</span>
-          <span style={{ fontSize: 13, fontWeight: 800, color: ORANGE }}>{done}/{quests.length} done</span>
-        </div>
-      }>Today's Quests</SectionLabel>
-      <Card>
-        {quests.map((q, i) => (
-          <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: i < quests.length - 1 ? '1px solid var(--border)' : 'none' }}>
-            <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: q.completed ? GREEN : 'transparent', border: q.completed ? 'none' : `2px solid ${dark ? 'rgba(255,255,255,.18)' : 'rgba(6,42,120,.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {q.completed && <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: q.completed ? 'var(--text-tert)' : 'var(--text-prim)', textDecoration: q.completed ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>{q.subtitle}</div>
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: q.completed ? 'var(--text-tert)' : ORANGE, flexShrink: 0 }}>+{q.xp} XP</div>
-          </div>
-        ))}
-        <Link href="/student/practice" style={{ textDecoration: 'none' }}>
-          <div style={{ padding: '13px 20px', textAlign: 'center', fontSize: 13, fontWeight: 700, color: BLUE, borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
-            Start practising →
-          </div>
-        </Link>
-      </Card>
-    </div>
-  )
-}
-
-
 // ─── EXAM GOALS ───────────────────────────────────────────────────────────────
 function ExamGoals({ profile, exams }) {
   // Goals stored locally in ep_guest or readable from profile
@@ -290,15 +187,15 @@ function ExamGoals({ profile, exams }) {
           💡 Set your goals in Profile to stay focused and track what matters.
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.map((item, i) => (
-          <div key={i} style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--border)' }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: `${item.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: item.text ? 11 : 20, fontWeight: 900, color: item.color }}>
+          <div key={i} style={{ background: 'var(--bg-card)', borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--border)' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: `${item.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: item.text ? 10 : 18, fontWeight: 900, color: item.color }}>
               {item.text || item.icon}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: item.color, marginBottom: 3 }}>{item.label}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: item.color, marginBottom: 2 }}>{item.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: item.value === 'Not set' ? 'var(--text-tert)' : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
             </div>
           </div>
         ))}
@@ -388,32 +285,27 @@ function LeaderboardSnap({ board, myId }) {
 }
 
 
-// ─── JUMP IN ──────────────────────────────────────────────────────────────────
-function JumpInCards() {
+// ─── PRACTICE NOW ─────────────────────────────────────────────────────────────
+function PracticeNowCard() {
   return (
-    <div>
-      <SectionLabel>Jump In</SectionLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        {[
-          { icon: '⚡', label: 'Speed Round', sub: '10 questions · 60 sec',   xp: '+15 XP',  dark: false, href: '/student/practice?mode=speed', bg: 'var(--bg-card)',                                         border: 'var(--border)' },
-          { icon: '📋', label: 'Mock Exam',   sub: 'Full WAEC / JAMB format', xp: '+200 XP', dark: true,  href: '/student/practice?mode=mock',  bg: `linear-gradient(145deg,${NAVY},#04194a)`, border: 'rgba(24,183,242,.2)' },
-        ].map(item => (
-          <Link key={item.label} href={item.href} style={{ textDecoration: 'none' }}>
-            <div style={{ borderRadius: 20, padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 12, background: item.bg, border: `1px solid ${item.border}`, minHeight: 140, position: 'relative', overflow: 'hidden', cursor: 'pointer', boxShadow: item.dark ? `0 8px 32px rgba(6,42,120,.35)` : '0 2px 8px rgba(6,42,120,.05)' }}>
-              {item.dark && <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle,rgba(24,183,242,.14) 0%,transparent 70%)', pointerEvents: 'none' }} />}
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: item.dark ? 'rgba(255,184,0,.18)' : 'rgba(18,100,229,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{item.icon}</div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: item.dark ? '#fff' : 'var(--text-prim)', marginBottom: 4 }}>{item.label}</div>
-                <div style={{ fontSize: 12, color: item.dark ? 'rgba(255,255,255,.5)' : 'var(--text-tert)' }}>{item.sub}</div>
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: item.dark ? 'rgba(255,255,255,.14)' : 'rgba(255,184,0,.14)', color: item.dark ? '#fff' : ORANGE, alignSelf: 'flex-start' }}>
-                ⚡ {item.xp}
-              </div>
-            </div>
-          </Link>
-        ))}
+    <Link href="/student/practice" style={{ textDecoration: 'none' }}>
+      <div style={{
+        borderRadius: 20, padding: '22px 24px',
+        background: `linear-gradient(135deg,${NAVY} 0%,#0e3494 100%)`,
+        border: '1px solid rgba(24,183,242,.2)',
+        display: 'flex', alignItems: 'center', gap: 16,
+        boxShadow: '0 8px 32px rgba(6,42,120,.3)',
+        cursor: 'pointer', position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', top: -30, right: -30, width: 140, height: 140, borderRadius: '50%', background: 'radial-gradient(circle,rgba(24,183,242,.12) 0%,transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(255,184,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0 }}>⚡</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', marginBottom: 4 }}>Practice Now</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Questions tailored to your weak topics</div>
+        </div>
+        <div style={{ fontSize: 20, color: 'rgba(255,255,255,.4)', flexShrink: 0 }}>→</div>
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -443,7 +335,7 @@ function GuestNudge() {
         <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.5, marginBottom: 12 }}>
           You're practising as a guest. Create a free account to save your XP and never lose your streak.
         </div>
-        <Link href="/join" style={{ textDecoration: 'none' }}>
+        <Link href="/signup" style={{ textDecoration: 'none' }}>
           <div style={{ display: 'inline-block', padding: '9px 20px', borderRadius: 12, background: BLUE, color: '#fff', fontSize: 13, fontWeight: 800 }}>
             Create free account →
           </div>
@@ -461,12 +353,10 @@ export default function HomePage() {
   const profile             = useStudentUser()  // from layout — instant, no network call
 
   const isGuest   = !!profile?.isGuest
-  const isReady   = profile !== null  // layout finished its auth check
+  const isReady   = profile !== null
 
-  // All local — computed synchronously once profile is available
-  const exams     = profile?.exam_types ?? (profile?.exams ? profile.exams : ['WAEC'])
-  const quests    = isReady ? buildQuests(profile) : []
-  const activity  = isReady ? readWeeklyActivity() : [0, 0, 0, 0, 0, 0, 0]
+  const exams    = profile?.exam_types ?? (profile?.exams ? profile.exams : ['WAEC'])
+  const activity = isReady ? readWeeklyActivity() : [0, 0, 0, 0, 0, 0, 0]
 
   // Leaderboard — cached in localStorage, background fetch every 10 min
   const [board, setBoard] = useState([])
@@ -525,11 +415,11 @@ export default function HomePage() {
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <PageGrid
         left={<>
-          <HeroBanner name={displayName} quests={quests} xp={xp} dark={dark} />
+          <HeroBanner name={displayName} xp={xp} dark={dark} />
           {isGuest && <GuestNudge />}
-          <TodaysQuests quests={quests} dark={dark} />
+          <DailyChallenge profile={profile} />
           <ExamGoals profile={profile} exams={exams} />
-          <JumpInCards />
+          <PracticeNowCard />
           <ConsistencyBanner />
         </>}
         right={<>

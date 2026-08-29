@@ -15,8 +15,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import SessionResults from '@/components/student/SessionResults'
-import { appendLocalSession } from '@/components/student/SessionHistory'
-import { recordLocalActivity } from '@/app/student/home/page'
+import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -1072,7 +1071,7 @@ function ResultsScreen({ questions, answers, config, xpAwarded, streakDays, dura
 export default function PracticeSessionPage() {
   const router   = useRouter()
   const { dark } = useTheme()
-  const { setTotalPoints, showXPToast } = usePoints()
+  const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
 
   const [phase,     setPhase]    = useState('loading')
   const [questions, setQuestions]= useState([])
@@ -1148,39 +1147,62 @@ export default function PracticeSessionPage() {
   // ── Save ──────────────────────────────────────────────────────────────────
   async function saveSession(mapOverride) {
     setPhase('saving')
-    const map = mapOverride ?? answerMap
+    const map          = mapOverride ?? answerMap
     const durationSecs = msToSecs(Date.now() - startTimeRef.current)
-    const results = questions.map((q, i) => map[i] ?? { question_id:q.id, topic_id:q.topic_id, subject_id:q.subject_id, isCorrect:false, is_correct:false, selectedIdx:null, time_taken_ms:0 })
-    try {
-      const res  = await fetch('/api/student/questions/session/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id:sessionIdRef.current, exam:config?.examType||'WAEC', mode:config?.mode||'practice', results, duration_secs:durationSecs }) })
-      const data = await res.json()
-      if (data.ok) {
-        try { localStorage.removeItem('ep_pending_session') } catch {}
-        // Update XP context immediately
-        setTotalPoints(data.new_total_xp)
-        showXPToast(data.xp_awarded, 'Practice session done!')
-        // Keep local session history cache fresh — SessionHistory reads this first
-        const correct = Object.values(map).filter(a => a?.isCorrect).length
-        appendLocalSession({
-          id:              data.session_id ?? null,
-          mode:            config?.mode ?? 'practice',
-          questions_count: questions.length,
-          correct_count:   correct,
-          subject_name:    config?.subjects?.[0] ?? 'Mixed',
-          created_at:      new Date().toISOString(),
-          duration_secs:   durationSecs,
-        })
-        // Record activity for home page chart (works for guests and auth users)
-        recordLocalActivity(questions.length)
-      }
-      setSaveData(data.ok ? { ...data, duration_secs: durationSecs } : { xp_awarded:0, streak_days:0, duration_secs: durationSecs })
-    } catch {
-      const fallbackCorrect  = Object.values(mapOverride ?? answerMap).filter(a => a?.isCorrect).length
-      const fallbackAttempted = Object.values(mapOverride ?? answerMap).filter(a => a && a.selectedIdx !== null).length
-      const fallbackXP = Math.max(5, fallbackAttempted * 5 + fallbackCorrect * 10)
-      setSaveData({ xp_awarded: fallbackXP, streak_days: 0, duration_secs: durationSecs })
+    const results      = questions.map((q, i) => map[i] ?? {
+      question_id:  q.id,
+      topic_id:     q.topic_id,
+      subject_id:   q.subject_id,
+      isCorrect:    false,
+      is_correct:   false,
+      selectedIdx:  null,
+      time_taken_ms: 0,
+    })
+
+    const subjectName = config?.subjects?.[0] ?? 'Mixed'
+    const payload = {
+      session_id:   sessionIdRef.current,
+      exam:         config?.examType || 'WAEC',
+      mode:         config?.mode    || 'practice',
+      subject_name: subjectName,
+      results,
+      duration_secs: durationSecs,
     }
+
+    // ── Step 1: Save locally first — instant, never fails ───────────────────
+    // This writes to ep_session_history, ep_activity, and ep_sync_queue.
+    // The user sees their results immediately regardless of network state.
+    const correct    = results.filter(r => r.is_correct).length
+    const localXP    = Math.max(5,
+      results.filter(r => r.selectedIdx !== null).length * 5 +
+      correct * 10 +
+      (results.length > 0 && Math.round((correct/results.length)*100) >= 80 ? 50
+        : Math.round((correct/results.length)*100) >= 60 ? 25 : 0)
+    )
+    saveSessionLocally(payload, localXP)
+    try { localStorage.removeItem('ep_pending_session') } catch {}
+
+    // Show results immediately with local XP
+    setTotalPoints((currentXP || 0) + localXP)
+    showXPToast(localXP, 'Practice session done!')
+    setSaveData({ xp_awarded: localXP, streak_days: 0, duration_secs: durationSecs })
     setPhase('results')
+
+    // ── Step 2: Flush queue to server in background ──────────────────────────
+    // For auth users: syncs immediately, updates server XP + mastery.
+    // For guests: server returns ok+guest, session stays queued.
+    //   When the guest creates an account and logs in, syncOnLogin() is called
+    //   and all queued sessions land in Supabase automatically.
+    flushSyncQueue().then(synced => {
+      if (synced > 0) {
+        // Re-fetch authoritative XP from server and update context
+        // (non-blocking — user already sees local XP from above)
+        fetch('/api/student/profile')
+          .then(r => r.ok ? r.json() : null)
+          .then(prof => { if (prof?.total_points) setTotalPoints(prof.total_points) })
+          .catch(() => {})
+      }
+    }).catch(() => {})
   }
 
   const handleTimeUp = useCallback(() => saveSession(), [answerMap, questions])

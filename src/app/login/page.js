@@ -34,6 +34,9 @@ function LoginForm() {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
     const role = profile?.role
 
+    // Flush any queued guest sessions to Supabase now that user is logged in
+    import('@/lib/localSessionSync').then(({ syncOnLogin }) => syncOnLogin()).catch(() => {})
+
     if (from) { router.push(from); return }
     if (role === 'school_admin') { router.push('/school/dashboard'); return }
     if (role === 'admin')        { router.push('/admin/dashboard');  return }
@@ -138,7 +141,7 @@ function LoginForm() {
                 </>
               ) : (
                 <>New to ExamPrep?{' '}
-                  <Link href="/onboarding" style={{ color: '#9b7ae0', fontWeight: 700, textDecoration: 'none' }}>Create a free account →</Link>
+                  <Link href="/signup" style={{ color: '#1264E5', fontWeight: 700, textDecoration: 'none' }}>Create a free account →</Link>
                 </>
               )}
             </p>

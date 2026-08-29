@@ -68,7 +68,7 @@ export async function GET(request) {
     let query = service
       .from('questions')
       .select(`
-        id, question_text, options, correct_answer, explanation,
+        id, question_text, options, correct_answer, explanation, hint,
         year, difficulty, source,
         topic_id, subject_id,
         topics  ( id, name ),
@@ -136,6 +136,7 @@ export async function GET(request) {
       options:        q.options,
       correct_answer: q.correct_answer,
       explanation:    q.explanation ?? null,
+      hint:           q.hint         ?? null,
       year:           q.year ?? null,
       difficulty:     q.difficulty ?? 'medium',
       source:         q.source ?? 'past_paper',

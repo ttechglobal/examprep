@@ -125,14 +125,28 @@ function Row({ icon, label, value, onTap, last = false }) {
 function Sheet({ title, onClose, children, wide = false }) {
   return (
     <div
+      className="ep-sheet-backdrop"
       style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <style>{`
         @keyframes ep-sheet-up { from { transform: translateY(100%) } to { transform: translateY(0) } }
+        @keyframes ep-sheet-in { from { opacity: 0; transform: scale(.97) translateY(8px) } to { opacity: 1; transform: scale(1) translateY(0) } }
         @keyframes spin { to { transform: rotate(360deg) } }
+        @media (min-width: 768px) {
+          .ep-sheet-container {
+            border-radius: 24px !important;
+            border: 1px solid var(--border) !important;
+            animation: ep-sheet-in .25s ease !important;
+            padding-bottom: 18px !important;
+          }
+          .ep-sheet-backdrop {
+            justify-content: center !important;
+            align-items: center !important;
+          }
+        }
       `}</style>
-      <div style={{
+      <div className="ep-sheet-container" style={{
         width: '100%', maxWidth: wide ? 640 : 520,
         maxHeight: '92dvh', overflowY: 'auto',
         background: 'var(--bg-card)',
@@ -140,7 +154,9 @@ function Sheet({ title, onClose, children, wide = false }) {
         border: '1px solid var(--border)',
         boxShadow: '0 -8px 40px rgba(0,0,0,.4)',
         animation: 'ep-sheet-up .3s cubic-bezier(0.32,0.72,0,1)',
-        paddingBottom: 'env(safe-area-inset-bottom, 16px)',
+        // Bottom padding clears the mobile bottom nav (80px) + safe area.
+        // On desktop the sheet centres so no nav overlap — handled via media query.
+        paddingBottom: 'max(96px, calc(env(safe-area-inset-bottom, 0px) + 80px))',
       }}>
         <div style={{ padding: '12px 20px 0', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
           <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--border)', margin: '0 auto 14px' }} />

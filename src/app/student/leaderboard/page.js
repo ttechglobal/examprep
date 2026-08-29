@@ -208,7 +208,10 @@ export default function LeaderboardPage() {
     const ctrl = new AbortController()
     fetchRef.current = ctrl
 
-    fetch(`/api/leaderboard/global?limit=12&period=${period}&scope=${scope}`, { signal: ctrl.signal })
+    const endpoint = scope === 'school'
+      ? `/api/leaderboard/school?limit=12&period=${period}`
+      : `/api/leaderboard/national?limit=12&period=${period}`
+    fetch(endpoint, { signal: ctrl.signal })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return

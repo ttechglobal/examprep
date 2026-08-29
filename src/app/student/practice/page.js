@@ -14,7 +14,7 @@ import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
-import DailyQuests from '@/components/student/DailyQuests'
+import DailyChallenge from '@/components/student/DailyChallenge'
 import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
 
@@ -312,9 +312,9 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode = 'c
         @keyframes spin { to { transform: rotate(360deg) } }
         .ps-backdrop { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.7); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end }
         .ps-sheet { width: 100%; max-width: 560px; background: var(--bg-card); border-radius: 28px 28px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; max-height: 88vh; box-shadow: 0 -20px 60px rgba(0,0,0,.4); animation: sheet-up .3s cubic-bezier(.22,.61,.36,1) }
-        .ps-cta { padding: 14px 22px; padding-bottom: max(76px,calc(env(safe-area-inset-bottom) + 68px)); border-top: 1px solid var(--border); background: var(--bg-card) }
+        .ps-cta { padding: 14px 22px; padding-bottom: max(96px,calc(env(safe-area-inset-bottom, 0px) + 80px)); border-top: 1px solid var(--border); background: var(--bg-card) }
         @media (min-width: 768px) {
-          .ps-backdrop { justify-content: center }
+          .ps-backdrop { justify-content: center; align-items: center }
           .ps-sheet { border-radius: 24px; border: 1px solid var(--border); max-height: 86vh; animation: sheet-in .25s ease }
           .ps-cta { padding: 14px 22px !important; padding-bottom: 18px !important }
         }
@@ -729,7 +729,7 @@ export default function PracticePage() {
         {!hasSubjects && !loadingSubjects
           ? <NoSubjectsPrompt isGuest={isGuest} />
           : <>
-              <DailyQuests onStart={openSheet} profile={profile} />
+              <DailyChallenge profile={profile} />
               <PracticeModeCards onStart={openSheet} dark={dark} />
               <SessionHistory />
             </>
