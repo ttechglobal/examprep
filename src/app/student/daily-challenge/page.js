@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useStudentUser } from '@/app/student/layout'
 import { usePoints }      from '@/contexts/PointsContext'
 import { useTheme }       from '@/contexts/ThemeContext'
+import { MathText }       from '@/lib/mathRenderer'
 import Link from 'next/link'
 
 const NAVY   = '#062A78'
@@ -46,7 +47,9 @@ function ExplanationBox({ explanation }) {
     return (
       <div style={{ padding:'12px 14px', borderRadius:12, background:`${CYAN}08`, border:`1px solid ${CYAN}20`, marginTop:12 }}>
         <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:CYAN, marginBottom:6 }}>Explanation</div>
-        <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}>{explanation}</p>
+        <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}>
+          <MathText text={explanation}/>
+        </p>
       </div>
     )
   }
@@ -57,8 +60,8 @@ function ExplanationBox({ explanation }) {
     <div style={{ borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-subtle)', overflow:'hidden', marginTop:12 }}>
       <div style={{ padding:'12px 16px', borderBottom:displaySteps.length?'1px solid var(--border)':'none' }}>
         <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:concept?6:0 }}>Explanation</div>
-        {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE, marginBottom:displayIntro?5:0 }}>{concept}</div>}
-        {displayIntro && <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}>{displayIntro}</p>}
+        {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE, marginBottom:displayIntro?5:0 }}><MathText text={concept}/></div>}
+        {displayIntro && <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}><MathText text={displayIntro}/></p>}
       </div>
       {displaySteps.map((step, i) => {
         const lines = Array.isArray(step?.lines) ? step.lines : []
@@ -67,8 +70,12 @@ function ExplanationBox({ explanation }) {
             <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
               <span style={{ fontSize:10, fontWeight:900, color:BLUE, background:`${BLUE}14`, border:`1px solid ${BLUE}25`, borderRadius:999, padding:'2px 8px', flexShrink:0, marginTop:2 }}>Step {i+1}</span>
               <div style={{ flex:1 }}>
-                {step?.title && <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', marginBottom:lines.length?4:0 }}>{step.title}</div>}
-                {lines.map((line, li) => <div key={li} style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.8 }}>{String(line??'')}</div>)}
+                {step?.title && <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', marginBottom:lines.length?6:0 }}><MathText text={step.title}/></div>}
+                {lines.map((line, li) => (
+                  <div key={li} style={{ fontSize:13, color:'var(--text-sec)', lineHeight:2, padding:'2px 0' }}>
+                    <MathText text={String(line ?? '')}/>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -77,7 +84,7 @@ function ExplanationBox({ explanation }) {
       {study_tip && (
         <div style={{ padding:'10px 16px', background:`${GOLD}08`, borderTop:'1px solid var(--border)' }}>
           <span style={{ fontSize:11, fontWeight:700, color:GOLD }}>Tip: </span>
-          <span style={{ fontSize:11, color:'var(--text-sec)' }}>{study_tip}</span>
+          <span style={{ fontSize:11, color:'var(--text-sec)' }}><MathText text={study_tip}/></span>
         </div>
       )}
     </div>

@@ -103,25 +103,30 @@ function HintButton({ hint, accent }) {
   if (!hint || typeof hint !== 'string' || !hint.trim()) return null
 
   return (
-    <div className="rounded-[18px] border-2 overflow-hidden"
-      style={{ borderColor: open ? '#f59e0b60' : '#f59e0b40', background: open ? '#fffbeb' : '#fefce8' }}>
-      {!open ? (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:6 }}>
+      {/* Small pill button — not full width */}
+      {!open && (
         <button onClick={() => setOpen(true)}
-          className="w-full flex items-center gap-2 px-4 py-3 text-left">
-          <span className="text-base">&#x1F4A1;</span>
-          <span className="text-sm font-bold text-amber-700"
-            style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif" }}>
-            Need a hint?
-          </span>
-          <span className="ml-auto text-xs text-amber-500">Tap to reveal</span>
+          style={{
+            display:'inline-flex', alignItems:'center', gap:5,
+            padding:'5px 11px', borderRadius:999,
+            border:'1px solid #f59e0b50', background:'#fefce8',
+            cursor:'pointer', fontFamily:"'Baloo 2','Inter',sans-serif",
+          }}>
+          <span style={{ fontSize:12 }}>💡</span>
+          <span style={{ fontSize:11, fontWeight:700, color:'#92400e' }}>Hint</span>
         </button>
-      ) : (
-        <div className="px-4 py-3">
-          <p className="text-xs font-black text-amber-600 uppercase tracking-wide mb-1.5"
-            style={{ fontFamily: "'Baloo 2', 'Inter', sans-serif" }}>
-            &#x1F4A1; Hint
-          </p>
-          <MathText text={hint} className="text-sm text-amber-900 leading-relaxed" as="p" />
+      )}
+      {open && (
+        <div style={{ borderRadius:12, border:'1px solid #f59e0b50', background:'#fffbeb', padding:'10px 12px', width:'100%' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+            <span style={{ fontSize:10, fontWeight:900, color:'#92400e', textTransform:'uppercase', letterSpacing:'.06em' }}>💡 Hint</span>
+            <button onClick={() => setOpen(false)}
+              style={{ fontSize:11, color:'#b45309', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>
+              close ×
+            </button>
+          </div>
+          <MathText text={hint} className="text-xs text-amber-900 leading-relaxed" as="p" />
         </div>
       )}
     </div>

@@ -49,7 +49,7 @@ export function StudentSidebar({ active = 'home', dark }) {
 
   return (
     <aside style={{
-      width: 220, flexShrink: 0, position: 'sticky', top: 20,
+      width: 256, flexShrink: 0, position: 'sticky', top: 20,
       height: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column',
       background:  dark ? 'rgba(14,17,32,.97)' : 'rgba(255,255,255,.95)',
       borderRadius: 20,

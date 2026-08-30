@@ -18,7 +18,7 @@ const GOLD = '#FFB800'
 const ORANGE = '#FF6A00'
 const CYAN = '#18B7F2'
 
-const SHELL_EXCLUDED = ['/student/practice/session', '/student/subjects']
+const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects']
 
 // ── Shared profile context — fetched once in layout, available to all pages ───
 export const StudentUserContext = createContext(null)
@@ -244,11 +244,19 @@ function StudentLayoutInner({ children }) {
 
       {/* ── DESKTOP — Tailwind hides this on mobile ── */}
       <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
-        <div style={{ width:'100%', padding:'20px 24px 60px', display:'flex', gap:20, alignItems:'flex-start' }}>
-          <StudentSidebar active={active.id} dark={dark} />
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column' }}>
-            <DesktopTopbar name={name} />
-            <Suspense fallback={null}>{children}</Suspense>
+        <div style={{ width:'100%', display:'flex', alignItems:'flex-start' }}>
+          {/* Sidebar — fixed on the left, with breathing room */}
+          <div style={{ position:'sticky', top:0, height:'100dvh', flexShrink:0, padding:'0 8px' }}>
+            <StudentSidebar active={active.id} dark={dark} />
+          </div>
+          {/* Main column — topbar fixed at top, content scrolls */}
+          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', height:'100dvh' }}>
+            <div style={{ position:'sticky', top:0, zIndex:40, padding:'20px 28px 0', flexShrink:0 }}>
+              <DesktopTopbar name={name} />
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:'20px 28px 48px' }}>
+              <Suspense fallback={null}>{children}</Suspense>
+            </div>
           </div>
         </div>
       </div>

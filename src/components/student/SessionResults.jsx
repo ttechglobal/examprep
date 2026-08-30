@@ -104,16 +104,12 @@ export default function SessionResults({ questions, answers, config, xpAwarded, 
                 </div>
                 <div style={{ fontSize:13, color:'rgba(255,255,255,.6)', marginBottom:16, lineHeight:1.5 }}>{sub}</div>
                 <div style={{ fontSize:12, fontWeight:800, color:GOLD }}>{tip}</div>
-                <div style={{ display:'flex', gap:10, marginTop:20, flexWrap:'wrap' }}>
-                  <button onClick={onReview}
-                    style={{ padding:'11px 20px', borderRadius:11, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:13, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0` }}>
-                    Review Answers
-                  </button>
-                  <button onClick={onHome}
-                    style={{ padding:'11px 20px', borderRadius:11, cursor:'pointer', background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.2)', color:'#fff', fontSize:13, fontWeight:700, fontFamily:'inherit' }}>
-                    Back to Practice
-                  </button>
-                </div>
+                {streakDays > 0 && (
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:14, padding:'4px 10px', borderRadius:999, background:'rgba(255,184,0,.18)', border:'1px solid rgba(255,184,0,.3)' }}>
+                    <span style={{ fontSize:13 }}>🔥</span>
+                    <span style={{ fontSize:11, fontWeight:800, color:GOLD }}>{streakDays} day streak</span>
+                  </div>
+                )}
               </div>
               <div style={{ width:110, flexShrink:0, alignSelf:'flex-end' }}>
                 <img src="/images/zara_studybuddy.png" alt="" style={{ width:'100%', objectFit:'contain', filter:'drop-shadow(0 4px 16px rgba(0,0,0,.4))' }} onError={e=>{e.currentTarget.style.display='none'}}/>
@@ -146,14 +142,43 @@ export default function SessionResults({ questions, answers, config, xpAwarded, 
             </div>
           </div>
 
-          {/* Bottom actions */}
+          {/* Breakdown */}
+          <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'16px 20px' }}>
+            <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:12 }}>Breakdown</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+              {[
+                { label:'Correct',   value:correct,   color:GREEN,  bg:`${GREEN}10`,  border:`${GREEN}30`  },
+                { label:'Incorrect', value:incorrect, color:RED,    bg:`${RED}08`,    border:`${RED}25`    },
+                { label:'Skipped',   value:skipped,   color:ORANGE, bg:`${ORANGE}08`, border:`${ORANGE}25` },
+              ].map((s,i) => (
+                <div key={i} style={{ borderRadius:14, padding:'12px 10px', background:s.bg, border:`1.5px solid ${s.border}`, textAlign:'center' }}>
+                  <div style={{ fontSize:24, fontWeight:900, color:s.color, lineHeight:1 }}>{s.value}</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:s.color, opacity:.8, marginTop:4, textTransform:'uppercase', letterSpacing:'.06em' }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, paddingTop:12, borderTop:'1px solid var(--border)' }}>
+              <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}>Time taken</span>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:13, fontWeight:900, color:BLUE }}>{timeStr}</span>
+                {avgSecs > 0 && <span style={{ fontSize:11, color:'var(--text-tert)' }}>~{avgSecs}s / Q</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions — single row */}
           <div style={{ display:'flex', gap:10 }}>
             <button onClick={onRetry}
-              style={{ flex:1, padding:'14px', borderRadius:14, border:'1px solid var(--border)', cursor:'pointer', fontFamily:'inherit', fontWeight:700, fontSize:14, background:'var(--bg-card)', color:'var(--text-sec)', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+              style={{ flex:1, padding:'14px', borderRadius:14, border:'1px solid var(--border)', cursor:'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'var(--bg-card)', color:'var(--text-sec)', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
               Try Again
             </button>
+            <button onClick={onHome}
+              style={{ flex:1, padding:'14px', borderRadius:14, border:'1px solid var(--border)', cursor:'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'var(--bg-card)', color:'var(--text-sec)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              Home
+            </button>
             <button onClick={onReview}
-              style={{ flex:2, padding:'14px', borderRadius:14, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:BLUE, color:'#fff', boxShadow:`0 5px 0 #0a3fa0,0 8px 20px ${BLUE}40`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              style={{ flex:2, padding:'14px', borderRadius:14, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:13, background:BLUE, color:'#fff', boxShadow:`0 5px 0 #0a3fa0,0 8px 20px ${BLUE}40`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="12" r="3" stroke="#fff" strokeWidth="2"/></svg>
               Review Answers
             </button>
           </div>

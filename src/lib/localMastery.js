@@ -114,8 +114,8 @@ export function updateLocalMastery(exam, results, subjectName) {
 
       const topic = data[exam][subjectId].topics[topicId]
 
-      // Keep topic name updated
-      if (r.topic_name && !topic.name) topic.name = r.topic_name
+      // Keep topic name updated — always overwrite if incoming has a name
+      if (r.topic_name) topic.name = r.topic_name
 
       // Prepend newest attempt (compact shape: c = correct, d = date)
       topic.attempts.unshift({ c: r.is_correct ? 1 : 0, d: today })
@@ -417,6 +417,32 @@ export function mergeServerAttempts(serverAttempts) {
 export function clearLocalMastery() {
   if (typeof window === 'undefined') return
   try { localStorage.removeItem(STORAGE_KEY) } catch {}
+}
+
+/**
+ * Backfill blank topic names from a lookup map.
+ * Called from the progress page after fetching topic names from the API.
+ *
+ * @param {string} exam
+ * @param {string} subjectId
+ * @param {Object} nameMap  - { [topicId]: topicName }
+ */
+export function backfillTopicNames(exam, subjectId, nameMap) {
+  if (!nameMap || !Object.keys(nameMap).length) return
+  try {
+    const data    = read()
+    const subject = data[exam]?.[subjectId]
+    if (!subject) return
+
+    let changed = false
+    for (const [topicId, name] of Object.entries(nameMap)) {
+      if (subject.topics[topicId] && !subject.topics[topicId].name && name) {
+        subject.topics[topicId].name = name
+        changed = true
+      }
+    }
+    if (changed) write(data)
+  } catch {}
 }
 
 /**

@@ -66,27 +66,23 @@ function normalise(s) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function SessionHistory({ limit = 6 }) {
+export default function SessionHistory({ limit = 5 }) {
   const [sessions, setSessions] = useState([])
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
     let cancelled = false
 
-    // Step 1: read localStorage immediately — no await, no spinner for returning users
     const local = readLocalSessions()
     if (local.length) {
       setSessions(local.slice(0, limit))
       setLoading(false)
     }
 
-    // Step 2: check if we need to sync from Supabase
     const lastSync = Number(localStorage.getItem('ep_session_sync') ?? '0')
     const needsSync = (Date.now() - lastSync) > CACHE_SECS * 1000
+    if (!needsSync) return
 
-    if (!needsSync) return  // local data is fresh enough
-
-    // Step 3: background sync — only for authenticated users
     ;(async () => {
       try {
         const supabase = createClient()
@@ -106,7 +102,7 @@ export default function SessionHistory({ limit = 6 }) {
         writeLocalSessions(normalised)
         localStorage.setItem('ep_session_sync', String(Date.now()))
         if (!cancelled) setSessions(normalised.slice(0, limit))
-      } catch { /* non-fatal — local data already showing */ }
+      } catch {}
       finally { if (!cancelled) setLoading(false) }
     })()
 
@@ -115,62 +111,65 @@ export default function SessionHistory({ limit = 6 }) {
 
   if (loading && !sessions.length) {
     return (
-      <div>
-        <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-prim)', marginBottom: 14 }}>Recent Sessions</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
-          {[...Array(3)].map((_, i) => (
-            <div key={i} style={{ height: 100, borderRadius: 16, background: 'var(--bg-subtle)', animation: 'pulse2 1.4s infinite' }} />
-          ))}
-          <style>{`@keyframes pulse2 { 0%,100%{opacity:.6} 50%{opacity:.3} }`}</style>
+      <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'16px 18px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+          <span style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)' }}>Recent Sessions</span>
         </div>
+        {[...Array(3)].map((_, i) => (
+          <div key={i} style={{ height:44, borderRadius:10, background:'var(--bg-subtle)', marginBottom:i<2?8:0, animation:'pulse2 1.4s infinite' }}/>
+        ))}
+        <style>{`@keyframes pulse2{0%,100%{opacity:.6}50%{opacity:.3}}`}</style>
       </div>
     )
   }
 
   if (!sessions.length) {
     return (
-      <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', padding: '28px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 6 }}>No sessions yet</div>
-        <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.6 }}>Start a practice session and your history will appear here.</div>
+      <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'28px 20px', textAlign:'center' }}>
+        <div style={{ fontSize:32, marginBottom:10 }}>📋</div>
+        <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:6 }}>No sessions yet</div>
+        <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.6 }}>Start a practice session and your history will appear here.</div>
       </div>
     )
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <span style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-prim)' }}>Recent Sessions</span>
+    <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', borderBottom:'1px solid var(--border)' }}>
+        <span style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)' }}>Recent Sessions</span>
+        <a href="/student/progress"
+          style={{ fontSize:12, fontWeight:700, color:BLUE, textDecoration:'none' }}>
+          View all →
+        </a>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
-        {sessions.map((s, i) => {
-          const col = scoreColor(s.pct)
-          return (
-            <div key={s.id ?? i} style={{ background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', padding: '14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.subject}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span>{modeIcon(s.mode)}</span>
-                    <span>{modeLabel(s.mode)}</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: col }}>{s.pct}%</div>
-                  <div style={{ fontSize: 9, color: 'var(--text-tert)' }}>{s.correct}/{s.count}</div>
-                </div>
-              </div>
-              <div style={{ height: 5, borderRadius: 999, background: 'var(--bg-subtle)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${s.pct}%`, borderRadius: 999, background: col, transition: 'width .6s ease' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 10, color: 'var(--text-tert)' }}>{s.date}</span>
-                {s.timeStr && <span style={{ fontSize: 10, color: 'var(--text-tert)' }}>{s.timeStr}</span>}
-              </div>
+
+      {/* Session rows */}
+      {sessions.map((s, i) => {
+        const col = scoreColor(s.pct)
+        return (
+          <div key={s.id ?? i}
+            style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 18px', borderBottom: i < sessions.length-1 ? '1px solid var(--border)' : 'none' }}>
+
+            {/* Mode icon pill */}
+            <div style={{ width:36, height:36, borderRadius:10, background:'var(--bg-subtle)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:16 }}>
+              {modeIcon(s.mode)}
             </div>
-          )
-        })}
-      </div>
+
+            {/* Subject + mode */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.subject}</div>
+              <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1 }}>{modeLabel(s.mode)} · {s.date}</div>
+            </div>
+
+            {/* Score */}
+            <div style={{ textAlign:'right', flexShrink:0 }}>
+              <div style={{ fontSize:15, fontWeight:900, color:col }}>{s.pct}%</div>
+              <div style={{ fontSize:10, color:'var(--text-tert)' }}>{s.correct}/{s.count}</div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

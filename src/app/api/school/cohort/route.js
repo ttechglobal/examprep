@@ -2,11 +2,49 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
-function generateInviteCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return Array.from({ length: 6 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join('')
+// ── Code generator ──────────────────────────────────────────────────────────
+// Produces a human-readable invite code from the school name + session year.
+//
+// Format:  SCHOOLSLUG-YEAR   e.g. KINGSWAY-2025  or  FAITHACADEMY-2026
+// If that's already taken (same school, new cohort same year), appends -B, -C etc.
+//
+// Rules:
+//   - School slug: up to 12 chars, letters only, uppercased
+//   - Year: last 4 digits of the session string, or current year as fallback
+//   - Separator: hyphen
+//   - Uniqueness guaranteed by checking the cohorts table before inserting
+//
+function buildBaseCode(schoolName, session) {
+  // Slug: strip non-alpha, uppercase, cap at 12 chars
+  const slug = (schoolName || 'SCHOOL')
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')   // letters only
+    .slice(0, 12)
+
+  // Year: pull 4-digit year from session string, else current year
+  const yearMatch = (session || '').match(/\d{4}/)
+  const year = yearMatch ? yearMatch[0] : String(new Date().getFullYear())
+
+  return `${slug}-${year}`
+}
+
+async function generateUniqueCode(service, schoolName, session) {
+  const base    = buildBaseCode(schoolName, session)
+  const suffixes = ['', '-B', '-C', '-D', '-E', '-F', '-G', '-H']
+
+  for (const suffix of suffixes) {
+    const candidate = `${base}${suffix}`
+    const { data: existing } = await service
+      .from('cohorts')
+      .select('id')
+      .eq('invite_code', candidate)
+      .maybeSingle()
+    if (!existing) return candidate   // not taken — use it
+  }
+
+  // Extremely unlikely fallback: append random 3-char suffix
+  const rand = Math.random().toString(36).slice(2,5).toUpperCase()
+  return `${base}-${rand}`
 }
 
 // GET — fetch school's active cohort + members
@@ -78,6 +116,13 @@ export async function POST(request) {
     return NextResponse.json({ error: 'No school assigned' }, { status: 403 })
   }
 
+  // Fetch school name to build the readable code slug
+  const { data: school } = await service
+    .from('schools')
+    .select('name')
+    .eq('id', schoolId)
+    .single()
+
   // Archive existing active cohort
   await service
     .from('cohorts')
@@ -85,7 +130,8 @@ export async function POST(request) {
     .eq('school_id', schoolId)
     .eq('is_active', true)
 
-  const code = invite_code ?? generateInviteCode()
+  // Generate readable unique code — allow override from body (e.g. onboarding)
+  const code = invite_code ?? await generateUniqueCode(service, school?.name ?? '', session ?? '')
 
   const { data: cohort, error } = await service
     .from('cohorts')

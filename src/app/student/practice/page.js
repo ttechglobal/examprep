@@ -745,7 +745,7 @@ export default function PracticePage() {
           onExamChange={handleExamChange}
           onClose={() => setShowSheet(false)}
           onStart={handleStart}
-          onMockExam={() => { setShowSheet(false); router.push('/student/exam') }}
+          onMockExam={() => { setShowSheet(false); sessionStorage.setItem('mock_config', JSON.stringify({ subjects })); router.push('/student/practice/mock') }}
         />
       )}
     </>
