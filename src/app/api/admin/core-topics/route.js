@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/core-topics/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // GET returns every topic for a subject with past paper frequency data.
@@ -23,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+
 import { NextResponse } from 'next/server'
 
 function svc() {
@@ -33,12 +34,6 @@ function svc() {
   )
 }
 
-async function getUser() {
-  const supabase = await createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) throw new Error('Not authenticated')
-  return user
-}
 
 function topicLessonStatus(subtopics) {
   if (!subtopics?.length) return null

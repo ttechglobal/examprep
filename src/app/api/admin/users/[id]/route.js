@@ -1,9 +1,10 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/users/[id]/route.js
 // DELETE /api/admin/users/[id]
 // Permanently deletes a user from auth.users (which cascades to profiles
 // if you have the on-delete trigger set up, otherwise we delete manually).
 
-import { createClient } from '@/lib/supabase/server'
+
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -14,17 +15,9 @@ function svc() {
   )
 }
 
-async function requireAdmin(supabase) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  return user
-}
 
 export async function DELETE(request, { params }) {
-  const supabase = await createClient()
-  try { await requireAdmin(supabase) } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (authError) return authError
 
   const { id } = await params
   if (!id) return NextResponse.json({ error: 'User ID required' }, { status: 400 })

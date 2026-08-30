@@ -1,3 +1,4 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/flashcards/route.js
 // Service-role endpoint so admin inserts bypass student RLS on flashcards table.
 //
@@ -5,7 +6,7 @@
 // DELETE — delete a single flashcard by id
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+
 import { NextResponse } from 'next/server'
 
 const svc = () => createServiceClient(
@@ -13,17 +14,10 @@ const svc = () => createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-async function requireAdmin() {
-  // Same check as every other admin API route — session validity only.
-  // Admin layout already blocks unauthenticated access via cookie check.
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user ?? null
-}
 
 export async function POST(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { cards } = await request.json()
   if (!Array.isArray(cards) || cards.length === 0) {
@@ -41,8 +35,8 @@ export async function POST(request) {
 }
 
 export async function DELETE(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
@@ -56,8 +50,8 @@ export async function DELETE(request) {
 }
 
 export async function PATCH(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { id, ...updates } = await request.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

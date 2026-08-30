@@ -14,9 +14,6 @@ function svc() {
   )
 }
 
-  if (!user) throw new Error('Unauthorized')
-  return user
-
 
 // ── PATCH — update question fields ───────────────────────────────────────────
 export async function PATCH(request, { params }) {

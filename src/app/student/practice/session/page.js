@@ -266,21 +266,16 @@ function HintBlock({ hint }) {
       background: open ? `${GOLD}10` : `${GOLD}06`,
       transition:'background .2s',
     }}>
-      {!open ? (
-        <button
-          onClick={() => setOpen(true)}
+      <button
+          onClick={() => setOpen(o => !o)}
           style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'11px 14px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}
         >
           <span style={{ fontSize:16, lineHeight:1 }}>💡</span>
-          <span style={{ fontSize:13, fontWeight:700, color:GOLD }}>Need a hint?</span>
-          <span style={{ marginLeft:'auto', fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>Tap to reveal</span>
+          <span style={{ fontSize:13, fontWeight:700, color:GOLD }}>{open ? 'Hint' : 'Need a hint?'}</span>
+          <span style={{ marginLeft:'auto', fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>{open ? 'Tap to close ×' : 'Tap to reveal'}</span>
         </button>
-      ) : (
-        <div style={{ padding:'12px 14px' }}>
-          <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:7, display:'flex', alignItems:'center', gap:5 }}>
-            <span>💡</span>
-            <span>Hint</span>
-          </div>
+      {open && (
+        <div style={{ padding:'0 14px 12px' }}>
           <MathText
             text={hint}
             as="p"
@@ -377,11 +372,17 @@ function ExplanationBlock({ explanation, isCorrect, dark }) {
                           {step.title}
                         </div>
                       )}
-                      {lines.map((line, li) => (
-                        <div key={li} style={{ fontSize:15, lineHeight:2.2, overflowX:'auto' }}>
-                          <MathText text={line} as="span" className=""/>
-                        </div>
-                      ))}
+                      {lines.map((line, li) => {
+                        // Auto-wrap bare LaTeX lines (containing \ commands without $ delimiters)
+                        const mathLine = (typeof line === 'string' && line.includes('\\') && !line.includes('$'))
+                          ? `$${line.trim()}$`
+                          : line
+                        return (
+                          <div key={li} style={{ fontSize:15, lineHeight:2.2, overflowX:'auto' }}>
+                            <MathText text={mathLine} as="span" className=""/>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -614,8 +615,8 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
       </div>
 
       {/* Hint — always available before answer is finalised (both study and practice) */}
-      {!revealed && !studyWrong && !reviewMode && question.hint && (
-        <HintBlock hint={question.hint}/>
+      {!revealed && !studyWrong && !reviewMode && (question.hint || question.explanation?.hint) && (
+        <HintBlock hint={question.hint || question.explanation?.hint}/>
       )}
       {/* Study wrong attempt — show nudge, keep hint available */}
       {studyWrong && !revealed && (
@@ -627,17 +628,8 @@ function QuestionCard({ question, qIndex, total, onAnswer, onNext, onPrev, sessi
           </div>
         </div>
       )}
-      {studyWrong && !revealed && question.hint && (
-        <HintBlock hint={question.hint}/>
-      )}
-      {/* Practice mode: no hint data — still show nudge linking to lesson */}
-      {!revealed && !reviewMode && !question.hint && !isStudy && (
-        <div style={{ marginBottom:12, display:'flex', alignItems:'center', gap:6, padding:'8px 12px', borderRadius:12, border:`1px dashed ${GOLD}40`, background:`${GOLD}05` }}>
-          <span style={{ fontSize:14 }}>💡</span>
-          <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}>Need a hint? Study this topic in </span>
-          <span style={{ fontSize:12, fontWeight:800, color:GOLD }}>Lesson Mode</span>
-          <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}> for guided explanations.</span>
-        </div>
+      {studyWrong && !revealed && (question.hint || question.explanation?.hint) && (
+        <HintBlock hint={question.hint || question.explanation?.hint}/>
       )}
 
       {/* Options */}
@@ -764,19 +756,18 @@ function ReviewSession({ questions, answers, onDone, dark }) {
       <style>{`
         @media (min-width: 1024px) {
           .rev-body { flex-direction: row !important; }
-          .rev-q-col { max-width: 640px !important; padding: 32px 40px !important; }
-          .rev-exp-col { display: flex !important; flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; min-height: 0 !important; flex-direction: column; padding: 32px 28px !important; }
+          .rev-q-col { width: 480px !important; flex-shrink: 0 !important; padding: 24px 28px !important; overflow-y: auto !important; }
+          .rev-exp-col { display: flex !important; flex: 1 !important; min-width: 0 !important; min-height: 0 !important; border-left: 1px solid var(--border); overflow-y: auto; flex-direction: column; padding: 24px 28px !important; }
           .rev-q-col .inline-explanation { display: none !important; }
         }
         @media (max-width: 1023px) {
           .rev-exp-col { display: none !important; }
-          .rev-q-col { padding-bottom: 20px !important; }
         }
       `}</style>
       <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
 
         {/* Question column — mobile: full width + inline explanation. Desktop: left column, hideExplanation */}
-        <div className="rev-q-col" style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
+        <div className="rev-q-col" style={{ overflowY:'auto', padding:'20px 16px' }}>
           {q && (
             <QuestionCard
               key={q.id + '-review-' + rIndex}
@@ -1161,19 +1152,22 @@ export default function PracticeSessionPage() {
     })
 
     const subjectName = config?.subjects?.[0] ?? 'Mixed'
+    const correctCount = results.filter(r => r.is_correct).length
     const payload = {
-      session_id:   sessionIdRef.current,
-      exam:         config?.examType || 'WAEC',
-      mode:         config?.mode    || 'practice',
-      subject_name: subjectName,
+      session_id:      sessionIdRef.current,
+      exam:            config?.examType || 'WAEC',
+      mode:            config?.mode    || 'practice',
+      subject_name:    subjectName,
       results,
-      duration_secs: durationSecs,
+      duration_secs:   durationSecs,
+      questions_count: results.length,
+      correct_count:   correctCount,
     }
 
     // ── Step 1: Save locally first — instant, never fails ───────────────────
     // This writes to ep_session_history, ep_activity, and ep_sync_queue.
     // The user sees their results immediately regardless of network state.
-    const correct    = results.filter(r => r.is_correct).length
+    const correct    = correctCount
     const localXP    = Math.max(5,
       results.filter(r => r.selectedIdx !== null).length * 5 +
       correct * 10 +

@@ -1,9 +1,10 @@
+import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/users-list/route.js
 // GET /api/admin/users-list
 // Returns all student profiles with last_active and accuracy data.
 // Used by /admin/users page.
 
-import { createClient } from '@/lib/supabase/server'
+
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -14,17 +15,10 @@ function svc() {
   )
 }
 
-async function requireAdmin(supabase) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  return user
-}
 
 export async function GET() {
-  const supabase = await createClient()
-  try { await requireAdmin(supabase) } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const db = svc()
 
