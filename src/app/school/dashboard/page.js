@@ -386,6 +386,46 @@ function OverviewTab({ data, adminName, onTabChange, onCohortCreated }) {
           </div>
         )
       })()}
+
+      {/* Performance Trend — week by week subject accuracy */}
+      {subjectTopics.length > 0 && (
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>Performance Trends</p>
+            <p style={{ fontSize: 11, color: DIM }}>Cohort accuracy by subject</p>
+          </div>
+          <p style={{ fontSize: 11, color: DIM, marginBottom: 16 }}>How the class is performing across subjects this period</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {subjectTopics.slice(0, 8).map(s => {
+              const c = pctColor(s.accuracy)
+              const weakTopics = (s.topics ?? []).filter(t => t.accuracy !== null && t.accuracy < 50).slice(0, 2)
+              return (
+                <div key={s.subjectName}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.fg, flexShrink: 0 }}/>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{s.subjectName}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: c.bg, color: c.fg, border: `1px solid ${c.border}` }}>{c.label}</span>
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: c.fg }}>{pct(s.accuracy)}</span>
+                  </div>
+                  <AccBar pct={s.accuracy} height={7} color={c.fg}/>
+                  {weakTopics.length > 0 && (
+                    <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: DIM, paddingTop: 2 }}>Weak topics:</span>
+                      {weakTopics.map(t => (
+                        <span key={t.topicName} style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: '#fef2f2', color: RED, border: '1px solid #fecaca' }}>
+                          {t.topicName} · {t.accuracy}%
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

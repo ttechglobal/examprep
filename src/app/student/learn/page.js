@@ -97,51 +97,29 @@ const TOOLS = [
 ]
 
 function LearnToolCard({ tool, subjects, dark }) {
-  const [subj, setSubj] = useState('')
-  const pct = Math.round((tool.dailyVal / tool.dailyMax) * 100)
   return (
-    <Card style={{ display:'flex', flexDirection:'column', overflow:'visible' }}>
-      <div style={{ padding:'22px 22px 0', display:'flex', gap:14, alignItems:'flex-start' }}>
-        <div style={{ width:56, height:56, borderRadius:18, background:tool.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:`0 6px 20px ${tool.glowColor}40` }}>{tool.icon}</div>
+    <Card style={{ display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
+      {/* Coming Soon overlay */}
+      <div style={{ position:'absolute', inset:0, background:'var(--bg-card)', opacity:.88, zIndex:2, borderRadius:20 }}/>
+      <div style={{ position:'absolute', inset:0, zIndex:3, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10 }}>
+        <div style={{ fontSize:28, marginBottom:4 }}>🔧</div>
+        <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>{tool.label}</div>
+        <div style={{ padding:'5px 14px', borderRadius:999, background:`${tool.tagColor}18`, border:`1.5px solid ${tool.tagColor}40`, fontSize:11, fontWeight:800, color:tool.tagColor, letterSpacing:'.06em' }}>
+          COMING SOON
+        </div>
+        <div style={{ fontSize:11, color:'var(--text-tert)', textAlign:'center', maxWidth:200, lineHeight:1.5 }}>{tool.desc}</div>
+      </div>
+      {/* Card content (blurred behind overlay) */}
+      <div style={{ padding:'22px 22px 0', display:'flex', gap:14, alignItems:'flex-start', filter:'blur(2px)' }}>
+        <div style={{ width:56, height:56, borderRadius:18, background:tool.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{tool.icon}</div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:5 }}>
-            {tool.tags.map(t=>(<span key={t} style={{ fontSize:9, fontWeight:800, color:tool.tagColor, background:`${tool.tagColor}14`, border:`1px solid ${tool.tagColor}25`, padding:'2px 7px', borderRadius:999 }}>{t}</span>))}
-          </div>
-          <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', marginBottom:4 }}>{tool.label}</div>
+          <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>{tool.label}</div>
           <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.5 }}>{tool.desc}</div>
         </div>
       </div>
-      <div style={{ padding:'16px 22px 0' }}>
-        <div style={{ position:'relative' }}>
-          <select value={subj} onChange={e=>setSubj(e.target.value)} style={{ width:'100%', appearance:'none', padding:'10px 36px 10px 14px', borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:subj?'var(--text-prim)':'var(--text-tert)', fontSize:13, fontWeight:600, fontFamily:'inherit', cursor:'pointer', outline:'none' }}>
-            <option value="">Select Subject</option>
-            {subjects.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><path d="M2 4.5l4 4 4-4" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-      </div>
-      <div style={{ padding:'12px 22px 0' }}>
-        <Link href={subj?`${tool.href}/${encodeURIComponent(subj)}`:tool.href} style={{ textDecoration:'none', display:'block' }}>
-          <button style={{ width:'100%', padding:'13px', borderRadius:13, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:tool.ctaColor, color:'#fff', boxShadow:`0 4px 16px ${tool.glowColor}40`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-            {tool.ctaLabel}
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M8 4l3 3-3 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </Link>
-      </div>
-      <div style={{ padding:'16px 22px 20px', borderTop:'1px solid var(--border)', marginTop:16 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-          <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{tool.dailyLabel}</span>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)' }}>{tool.dailyVal} / {tool.dailyMax} {tool.dailyUnit}</span>
-            <div style={{ display:'flex', alignItems:'center', gap:3, padding:'2px 7px', borderRadius:999, background:`${ORANGE}14` }}>
-              <span style={{ fontSize:10 }}>🛡️</span>
-              <span style={{ fontSize:9, fontWeight:800, color:ORANGE }}>+20 XP</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ height:8, borderRadius:999, background:dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.07)', overflow:'hidden' }}>
-          <div style={{ height:'100%', width:`${pct}%`, borderRadius:999, background:tool.ctaColor, transition:'width .6s ease', boxShadow:`0 0 8px ${tool.glowColor}50` }}/>
-        </div>
+      <div style={{ padding:'16px 22px 20px', filter:'blur(2px)', marginTop:16 }}>
+        <div style={{ height:8, borderRadius:999, background:'var(--bg-subtle)' }}/>
+        <div style={{ marginTop:12, height:46, borderRadius:13, background:tool.ctaColor, opacity:.5 }}/>
       </div>
     </Card>
   )

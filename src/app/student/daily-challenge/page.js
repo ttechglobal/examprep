@@ -113,47 +113,108 @@ function Skeleton() {
   )
 }
 
+const BOARD_CACHE_KEY = 'ep_daily_board_cache'
+function readBoardCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(BOARD_CACHE_KEY) || 'null')
+    if (!c) return null
+    if (c.date !== new Date().toISOString().slice(0,10)) return null
+    if (Date.now() - (c.ts||0) > 180_000) return null  // refresh every 3 min
+    return c.board ?? null
+  } catch { return null }
+}
+function writeBoardCache(board) {
+  try { localStorage.setItem(BOARD_CACHE_KEY, JSON.stringify({ date: new Date().toISOString().slice(0,10), board, ts: Date.now() })) } catch {}
+}
+
+const AV_COLORS_DC = ['#FF6A00','#1264E5','#7C3AED','#18B7F2','#22c55e','#FFB800']
+
 function TodayBoard({ myId }) {
-  const [rows, setRows]       = useState([])
-  const [loading, setLoading] = useState(true)
+  const [rows, setRows]       = useState(() => readBoardCache() ?? [])
+  const [loading, setLoading] = useState(!readBoardCache())
+
   useEffect(() => {
-    fetch('/api/student/daily-quiz/board').then(r=>r.ok?r.json():null).then(d=>{if(d?.board)setRows(d.board)}).catch(()=>{}).finally(()=>setLoading(false))
+    const cached = readBoardCache()
+    if (cached) { setRows(cached); setLoading(false); return }
+    fetch('/api/student/daily-quiz/board')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.board) { setRows(d.board); writeBoardCache(d.board) } })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
+
   return (
     <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', overflow:'hidden' }}>
-      <div style={{ padding:'16px 18px 12px', borderBottom:'1px solid var(--border)' }}>
-        <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)' }}>Today's Board</div>
-        <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>Students who answered today</div>
+      <div style={{ padding:'16px 18px 12px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)' }}>Today's Board</div>
+          <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:2 }}>Students who answered today</div>
+        </div>
+        <span style={{ fontSize:18 }}>🏆</span>
       </div>
+
       {loading ? (
-        <div style={{ padding:'22px 18px', textAlign:'center', color:'var(--text-tert)', fontSize:12 }}>Loading…</div>
+        <div style={{ padding:'18px 16px', display:'flex', flexDirection:'column', gap:10 }}>
+          {[1,2,3].map(i => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, opacity: 0.5 - i*0.12 }}>
+              <div style={{ width:20, height:14, borderRadius:4, background:'var(--bg-subtle)' }}/>
+              <div style={{ width:32, height:32, borderRadius:'50%', background:'var(--bg-subtle)' }}/>
+              <div style={{ flex:1, height:12, borderRadius:6, background:'var(--bg-subtle)' }}/>
+              <div style={{ width:36, height:12, borderRadius:6, background:'var(--bg-subtle)' }}/>
+            </div>
+          ))}
+        </div>
       ) : !rows.length ? (
         <div style={{ padding:'28px 18px', textAlign:'center' }}>
           <div style={{ fontSize:28, marginBottom:8 }}>🧩</div>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)', marginBottom:4 }}>No attempts yet today</div>
-          <div style={{ fontSize:11, color:'var(--text-tert)' }}>You could be the first! Answer today's challenge.</div>
+          <div style={{ fontSize:11, color:'var(--text-tert)' }}>Be the first! Answer today's challenge.</div>
         </div>
-      ) : rows.map((row,i) => {
-        const isMe = row.student_id === myId
-        return (
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 18px', borderBottom:i<rows.length-1?'1px solid var(--border)':'none', background:isMe?`${BLUE}08`:'transparent' }}>
-            <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', width:20, textAlign:'center', flexShrink:0 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
-            <div style={{ width:28, height:28, borderRadius:'50%', flexShrink:0, background:isMe?`linear-gradient(135deg,${NAVY},${BLUE})`:`${BLUE}18`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, color:isMe?GOLD:BLUE }}>
-              {(row.name||'?').charAt(0).toUpperCase()}
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:isMe?800:600, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{isMe?'You':row.name}</div>
-              {row.school && <div style={{ fontSize:10, color:'var(--text-tert)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.school}</div>}
-            </div>
-            <div style={{ flexShrink:0, textAlign:'right' }}>
-              <div style={{ fontSize:11, fontWeight:800, color:row.correct?GREEN:row.completed?RED:ORANGE }}>
-                {row.correct ? '✓ Correct' : row.completed ? '✗ Missed' : '⏳ In progress'}
+      ) : (
+        <div>
+          {rows.slice(0, 10).map((row, i) => {
+            const isMe = row.student_id === myId
+            const avColor = AV_COLORS_DC[i % AV_COLORS_DC.length]
+            return (
+              <div key={row.student_id ?? i} style={{
+                display:'flex', alignItems:'center', gap:10, padding:'11px 16px',
+                borderBottom: i < Math.min(rows.length, 10) - 1 ? '1px solid var(--border)' : 'none',
+                background: isMe ? `${BLUE}08` : 'transparent',
+              }}>
+                <div style={{ width:22, textAlign:'center', flexShrink:0 }}>
+                  {i < 3
+                    ? <span style={{ fontSize:15 }}>{['🥇','🥈','🥉'][i]}</span>
+                    : <span style={{ fontSize:11, fontWeight:800, color:'var(--text-tert)' }}>{i+1}</span>
+                  }
+                </div>
+                <div style={{ width:32, height:32, borderRadius:'50%', flexShrink:0, background: isMe ? `linear-gradient(135deg,${NAVY},${BLUE})` : `${avColor}22`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:900, color: isMe ? GOLD : avColor, border: isMe ? `2px solid ${GOLD}40` : 'none' }}>
+                  {(row.name||row.first_name||'?').charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:isMe?800:600, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {isMe ? 'You' : (row.name||row.first_name||'Student')}
+                  </div>
+                  <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1 }}>
+                    {row.correct}/{row.total ?? 2} correct
+                    {row.completed && <span style={{ marginLeft:5, color:GREEN, fontWeight:700 }}>✓</span>}
+                  </div>
+                </div>
+                {(row.xp_earned > 0) && (
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:12, fontWeight:900, color: isMe ? GOLD : 'var(--text-prim)' }}>+{row.xp_earned}</div>
+                    <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--text-tert)' }}>XP</div>
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize:10, color:'var(--text-tert)' }}>{row.attempts_used}/{MAX_ATTEMPTS} attempt{row.attempts_used!==1?'s':''}</div>
+            )
+          })}
+          {rows.length > 10 && (
+            <div style={{ padding:'10px', textAlign:'center', fontSize:11, color:'var(--text-tert)', borderTop:'1px solid var(--border)' }}>
+              +{rows.length - 10} more students today
             </div>
-          </div>
-        )
-      })}
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -243,26 +304,50 @@ function QuestionCard({ slot, question, state, onAttempt, submitting }) {
   )
 }
 
+const DAILY_CACHE_KEY = 'ep_daily_quiz_cache'
+
+function readDailyCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(DAILY_CACHE_KEY) || 'null')
+    if (!c) return null
+    const today = new Date().toISOString().slice(0, 10)
+    if (c.date !== today) return null   // stale — new day
+    return c.challenges ?? null
+  } catch { return null }
+}
+function writeDailyCache(challenges) {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: today, challenges, ts: Date.now() }))
+  } catch {}
+}
+
 export default function DailyChallengePage() {
   const profile               = useStudentUser()
   const { dark }              = useTheme()
   const { totalPoints, setTotalPoints } = usePoints()
   const countdown             = useCountdown()
-  const [loading, setLoading]     = useState(true)
-  const [challenges, setChallenges] = useState([])
+  // Seed from cache immediately so the page doesn't flash blank on navigation
+  const [loading, setLoading]     = useState(() => !readDailyCache())
+  const [challenges, setChallenges] = useState(() => readDailyCache() ?? [])
   const [error, setError]         = useState(false)
   const [submitting, setSubmitting] = useState(null)
   const myId = profile?.id ?? null
 
   const fetchQuiz = useCallback(async () => {
-    setLoading(true); setError(false)
+    // Always fetch fresh from the API — the API returns the real current state
+    // including any attempts the student already made (persisted in DB).
+    // We only use the cache for instant rendering while this fetch is in flight.
+    setError(false)
     try {
       const subs = [...new Set([...(profile?.subjects_waec??[]),...(profile?.subjects_jamb??[]),...(profile?.subjects??[])])]
       const param = subs.length ? `?subjects=${encodeURIComponent(subs.join(','))}` : ''
       const res = await fetch(`/api/student/daily-quiz${param}`)
       if (!res.ok) { setError(true); return }
       const data = await res.json()
-      setChallenges(data.challenges ?? [])
+      const list = data.challenges ?? []
+      setChallenges(list)
+      writeDailyCache(list)   // update cache with fresh server state
     } catch { setError(true) }
     finally   { setLoading(false) }
   }, [profile])
@@ -280,14 +365,18 @@ export default function DailyChallengePage() {
       })
       const data = await res.json()
       if (!data.ok) return
-      setChallenges(prev => prev.map(c => {
-        if (c.slot !== slot) return c
-        return {
-          ...c,
-          state: { ...c.state, attempts_used:data.attempts_used, completed:data.completed, correct:data.correct, selected_indices:[...(c.state.selected_indices??[]),selectedIdx], xp_awarded:data.xp_awarded },
-          question: data.completed ? { ...c.question, correct_answer:data.correct_answer, explanation:data.explanation } : c.question,
-        }
-      }))
+      setChallenges(prev => {
+        const updated = prev.map(c => {
+          if (c.slot !== slot) return c
+          return {
+            ...c,
+            state: { ...c.state, attempts_used:data.attempts_used, completed:data.completed, correct:data.correct, selected_indices:[...(c.state.selected_indices??[]),selectedIdx], xp_awarded:data.xp_awarded },
+            question: data.completed ? { ...c.question, correct_answer:data.correct_answer, explanation:data.explanation } : c.question,
+          }
+        })
+        writeDailyCache(updated)  // keep cache in sync after each attempt
+        return updated
+      })
       if (data.xp_awarded > 0) setTotalPoints(totalPoints + data.xp_awarded)
     } finally { setSubmitting(null) }
   }

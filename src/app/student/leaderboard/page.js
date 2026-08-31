@@ -186,7 +186,44 @@ function BoardSkeleton() {
 }
 
 // ── School: not connected state ───────────────────────────────────────────────
-function SchoolNotConnected({ profile, onLinked }) {
+function SchoolNotConnected({ profile, onLinked, isGuest }) {
+  if (isGuest) {
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <Card style={{ padding:'28px 24px', textAlign:'center' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🏫</div>
+          <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:6 }}>Connect your school</div>
+          <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6, marginBottom:20, maxWidth:320, margin:'0 auto 20px' }}>
+            Create a free account first, then enter your school's access code to join the school leaderboard and share your progress with teachers.
+          </div>
+          <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
+            <Link href="/signup" style={{ textDecoration:'none' }}>
+              <div style={{ padding:'11px 24px', borderRadius:12, background:BLUE, color:'#fff', fontSize:13, fontWeight:800 }}>Create Free Account →</div>
+            </Link>
+            <Link href="/login" style={{ textDecoration:'none' }}>
+              <div style={{ padding:'11px 24px', borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-card)', color:'var(--text-prim)', fontSize:13, fontWeight:700 }}>Sign in</div>
+            </Link>
+          </div>
+        </Card>
+        <Card style={{ padding:'16px 18px' }}>
+          <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:12 }}>Why connect your school?</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {[
+              { icon:'📊', text:'Your performance trends are shared with your teachers so they can help you improve.' },
+              { icon:'🏆', text:'See how you rank against classmates on the school leaderboard.' },
+              { icon:'📬', text:'Your parents can receive weekly progress reports if your school enables it.' },
+            ].map((item,i) => (
+              <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                <div style={{ width:32, height:32, borderRadius:10, background:'var(--bg-subtle)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>{item.icon}</div>
+                <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.5, paddingTop:5 }}>{item.text}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <Card style={{ padding:'28px 24px', textAlign:'center' }}>
@@ -199,7 +236,6 @@ function SchoolNotConnected({ profile, onLinked }) {
           <JoinSchool profile={profile} onLinked={onLinked} compact={false}/>
         </div>
       </Card>
-
       <Card style={{ padding:'16px 18px' }}>
         <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:12 }}>Why connect your school?</div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -351,7 +387,7 @@ export default function LeaderboardPage() {
   )
 
   const showSchoolBoard = scope === 'school' && hasSchool
-  const showJoinCTA     = scope === 'school' && !hasSchool && !isGuest
+  const showJoinCTA     = scope === 'school' && !hasSchool
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -360,12 +396,10 @@ export default function LeaderboardPage() {
       {/* ── Scope tabs ── */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
         <div style={{ display:'inline-flex', background:'var(--bg-subtle)', borderRadius:14, padding:3, border:'1px solid var(--border)', gap:2 }}>
-          {!isGuest && (
-            <button onClick={() => setScope('school')} style={{ padding:'9px 20px', borderRadius:11, fontSize:13, fontWeight:scope==='school'?800:600, border:'none', cursor:'pointer', fontFamily:'inherit', background:scope==='school'?BLUE:'transparent', color:scope==='school'?'#fff':'var(--text-tert)', transition:'all .15s', display:'flex', alignItems:'center', gap:6 }}>
-              🏫 School
-              {hasSchool && <span style={{ fontSize:10, background:scope==='school'?'rgba(255,255,255,.2)':'var(--border)', color:scope==='school'?'#fff':'var(--text-tert)', padding:'1px 6px', borderRadius:999 }}>●</span>}
-            </button>
-          )}
+          <button onClick={() => setScope('school')} style={{ padding:'9px 20px', borderRadius:11, fontSize:13, fontWeight:scope==='school'?800:600, border:'none', cursor:'pointer', fontFamily:'inherit', background:scope==='school'?BLUE:'transparent', color:scope==='school'?'#fff':'var(--text-tert)', transition:'all .15s', display:'flex', alignItems:'center', gap:6 }}>
+            🏫 School
+            {hasSchool && <span style={{ fontSize:10, background:scope==='school'?'rgba(255,255,255,.2)':'var(--border)', color:scope==='school'?'#fff':'var(--text-tert)', padding:'1px 6px', borderRadius:999 }}>●</span>}
+          </button>
           <button onClick={() => setScope('national')} style={{ padding:'9px 20px', borderRadius:11, fontSize:13, fontWeight:scope==='national'?800:600, border:'none', cursor:'pointer', fontFamily:'inherit', background:scope==='national'?BLUE:'transparent', color:scope==='national'?'#fff':'var(--text-tert)', transition:'all .15s' }}>
             🌍 National
           </button>
@@ -393,7 +427,7 @@ export default function LeaderboardPage() {
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           {/* School: not connected */}
           {showJoinCTA && (
-            <SchoolNotConnected profile={profile} onLinked={handleLinked}/>
+            <SchoolNotConnected profile={profile} onLinked={handleLinked} isGuest={isGuest}/>
           )}
 
           {/* School or national board */}

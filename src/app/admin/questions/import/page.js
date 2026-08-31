@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic } from '@/lib/questionParser'
+import { MathText } from '@/lib/mathRenderer'
 
 // ── Sdash slug map: ExamPrep subject name → SdashAPI slug ────────────────────
 // Covers every ExamPrep subject name variant. Lookup is case-insensitive.
@@ -969,7 +970,7 @@ export default function SdashImportPage() {
             )}
 
             {/* Question */}
-            <p className="text-base font-semibold text-gray-900 leading-relaxed">{q.question_text}</p>
+            <MathText text={q.question_text} as="p" className="text-base font-semibold text-gray-900 leading-relaxed" />
 
             {/* Options */}
             <div className="space-y-2">
@@ -982,7 +983,7 @@ export default function SdashImportPage() {
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 ${
                       isCorrect ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
                     }`}>{k.toUpperCase()}</span>
-                    <span className={`leading-snug ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`}>{String(v)}</span>
+                    <MathText text={String(v)} as="span" className={`leading-snug ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`} />
                     {isCorrect && <span className="ml-auto text-green-600 font-black flex-shrink-0">✓</span>}
                   </div>
                 )
@@ -1001,7 +1002,7 @@ export default function SdashImportPage() {
               )}
 
               {/* Intro */}
-              {exp.intro && <p className="text-sm text-gray-700 mb-3">{exp.intro}</p>}
+              {exp.intro && <MathText text={exp.intro} as="p" className="text-sm text-gray-700 mb-3" />}
 
               {/* Steps */}
               {steps.length > 0 && (
@@ -1016,7 +1017,7 @@ export default function SdashImportPage() {
                         </div>
                         <div className="px-4 py-2 space-y-1">
                           {lines.map((line, li) => (
-                            <p key={li} className="text-sm font-mono text-gray-800 leading-relaxed">{line}</p>
+                            <MathText key={li} text={line} as="p" className="text-sm font-mono text-gray-800 leading-relaxed" />
                           ))}
                         </div>
                       </div>
@@ -1028,7 +1029,7 @@ export default function SdashImportPage() {
               {/* Answer note */}
               {(exp.answer_note || exp.correct) && (
                 <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                  <p className="text-sm text-green-800 leading-relaxed">{exp.answer_note ?? exp.correct}</p>
+                  <MathText text={exp.answer_note ?? exp.correct} as="p" className="text-sm text-green-800 leading-relaxed" />
                 </div>
               )}
 
@@ -1036,7 +1037,7 @@ export default function SdashImportPage() {
               {exp.study_tip && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <p className="text-[11px] font-black text-amber-700 uppercase tracking-wide mb-1">💡 Study tip</p>
-                  <p className="text-sm text-amber-800">{exp.study_tip}</p>
+                  <MathText text={exp.study_tip} as="p" className="text-sm text-amber-800" />
                 </div>
               )}
             </div>
@@ -1505,7 +1506,7 @@ export default function SdashImportPage() {
                       {/* Body — collapsed when hidden */}
                       {!isHidden && (
                         <div className="p-5 space-y-4">
-                          <p className="text-sm font-semibold text-gray-900 leading-relaxed">{q.question_text}</p>
+                          <MathText text={q.question_text} as="p" className="text-sm font-semibold text-gray-900 leading-relaxed" />
                           {exp.concept && (
                             <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold ${
                               q._mismatch ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-100 text-indigo-700'
@@ -1527,7 +1528,7 @@ export default function SdashImportPage() {
                                     <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5 ${
                                       isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
                                     }`}>{k.toUpperCase()}</span>
-                                    <span className="leading-snug">{String(v)}</span>
+                                    <MathText text={String(v)} as="span" className="leading-snug" />
                                     {isCorrect && <span className="ml-auto font-black text-green-600 flex-shrink-0">✓</span>}
                                   </div>
                                 )
@@ -1544,7 +1545,7 @@ export default function SdashImportPage() {
                               {(exp.answer_note || exp.correct) && (
                                 <div>
                                   <p className="text-[11px] font-black text-green-700 uppercase tracking-wide mb-1">✓ Answer</p>
-                                  <p className="text-xs text-gray-700 leading-relaxed">{exp.answer_note ?? exp.correct}</p>
+                                  <MathText text={exp.answer_note ?? exp.correct} as="p" className="text-xs text-gray-700 leading-relaxed" />
                                 </div>
                               )}
                               {steps.length > 0 && (
@@ -1561,7 +1562,7 @@ export default function SdashImportPage() {
                                           </div>
                                           <div className="px-3 py-2 space-y-0.5">
                                             {lines.map((line, li) => (
-                                              <p key={li} className="text-xs font-mono text-gray-800 leading-relaxed">{line}</p>
+                                              <MathText key={li} text={line} as="p" className="text-xs font-mono text-gray-800 leading-relaxed" />
                                             ))}
                                           </div>
                                         </div>
@@ -1590,7 +1591,7 @@ export default function SdashImportPage() {
                                     {Object.entries(wrongOpts).map(([letter, reason]) => (
                                       <div key={letter} className="flex gap-2 text-xs">
                                         <span className="flex-shrink-0 w-4 h-4 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[9px] font-black mt-0.5">{letter.toUpperCase()}</span>
-                                        <span className="text-gray-600 leading-relaxed">{reason}</span>
+                                        <MathText text={reason} as="span" className="text-gray-600 leading-relaxed" />
                                       </div>
                                     ))}
                                   </div>
@@ -1820,7 +1821,7 @@ export default function SdashImportPage() {
                       {heldParsedQs.map((q, i) => (
                         <div key={i} className={`rounded-xl border-2 p-4 space-y-2 ${q._mismatch ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'}`}>
                           {q._mismatch && <p className="text-xs font-black text-red-600">⚠️ Explanation mismatch — verify this one</p>}
-                          <p className="text-sm font-semibold text-gray-900">{q.question_text}</p>
+                          <MathText text={q.question_text} as="p" className="text-sm font-semibold text-gray-900" />
                           <div className="flex flex-wrap gap-1">
                             {Object.entries(q.options ?? {}).map(([k, v]) => (
                               <span key={k} className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${k === q.correct_answer ? 'bg-green-100 text-green-700 font-bold' : 'bg-gray-100 text-gray-500'}`}>

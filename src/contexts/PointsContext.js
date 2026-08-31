@@ -83,12 +83,25 @@ export function PointsProvider({ children }) {
         if (cancelled) return
         const dbVal = prof?.total_points ?? 0
         if (dbVal > 0) {
-          // Take the higher of (current state, DB) — never go backwards
+          // DB has XP — take the higher of local and DB (never go backwards)
           _setTotal(prev => {
             const best = Math.max(prev, dbVal)
             writeLS(best)
             return best
           })
+        } else {
+          // DB is 0 — could be a brand new account OR a guest who just signed up
+          // but whose session queue hasn't flushed yet.
+          // Only reset to 0 if localStorage is also 0 — meaning they truly never
+          // earned any XP. If localStorage has XP from guest practice, keep it:
+          // flushSyncQueue will write it to DB shortly, then the next sync will
+          // read the correct DB value.
+          const localVal = readLS()
+          if (localVal === 0) {
+            writeLS(0)
+            _setTotal(0)
+          }
+          // else: localStorage has guest XP → keep showing it; DB will catch up
         }
       } catch { /* non-fatal — localStorage value is already showing */ }
     }

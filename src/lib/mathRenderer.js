@@ -221,8 +221,26 @@ function splitSegments(text) {
     segments.push({ type: 'text', content: remaining.slice(last) })
   }
 
+  // SAFETY NET: if any text segment contains raw LaTeX commands (\text{, \frac, \circ etc.)
+  // that slipped through without delimiters, wrap the whole segment as math
+  const rawLatexPattern = /\\(?:text\s*\{|frac\s*\{|circ|sqrt\s*\{|times|div|leq|geq|cdot|theta|alpha|beta|pi|Delta|angle|therefore|approx)/
+  const wrappedSegments = segments.map(seg => {
+    if (seg.type !== 'text') return seg
+    if (!rawLatexPattern.test(seg.content)) return seg
+    // Strip \text{...} wrappers — pull out the text content, render math parts separately
+    // Replace \text{prose} with just the prose, keep actual math commands
+    const cleaned = seg.content
+      .replace(/\\text\s*\{([^}]*)\}/g, '$1')  // unwrap \text{...} → plain text
+      .trim()
+    // If after stripping \text{} there are still LaTeX commands, render as math
+    if (/\\(?:frac|circ|sqrt|times|leq|geq|theta|alpha|beta|pi|Delta|angle)/.test(cleaned)) {
+      return { type: 'math', content: cleaned }
+    }
+    return { type: 'text', content: cleaned }
+  })
+
   // Post-process plain text segments: auto-detect math expressions
-  return segments.flatMap(seg => {
+  return wrappedSegments.flatMap(seg => {
     if (seg.type !== 'text') return [seg]
     return autoDetect(seg.content)
   })
@@ -499,9 +517,9 @@ export function scoreQuestion(question) {
 
   // Refers to diagram but no visual attached
   const refsDiagram = /diagram|figure|table|graph|above|below/i.test(qText)
-  const hasVisual   = question?.image_url || question?.svg_diagram
+  const hasVisual   = question?.image_url || question?.svg_diagram || question?.illustration_prompt
   if (refsDiagram && !hasVisual) {
-    issues.push('Question refers to a diagram but no image or SVG is attached')
+    issues.push('Question refers to a diagram but no image, SVG, or illustration prompt is attached')
     score -= 20
   }
 

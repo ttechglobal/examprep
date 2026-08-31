@@ -3,8 +3,8 @@
 // Returns a summary of which years have questions in the DB for a subject+exam.
 // Used by the "Year Coverage" tab in Past Questions admin page.
 
+import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 const svc = () => createServiceClient(
@@ -12,12 +12,10 @@ const svc = () => createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const SDASH_YEARS = Array.from({ length: 2026 - 2001 + 1 }, (_, i) => String(2001 + i))
-
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
+
 
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')

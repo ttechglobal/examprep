@@ -4,9 +4,13 @@
 // Returns subject × year matrix with accurate question counts.
 // Filters questions by exam_type to match the selected exam — fixes
 // the bug where JAMB questions showed under WAEC subject rows.
+//
+// AUTH FIX: was using supabase.auth.getUser() which checks for a Supabase
+// session — but the admin panel uses its own admin_session cookie via
+// requireAdmin(). Swapped to match every other admin route.
 
+import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 const svc = () => createServiceClient(
@@ -20,12 +24,11 @@ const EXAM_TYPES = ['WAEC', 'JAMB', 'NECO', 'IGCSE']
 
 /** @param {import('next/server').NextRequest} request */
 export async function GET(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
-  const examType = searchParams.get('examType') ?? 'WAEC'
+  const examType = searchParams.get('examType') ?? 'ALL'
 
   const db = svc()
 

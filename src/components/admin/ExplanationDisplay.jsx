@@ -10,6 +10,8 @@
 // Usage:
 //   <ExplanationDisplay question={question} selectedAnswer="B" />
 
+import { MathText } from '@/lib/mathRenderer'
+
 export default function ExplanationDisplay({ question, selectedAnswer }) {
   if (!question) return null
 
@@ -71,9 +73,7 @@ export default function ExplanationDisplay({ question, selectedAnswer }) {
           <p className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1.5">
             Why {selectedAnswer} is wrong
           </p>
-          <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">
-            {thisWrongReason || misconception}
-          </p>
+          <MathText text={thisWrongReason || misconception} as="p" className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed" />
         </div>
       )}
 
@@ -83,7 +83,7 @@ export default function ExplanationDisplay({ question, selectedAnswer }) {
           <p className="text-xs font-black text-secondary uppercase tracking-wide mb-1.5">
             {isCorrect ? "Why you're right" : `Why ${question.correct_answer} is correct`}
           </p>
-          <p className="text-sm text-primary leading-relaxed">{correctText}</p>
+          <MathText text={correctText} as="p" className="text-sm text-primary leading-relaxed" />
         </div>
       )}
 
@@ -99,9 +99,11 @@ export default function ExplanationDisplay({ question, selectedAnswer }) {
                 <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">
                   {i + 1}
                 </span>
-                <p className="text-sm font-mono text-primary leading-relaxed">
-                  {typeof step === 'string' ? step : step.instruction ?? step.step ?? ''}
-                </p>
+                <MathText
+                  text={typeof step === 'string' ? step : step.instruction ?? step.step ?? ''}
+                  as="p"
+                  className="text-sm font-mono text-primary leading-relaxed"
+                />
               </div>
             ))}
           </div>
@@ -142,7 +144,7 @@ export default function ExplanationDisplay({ question, selectedAnswer }) {
                 }`}>
                   {key}
                 </span>
-                <p className="text-sm text-primary leading-relaxed flex-1">{reason}</p>
+                <MathText text={reason} as="p" className="text-sm text-primary leading-relaxed flex-1" />
               </div>
             ))}
           </div>

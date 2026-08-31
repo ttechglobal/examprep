@@ -286,6 +286,15 @@ GEOMETRY / TRIANGLES:
   ✓  $\\Delta PQR$,  $\\angle PQR = 34^{\\circ}$
   ✗  deltaPQR,  ΔPR  (without proper LaTeX)
 
+ANGLES — CRITICAL:
+  ✓  $64^{\\circ}$           (inside $ delimiters)
+  ✓  Since $64^{\\circ} < 180^{\\circ}$, we add $180^{\\circ} - 64^{\\circ} = 116^{\\circ}$
+  ✗  \\text{Since } 064∘ < 180^{\\circ}\\text{, we add }  ← NEVER DO THIS
+  ✗  064∘064∘                                             ← NEVER duplicate values
+  RULE: Never use \\text{...} to wrap sentence prose inside a math expression.
+        \\text{} is only for short labels inside equations (e.g. $x_{\\text{max}}$).
+        Write prose as normal text. Only the numbers/symbols go inside $...$.
+
 CURRENCY — CRITICAL:
   ✓  ₦500.00  (use ₦ directly for Naira)
   ✓  GH₵500.00  (Ghana cedis — use character directly)
@@ -316,34 +325,61 @@ PART 4 — TAG TO CURRICULUM
 ═══════════════════════════════════════════════
 
 ═════════════════════════════════════════════
-PART 5 — SVG DIAGRAMS (STEM SUBJECTS)
+PART 5 — ILLUSTRATION PROMPTS (STEM SUBJECTS)
 ═════════════════════════════════════════════
 
 For Mathematics, Physics, Chemistry, Further Mathematics, Biology, Geography:
-Whenever a question involves a geometric shape, graph, circuit, force diagram,
-molecular structure, coordinate axis, or any spatial concept — CREATE AN SVG.
+Whenever a question or its explanation would benefit from a visual diagram,
+generate an illustration_prompt — a precise, detailed description that an
+artist or AI can use to create the SVG illustration later.
 
-QUESTION-LEVEL svg_diagram: (top-level field)
-  Draw the described setup. Label all given values. Accent the unknown in #4f46e5.
-  e.g. "A cylinder of radius 3.5 cm and height 10 cm…" → draw the labelled cylinder
-  e.g. "Forces P and Q act at 60° to each other…" → draw the force diagram
-  e.g. "ABCD is a rectangle with AB = 8 cm, BC = 5 cm…" → draw the labelled rectangle
+DO NOT generate SVG code. Generate the prompt only.
 
-EXPLANATION-LEVEL svg_diagram: (inside explanation object)
-  ALWAYS add to the explanation of any geometric/spatial calculation.
-  Show the worked solution: label the values used, highlight the answer.
+WHEN TO INCLUDE illustration_prompt:
+  Question-level (top-level field): when the question describes a shape, graph,
+  circuit, force diagram, or spatial setup the student needs to visualise.
+    e.g. "A cylinder of radius 3.5 cm and height 10 cm…" → prompt for labelled cylinder
+    e.g. "Forces P and Q act at 60° to each other…" → prompt for force diagram
+    e.g. "ABCD is a rectangle with AB = 8 cm, BC = 5 cm…" → prompt for labelled rectangle
 
-SVG RULES:
-  - viewBox="0 0 280 200" · scales to the mobile card width
-  - stroke="#1e293b" fill="none" for outlines · fill="#1e293b" for labels
-  - Accent colour #4f46e5 for the key measurement or answer
-  - font-size="13" font-family="system-ui,sans-serif" on all <text> elements
-  - Include <title> describing what it shows
-  - Clean and minimal — label clearly, avoid clutter
-  - If no diagram is useful: svg_diagram: "" (empty string — never force one)
+  Explanation-level (inside explanation object): when the worked solution
+  involves a geometric, spatial, or graphical concept that a diagram would
+  clarify — coordinate geometry, ray diagrams, circuit analysis, force resolution,
+  biological structures, etc.
 
-EXAMPLE — cylinder with r=3.5cm h=10cm:
-  "svg_diagram": "<svg viewBox=\"0 0 280 200\" xmlns=\"http://www.w3.org/2000/svg\"><title>Cylinder r=3.5cm h=10cm</title><ellipse cx=\"140\" cy=\"48\" rx=\"72\" ry=\"22\" stroke=\"#1e293b\" stroke-width=\"1.5\" fill=\"#f1f5f9\"/><rect x=\"68\" y=\"48\" width=\"144\" height=\"112\" fill=\"#f1f5f9\" stroke=\"none\"/><line x1=\"68\" y1=\"48\" x2=\"68\" y2=\"160\" stroke=\"#1e293b\" stroke-width=\"1.5\"/><line x1=\"212\" y1=\"48\" x2=\"212\" y2=\"160\" stroke=\"#1e293b\" stroke-width=\"1.5\"/><ellipse cx=\"140\" cy=\"160\" rx=\"72\" ry=\"22\" stroke=\"#1e293b\" stroke-width=\"1.5\" fill=\"#f1f5f9\"/><line x1=\"140\" y1=\"48\" x2=\"212\" y2=\"48\" stroke=\"#4f46e5\" stroke-width=\"2\" stroke-dasharray=\"5,3\"/><text x=\"148\" y=\"43\" font-size=\"12\" fill=\"#4f46e5\" font-family=\"system-ui\">r = 3.5 cm</text><line x1=\"220\" y1=\"48\" x2=\"220\" y2=\"160\" stroke=\"#64748b\" stroke-width=\"1.5\"/><text x=\"225\" y=\"108\" font-size=\"12\" fill=\"#64748b\" font-family=\"system-ui\">h = 10 cm</text></svg>"
+WHEN NOT TO INCLUDE:
+  - Pure calculation questions with no spatial component
+  - English, humanities, or recall questions
+  - If no diagram would genuinely help the student understand
+  - Set both fields to "" (empty string) in these cases
+
+PROMPT FORMAT — be precise and complete:
+  Describe exactly what the diagram should show so it can be generated
+  without any further context. Include:
+  • Type of diagram (labelled cross-section, force diagram, coordinate graph, etc.)
+  • All shapes, lines, and structures to draw
+  • All measurements, values, and labels to include
+  • Which element to highlight or accent (the unknown or the answer)
+  • Approximate layout (e.g. "horizontal line dividing air above and glass below")
+
+GOOD EXAMPLE — cylinder:
+  "Draw a labelled diagram of a cylinder. Show an elliptical top face and
+  bottom face connected by two vertical lines. Draw a dashed horizontal line
+  from the centre of the top face to its right edge, labelled 'r = 3.5 cm'
+  in accent colour (#4f46e5). Draw a vertical arrow along the right side
+  labelled 'h = 10 cm'. Title: Cylinder with r = 3.5 cm, h = 10 cm."
+
+GOOD EXAMPLE — refraction:
+  "Draw a ray diagram showing light refraction at a glass surface. Show a
+  horizontal boundary line dividing two regions: air (top, label it 'Air')
+  and glass (bottom, label it 'Glass'). Draw a dashed vertical normal line
+  through the boundary. Draw an incident ray from the top-left hitting the
+  boundary at 30° to the normal. Draw a refracted ray continuing into the
+  glass at a smaller angle (about 19°) to the normal. Label: angle of
+  incidence (30°), angle of refraction, incident ray, refracted ray, normal."
+
+BAD EXAMPLE (too vague):
+  "Draw a diagram of the cylinder described in the question."
 
 ═════════════════════════════════════════════
 PART 6 — ENGLISH / LANGUAGE INSTRUCTION TEXT
@@ -395,7 +431,7 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
       "correct": "why the correct answer is right — 1-2 sentences",
       "answer_note": "The correct answer is [LETTER] — [option text]. 1-2 warm sentences.",
       "steps": [],
-      "svg_diagram": "",
+      "illustration_prompt": "",
       "hint": "one sentence nudging toward solution without revealing the answer",
       "study_tip": "",
       "wrong_options": {
@@ -404,7 +440,7 @@ Return ONLY a valid JSON array. No markdown, no preamble, no explanation.
         "D": "one sentence: specific misconception behind option D"
       }
     },
-    "svg_diagram": "",
+    "illustration_prompt": "",
     "instruction_text": null,
     "topic_title": "",
     "subtopic_title": ""
@@ -462,6 +498,11 @@ Example for a circuit:
 
 FORMATTING: same KaTeX rules as main prompt — wrap ALL math in $...$
 Use ₦ for Naira directly. Never \\text{N} or \\500.
+
+ANGLES — CRITICAL (most common AI mistake):
+  ✓  Since $64^{\\circ} < 180^{\\circ}$, we add $180^{\\circ} - 64^{\\circ} = 116^{\\circ}$
+  ✗  \\text{Since } 064∘ < 180^{\\circ}\\text{, we add }  ← NEVER wrap prose in \\text{}
+  RULE: Write prose as normal text. Only numbers/symbols go inside $...$.
 
 "wrong_options": include ALL wrong options (B, C, D) — one sentence each explaining the specific mistake. The UI will only show the one the student picked.
 
@@ -784,6 +825,12 @@ SQUARE ROOTS:
 
 SPECIAL VALUES: π → $\\pi$  · θ → $\\theta$  · ° → $90^{\\circ}$  · ≈ → $\\approx$
 
+ANGLES — CRITICAL (most common mistake in explanations):
+  CORRECT: "Since $64^{\\circ} < 180^{\\circ}$, we add $180^{\\circ} - 64^{\\circ} = 116^{\\circ}$"
+  WRONG:   "\\text{Since } 064∘ < 180^{\\circ}\\text{, we add }"
+  RULE: NEVER use \\text{} to wrap prose sentences inside math. 
+        Write prose normally. Only mathematical values go inside $...$.
+
 ══════════════════════════════════════════════════════
 ONE OPERATION PER LINE — NO SKIPPING STEPS
 ══════════════════════════════════════════════════════
@@ -947,6 +994,15 @@ ${isCalc || isBio ? calcWorkingsGuide : nonCalcWorkingsGuide}
 
 "study_tip"    — One short exam technique tip. Only include if genuinely useful. Otherwise "".
 
+"illustration_prompt" — A precise description of a diagram that would help the student
+                 understand the explanation. Used by the admin to generate an SVG later.
+                 INCLUDE for: geometry, force diagrams, ray diagrams, circuits, graphs,
+                 coordinate geometry, biological structures, chemical apparatus, maps.
+                 EXCLUDE for: pure recall, English, humanities, or nothing spatial.
+                 Write it as a complete instruction an artist could follow with no other
+                 context — include all shapes, labels, values, and layout details.
+                 Set to "" when no diagram would genuinely help.
+
 "correct"      — Repeat answer_note here exactly (legacy field).
 
 ═══════════════════════════════════════
@@ -996,6 +1052,7 @@ The array must have EXACTLY ${rawQuestions.length} objects.
       "answer_note": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm².",
       "hint": "Think about which formula links curved surface area, radius and height.",
       "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
+      "illustration_prompt": "Draw a labelled diagram of a cylinder. Show elliptical top and bottom faces connected by two vertical lines. Draw a dashed line from the centre of the top face to its right edge labelled 'r = 4 cm' in accent colour. Draw a vertical arrow on the right side labelled 'h = 14 cm'. Use a clean minimal style with dark outlines on a white background.",
       "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm²."
     }
   }
@@ -1083,15 +1140,16 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
       explanation: e.explanation
         ? {
             // New schema fields
-            concept:          e.explanation.concept          ?? '',
-            formula_box:      e.explanation.formula_box      ?? '',
-            variables_key:    e.explanation.variables_key    ?? [],
-            intro:            e.explanation.intro            ?? '',
-            steps:            e.explanation.steps            ?? [],
-            answer_note:      e.explanation.answer_note      ?? e.explanation.correct ?? '',
-            hint:             e.explanation.hint             ?? '',
-            study_tip:        e.explanation.study_tip        ?? '',
-            wrong_option_note:e.explanation.wrong_option_note ?? '',
+            concept:              e.explanation.concept              ?? '',
+            formula_box:          e.explanation.formula_box          ?? '',
+            variables_key:        e.explanation.variables_key        ?? [],
+            intro:                e.explanation.intro                ?? '',
+            steps:                e.explanation.steps                ?? [],
+            answer_note:          e.explanation.answer_note          ?? e.explanation.correct ?? '',
+            hint:                 e.explanation.hint                 ?? '',
+            study_tip:            e.explanation.study_tip            ?? '',
+            wrong_option_note:    e.explanation.wrong_option_note    ?? '',
+            illustration_prompt:  e.explanation.illustration_prompt  ?? '',
             // Legacy compat
             correct:          e.explanation.correct          ?? e.explanation.answer_note ?? '',
             workings:         e.explanation.workings         ?? [],
@@ -1100,8 +1158,8 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
         : {
             concept: '', formula_box: '', variables_key: [],
             intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
-            hint: '',
-            study_tip: '', wrong_option_note: '',
+            hint: '', study_tip: '', wrong_option_note: '',
+            illustration_prompt: '',
             correct: q.solution?.trim() ?? '', wrong_options: {},
           },
       topic_title:    e.topic_title    ?? '',

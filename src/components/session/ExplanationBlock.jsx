@@ -64,7 +64,7 @@ export function HintBlock({ hint }) {
 }
 
 // ─── EXPLANATION BLOCK ────────────────────────────────────────────────────────
-// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, svg_diagram, study_tip }
+// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, svg_diagram, illustration_prompt, study_tip }
 export function ExplanationBlock({ explanation, isCorrect, dark }) {
   if (!explanation) return null
 
