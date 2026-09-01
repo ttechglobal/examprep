@@ -98,3 +98,45 @@ export async function POST(request) {
 
   return NextResponse.json({ school })
 }
+// ── PATCH — update existing school info ────────────────────────────────────────
+// Used by the Settings tab in the school dashboard.
+// Only updates name / city / state — does NOT change role or school_id.
+export async function PATCH(request) {
+  const supabase = await createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
+  let body
+  try { body = await request.json() }
+  catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }) }
+
+  const { schoolName, city, state } = body
+  if (!schoolName?.trim()) return NextResponse.json({ error: 'School name is required' }, { status: 400 })
+
+  const db = svc()
+
+  // Get this admin's school_id
+  const { data: profile } = await db
+    .from('profiles')
+    .select('school_id, role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role !== 'school_admin' || !profile?.school_id) {
+    return NextResponse.json({ error: 'No school found for this account' }, { status: 403 })
+  }
+
+  const { data: school, error: updateError } = await db
+    .from('schools')
+    .update({ name: schoolName.trim(), city: city?.trim() ?? '', state: state ?? '' })
+    .eq('id', profile.school_id)
+    .select()
+    .single()
+
+  if (updateError) {
+    console.error('[school/setup PATCH] update error:', updateError)
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ school })
+}

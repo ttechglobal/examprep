@@ -22,43 +22,40 @@ export async function GET() {
     const service = db()
     const today   = todayStr()
 
-    // All attempts today (any slot, any completion status, at least 1 attempt)
+    // Fetch ALL slot rows for today so we can aggregate both slots per student
     const { data: attempts, error } = await service
       .from('daily_quiz_attempts')
-      .select('student_id, correct, attempts_used, completed, updated_at')
+      .select('student_id, slot, correct, attempts_used, completed, xp_awarded, updated_at')
       .eq('quiz_date', today)
       .gt('attempts_used', 0)
       .order('updated_at', { ascending: true })
-      .limit(100)
+      .limit(200)
 
     if (error) throw error
     if (!attempts?.length) {
       return NextResponse.json({ board: [], date: today })
     }
 
-    // Deduplicate per student — keep their best row:
-    // completed+correct > completed+wrong > in-progress, then fewest attempts
-    const best = {}
+    // Aggregate per student across both slots
+    const studentMap = {}
     for (const row of attempts) {
-      const id   = row.student_id
-      const prev = best[id]
-      if (!prev) { best[id] = row; continue }
-      // Prefer completed over in-progress
-      if (row.completed && !prev.completed)   { best[id] = row; continue }
-      if (!row.completed && prev.completed)   continue
-      // Both completed: prefer correct
-      if (row.correct && !prev.correct)       { best[id] = row; continue }
-      if (!row.correct && prev.correct)       continue
-      // Same completion/correct: prefer fewer attempts
-      if (row.attempts_used < prev.attempts_used) { best[id] = row }
+      const id = row.student_id
+      if (!studentMap[id]) {
+        studentMap[id] = { student_id: id, correct: 0, total: 0, xp_earned: 0, completed: 0, last_updated: row.updated_at }
+      }
+      const s = studentMap[id]
+      s.total       += 1
+      s.xp_earned   += row.xp_awarded ?? 0
+      if (row.correct)    s.correct   += 1
+      if (row.completed)  s.completed += 1
+      if (row.updated_at > s.last_updated) s.last_updated = row.updated_at
     }
 
-    // Sort: completed+correct first, then completed, then in-progress, then fewest attempts
-    const sorted = Object.values(best).sort((a, b) => {
-      const scoreA = (a.completed ? 2 : 0) + (a.correct ? 1 : 0)
-      const scoreB = (b.completed ? 2 : 0) + (b.correct ? 1 : 0)
-      if (scoreB !== scoreA) return scoreB - scoreA
-      return (a.attempts_used ?? 0) - (b.attempts_used ?? 0)
+    // Sort: most correct first → most XP → fewest total slots (faster completion)
+    const sorted = Object.values(studentMap).sort((a, b) => {
+      if (b.correct   !== a.correct)   return b.correct   - a.correct
+      if (b.xp_earned !== a.xp_earned) return b.xp_earned - a.xp_earned
+      return a.total - b.total
     }).slice(0, 30)
 
     // Fetch profiles
@@ -72,13 +69,14 @@ export async function GET() {
     for (const p of profiles ?? []) profMap[p.id] = p
 
     const board = sorted.map(r => ({
-      student_id:    r.student_id,
-      name:          profMap[r.student_id]?.full_name   ?? 'Student',
-      school:        profMap[r.student_id]?.school_name ?? null,
-      correct:       r.correct   ?? false,
-      completed:     r.completed ?? false,
-      attempts_used: r.attempts_used ?? 0,
-      completed_at:  r.updated_at,
+      student_id:   r.student_id,
+      name:         profMap[r.student_id]?.full_name   ?? 'Student',
+      school:       profMap[r.student_id]?.school_name ?? null,
+      correct:      r.correct,
+      total:        r.total,        // number of slots attempted (max 2)
+      xp_earned:    r.xp_earned,
+      completed:    r.completed === r.total && r.total > 0,
+      completed_at: r.last_updated,
     }))
 
     return NextResponse.json(

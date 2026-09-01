@@ -43,7 +43,7 @@ export function Calculator({ onClose, dark }) {
   ]
 
   return (
-    <div style={{ position:'fixed', bottom:84, right:14, zIndex:400, width:'clamp(252px,320px,340px)', background:dark?'#1a1d2e':'#fff', borderRadius:18, border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,.55)', overflow:'hidden' }}>
+    <div style={{ position:'fixed', bottom:84, right:14, zIndex:1200, width:'clamp(252px,320px,340px)', background:dark?'#1a1d2e':'#fff', borderRadius:18, border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,.55)', overflow:'hidden' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 13px', borderBottom:'1px solid var(--border)' }}>
         <span style={{ fontSize:11, fontWeight:800, color:'var(--text-tert)' }}>Calculator</span>
         <button onClick={onClose} style={{ width:22, height:22, borderRadius:5, background:'var(--bg-subtle)', border:'none', cursor:'pointer', fontSize:14, color:'var(--text-tert)' }}>×</button>

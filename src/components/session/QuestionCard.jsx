@@ -43,28 +43,31 @@ export function QuestionCard({
 }) {
   const isStudy = sessionType === 'study'
 
-  // Shuffle options once per question mount
+  // Keep options in their original A/B/C/D order.
+  // Shuffling was removed because correct_answer is stored as a letter ("A","B","C","D")
+  // tied to the original position. Randomising display positions breaks the
+  // correct_answer mapping and causes right answers to be marked wrong.
   const [shuffledOptions, setShuffledOptions] = useState([])
   useEffect(() => {
     const raw     = normaliseOptions(question.options)
     const withIdx = raw.map((text, i) => ({ text, originalIdx: i }))
-    for (let i = withIdx.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [withIdx[i], withIdx[j]] = [withIdx[j], withIdx[i]]
-    }
     setShuffledOptions(withIdx)
   }, [question.id])
 
   useEffect(() => { injectMathStyles() }, [])
 
   const [selected,      setSelected]      = useState(alreadyAnswered?.selectedIdx ?? null)
-  const [revealed,      setRevealed]      = useState(reviewMode || alreadyAnswered !== null)
+  // In practice mode, navigating back to an answered question must NOT reveal
+  // the answer — the student should see their prior selection highlighted but
+  // no ✓/✗ coloring and no explanation until the full session ends.
+  // Only auto-reveal in study mode (instant feedback) or review mode.
+  const [revealed,      setRevealed]      = useState(reviewMode || (isStudy && alreadyAnswered !== null))
   const [studyAttempts, setStudyAttempts] = useState(0)
   const [studyWrong,    setStudyWrong]    = useState(false)
 
   useEffect(() => {
     setSelected(alreadyAnswered?.selectedIdx ?? null)
-    setRevealed(reviewMode || alreadyAnswered !== null)
+    setRevealed(reviewMode || (isStudy && alreadyAnswered !== null))
     setStudyAttempts(0)
     setStudyWrong(false)
   }, [qIndex, question.id, reviewMode])
@@ -76,15 +79,27 @@ export function QuestionCard({
       setSelected(idx)
       const correct = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)
       if (correct) {
-        setRevealed(true); setStudyWrong(false)
+        setRevealed(true)
+        setStudyWrong(false)
+        // Notify parent immediately so the desktop explanation panel updates
+        // without waiting for the Next button click.
+        onAnswerChange?.({ selectedIdx: idx, isCorrect: true })
       } else {
         const attempts = studyAttempts + 1
         setStudyAttempts(attempts)
-        if (attempts >= 2) { setRevealed(true); setStudyWrong(false) }
-        else setStudyWrong(true)
+        if (attempts >= 2) {
+          setRevealed(true)
+          setStudyWrong(false)
+          // Also notify on forced reveal (exhausted attempts)
+          onAnswerChange?.({ selectedIdx: idx, isCorrect: false })
+        } else {
+          setStudyWrong(true)
+        }
       }
     } else {
-      if (revealed) return
+      // In practice mode revealed stays false, so guard against re-selection
+      // by checking alreadyAnswered directly instead of relying on revealed.
+      if (revealed || alreadyAnswered !== null) return
       setSelected(idx)
       // Notify parent immediately so mock mode can track without waiting for Next
       const isCorrect = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)

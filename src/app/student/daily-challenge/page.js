@@ -201,7 +201,7 @@ function TodayBoard({ myId }) {
                 </div>
                 {(row.xp_earned > 0) && (
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontSize:12, fontWeight:900, color: isMe ? GOLD : 'var(--text-prim)' }}>+{row.xp_earned}</div>
+                    <div style={{ fontSize:12, fontWeight:900, color: GOLD }}>+{row.xp_earned}</div>
                     <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--text-tert)' }}>XP</div>
                   </div>
                 )}
@@ -315,6 +315,18 @@ function readDailyCache() {
     return c.challenges ?? null
   } catch { return null }
 }
+function isDailyCacheComplete() {
+  // Returns true if every challenge in today's cache is already completed —
+  // in which case we should never re-fetch (avoids haphazard refresh).
+  try {
+    const c = JSON.parse(localStorage.getItem(DAILY_CACHE_KEY) || 'null')
+    if (!c) return false
+    const today = new Date().toISOString().slice(0, 10)
+    if (c.date !== today) return false
+    const challenges = c.challenges ?? []
+    return challenges.length > 0 && challenges.every(ch => ch.state?.completed)
+  } catch { return false }
+}
 function writeDailyCache(challenges) {
   try {
     const today = new Date().toISOString().slice(0, 10)
@@ -335,9 +347,10 @@ export default function DailyChallengePage() {
   const myId = profile?.id ?? null
 
   const fetchQuiz = useCallback(async () => {
-    // Always fetch fresh from the API — the API returns the real current state
-    // including any attempts the student already made (persisted in DB).
-    // We only use the cache for instant rendering while this fetch is in flight.
+    // If today's cache has all challenges completed, trust it — nothing changes
+    // until midnight. Prevents haphazard re-fetches after the student finishes.
+    if (isDailyCacheComplete()) { setLoading(false); return }
+
     setError(false)
     try {
       const subs = [...new Set([...(profile?.subjects_waec??[]),...(profile?.subjects_jamb??[]),...(profile?.subjects??[])])]

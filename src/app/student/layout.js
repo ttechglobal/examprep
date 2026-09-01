@@ -18,7 +18,7 @@ const GOLD = '#FFB800'
 const ORANGE = '#FF6A00'
 const CYAN = '#18B7F2'
 
-const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects']
+const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects', '/student/learn/world']
 
 // ── Shared profile context — fetched once in layout, available to all pages ───
 export const StudentUserContext = createContext(null)
@@ -204,15 +204,36 @@ function StudentLayoutInner({ children }) {
           } catch {}
           return
         }
-        const { data } = await supabase
+        // Fetch only columns guaranteed to exist. exam_types / subjects_waec /
+        // subjects_jamb / onboarded may not exist yet (pre-migration) and would
+        // cause a 400. If the select fails, fall back to the API route which uses
+        // the service role and handles missing columns more gracefully.
+        // Try to fetch extended columns; fall back to safe set if rejected.
+        // subjects_waec/subjects_jamb/exam_types exist after the profile migration.
+        const { data, error: profileError } = await supabase
           .from('profiles')
-          .select('id,full_name,username,total_points,exam_types,subjects,subjects_waec,subjects_jamb,onboarded,school_id')
+          .select('id,full_name,username,total_points,exam_type,exam_types,subjects,subjects_waec,subjects_jamb,school_id,onboarded')
           .eq('id', user.id).single()
-        if (data) {
-          // Normalise: add exam_type (singular) so all pages use the same field
-          // regardless of whether they came from Supabase (exam_types[]) or ep_guest (exams[])
-          const examType = data.exam_types?.[0] ?? 'WAEC'
-          const normalised = { ...data, exam_type: examType }
+
+        let profileData = data
+        if (profileError || !data) {
+          try {
+            const apiRes = await fetch('/api/student/profile')
+            if (apiRes.ok) profileData = await apiRes.json()
+          } catch {}
+        }
+
+        if (profileData) {
+          // Normalise: ensure all fields exist regardless of DB migration state.
+          const examType = profileData.exam_types?.[0] ?? profileData.exam_type ?? 'WAEC'
+          const normalised = {
+            ...profileData,
+            exam_type:     examType,
+            exam_types:    profileData.exam_types    ?? [examType],
+            subjects_waec: profileData.subjects_waec ?? (examType === 'WAEC' ? (profileData.subjects ?? []) : []),
+            subjects_jamb: profileData.subjects_jamb ?? (examType === 'JAMB' ? (profileData.subjects ?? []) : []),
+            onboarded:     profileData.onboarded     ?? true,
+          }
           setProfile(normalised)
           cacheAuthProfile(normalised)
           try { localStorage.setItem('ep_student_name', data.full_name || data.username || '') } catch {}

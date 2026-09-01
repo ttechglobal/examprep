@@ -128,15 +128,23 @@ export async function PATCH(request) {
   const db  = svc()
   const col = exam === 'WAEC' ? 'subjects_waec' : 'subjects_jamb'
 
+  // Build update — always write the exam-specific column.
+  // Also update the legacy `subjects` column so older code paths still work.
+  const update = {
+    [col]:     uniqueSubjects,
+    subjects:  uniqueSubjects,   // keep legacy column in sync
+  }
+
   const { error } = await db
     .from('profiles')
-    .update({ [col]: uniqueSubjects })
+    .update(update)
     .eq('id', user.id)
 
   if (error) {
+    // Column doesn't exist yet — tell the dev exactly what to run
     if (error.code === '42703') {
       return NextResponse.json({
-        error: `Column ${col} missing. Run: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ${col} text[] DEFAULT '{}';`
+        error: `Column missing. Run migration: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ${col} text[] DEFAULT '{}';`
       }, { status: 500 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })

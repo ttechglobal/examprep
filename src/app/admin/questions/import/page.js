@@ -300,6 +300,147 @@ function YearRangePicker({ value, onChange }) {
 const CURRENT_YEAR = new Date().getFullYear()
 const DEFAULT_YEAR = String(CURRENT_YEAR - 1)
 
+// ── Illustration SVG Panel ────────────────────────────────────────────────────
+// Shown on any question card whose explanation has an illustration_prompt.
+// Admin copies the prompt, generates SVG externally, pastes it back here,
+// sees a live preview, then the SVG is saved into explanation.svg_diagram.
+function IllustrationPanel({ questionIdx, prompt, svgCode, onChange }) {
+  const [copied, setCopied] = useState(false)
+  const [tab, setTab]       = useState('prompt') // 'prompt' | 'paste' | 'preview'
+
+  const hasValidSvg = svgCode && svgCode.trim().toLowerCase().startsWith('<svg')
+
+  return (
+    <div className="rounded-xl border-2 border-violet-200 bg-violet-50 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-violet-100 border-b border-violet-200">
+        <span className="text-base">🎨</span>
+        <span className="text-xs font-black text-violet-800 uppercase tracking-wide flex-1">
+          Illustration needed
+        </span>
+        {hasValidSvg && (
+          <span className="text-[10px] font-bold text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full">
+            ✓ SVG ready
+          </span>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 px-3 pt-2.5 pb-0">
+        {[
+          { id: 'prompt',  label: '1. Prompt' },
+          { id: 'paste',   label: '2. Paste SVG' },
+          { id: 'preview', label: '3. Preview', disabled: !hasValidSvg },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => !t.disabled && setTab(t.id)}
+            disabled={t.disabled}
+            className={`px-3 py-1.5 text-[11px] font-bold rounded-t-lg border-b-2 transition-colors ${
+              tab === t.id
+                ? 'border-violet-500 text-violet-700 bg-white'
+                : t.disabled
+                ? 'border-transparent text-gray-300 cursor-not-allowed'
+                : 'border-transparent text-violet-500 hover:text-violet-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-3 bg-white border-t border-violet-100 space-y-3">
+
+        {/* Step 1: show the illustration_prompt */}
+        {tab === 'prompt' && (
+          <>
+            <p className="text-[11px] text-violet-700 leading-relaxed">
+              Copy this prompt → open an SVG generator or Claude → paste and generate → come back to paste the SVG code in the next tab.
+            </p>
+            <div className="border border-violet-200 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-violet-50 border-b border-violet-100">
+                <span className="text-[10px] font-black text-violet-600 uppercase tracking-wide">Illustration Prompt</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors ${
+                    copied ? 'bg-green-100 text-green-700' : 'bg-violet-600 text-white hover:bg-violet-500'
+                  }`}
+                >
+                  {copied ? '✓ Copied!' : '📋 Copy'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-700 px-3 py-2.5 leading-relaxed font-mono bg-white">
+                {prompt}
+              </p>
+            </div>
+            <button
+              onClick={() => setTab('paste')}
+              className="w-full py-2 bg-violet-600 text-white text-[11px] font-bold rounded-lg hover:bg-violet-500 transition-colors"
+            >
+              → I have the SVG — paste it now
+            </button>
+          </>
+        )}
+
+        {/* Step 2: paste SVG code */}
+        {tab === 'paste' && (
+          <>
+            <p className="text-[11px] text-violet-700 leading-relaxed">
+              Paste the raw SVG code below. It must start with <code className="bg-gray-100 px-1 rounded">&lt;svg</code>.
+            </p>
+            <textarea
+              value={svgCode}
+              onChange={e => onChange(e.target.value)}
+              placeholder={'<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">\n  ...\n</svg>'}
+              className="w-full h-36 text-[11px] font-mono text-gray-700 border border-violet-200 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-400"
+              spellCheck={false}
+            />
+            {svgCode && !hasValidSvg && (
+              <p className="text-[11px] text-red-600 font-medium">⚠ Doesn&apos;t look like SVG — make sure it starts with &lt;svg</p>
+            )}
+            {hasValidSvg && (
+              <button
+                onClick={() => setTab('preview')}
+                className="w-full py-2 bg-green-600 text-white text-[11px] font-bold rounded-lg hover:bg-green-500 transition-colors"
+              >
+                → Preview SVG
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Step 3: live SVG preview */}
+        {tab === 'preview' && hasValidSvg && (
+          <>
+            <div className="rounded-lg border border-violet-200 bg-white overflow-hidden">
+              <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-100 flex items-center justify-between">
+                <span className="text-[10px] font-black text-violet-600 uppercase tracking-wide">Preview</span>
+                <button
+                  onClick={() => setTab('paste')}
+                  className="text-[10px] text-violet-500 hover:text-violet-700 font-bold"
+                >
+                  ✏️ Edit SVG
+                </button>
+              </div>
+              <div
+                className="flex justify-center p-4 overflow-x-auto"
+                dangerouslySetInnerHTML={{
+                  __html: svgCode
+                    .replace(/<script[\s\S]*?<\/script>/gi, '')
+                    .replace(/\son\w+="[^"]*"/gi, '')
+                }}
+              />
+            </div>
+            <p className="text-[10px] text-green-700 font-bold text-center">
+              ✓ This SVG will be saved with the question and shown to students in the explanation.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SdashImportPage() {
   const [subjects,       setSubjects]       = useState([])
@@ -336,6 +477,8 @@ export default function SdashImportPage() {
   const [hiddenIndexes,     setHiddenIndexes]      = useState(new Set())  // questions user hid in this session
   const [previewQuestion,   setPreviewQuestion]    = useState(null)       // question to show in modal
   const [editingTopicIdx,   setEditingTopicIdx]    = useState(null)       // question index being topic-edited
+  const [svgDrafts,         setSvgDrafts]          = useState({})         // { [questionIndex]: svgCode } — illustration SVGs pasted by admin
+  const [svgExpandedIdx,    setSvgExpandedIdx]     = useState(null)       // which question's SVG editor is open
   const [topicEditValue,    setTopicEditValue]     = useState({ topic_title: '', subtopic_title: '' })
 
   // ── Held (diagram) questions management ───────────────────────────────────
@@ -525,12 +668,15 @@ export default function SdashImportPage() {
       examType,
       selectedSubject?.name ?? 'Unknown Subject'
     )
-    // Auto-match topics against loaded curriculum
-    const withMatches = merged.map(q => {
+    // Auto-match topics against loaded curriculum.
+    // _importIdx is a stable identity for each question across filtering —
+    // used to key svgDrafts so SVG edits survive the "hide question" action.
+    const withMatches = merged.map((q, idx) => {
       const match = matchTopicSubtopic(q, topics)
-      return { ...q, _topicMatch: match }
+      return { ...q, _topicMatch: match, _importIdx: idx }
     })
     setParsedQuestions(withMatches)
+    setSvgDrafts({})   // reset SVG drafts for new batch
     setEnrichStep(4)  // step 4 = Review panel; step 5 = Done (set after save)
   }
 
@@ -546,8 +692,18 @@ export default function SdashImportPage() {
         // Priority: explicit topic_id (from manual/suggestion edit) > AI match > null
         const topicId    = q.topic_id    ?? match?.topic?.id    ?? null
         const subtopicId = q.subtopic_id ?? match?.subtopic?.id ?? null
+
+        // Merge any SVG the admin pasted for this question into explanation.svg_diagram.
+        // svgDrafts is keyed by the question's _importIdx (set during parse), which
+        // survives filtering (hidden questions removed) without index drift.
+        const svgCode = q._importIdx != null ? (svgDrafts[q._importIdx] ?? '') : ''
+        const explanation = svgCode.trim()
+          ? { ...(q.explanation ?? {}), svg_diagram: svgCode.trim() }
+          : q.explanation
+
         return {
           ...q,
+          explanation,
           topic_id:      topicId,
           subtopic_id:   subtopicId,
           topic_title:    q.topic_title    || match?.topic?.name    || '',
@@ -1040,6 +1196,29 @@ export default function SdashImportPage() {
                   <MathText text={exp.study_tip} as="p" className="text-sm text-amber-800" />
                 </div>
               )}
+
+              {/* SVG diagram — if the admin has already pasted one for this question */}
+              {(() => {
+                const idx = q._importIdx
+                const svg = idx != null ? (svgDrafts[idx] ?? '') : ''
+                const validSvg = svg.trim().toLowerCase().startsWith('<svg') ? svg : null
+                if (!validSvg) return null
+                return (
+                  <div className="mt-3 rounded-xl border border-violet-200 overflow-hidden">
+                    <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-100">
+                      <span className="text-[10px] font-black text-violet-600 uppercase tracking-wide">Diagram</span>
+                    </div>
+                    <div
+                      className="flex justify-center p-4 bg-white overflow-x-auto"
+                      dangerouslySetInnerHTML={{
+                        __html: validSvg
+                          .replace(/<script[\s\S]*?<\/script>/gi, '')
+                          .replace(/\son\w+="[^"]*"/gi, '')
+                      }}
+                    />
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Topic tag */}
@@ -1600,6 +1779,16 @@ export default function SdashImportPage() {
                             </div>
                           </div>
 
+                          {/* Illustration panel — shown when AI provided an illustration_prompt */}
+                          {q.explanation?.illustration_prompt && (
+                            <IllustrationPanel
+                              questionIdx={q._importIdx ?? i}
+                              prompt={q.explanation.illustration_prompt}
+                              svgCode={svgDrafts[q._importIdx ?? i] ?? ''}
+                              onChange={code => setSvgDrafts(prev => ({ ...prev, [q._importIdx ?? i]: code }))}
+                            />
+                          )}
+
                           {/* Topic tag — editable with AI suggestions */}
                           {isEditingTopic ? (
                             <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
@@ -1688,6 +1877,38 @@ export default function SdashImportPage() {
 
               {/* Sticky save bar at the bottom */}
               <div className="sticky bottom-4 z-10 space-y-2">
+                {/* Pre-save flags */}
+                {(() => {
+                  const visibleQs = parsedQuestions.filter((_, i) => !hiddenIndexes.has(i))
+                  const pendingIllustrations = visibleQs.filter(q =>
+                    q.explanation?.illustration_prompt &&
+                    !(svgDrafts[q._importIdx ?? 0] ?? '').trim().toLowerCase().startsWith('<svg')
+                  )
+                  const mismatchedVisible = visibleQs.filter(q => q._mismatch)
+                  if (!pendingIllustrations.length && !mismatchedVisible.length) return null
+                  return (
+                    <div className="space-y-1.5">
+                      {mismatchedVisible.length > 0 && (
+                        <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 border border-red-300 rounded-xl text-xs">
+                          <span className="text-base flex-shrink-0">&#9888;&#65039;</span>
+                          <div>
+                            <p className="font-black text-red-700">{mismatchedVisible.length} question{mismatchedVisible.length !== 1 ? 's' : ''} have explanation mismatches</p>
+                            <p className="text-red-600 mt-0.5">These are highlighted red above. Review them before saving or hide the ones you are not sure about.</p>
+                          </div>
+                        </div>
+                      )}
+                      {pendingIllustrations.length > 0 && (
+                        <div className="flex items-start gap-2 px-4 py-2.5 bg-violet-50 border border-violet-300 rounded-xl text-xs">
+                          <span className="text-base flex-shrink-0">&#127912;</span>
+                          <div>
+                            <p className="font-black text-violet-700">{pendingIllustrations.length} illustration{pendingIllustrations.length !== 1 ? 's' : ''} have no SVG yet</p>
+                            <p className="text-violet-600 mt-0.5">These questions will save without a diagram. You can add the SVG later in Past Questions. Scroll up to add them now if you prefer.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
                 {hiddenIndexes.size > 0 && (
                   <div className="text-center text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
                     {hiddenIndexes.size} question{hiddenIndexes.size !== 1 ? 's' : ''} hidden — they will not be saved. Find them in Hidden Questions later.

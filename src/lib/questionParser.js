@@ -328,59 +328,73 @@ PART 4 — TAG TO CURRICULUM
 PART 5 — ILLUSTRATION PROMPTS (STEM SUBJECTS)
 ═════════════════════════════════════════════
 
-For Mathematics, Physics, Chemistry, Further Mathematics, Biology, Geography:
-Whenever a question or its explanation would benefit from a visual diagram,
-generate an illustration_prompt — a precise, detailed description that an
-artist or AI can use to create the SVG illustration later.
-
-DO NOT generate SVG code. Generate the prompt only.
-
 WHEN TO INCLUDE illustration_prompt:
-  Question-level (top-level field): when the question describes a shape, graph,
-  circuit, force diagram, or spatial setup the student needs to visualise.
-    e.g. "A cylinder of radius 3.5 cm and height 10 cm…" → prompt for labelled cylinder
-    e.g. "Forces P and Q act at 60° to each other…" → prompt for force diagram
-    e.g. "ABCD is a rectangle with AB = 8 cm, BC = 5 cm…" → prompt for labelled rectangle
+  Generate ONLY when a diagram is ESSENTIAL — not just possible.
+  Test: "Would a student who reads the steps still be confused without seeing it?"
+  If yes — write the prompt. If no — set "" and move on.
 
-  Explanation-level (inside explanation object): when the worked solution
-  involves a geometric, spatial, or graphical concept that a diagram would
-  clarify — coordinate geometry, ray diagrams, circuit analysis, force resolution,
-  biological structures, etc.
+  INCLUDE (diagram genuinely changes understanding):
+    • Geometry: labelled shapes with specific measurements (cylinder, triangle, circle)
+    • Force/vector diagrams: arrows, angles, resultant labelled
+    • Ray diagrams: refraction, reflection, lenses
+    • Electric circuits: components in series/parallel
+    • Coordinate geometry: graph with plotted points, lines, intercepts
+    • Chemical apparatus: titration, distillation, electrolysis
+    • Biological structures: labelled cell, organ, or system diagram
 
-WHEN NOT TO INCLUDE:
-  - Pure calculation questions with no spatial component
-  - English, humanities, or recall questions
-  - If no diagram would genuinely help the student understand
-  - Set both fields to "" (empty string) in these cases
+  EXCLUDE — set both fields to "" (empty string):
+    • Pure number calculations: simultaneous equations, quadratics, indices,
+      fractions, percentages, profit/loss, interest, logs, sequences, probability
+    • Recall and definition questions
+    • English, humanities, economics, commerce, government
+    • Chemistry recall (naming compounds, equations without apparatus)
+    • Any question where the written steps fully explain the concept
+    • When in doubt — always default to ""
 
-PROMPT FORMAT — be precise and complete:
-  Describe exactly what the diagram should show so it can be generated
-  without any further context. Include:
-  • Type of diagram (labelled cross-section, force diagram, coordinate graph, etc.)
-  • All shapes, lines, and structures to draw
-  • All measurements, values, and labels to include
-  • Which element to highlight or accent (the unknown or the answer)
-  • Approximate layout (e.g. "horizontal line dividing air above and glass below")
+  MATHEMATICS RULE: the vast majority of maths questions get "". Only include
+  for geometry (shapes with labelled measurements), coordinate geometry (plotted
+  points/lines on a grid), and trigonometry (right-angled triangle with sides
+  labelled). Algebra, number, statistics, logs — always "".
 
-GOOD EXAMPLE — cylinder:
-  "Draw a labelled diagram of a cylinder. Show an elliptical top face and
-  bottom face connected by two vertical lines. Draw a dashed horizontal line
-  from the centre of the top face to its right edge, labelled 'r = 3.5 cm'
-  in accent colour (#4f46e5). Draw a vertical arrow along the right side
-  labelled 'h = 10 cm'. Title: Cylinder with r = 3.5 cm, h = 10 cm."
+SVG BRIEF FORMAT — write a precise code specification, not a vague description:
+  The output of this prompt will be used to generate actual SVG code directly.
+  Always specify:
+    1. viewBox: always "0 0 400 300" (landscape, mobile-safe at 100% width)
+    2. Background: white <rect> filling the viewBox
+    3. Every shape: element type, position (cx/cy or x/y), size, fill, stroke
+    4. Every label: text content, x/y coordinates, font-size (12–14px), colour
+    5. Key/answer element accent: stroke or fill #4f46e5 (indigo)
+    6. Main outlines: stroke #1f2937, stroke-width 2
+    7. Secondary/dashed lines: stroke-dasharray="6 3", colour #6b7280
+    8. Font: font-family="system-ui, sans-serif"
+    9. No shadows, no gradients, no masks — clean flat educational style
 
-GOOD EXAMPLE — refraction:
-  "Draw a ray diagram showing light refraction at a glass surface. Show a
-  horizontal boundary line dividing two regions: air (top, label it 'Air')
-  and glass (bottom, label it 'Glass'). Draw a dashed vertical normal line
-  through the boundary. Draw an incident ray from the top-left hitting the
-  boundary at 30° to the normal. Draw a refracted ray continuing into the
-  glass at a smaller angle (about 19°) to the normal. Label: angle of
-  incidence (30°), angle of refraction, incident ray, refracted ray, normal."
+GOOD EXAMPLE — cylinder (geometry):
+  "SVG brief: viewBox 0 0 400 300. White background rect.
+   Cylinder centred in frame: top ellipse cx=200 cy=100 rx=80 ry=25;
+   bottom ellipse cx=200 cy=220 rx=80 ry=25. Two vertical lines:
+   left edge x=120 y=100→220, right edge x=280 y=100→220.
+   All fills white, stroke #1f2937 stroke-width 2.
+   Dashed radius line from (200,100) to (280,100): stroke #4f46e5 dasharray 6 3.
+   Label 'r = 3.5 cm' at (285,96) fill #4f46e5 font-size 13.
+   Vertical arrow (295,100)→(295,220) with arrowhead, stroke #1f2937.
+   Label 'h = 10 cm' at (305,165) font-size 13 fill #1f2937.
+   Title 'Cylinder' at (200,278) text-anchor middle fill #6b7280 font-size 13."
 
-BAD EXAMPLE (too vague):
-  "Draw a diagram of the cylinder described in the question."
+GOOD EXAMPLE — refraction (ray diagram):
+  "SVG brief: viewBox 0 0 400 300. White background.
+   Horizontal boundary line from (50,160) to (350,160): stroke #1f2937 w2.
+   Label 'Air' at (30,140) and 'Glass' at (25,185), font-size 13 fill #6b7280.
+   Dashed normal line from (200,60) to (200,240): stroke #6b7280 dasharray 6 3.
+   Incident ray from (80,60) to (200,160): stroke #1f2937 w2, arrowhead at end.
+   Refracted ray from (200,160) to (300,240): stroke #4f46e5 w2, arrowhead.
+   Arc for incidence angle near (200,160) radius 35: stroke #6b7280.
+   Label '30°' at (175,135) font-size 12. Label '19°' at (215,180) fill #4f46e5 font-size 12.
+   Labels 'Incident ray' and 'Refracted ray' near each arrow, font-size 11."
 
+BAD EXAMPLE (never write like this):
+  "Draw a diagram of the cylinder from the question."
+  "Illustrate the forces acting on the object."
 ═════════════════════════════════════════════
 PART 6 — ENGLISH / LANGUAGE INSTRUCTION TEXT
 ═════════════════════════════════════════════
@@ -994,14 +1008,63 @@ ${isCalc || isBio ? calcWorkingsGuide : nonCalcWorkingsGuide}
 
 "study_tip"    — One short exam technique tip. Only include if genuinely useful. Otherwise "".
 
-"illustration_prompt" — A precise description of a diagram that would help the student
-                 understand the explanation. Used by the admin to generate an SVG later.
-                 INCLUDE for: geometry, force diagrams, ray diagrams, circuits, graphs,
-                 coordinate geometry, biological structures, chemical apparatus, maps.
-                 EXCLUDE for: pure recall, English, humanities, or nothing spatial.
-                 Write it as a complete instruction an artist could follow with no other
-                 context — include all shapes, labels, values, and layout details.
-                 Set to "" when no diagram would genuinely help.
+"illustration_prompt" — An SVG code specification for a diagram that genuinely helps
+                 the student understand. The output of this prompt will be pasted into
+                 an SVG generator or Claude to produce working SVG code — so write it
+                 as a complete, self-contained code brief, not a vague description.
+
+                 STRICT INCLUSION RULE — only generate when a diagram is ESSENTIAL.
+                 Ask: "Would a student who reads the explanation still be confused
+                 without a diagram?" If yes — write the prompt. If no — set "".
+
+                 INCLUDE (diagram genuinely changes understanding):
+                   - Geometry: labelled shapes with measurements (cylinder, triangle)
+                   - Force / vector diagrams: arrows, angles, resultant forces
+                   - Ray diagrams: refraction, reflection, lenses with angles labelled
+                   - Circuits: resistors, cells, switches in series/parallel
+                   - Coordinate geometry: points, lines, slopes on a labelled grid
+                   - Chemical apparatus: titration, distillation, electrolysis cell
+                   - Biological structures: cell, organ, or system diagrams
+
+                 EXCLUDE strictly (set "" — do NOT generate a prompt):
+                   - Pure calculation: simultaneous equations, quadratics, indices,
+                     fractions, percentages, profit/loss, interest, logs, sequences
+                   - Recall / definition questions
+                   - English, humanities, economics, commerce, government
+                   - Any question where the worked steps alone are enough to follow
+                   - When in doubt — default to ""
+
+                 MATHEMATICS RULE: most maths questions get "". Only include for
+                 geometry (shapes with measurements), coordinate geometry (graph
+                 with plotted points/lines), and trigonometry (labelled triangle).
+                 Algebra, number, statistics, probability — always "".
+
+                 SVG BRIEF FORMAT — write a precise code specification:
+                   1. viewBox: always "0 0 400 300" (landscape, mobile-safe)
+                   2. Background: white rect filling the viewBox
+                   3. Every shape: type, cx/cy or x/y, dimensions, fill, stroke
+                   4. Every label: text, x/y position, font-size 12-14, colour
+                   5. Accent colour for the key element: #4f46e5 (indigo)
+                   6. Main outlines: stroke #1f2937, stroke-width 2
+                   7. Dashed/secondary lines: stroke-dasharray="6 3", #6b7280
+                   8. Font: font-family="system-ui, sans-serif"
+                   9. No shadows, no gradients — clean flat style
+
+                 GOOD EXAMPLE — cylinder:
+                 "SVG brief: viewBox 0 0 400 300, white background rect.
+                  Cylinder centred: ellipse top cx=200 cy=100 rx=80 ry=25;
+                  ellipse bottom cx=200 cy=220 rx=80 ry=25; two vertical lines
+                  x=120 y=100→220 and x=280 y=100→220; fill white, stroke #1f2937 w2.
+                  Dashed line (200,100)→(280,100): stroke #4f46e5, dasharray 6 3.
+                  Label 'r = 4 cm' at (285,95), fill #4f46e5, font-size 13.
+                  Arrow line (295,100)→(295,220) + arrowhead, stroke #1f2937.
+                  Label 'h = 14 cm' at (305,165), font-size 13, fill #1f2937.
+                  Title 'Cylinder' at (200,275), text-anchor middle, fill #6b7280."
+
+                 BAD (too vague — never write like this):
+                 "Draw a diagram of the cylinder." / "Illustrate the forces."
+
+                 Set to "" when no diagram is essential.
 
 "correct"      — Repeat answer_note here exactly (legacy field).
 
@@ -1052,7 +1115,7 @@ The array must have EXACTLY ${rawQuestions.length} objects.
       "answer_note": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm².",
       "hint": "Think about which formula links curved surface area, radius and height.",
       "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
-      "illustration_prompt": "Draw a labelled diagram of a cylinder. Show elliptical top and bottom faces connected by two vertical lines. Draw a dashed line from the centre of the top face to its right edge labelled 'r = 4 cm' in accent colour. Draw a vertical arrow on the right side labelled 'h = 14 cm'. Use a clean minimal style with dark outlines on a white background.",
+      "illustration_prompt": "SVG brief: viewBox 0 0 400 300. White background rect. Cylinder centred: top ellipse cx=200 cy=100 rx=80 ry=25; bottom ellipse cx=200 cy=220 rx=80 ry=25; left line x=120 y=100→220; right line x=280 y=100→220; fill white, stroke #1f2937 w2. Dashed radius (200,100)→(280,100) stroke #4f46e5 dasharray 6 3. Label 'r = 4 cm' at (285,96) fill #4f46e5 font-size 13. Arrow (295,100)→(295,220) + arrowhead stroke #1f2937. Label 'h = 14 cm' at (305,165) font-size 13. Title 'Cylinder' at (200,278) text-anchor middle fill #6b7280.",
       "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm, h = 14cm and π = 22/7 gives 352cm²."
     }
   }

@@ -11,18 +11,31 @@ const db = () => svcClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// Columns that actually exist in the profiles table.
-// bio, first_name, last_name, state, country do NOT exist.
-const SELECT_COLS = [
-  'id', 'username', 'full_name', 'class_level', 'email',
+// Core columns guaranteed to exist in the profiles table.
+const SELECT_COLS_SAFE = [
+  'id', 'username', 'full_name', 'class_level',
   'school_id', 'school_name',
-  'exam_type', 'exam_types',
-  'subjects', 'subjects_waec', 'subjects_jamb',
+  'exam_type', 'subjects',
   'total_points', 'streak_days',
   'target_waec', 'target_jamb', 'target_jamb_breakdown',
   'target_university', 'target_course',
-  'onboarded', 'created_at',
+  'created_at',
 ].join(', ')
+
+// Extended columns added by migration (may not exist yet).
+const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded'
+
+// Try extended select; fall back to safe if the DB rejects unknown columns.
+async function selectProfile(db, userId) {
+  const { data, error } = await db
+    .from('profiles').select(SELECT_COLS_EXT).eq('id', userId).single()
+  if (!error) return { data }
+  const fallback = await db
+    .from('profiles').select(SELECT_COLS_SAFE).eq('id', userId).single()
+  return fallback
+}
+
+const SELECT_COLS = SELECT_COLS_EXT
 
 const ALLOWED_PATCH = [
   'username', 'full_name', 'class_level',
@@ -40,14 +53,22 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await db()
-    .from('profiles')
-    .select(SELECT_COLS)
-    .eq('id', user.id)
-    .single()
+  const { data, error } = await selectProfile(db(), user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ...data, email: user.email })
+
+  // Normalise missing columns so clients always get the same shape
+  const examType = data.exam_types?.[0] ?? data.exam_type ?? 'WAEC'
+  const normalised = {
+    ...data,
+    email:         user.email,
+    exam_type:     examType,
+    exam_types:    data.exam_types    ?? [examType],
+    subjects_waec: data.subjects_waec ?? (examType === 'WAEC' ? (data.subjects ?? []) : []),
+    subjects_jamb: data.subjects_jamb ?? (examType === 'JAMB' ? (data.subjects ?? []) : []),
+    onboarded:     data.onboarded     ?? true,
+  }
+  return NextResponse.json(normalised)
 }
 
 export async function PATCH(request) {

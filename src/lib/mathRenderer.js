@@ -91,7 +91,13 @@ export function toLatex(expr) {
   s = s.replace(
     /([A-Za-z][A-Za-z0-9^{}+\-*]*(?:\^{[^}]+}|\^\d+)?)\s*\/\s*([A-Za-z0-9^{}+\-*]+(?:\^{[^}]+}|\^\d+)?)/g,
     (match, num, den) => {
-      // Don't convert units like m/s, km/h
+      // Don't convert scientific/chemistry units: m/s, g/mol, kJ/mol, dm³/mol,
+      // km/h, cm/s, J/K, mol/L, N/m, W/m², etc.
+      // Rule: if either side is a pure unit token (letters only, 1–5 chars,
+      // possibly with a digit suffix for superscripts like dm3), skip it.
+      const UNIT_RE = /^[A-Za-z]{1,5}\d?$/ // mol, kJ, dm3, cm, Hz, Pa, atm…
+      if (UNIT_RE.test(num) && UNIT_RE.test(den)) return match
+      // Also skip single-letter / single-letter (m/s, g/L, etc.)
       if (/^[a-z]$/.test(num) && /^[a-z]$/.test(den)) return match
       return `\\frac{${num}}{${den}}`
     }
@@ -221,17 +227,42 @@ function splitSegments(text) {
     segments.push({ type: 'text', content: remaining.slice(last) })
   }
 
-  // SAFETY NET: if any text segment contains raw LaTeX commands (\text{, \frac, \circ etc.)
-  // that slipped through without delimiters, wrap the whole segment as math
+  // SAFETY NET: if any text segment contains raw LaTeX commands (\frac, \circ etc.)
+  // that slipped through without delimiters, wrap the whole segment as math.
+  // \text{ ... } wrappers are stripped first — their contents may be math commands.
   const rawLatexPattern = /\\(?:text\s*\{|frac\s*\{|circ|sqrt\s*\{|times|div|leq|geq|cdot|theta|alpha|beta|pi|Delta|angle|therefore|approx)/
+
+  // Strip \text{...} including nested braces, e.g. \text{ \frac{g}{mol} } → \frac{g}{mol}
+  function stripTextWrapper(s) {
+    return s.replace(/\\text\s*\{/g, (_, offset) => {
+      // Find the matching closing brace (handles nested braces)
+      let depth = 1, i = offset + _.length
+      while (i < s.length && depth > 0) {
+        if (s[i] === '{') depth++
+        else if (s[i] === '}') depth--
+        i++
+      }
+      return '' // signal: replace the whole \text{...} — done below
+    })
+    // Simpler approach: just remove \text{ and its paired closing } iteratively
+  }
+
+  // Actually do it properly with a loop
+  function removeTextWrappers(s) {
+    let out = s
+    // Remove \text{ ... } handling nested braces
+    let prev
+    do {
+      prev = out
+      out = out.replace(/\\text\s*\{([^{}]*)\}/g, '$1')
+    } while (out !== prev)
+    return out.trim()
+  }
+
   const wrappedSegments = segments.map(seg => {
     if (seg.type !== 'text') return seg
     if (!rawLatexPattern.test(seg.content)) return seg
-    // Strip \text{...} wrappers — pull out the text content, render math parts separately
-    // Replace \text{prose} with just the prose, keep actual math commands
-    const cleaned = seg.content
-      .replace(/\\text\s*\{([^}]*)\}/g, '$1')  // unwrap \text{...} → plain text
-      .trim()
+    const cleaned = removeTextWrappers(seg.content)
     // If after stripping \text{} there are still LaTeX commands, render as math
     if (/\\(?:frac|circ|sqrt|times|leq|geq|theta|alpha|beta|pi|Delta|angle)/.test(cleaned)) {
       return { type: 'math', content: cleaned }
@@ -250,12 +281,19 @@ function splitSegments(text) {
 function autoDetect(text) {
   if (!text) return []
 
+  // Scientific unit patterns that look like fractions but must NOT be converted.
+  // g/mol, kJ/mol, m/s, km/h, dm³/mol, J/K, mol/L, N/m, cm/s, W/m, etc.
+  // Rule: both sides are short letter-only tokens (≤5 chars, optional digit).
+  const UNIT_SLASH_RE = /^[A-Za-z]{1,5}\d?\/[A-Za-z]{1,5}\d?$/
+  if (UNIT_SLASH_RE.test(text.trim())) return [{ type: 'text', content: text }]
+
   // Patterns that indicate this chunk is math
   const MATH_PATTERNS = [
     // (expr)/(expr)
     /\([^()]+\)\s*\/\s*\([^()]+\)/,
     // algebraic fraction: letter/something or something/letter
-    /[A-Za-z][A-Za-z0-9]*\s*\/\s*[A-Za-z0-9]/,
+    // but NOT pure unit tokens like g/mol, m/s, kJ/mol
+    /(?<![A-Za-z]{1,5}\/)[A-Za-z][A-Za-z0-9]*\s*\/\s*[A-Za-z0-9]/,
     // ALL simple numeric fractions: 1/2, 3/4, 22/7
     /\b\d+\s*\/\s*\d+\b/,
     // sqrt(...)
@@ -291,7 +329,9 @@ function autoDetect(text) {
       result.push({ type: 'text', content: text.slice(last, m.index) })
     }
 
-    if (isMathTok) {
+    // Never treat pure unit tokens (g/mol, m/s, kJ/mol, dm3/mol…) as math
+    const isUnitTok = /^[A-Za-z]{1,5}\d?\/[A-Za-z]{1,5}\d?$/.test(tok)
+    if (isMathTok && !isUnitTok) {
       result.push({ type: 'math', content: tok })
     } else {
       result.push({ type: 'text', content: tok })

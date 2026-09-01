@@ -27,6 +27,7 @@ import { updateLocalMastery } from '@/lib/localMastery'
 
 const HISTORY_KEY  = 'ep_session_history'
 const ACTIVITY_KEY = 'ep_activity'
+const STREAK_KEY   = 'ep_streak'       // { days: number, lastDate: 'YYYY-MM-DD' }
 const QUEUE_KEY    = 'ep_sync_queue'
 const LOCK_KEY     = 'ep_sync_queue_lock'
 const LOCK_TTL_MS  = 30_000   // 30s — stale lock timeout
@@ -132,6 +133,44 @@ export function readWeeklyActivity() {
   } catch { return [0, 0, 0, 0, 0, 0, 0] }
 }
 
+// ── Streak ───────────────────────────────────────────────────────────────────
+
+/**
+ * Compute and persist the local streak from ep_activity.
+ * Streak = consecutive calendar days ending today where questions were answered.
+ */
+export function computeAndSaveStreak() {
+  try {
+    const activity = safeRead(ACTIVITY_KEY, {})
+    const today    = localDateStr()
+    let streak = 0
+    const cursor = new Date()
+    while (true) {
+      const key = localDateStr(cursor)
+      if (activity[key] && activity[key] > 0) {
+        streak++
+        cursor.setDate(cursor.getDate() - 1)
+      } else {
+        break
+      }
+    }
+    safeWrite(STREAK_KEY, { days: streak, lastDate: today })
+    return streak
+  } catch { return 0 }
+}
+
+/**
+ * Read the locally-cached streak. Recomputes if stale (new day or no cache).
+ */
+export function readLocalStreak() {
+  try {
+    const cached = safeRead(STREAK_KEY, null)
+    const today  = localDateStr()
+    if (cached && cached.lastDate === today) return cached.days ?? 0
+    return computeAndSaveStreak()
+  } catch { return 0 }
+}
+
 // ── Sync queue ────────────────────────────────────────────────────────────────
 
 function readQueue() { return safeRead(QUEUE_KEY, []) }
@@ -183,12 +222,15 @@ export function saveSessionLocally(sessionData, xpAwarded = 0) {
     ?? 0
   if (questionCount > 0) recordActivity(questionCount)
 
-  // 3. Update local mastery — instant, per-exam, per-topic
+  // 3. Recompute local streak now that activity has been updated
+  computeAndSaveStreak()
+
+  // 4. Update local mastery — instant, per-exam, per-topic
   if (sessionData.exam && sessionData.results?.length) {
     updateLocalMastery(sessionData.exam, sessionData.results, sessionData.subject_name)
   }
 
-  // 4. Queue for server sync
+  // 5. Queue for server sync
   enqueue(sessionData)
 }
 

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
+import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 
 import { BLUE, CYAN, GREEN, RED, ORANGE, GOLD, pct, msToSecs } from '@/components/session/SessionUtils'
 import { LoadingScreen, ErrorScreen, EndDialog, QuestionNav, SessionTimer, QuestionCountdown } from '@/components/session/SessionPrimitives'
@@ -33,10 +33,12 @@ export default function PracticeSessionPage() {
   const [errMsg,     setErrMsg]    = useState('')
   const [showEnd,    setShowEnd]   = useState(false)
   const [dialogMode, setDialogMode]= useState('end')
+  const [pendingMap, setPendingMap]= useState(null)
   const [showCalc,   setShowCalc]  = useState(false)
 
-  const startTimeRef = useRef(Date.now())
-  const sessionIdRef = useRef(crypto.randomUUID())
+  const startTimeRef    = useRef(Date.now())
+  const sessionIdRef    = useRef(crypto.randomUUID())
+  const savedResultsRef = useRef(null)   // set by saveSession; read by results + review screens
 
   // ── Load questions ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -91,13 +93,33 @@ export default function PracticeSessionPage() {
   // ── Next / Submit ──────────────────────────────────────────────────────────
   function handleNext({ selectedIdx, isCorrect } = {}) {
     const isLast = qIndex >= questions.length - 1
+
+    // Build the updated map synchronously so we never lose the last answer
+    // to React's async batching when saveSession reads answerMap too early.
+    let updatedMap = answerMap
     if (selectedIdx !== null && selectedIdx !== undefined) {
-      recordAnswer(qIndex, { isCorrect, selectedIdx, timeTakenMs: 0 })
+      const q = questions[qIndex]
+      const entry = {
+        question_id: q.id, topic_id: q.topic_id, subject_id: q.subject_id,
+        topic_name: q.topic_name || '', subject_name: q.subject_name || '',
+        isCorrect, is_correct: isCorrect, selectedIdx, time_taken_ms: 0,
+      }
+      updatedMap = { ...answerMap, [qIndex]: entry }
+      setAnswerMap(updatedMap)
+      setSkipped(prev => { const s = new Set(prev); s.delete(qIndex); return s })
     } else {
       setSkipped(prev => new Set([...prev, qIndex]))
     }
-    if (isLast) { setDialogMode('submit'); setShowEnd(true) }
-    else setQIndex(i => i + 1)
+
+    if (isLast) {
+      // Pass the fully-updated map directly so saveSession doesn't rely on
+      // stale state captured before React flushes the setAnswerMap above.
+      setDialogMode('submit')
+      setPendingMap(updatedMap)
+      setShowEnd(true)
+    } else {
+      setQIndex(i => i + 1)
+    }
   }
 
   // ── Save session ───────────────────────────────────────────────────────────
@@ -133,17 +155,29 @@ export default function PracticeSessionPage() {
     saveSessionLocally(payload, localXP)
     try { localStorage.removeItem('ep_pending_session') } catch {}
 
+    // Freeze the final answers in a ref BEFORE setPhase so that both
+    // SessionResults and ReviewSession always read the complete, correct list —
+    // never a stale answerMap snapshot from React's async state queue.
+    savedResultsRef.current = results
+
     setTotalPoints((currentXP || 0) + localXP)
     showXPToast(localXP, 'Practice session done!')
-    setSaveData({ xp_awarded: localXP, streak_days: 0, duration_secs: durationSecs })
+    // Read local streak (computed by saveSessionLocally → computeAndSaveStreak)
+    const localStreak = readLocalStreak()
+    setSaveData({ xp_awarded: localXP, streak_days: localStreak, duration_secs: durationSecs })
     setPhase('results')
 
-    // Background sync
+    // Background sync — update streak from server response if available
     flushSyncQueue().then(synced => {
       if (synced > 0) {
         fetch('/api/student/profile')
           .then(r => r.ok ? r.json() : null)
-          .then(prof => { if (prof?.total_points) setTotalPoints(prof.total_points) })
+          .then(prof => {
+            if (prof?.total_points) setTotalPoints(prof.total_points)
+            if (prof?.streak_days != null) {
+              setSaveData(prev => prev ? { ...prev, streak_days: prof.streak_days } : prev)
+            }
+          })
           .catch(() => {})
       }
     }).catch(() => {})
@@ -165,8 +199,21 @@ export default function PracticeSessionPage() {
   const hasOverallTimer = !isSpeedRound && !!(config?.durationSecs)
   const speedSecs       = isSpeedRound ? (config?.speedSecs ?? 30) : null
   const answeredCount   = Object.keys(answerMap).length
-  const answersArray    = questions.map((_, i) => answerMap[i] ?? null)
+  // After saveSession runs, read from the frozen ref — not from answerMap state
+  // which React may not have flushed yet when the results/review screens render.
+  const answersArray = savedResultsRef.current
+    ? savedResultsRef.current.map(r => ({ selectedIdx: r.selectedIdx, isCorrect: r.isCorrect ?? r.is_correct }))
+    : questions.map((_, i) => answerMap[i] ?? null)
   const subjectLabel    = config?.subjects?.[0] ?? ''
+
+  // Called immediately on selection in study mode — makes the desktop explanation
+  // panel appear without waiting for the Next button click.
+  // Defined here (after sessionType) so the closure captures the correct value.
+  const handleAnswerChange = useCallback(({ selectedIdx, isCorrect }) => {
+    if (sessionType !== 'study') return
+    recordAnswer(qIndex, { isCorrect, selectedIdx, timeTakenMs: 0 })
+  }, [qIndex, sessionType, recordAnswer])
+
   const modeLabel       = { study:'Study', practice:'Practice', timed:'Speed Round', quick5:'Quick 5', mock:'Mock Exam' }[config?.mode] ?? 'Practice'
   const q               = questions[qIndex]
 
@@ -217,16 +264,16 @@ export default function PracticeSessionPage() {
         }
       `}</style>
 
+      <div style={{ position:'fixed', inset:0, zIndex:1000, background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
       {showEnd && (
         <EndDialog
           answered={answeredCount} total={questions.length} mode={dialogMode}
-          onConfirm={() => { setShowEnd(false); saveSession() }}
-          onCancel={() => setShowEnd(false)}
+          onConfirm={() => { setShowEnd(false); saveSession(pendingMap ?? undefined) }}
+          onCancel={() => { setShowEnd(false); setPendingMap(null) }}
         />
       )}
       {showCalc && <Calculator onClose={() => setShowCalc(false)} dark={dark}/>}
-
-      <div style={{ position:'fixed', inset:0, zIndex:1000, background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
         {/* TOP BAR */}
         <div style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
@@ -278,6 +325,7 @@ export default function PracticeSessionPage() {
                 qIndex={qIndex}
                 total={questions.length}
                 onNext={handleNext}
+                onAnswerChange={handleAnswerChange}
                 onPrev={() => setQIndex(i => Math.max(0, i-1))}
                 sessionType={sessionType}
                 speedSecs={speedSecs}
@@ -285,24 +333,20 @@ export default function PracticeSessionPage() {
                 dark={dark}
                 alreadyAnswered={answerMap[qIndex] ?? null}
                 reviewMode={false}
-                hideExplanation={true}
+                hideExplanation={sessionType !== 'study'}
               />
             )}
           </div>
 
-          {/* RIGHT: explanation panel (desktop, study mode) */}
-          {q?.explanation && (
-            <div className="session-exp-col" style={{ overflowY:'auto', background:'var(--bg-base)' }}>
-              {answerMap[qIndex] ? (
+          {/* RIGHT: explanation panel (desktop, study mode only) */}
+          {sessionType === 'study' && (
+            <div className="session-exp-col" style={{ overflowY:'auto', background:'var(--bg-base)', padding: answerMap[qIndex] ? '0' : '0' }}>
+              {q?.explanation && answerMap[qIndex] ? (
                 <ExplanationBlock explanation={q.explanation} isCorrect={answerMap[qIndex]?.isCorrect} dark={dark}/>
-              ) : sessionType === 'study' ? (
-                <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-                  <div style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:32, marginBottom:8 }}>💡</div>
-                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text-tert)', lineHeight:1.5 }}>Answer the question to see the explanation</div>
-                  </div>
-                </div>
-              ) : null}
+              ) : (
+                // Empty panel while question is unanswered — keeps layout stable
+                <div style={{ height:'100%' }}/>
+              )}
             </div>
           )}
         </div>

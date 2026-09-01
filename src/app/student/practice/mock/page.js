@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
+import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 
 import { BLUE, CYAN, GREEN, RED, ORANGE, NAVY, PURPLE, pct, msToSecs } from '@/components/session/SessionUtils'
 import { LoadingScreen, ErrorScreen, EndDialog, SessionTimer } from '@/components/session/SessionPrimitives'
@@ -323,9 +323,10 @@ export default function MockPage() {
     saveSessionLocally(payload, localXP)
     setTotalPoints((currentXP||0)+localXP)
     showXPToast(localXP, 'Mock exam complete!')
-    setSaveData({ xp_awarded:localXP, streak_days:0, duration_secs:durationSecs })
+    const localStreak = readLocalStreak()
+    setSaveData({ xp_awarded:localXP, streak_days:localStreak, duration_secs:durationSecs })
     setPhase('results')
-    flushSyncQueue().then(s=>{ if(s>0) fetch('/api/student/profile').then(r=>r.ok?r.json():null).then(p=>{if(p?.total_points)setTotalPoints(p.total_points)}).catch(()=>{}) }).catch(()=>{})
+    flushSyncQueue().then(s=>{ if(s>0) fetch('/api/student/profile').then(r=>r.ok?r.json():null).then(p=>{ if(p?.total_points)setTotalPoints(p.total_points); if(p?.streak_days!=null)setSaveData(prev=>prev?{...prev,streak_days:p.streak_days}:prev) }).catch(()=>{}) }).catch(()=>{})
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -394,17 +395,19 @@ export default function MockPage() {
         }
       `}</style>
 
-      {showEnd && (
-        <EndDialog
-          answered={allAnswers.filter(Boolean).length} total={totalQs} mode="submit"
-          onConfirm={()=>{ setShowEnd(false); saveSession() }}
-          onCancel={()=>setShowEnd(false)}
-        />
-      )}
-      {showCalc && <Calculator onClose={()=>setShowCalc(false)} dark={dark}/>}
-
-      {/* zIndex:200 — covers StudentBottomNav (zIndex:100) and MobileTopbar */}
+      {/* zIndex:1000 — covers StudentBottomNav (zIndex:100) and MobileTopbar */}
       <div style={{ position:'fixed', inset:0, zIndex:1000, background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+        {/* EndDialog (zIndex:1200) and Calculator (zIndex:1200) sit above the */}
+        {/* session container (zIndex:1000) so they are always clickable.       */}
+        {showEnd && (
+          <EndDialog
+            answered={allAnswers.filter(Boolean).length} total={totalQs} mode="submit"
+            onConfirm={()=>{ setShowEnd(false); saveSession() }}
+            onCancel={()=>setShowEnd(false)}
+          />
+        )}
+        {showCalc && <Calculator onClose={()=>setShowCalc(false)} dark={dark}/>}
 
         {/* TOP BAR */}
         <div style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>

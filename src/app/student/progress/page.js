@@ -120,22 +120,37 @@ function buildTrendBuckets(exam, subjectId, periodDays) {
     const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
     if (periodDays <= 14) {
-      // Daily buckets — show day name + date
+      // Daily buckets — always start from Monday so the week reads left-to-right
+      // as Mon → Tue → Wed → Thu → Fri → Sat → Sun (same as ActivityChart).
+      // Future days (after today) are included but shown as null (no data).
+      const numWeeks  = periodDays === 7 ? 1 : 2
+      const todayDate = new Date(today)
+      // Find this week's Monday
+      const thisMon = new Date(todayDate)
+      thisMon.setDate(todayDate.getDate() - ((todayDate.getDay() + 6) % 7))
+      thisMon.setHours(0, 0, 0, 0)
+      // Start from Monday of the earliest week
+      const startMon = new Date(thisMon)
+      startMon.setDate(thisMon.getDate() - (numWeeks - 1) * 7)
+
+      const todayStr = localDateStr(todayDate)
       const buckets = []
-      for (let i = periodDays - 1; i >= 0; i--) {
-        const d = new Date(today)
-        d.setDate(today.getDate() - i)
-        const key = localDateStr(d)
-        const dayAttempts = allAttempts.filter(a => a.d === key)
-        const total = dayAttempts.length
+      for (let i = 0; i < numWeeks * 7; i++) {
+        const d = new Date(startMon)
+        d.setDate(startMon.getDate() + i)
+        const key     = localDateStr(d)
+        const isFuture = key > todayStr
+        const isToday  = key === todayStr
+        const dayAttempts = isFuture ? [] : allAttempts.filter(a => a.d === key)
+        const total   = dayAttempts.length
         const correct = dayAttempts.filter(a => a.c).length
-        const label = i === 0 ? 'Today'
-          : i === 1 ? 'Yest'
+        const label   = isToday ? 'Today'
           : `${DAY_NAMES[d.getDay()]} ${d.getDate()}`
         buckets.push({
           label,
-          score: total >= 3 ? Math.round((correct/total)*100) : null,
+          score:    isFuture ? null : (total >= 3 ? Math.round((correct/total)*100) : null),
           attempts: total,
+          isFuture,
         })
       }
       return buckets
@@ -471,9 +486,34 @@ function TopicLists({ insight }) {
 
   const scored = insight.topics.filter(t => t.enough_data)
   const strong = [...scored].sort((a,b) => b.score - a.score).slice(0, 3)
-  const weak   = [...scored].sort((a,b) => a.score - b.score).slice(0, 3)
 
-  if (!scored.length) return (
+  // "Needs Work" priority:
+  //   1. Topics with enough_data AND a real score — sorted lowest first.
+  //      These are genuinely weak areas (the student has real evidence of struggle).
+  //   2. Fallback: if no scored topics exist yet, show attempted topics (any attempt
+  //      count) sorted by worst raw accuracy, so the student gets useful direction
+  //      even before they've hit the 5-attempt threshold.
+  let weak
+  if (scored.length > 0) {
+    // Normal path — real scored data exists
+    weak = [...scored].sort((a,b) => a.score - b.score).slice(0, 3)
+  } else {
+    // Fallback: topics with attempts but not yet enough for a stable score.
+    // Rank by raw accuracy (correct / total) ascending — worst ratio first.
+    // A topic with 0 correct out of 4 attempts ranks worse than 1/4.
+    const attempted = insight.topics.filter(t => t.total > 0)
+    weak = [...attempted]
+      .sort((a, b) => {
+        const ratioA = a.total > 0 ? a.correct / a.total : 0
+        const ratioB = b.total > 0 ? b.correct / b.total : 0
+        // Lowest ratio first; break ties by most attempts (more evidence)
+        if (ratioA !== ratioB) return ratioA - ratioB
+        return b.total - a.total
+      })
+      .slice(0, 3)
+  }
+
+  if (!scored.length && !weak.length) return (
     <div style={{ textAlign:'center', padding:'16px 0', fontSize:12, color:'var(--text-tert)' }}>
       Need at least 5 attempts per topic to score. Keep practising!
     </div>
@@ -509,19 +549,28 @@ function TopicLists({ insight }) {
           <span>⚠️</span> Needs Work
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-          {weak.map((t,i) => (
-            <div key={t.topic_id??i} style={{ padding:'8px 10px', borderRadius:11, background:`${RED}0f`, border:`1px solid ${RED}20` }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text-prim)', marginBottom:3, lineHeight:1.3 }}>
-                {t.topic_name || 'Unknown'}
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <div style={{ flex:1, height:4, borderRadius:999, background:'var(--bg-subtle)', overflow:'hidden' }}>
-                  <div style={{ height:'100%', width:`${t.score}%`, borderRadius:999, background:RED }}/>
+          {weak.map((t,i) => {
+            // Use real score if available; fallback to raw accuracy for under-threshold topics
+            const displayScore = t.enough_data
+              ? t.score
+              : (t.total > 0 ? Math.round((t.correct / t.total) * 100) : 0)
+            return (
+              <div key={t.topic_id??i} style={{ padding:'8px 10px', borderRadius:11, background:`${RED}0f`, border:`1px solid ${RED}20` }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-prim)', marginBottom:3, lineHeight:1.3 }}>
+                  {t.topic_name || 'Unknown'}
                 </div>
-                <span style={{ fontSize:10, fontWeight:900, color:RED, flexShrink:0 }}>{t.score}%</span>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <div style={{ flex:1, height:4, borderRadius:999, background:'var(--bg-subtle)', overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${displayScore}%`, borderRadius:999, background:RED }}/>
+                  </div>
+                  <span style={{ fontSize:10, fontWeight:900, color:RED, flexShrink:0 }}>
+                    {displayScore}%
+                    {!t.enough_data && <span style={{ fontSize:8, fontWeight:600, opacity:.65, marginLeft:2 }}>({t.total} att)</span>}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

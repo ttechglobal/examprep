@@ -59,7 +59,9 @@ export async function POST(request) {
     .eq('id', user.id)
 
   return NextResponse.json({
-    success: true,
+    success:     true,
+    school_id:   cohort.school_id,
+    school_name: cohort.schools?.name ?? null,
     cohort: { name: cohort.name, school: cohort.schools?.name }
   })
 }

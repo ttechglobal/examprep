@@ -964,7 +964,7 @@ function SettingsTab({ school, onSaved }) {
     setError(null)
     try {
       const res  = await fetch('/api/school/setup', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schoolName: name.trim(), city: city.trim(), state }),
       })
       const data = await res.json()

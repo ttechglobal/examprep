@@ -413,6 +413,158 @@ function StepSubjects({ data, onNext, onBack }) {
   )
 }
 
+
+// ─── STEP 3b: OPTIONAL ACCOUNT CREATION ─────────────────────────
+function StepAccount({ data, onNext, onBack }) {
+  const [email,        setEmail]        = useState('')
+  const [password,     setPassword]     = useState('')
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState('')
+  const [oauthLoading, setOauthLoading] = useState(false)
+
+  function saveGuestLocally() {
+    const subjectsWaec = data.exams.includes('WAEC') ? data.subjects : []
+    const subjectsJamb = data.exams.includes('JAMB') ? data.subjects : []
+    localStorage.setItem('ep_guest', JSON.stringify({
+      username: data.username, full_name: data.username,
+      exams: data.exams, subjects: data.subjects,
+      subjects_waec: subjectsWaec, subjects_jamb: subjectsJamb,
+      onboarded: true,
+    }))
+  }
+
+  async function handleEmailSignup() {
+    if (!email.trim() || password.length < 6) {
+      setError('Enter a valid email and a password with at least 6 characters.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const supabase = createClient()
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { username: data.username, full_name: data.username } },
+      })
+      if (signUpErr) { setError(signUpErr.message); setLoading(false); return }
+      saveGuestLocally()
+      onNext({ accountCreated: true })
+    } catch (e) { setError(e.message); setLoading(false) }
+  }
+
+  async function handleGoogle() {
+    setOauthLoading(true)
+    setError('')
+    try {
+      saveGuestLocally()
+      const supabase = createClient()
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/student/home` },
+      })
+    } catch (e) { setError(e.message); setOauthLoading(false) }
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1 }}>
+      <div style={{ marginBottom:20 }}>
+        <h2 className="text-primary" style={{ fontSize:22, fontWeight:900, letterSpacing:'-.03em', marginBottom:8 }}>
+          Save your progress
+        </h2>
+        <p className="text-secondary" style={{ fontSize:13, lineHeight:1.65 }}>
+          Create a free account to save your stats, join the leaderboard, and connect to your school. You can skip this and do it later.
+        </p>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:20 }}>
+        {[
+          { icon:'\u{1F3C6}', text:'Join leaderboard' },
+          { icon:'\u{1F3EB}', text:'Connect school' },
+          { icon:'\u{1F4CA}', text:'Track progress' },
+          { icon:'\u{1F504}', text:'Sync across devices' },
+        ].map(b => (
+          <div key={b.text} style={{
+            display:'flex', alignItems:'center', gap:8,
+            background:'var(--bg-card)', border:'1px solid var(--border)',
+            borderRadius:10, padding:'10px 12px',
+            fontSize:12, fontWeight:600, color:'var(--text-sec)',
+          }}>
+            <span style={{ fontSize:15 }}>{b.icon}</span>{b.text}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleGoogle}
+        disabled={oauthLoading || loading}
+        style={{
+          width:'100%', padding:'13px 16px', borderRadius:12,
+          border:'1.5px solid var(--border-strong)',
+          background:'var(--bg-card)',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+          fontSize:14, fontWeight:700, color:'var(--text-prim)',
+          cursor:'pointer', marginBottom:12,
+          opacity: (oauthLoading || loading) ? 0.6 : 1,
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        {oauthLoading ? 'Redirecting...' : 'Continue with Google'}
+      </button>
+
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+        <div style={{ flex:1, height:1, background:'var(--border)' }}/>
+        <span className="text-tertiary" style={{ fontSize:11, fontWeight:600 }}>or</span>
+        <div style={{ flex:1, height:1, background:'var(--border)' }}/>
+      </div>
+
+      <input
+        type="email" placeholder="Email address"
+        value={email} onChange={e => { setEmail(e.target.value); setError('') }}
+        style={{
+          width:'100%', padding:'13px 14px', borderRadius:12,
+          border:'1.5px solid var(--border-strong)', background:'var(--bg-card)',
+          fontSize:14, color:'var(--text-prim)', marginBottom:10,
+        }}
+      />
+      <input
+        type="password" placeholder="Password (min 6 characters)"
+        value={password} onChange={e => { setPassword(e.target.value); setError('') }}
+        style={{
+          width:'100%', padding:'13px 14px', borderRadius:12,
+          border:'1.5px solid var(--border-strong)', background:'var(--bg-card)',
+          fontSize:14, color:'var(--text-prim)', marginBottom:10,
+        }}
+      />
+
+      {error && <p style={{ fontSize:12, color:'#ef5d4e', marginBottom:8, fontWeight:600 }}>{error}</p>}
+
+      <Cta onClick={handleEmailSignup} loading={loading} disabled={oauthLoading}>
+        Create account &amp; continue
+      </Cta>
+
+      <button
+        onClick={() => onNext({ accountCreated: false })}
+        disabled={loading || oauthLoading}
+        style={{
+          background:'none', border:'none', fontSize:13, fontWeight:600,
+          color:'var(--text-tert)', cursor:'pointer', padding:'14px 0 4px',
+          textAlign:'center', width:'100%',
+        }}
+      >
+        Skip for now &mdash; I'll create an account later
+      </button>
+
+      <button onClick={onBack} style={{
+        background:'none', border:'none', fontSize:12, fontWeight:600,
+        cursor:'pointer', padding:'8px 0', color:'var(--text-tert)',
+      }}>
+        ← Back
+      </button>
+    </div>
+  )
+}
+
 // ─── STEP 4: MASCOT INTRO ────────────────────────────────────────────────────
 function StepMascot({ data, onFinish }) {
   const [loading, setLoading] = useState(false)
@@ -576,7 +728,7 @@ function StepMascot({ data, onFinish }) {
 export default function OnboardingPage() {
   const router = useRouter()
   const { dark, toggle } = useTheme()
-  const [step, setStep] = useState(0) // 0–3
+  const [step, setStep] = useState(0) // 0–4 (0=username, 1=exam, 2=subjects, 3=account, 4=mascot)
   const [formData, setFormData] = useState({})
   const [checking, setChecking] = useState(true)
 
@@ -666,7 +818,7 @@ export default function OnboardingPage() {
 
           {/* STEP DOTS */}
           <div style={{ padding: '12px 0 20px' }}>
-            <StepDots current={step} total={4}/>
+            <StepDots current={step} total={5}/>
           </div>
 
           {/* STEP CONTENT */}
@@ -674,7 +826,8 @@ export default function OnboardingPage() {
             {step === 0 && <StepUsername onNext={advance}/>}
             {step === 1 && <StepExamType onNext={advance} onBack={goBack}/>}
             {step === 2 && <StepSubjects data={formData} onNext={advance} onBack={goBack}/>}
-            {step === 3 && <StepMascot data={formData} onFinish={finish}/>}
+            {step === 3 && <StepAccount data={formData} onNext={advance} onBack={goBack}/>}
+            {step === 4 && <StepMascot data={formData} onFinish={finish}/>}
           </div>
 
         </div>

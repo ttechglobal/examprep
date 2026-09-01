@@ -36,7 +36,7 @@ export function EndDialog({ answered, total, onConfirm, onCancel, mode = 'end' }
   const unanswered = total - answered
   const isSubmit   = mode === 'submit'
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:500, background:'rgba(0,0,0,.65)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div style={{ position:'fixed', inset:0, zIndex:1200, background:'rgba(0,0,0,.65)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--bg-base)', borderRadius:22, border:'1px solid var(--border)', padding:'28px 24px', maxWidth:360, width:'100%', boxShadow:'0 24px 60px rgba(0,0,0,.6)' }}>
         <div style={{ fontSize:36, textAlign:'center', marginBottom:12 }}>{isSubmit ? '📋' : '⚠️'}</div>
         <div style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', textAlign:'center', marginBottom:8 }}>

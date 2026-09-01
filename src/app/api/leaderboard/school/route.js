@@ -107,19 +107,22 @@ export async function GET(request) {
           streak_days: p.streak_days ?? 0,
         }))
     } else {
-      // Aggregate XP from practice sessions in the window
-      const { data: sessions, error: sessErr } = await service
-        .from('practice_sessions')
-        .select('student_id, xp_awarded')
+      // Aggregate XP from question_attempts in the window.
+      // practice_sessions.xp_awarded does not exist in the DB schema.
+      const { data: attempts, error: sessErr } = await service
+        .from('question_attempts')
+        .select('student_id, is_correct')
         .in('student_id', studentIds)
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
 
       if (sessErr) throw sessErr
 
+      const XP_PER_CORRECT = 10
       const xpMap = {}
-      for (const s of sessions ?? []) {
-        xpMap[s.student_id] = (xpMap[s.student_id] ?? 0) + (s.xp_awarded ?? 0)
+      for (const a of attempts ?? []) {
+        if (!a.is_correct) continue
+        xpMap[a.student_id] = (xpMap[a.student_id] ?? 0) + XP_PER_CORRECT
       }
 
       leaderboard = Object.entries(xpMap)

@@ -21,8 +21,8 @@ const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
 
-const CACHE_SECS = 120  // school: 2 min (more personal); national: longer but we also use this
-const NAT_CACHE_SECS = 600
+const CACHE_SECS     = 120  // school: 2 min
+const NAT_CACHE_SECS = 120  // national: 2 min (was 10 — reduced to prevent stale empty caches)
 
 function cacheKey(scope, period) { return `ep_lb_${scope}_${period}` }
 function readCache(scope, period) {
@@ -194,7 +194,7 @@ function SchoolNotConnected({ profile, onLinked, isGuest }) {
           <div style={{ fontSize:40, marginBottom:12 }}>🏫</div>
           <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:6 }}>Connect your school</div>
           <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6, marginBottom:20, maxWidth:320, margin:'0 auto 20px' }}>
-            Create a free account first, then enter your school's access code to join the school leaderboard and share your progress with teachers.
+            Create a free account first, then enter your school's code to join the school leaderboard and share your progress with teachers.
           </div>
           <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
             <Link href="/signup" style={{ textDecoration:'none' }}>
@@ -230,7 +230,7 @@ function SchoolNotConnected({ profile, onLinked, isGuest }) {
         <div style={{ fontSize:40, marginBottom:12 }}>🏫</div>
         <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:6 }}>Connect your school</div>
         <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6, marginBottom:20, maxWidth:320, margin:'0 auto 20px' }}>
-          Enter the access code your teacher gave you to join your school's leaderboard and let your teachers track your progress.
+          Enter the school code your teacher gave you to join your school's leaderboard and let your teachers track your progress.
         </div>
         <div style={{ maxWidth:340, margin:'0 auto' }}>
           <JoinSchool profile={profile} onLinked={onLinked} compact={false}/>
@@ -344,7 +344,8 @@ export default function LeaderboardPage() {
     if (sc === 'school' && !hasSchool) { setBoard([]); setLoading(false); return }
 
     const cached = readCache(sc, per)
-    if (cached) { setBoard(cached); setLoading(false); return }
+    // Skip cache if it's empty — always re-fetch to check if data appeared
+    if (cached && cached.length > 0) { setBoard(cached); setLoading(false); return }
 
     setLoading(true)
     try {
@@ -356,7 +357,8 @@ export default function LeaderboardPage() {
       const data = await res.json()
       const list = data.leaderboard ?? []
       if (data.school_name) setSchoolName(data.school_name)
-      writeCache(sc, per, list)
+      // Only cache non-empty results — empty may be a transient failure
+      if (list.length > 0) writeCache(sc, per, list)
       setBoard(list)
     } catch {
       setBoard([])
@@ -482,7 +484,7 @@ export default function LeaderboardPage() {
             <Card style={{ padding:'16px' }}>
               <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>🏫 Connect your school</div>
               <div style={{ fontSize:11, color:'var(--text-tert)', marginBottom:12, lineHeight:1.5 }}>
-                Enter your school code to join the school leaderboard and share progress with your teachers.
+                Enter the school code your teacher gave you to join the leaderboard and share progress with your teachers.
               </div>
               <JoinSchool profile={profile} onLinked={handleLinked} compact={true}/>
             </Card>
@@ -494,7 +496,7 @@ export default function LeaderboardPage() {
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {[
                 { icon:'⭐', text:'Earn XP by practising questions and completing daily challenges.' },
-                { icon:'🏫', text:'School leaderboard shows rankings within your school. Connect with your school code.' },
+                { icon:'🏫', text:'School leaderboard shows rankings within your school. Connect using the school code from your teacher.' },
                 { icon:'📊', text:'Your performance trends are shared with your school if you\'re connected.' },
                 { icon:'📅', text:'Weekly board resets every Monday.' },
               ].map((item,i) => (
