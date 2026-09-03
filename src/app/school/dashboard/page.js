@@ -834,6 +834,9 @@ function CohortTab({ cohort, allCohorts, totalStudents, onCohortCreated }) {
         )}
       </Card>
 
+      {/* Live leaderboard for active cohort */}
+      <CohortLeaderboard cohort={cohort}/>
+
       {/* Past cohorts */}
       {allCohorts.filter(c => !c.is_active).length > 0 && (
         <div>
@@ -852,6 +855,125 @@ function CohortTab({ cohort, allCohorts, totalStudents, onCohortCreated }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Cohort leaderboard (used inside CohortTab) ────────────────────────────────
+function CohortLeaderboard({ cohort }) {
+  const [board,   setBoard]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [period,  setPeriod]  = useState('week')
+
+  useEffect(() => {
+    if (!cohort) { setLoading(false); return }
+    setLoading(true)
+    fetch(`/api/leaderboard/school?period=${period}&limit=15`)
+      .then(r => r.json())
+      .then(d => { setBoard(d.leaderboard ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [cohort, period])
+
+  if (!cohort) return null
+
+  const PERIOD_OPTS = [
+    { key: 'week',     label: 'This Week'  },
+    { key: 'lastWeek', label: 'Last Week'  },
+    { key: 'month',    label: 'This Month' },
+    { key: 'all',      label: 'All Time'   },
+  ]
+
+  const medalColors = ['#f59e0b', '#94a3b8', '#cd7f32']
+
+  return (
+    <Card>
+      <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <p style={{ fontSize: 14, fontWeight: 900, color: TEXT }}>🏆 Cohort Leaderboard</p>
+          <p style={{ fontSize: 11, color: DIM, marginTop: 2 }}>{cohort.name} · ranked by XP earned</p>
+        </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {PERIOD_OPTS.map(o => (
+            <button key={o.key} onClick={() => setPeriod(o.key)} style={{
+              padding: '5px 10px', borderRadius: 7, fontSize: 11, fontWeight: period === o.key ? 800 : 600,
+              border: `1px solid ${period === o.key ? BLUE : BORDER}`,
+              background: period === o.key ? `rgba(18,100,229,.08)` : CARD,
+              color: period === o.key ? BLUE : DIM, cursor: 'pointer', transition: 'all .12s',
+            }}>{o.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '28px', textAlign: 'center' }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2.5px solid ${EMERALD}`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite', margin: '0 auto 8px' }}/>
+          <p style={{ fontSize: 12, color: DIM }}>Loading rankings…</p>
+        </div>
+      ) : !board.length ? (
+        <div style={{ padding: '28px', textAlign: 'center' }}>
+          <p style={{ fontSize: 28, marginBottom: 8 }}>📊</p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: SEC, marginBottom: 4 }}>No rankings yet</p>
+          <p style={{ fontSize: 12, color: DIM, lineHeight: 1.5 }}>
+            Students need to practise questions to earn XP and appear here.
+          </p>
+        </div>
+      ) : (
+        <div>
+          {board.map((entry, i) => {
+            const rank       = entry.rank
+            const isMedal    = rank <= 3
+            const medalColor = medalColors[rank - 1]
+            return (
+              <div key={entry.student_id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '11px 20px',
+                borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
+                background: rank === 1 ? 'rgba(245,158,11,.04)' : 'transparent',
+              }}>
+                {/* Rank */}
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: isMedal ? medalColor : BG,
+                  border: `1px solid ${isMedal ? medalColor : BORDER}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 900,
+                  color: isMedal ? '#fff' : DIM,
+                }}>
+                  {rank}
+                </div>
+
+                {/* Avatar */}
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                  background: `linear-gradient(135deg, ${NAVY}, ${BLUE})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 800, color: '#fff',
+                }}>
+                  {(entry.name || 'S').charAt(0)}
+                </div>
+
+                {/* Name + streak */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.name || 'Student'}
+                  </p>
+                  {entry.streak_days > 0 && (
+                    <p style={{ fontSize: 10, color: AMBER }}>🔥 {entry.streak_days}d streak</p>
+                  )}
+                </div>
+
+                {/* XP */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 900, color: isMedal ? medalColor : TEXT }}>
+                    {(entry.xp || 0).toLocaleString()}
+                  </p>
+                  <p style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: DIM }}>XP</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
   )
 }
 

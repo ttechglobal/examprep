@@ -47,7 +47,7 @@ function Card({ children, style={} }) {
 }
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
-function HeroBanner({ dark, scope, schoolName }) {
+function HeroBanner({ dark, scope, schoolName, cohortName }) {
   const isSchool = scope === 'school'
   return (
     <div style={{ borderRadius:22, overflow:'hidden', position:'relative', background:dark?`linear-gradient(135deg,${NAVY} 0%,#0a1f5e 60%,#0e2875 100%)`:`linear-gradient(135deg,${NAVY} 0%,#0c2360 50%,#1040a0 100%)`, padding:'24px 28px', display:'flex', alignItems:'center', minHeight:120 }}>
@@ -59,11 +59,18 @@ function HeroBanner({ dark, scope, schoolName }) {
         <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:isSchool?GOLD:CYAN, marginBottom:6, opacity:.9 }}>
           {isSchool ? '🏫 School Board' : '🌍 National Board'}
         </div>
-        <div style={{ fontSize:24, fontWeight:900, color:'#fff', letterSpacing:'-.04em', lineHeight:1.1, marginBottom:6 }}>
+        <div style={{ fontSize:24, fontWeight:900, color:'#fff', letterSpacing:'-.04em', lineHeight:1.1, marginBottom:4 }}>
           {isSchool && schoolName ? schoolName : 'Leaderboard'}
         </div>
+        {isSchool && cohortName && (
+          <div style={{ fontSize:12, color:GOLD, fontWeight:700, opacity:.85, marginBottom:2 }}>
+            {cohortName}
+          </div>
+        )}
         <div style={{ fontSize:13, color:'rgba(255,255,255,.5)' }}>
-          {isSchool ? 'Rankings within your school' : 'Compete with students across Nigeria'}
+          {isSchool
+            ? cohortName ? `Rankings for ${cohortName}` : 'Rankings within your school'
+            : 'Compete with students across Nigeria'}
         </div>
       </div>
       <div style={{ position:'relative', width:140, height:110, flexShrink:0, zIndex:1 }}>
@@ -327,6 +334,7 @@ export default function LeaderboardPage() {
   const [board,      setBoard]      = useState([])
   const [loading,    setLoading]    = useState(true)
   const [schoolName, setSchoolName] = useState(profile?.school_name ?? null)
+  const [cohortName, setCohortName] = useState(null)
 
   // Live school_id — updated when JoinSchool completes
   const [schoolId, setSchoolId] = useState(profile?.school_id ?? null)
@@ -357,6 +365,7 @@ export default function LeaderboardPage() {
       const data = await res.json()
       const list = data.leaderboard ?? []
       if (data.school_name) setSchoolName(data.school_name)
+      if (data.cohort_name) setCohortName(data.cohort_name)
       // Only cache non-empty results — empty may be a transient failure
       if (list.length > 0) writeCache(sc, per, list)
       setBoard(list)
@@ -422,7 +431,7 @@ export default function LeaderboardPage() {
         )}
       </div>
 
-      <HeroBanner dark={dark} scope={scope} schoolName={schoolName}/>
+      <HeroBanner dark={dark} scope={scope} schoolName={schoolName} cohortName={cohortName}/>
 
       <div className="lb-grid" style={{ display:'flex', flexDirection:'column', gap:16 }}>
         {/* ── Left / main ── */}

@@ -55,7 +55,7 @@ export function StudentSidebar({ active = 'home', dark }) {
       borderRadius: 20,
       border:      dark ? '1px solid rgba(255,255,255,.07)' : '1px solid rgba(6,42,120,.09)',
       boxShadow:   dark ? '0 4px 32px rgba(0,0,0,.4)' : '0 4px 24px rgba(6,42,120,.09)',
-      padding: '20px 14px',
+      padding: '24px 16px 24px 20px',
       backdropFilter: 'blur(16px)',
     }}>
 
@@ -77,7 +77,7 @@ export function StudentSidebar({ active = 'home', dark }) {
           return (
             <Link key={item.id} href={item.href} style={{ textDecoration:'none' }}>
               <div style={{
-                display:'flex', alignItems:'center', gap:10, padding:'10px 11px', borderRadius:13,
+                display:'flex', alignItems:'center', gap:10, padding:'10px 12px 10px 14px', borderRadius:13,
                 background: on ? (dark ? 'rgba(255,255,255,.08)' : 'rgba(18,100,229,.07)') : 'transparent',
                 border:     on ? (dark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(18,100,229,.14)') : '1px solid transparent',
                 transition: 'all .12s',
@@ -98,7 +98,7 @@ export function StudentSidebar({ active = 'home', dark }) {
 
         <Link href="/student/profile" style={{ textDecoration:'none' }}>
           <div style={{
-            display:'flex', alignItems:'center', gap:10, padding:'10px 11px', borderRadius:13,
+            display:'flex', alignItems:'center', gap:10, padding:'10px 12px 10px 14px', borderRadius:13,
             background: active === 'profile' ? (dark ? 'rgba(255,255,255,.08)' : 'rgba(18,100,229,.07)') : 'transparent',
             border:     active === 'profile' ? (dark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(18,100,229,.14)') : '1px solid transparent',
             transition: 'all .12s',

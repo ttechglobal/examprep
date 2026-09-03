@@ -76,7 +76,9 @@ export async function POST(request) {
     try { body = await request.json() }
     catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-    const { question_id, selected_index, subject_id, subject_name, slot = 1 } = body ?? {}
+    const { question_id, selected_index, subject_id, subject_name } = body ?? {}
+    // NOTE: 'slot' is not a DB column yet — unique constraint is (student_id, quiz_date).
+    // Both challenge cards share one row per day until the DB is migrated.
 
     if (!question_id)       return NextResponse.json({ error: 'question_id required' }, { status: 400 })
     if (selected_index == null) return NextResponse.json({ error: 'selected_index required' }, { status: 400 })
@@ -139,7 +141,6 @@ export async function POST(request) {
       .select('*')
       .eq('student_id', userId)
       .eq('quiz_date', today)
-      .eq('slot', slot)
       .maybeSingle()
 
     // Guard: already completed today
@@ -182,7 +183,6 @@ export async function POST(request) {
     const upsertData = {
       student_id:       userId,
       quiz_date:        today,
-      slot:             slot,
       question_id,
       subject_id:       subject_id ?? existing?.subject_id ?? null,
       subject_name:     subject_name ?? existing?.subject_name ?? null,
@@ -197,7 +197,7 @@ export async function POST(request) {
 
     const { error: upsertErr } = await service
       .from('daily_quiz_attempts')
-      .upsert(upsertData, { onConflict: 'student_id,quiz_date,slot' })
+      .upsert(upsertData, { onConflict: 'student_id,quiz_date' })
 
     if (upsertErr) {
       console.error('[daily-quiz/attempt] upsert error:', upsertErr.message)

@@ -25,7 +25,7 @@ export async function GET() {
     // Fetch ALL slot rows for today so we can aggregate both slots per student
     const { data: attempts, error } = await service
       .from('daily_quiz_attempts')
-      .select('student_id, slot, correct, attempts_used, completed, xp_awarded, updated_at')
+      .select('student_id, correct, attempts_used, completed, xp_awarded, updated_at')
       .eq('quiz_date', today)
       .gt('attempts_used', 0)
       .order('updated_at', { ascending: true })

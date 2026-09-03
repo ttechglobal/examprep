@@ -46,35 +46,35 @@ export async function POST(request) {
     const userId  = user.id
 
     // ── Insert question_attempts (best-effort) ────────────────────────────────
-    // Only use columns confirmed to exist in the DB schema.
-    // If the insert fails, we log and continue — XP must still be awarded.
-    // Run migration_question_attempts_columns.sql to add mode/session_id/exam_type.
+    // Schema constraints that must be satisfied:
+    //   - question_id  NOT NULL  → skip any result that has no question_id
+    //   - context      NOT NULL  → always 'practice' for this route
+    //   - context      CHECK IN ('diagnostic','lesson','practice','exam')
     try {
-      const rows = results.map(r => ({
-        student_id:  userId,
-        is_correct:  r.is_correct ?? false,
-        // Optional FK columns — only include if non-null to avoid FK constraint errors
-        ...(r.question_id ? { question_id: r.question_id } : {}),
-        ...(r.topic_id    ? { topic_id:    r.topic_id    } : {}),
-        ...(r.subject_id  ? { subject_id:  r.subject_id  } : {}),
-      }))
+      const rows = results
+        .filter(r => !!r.question_id)   // question_id is NOT NULL — drop rows without one
+        .map(r => ({
+          student_id:  userId,
+          question_id: r.question_id,
+          is_correct:  r.is_correct ?? false,
+          context:     'practice',       // required NOT NULL; this route is always practice
+          ...(r.topic_id    ? { topic_id:    r.topic_id    } : {}),
+          ...(r.subject_id  ? { subject_id:  r.subject_id  } : {}),
+          ...(r.subject_name ? { subject_name: r.subject_name } : {}),
+          ...(r.exam_type   ? { exam_type:   r.exam_type   } : {}),
+          ...(r.session_id  ? { session_id:  r.session_id  } : {}),
+          ...(r.time_spent_ms != null ? { time_spent_ms: r.time_spent_ms } : {}),
+        }))
 
-      const { error: insertError } = await service
-        .from('question_attempts')
-        .insert(rows)
-
-      if (insertError) {
-        console.warn('[session/save] question_attempts insert failed:', insertError.message)
-        // Absolute minimum fallback — just student_id + is_correct
-        await service
+      if (rows.length > 0) {
+        const { error: insertError } = await service
           .from('question_attempts')
-          .insert(results.map(r => ({
-            student_id: userId,
-            is_correct: r.is_correct ?? false,
-          })))
-          .then(({ error: e }) => {
-            if (e) console.error('[session/save] minimal insert also failed:', e.message)
-          })
+          .insert(rows)
+
+        if (insertError) {
+          console.warn('[session/save] question_attempts insert failed:', insertError.message)
+          // XP is still awarded below — a failed insert never blocks XP
+        }
       }
     } catch (insertEx) {
       console.error('[session/save] insert threw:', insertEx.message)
@@ -131,11 +131,12 @@ export async function POST(request) {
       }
     } catch { /* streak is cosmetic — never block */ }
 
-    await service
-      .from('profiles')
-      .update({ streak_days: streakDays })
-      .eq('id', userId)
-      .catch(() => {})
+    try {
+      await service
+        .from('profiles')
+        .update({ streak_days: streakDays })
+        .eq('id', userId)
+    } catch { /* streak is cosmetic — never block */ }
 
     return NextResponse.json({
       ok: true,

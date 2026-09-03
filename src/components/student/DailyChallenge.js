@@ -115,15 +115,10 @@ export default function DailyChallenge({ profile }) {
             ))}
           </>}
 
-          {/* Top section: puzzle + text */}
+          {/* Top section: text only — no icon */}
           <div style={{ padding:'24px 24px 0', display:'flex', alignItems:'flex-start', gap:20, position:'relative', zIndex:1 }}>
-            {/* Puzzle illustration */}
-            <div style={{ flexShrink:0, opacity: loading ? 0.4 : 1, transition:'opacity .3s' }}>
-              <PuzzleIllustration done={allDone} />
-            </div>
-
-            {/* Right text block */}
-            <div style={{ flex:1, paddingTop:8 }}>
+            {/* Right text block — now full width */}
+            <div style={{ flex:1, paddingTop:4 }}>
               <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color: allDone ? 'var(--text-tert)' : 'rgba(255,255,255,.45)', marginBottom:6 }}>
                 Today's Challenge
               </div>

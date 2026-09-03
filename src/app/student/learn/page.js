@@ -56,37 +56,55 @@ function Card({ children, style={} }) {
 function Hero({ name, dark }) {
   const [hov, setHov] = useState(false)
   return (
-    <div style={{ borderRadius:22, overflow:'hidden', position:'relative', background:dark?`linear-gradient(135deg,${NAVY} 0%,#0a1f5e 55%,#112f90 100%)`:`linear-gradient(135deg,${NAVY} 0%,#0c2360 45%,#1548b8 100%)`, minHeight:160, display:'flex', alignItems:'stretch' }}>
-      <div style={{ position:'absolute', top:-30, right:160, width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.18) 0%,transparent 70%)', pointerEvents:'none' }}/>
-      <div style={{ position:'absolute', bottom:-40, right:60, width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,184,0,.1) 0%,transparent 70%)', pointerEvents:'none' }}/>
-      {[[GOLD,14,'22%','top',14],[CYAN,9,'38%','top',22],['#fff',11,'14%','top',32],[GOLD,7,'28%','bottom',18]].map(([c,fs,right,side,top],i)=>(
-        <div key={i} style={{ position:'absolute', [side]:top, right, fontSize:fs, color:c, opacity:.55 }}>✦</div>
-      ))}
-      <div style={{ position:'absolute', right:290, top:'50%', transform:'translateY(-50%)', display:'flex', flexDirection:'column', gap:10, opacity:.85 }}>
-        {[{bg:'rgba(24,183,242,.2)',icon:'🌍'},{bg:'rgba(18,100,229,.25)',icon:'⚗️'},{bg:'rgba(124,58,237,.2)',icon:'⚡'}].map((b,i)=>(
-          <div key={i} style={{ width:44, height:44, borderRadius:14, background:b.bg, border:'1px solid rgba(255,255,255,.15)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{b.icon}</div>
+    <>
+      {/* Responsive overrides — hides image and floating icons on small screens */}
+      <style>{`
+        .hero-zara  { display: flex }
+        .hero-icons { display: flex }
+        .hero-pad   { padding: 28px 32px; max-width: 480px }
+        @media (max-width: 480px) {
+          .hero-zara  { display: none !important }
+          .hero-icons { display: none !important }
+          .hero-pad   { padding: 22px 20px; max-width: 100% }
+        }
+      `}</style>
+      <div style={{ borderRadius:22, overflow:'hidden', position:'relative', background:dark?`linear-gradient(135deg,${NAVY} 0%,#0a1f5e 55%,#112f90 100%)`:`linear-gradient(135deg,${NAVY} 0%,#0c2360 45%,#1548b8 100%)`, minHeight:160, display:'flex', alignItems:'stretch' }}>
+        {/* Glow orbs */}
+        <div style={{ position:'absolute', top:-30, right:160, width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.18) 0%,transparent 70%)', pointerEvents:'none' }}/>
+        <div style={{ position:'absolute', bottom:-40, right:60, width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,184,0,.1) 0%,transparent 70%)', pointerEvents:'none' }}/>
+        {/* Sparkles */}
+        {[[GOLD,14,'22%','top',14],[CYAN,9,'38%','top',22],['#fff',11,'14%','top',32],[GOLD,7,'28%','bottom',18]].map(([c,fs,right,side,top],i)=>(
+          <div key={i} style={{ position:'absolute', [side]:top, right, fontSize:fs, color:c, opacity:.55 }}>✦</div>
         ))}
-      </div>
-      <div style={{ flex:1, padding:'28px 32px', zIndex:1, maxWidth:480 }}>
-        <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.14em', color:'rgba(255,255,255,.5)', marginBottom:8 }}>EXL · Interactive Learning</div>
-        <div style={{ fontSize:26, fontWeight:900, color:'#fff', letterSpacing:'-.04em', lineHeight:1.15, marginBottom:8 }}>EXL Learning World</div>
-        <div style={{ fontSize:13, color:'rgba(255,255,255,.55)', lineHeight:1.6, marginBottom:20 }}>An interactive learning platform to learn by doing.</div>
-        <Link href="/student/learn/world" style={{ textDecoration:'none', display:'inline-block' }}>
-          <button onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-            style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 22px', borderRadius:13, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:hov?CYAN:BLUE, color:'#fff', boxShadow:hov?`0 6px 20px ${CYAN}50`:`0 4px 16px ${BLUE}50`, transition:'all .15s' }}>
-            Explore Learning World
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M8 4l3 3-3 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </Link>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, padding:'4px 10px', borderRadius:999, background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.15)' }}>
-          <div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }}/>
-          <span style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.65)', letterSpacing:'.08em' }}>CHEMISTRY · PHYSICS — LIVE NOW</span>
+        {/* Floating subject icons — hidden on mobile via .hero-icons */}
+        <div className="hero-icons" style={{ position:'absolute', right:290, top:'50%', transform:'translateY(-50%)', flexDirection:'column', gap:10, opacity:.85 }}>
+          {[{bg:'rgba(24,183,242,.2)',icon:'🌍'},{bg:'rgba(18,100,229,.25)',icon:'⚗️'},{bg:'rgba(124,58,237,.2)',icon:'⚡'}].map((b,i)=>(
+            <div key={i} style={{ width:44, height:44, borderRadius:14, background:b.bg, border:'1px solid rgba(255,255,255,.15)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{b.icon}</div>
+          ))}
+        </div>
+        {/* Text + CTA — full width on mobile via .hero-pad */}
+        <div className="hero-pad" style={{ flex:1, zIndex:1 }}>
+          <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.14em', color:'rgba(255,255,255,.5)', marginBottom:8 }}>EXL · Interactive Learning</div>
+          <div style={{ fontSize:26, fontWeight:900, color:'#fff', letterSpacing:'-.04em', lineHeight:1.15, marginBottom:8 }}>EXL Learning World</div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,.55)', lineHeight:1.6, marginBottom:20 }}>An interactive learning platform to learn by doing.</div>
+          <Link href="/student/learn/world" style={{ textDecoration:'none', display:'inline-block' }}>
+            <button onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 22px', borderRadius:13, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:hov?CYAN:BLUE, color:'#fff', boxShadow:hov?`0 6px 20px ${CYAN}50`:`0 4px 16px ${BLUE}50`, transition:'all .15s' }}>
+              Explore Learning World
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M8 4l3 3-3 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </Link>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, padding:'4px 10px', borderRadius:999, background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.15)' }}>
+            <div style={{ width:6, height:6, borderRadius:'50%', background:GREEN }}/>
+            <span style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.65)', letterSpacing:'.08em' }}>CHEMISTRY · PHYSICS — LIVE NOW</span>
+          </div>
+        </div>
+        {/* Zara image — hidden on mobile via .hero-zara */}
+        <div className="hero-zara" style={{ width:200, flexShrink:0, position:'relative', alignSelf:'flex-end', zIndex:1 }}>
+          <img src="/images/zara_studybuddy.png" alt="Zara" style={{ width:'100%', height:170, objectFit:'contain', objectPosition:'bottom center', display:'block', filter:'drop-shadow(0 6px 20px rgba(0,0,0,.45))' }} onError={e=>{e.currentTarget.style.display='none'}}/>
         </div>
       </div>
-      <div style={{ width:200, flexShrink:0, position:'relative', alignSelf:'flex-end', zIndex:1 }}>
-        <img src="/images/zara_studybuddy.png" alt="Zara" style={{ width:'100%', height:170, objectFit:'contain', objectPosition:'bottom center', display:'block', filter:'drop-shadow(0 6px 20px rgba(0,0,0,.45))' }} onError={e=>{e.currentTarget.style.display='none'}}/>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -291,7 +309,6 @@ export default function LearnPage() {
         </div>
       </div>
 
-      <ActivityToday dark={dark}/>
       {lessons.length > 0 && <ContinueLearning lessons={lessons} dark={dark}/>}
       <MotivationalFooter dark={dark}/>
     </div>
