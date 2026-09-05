@@ -267,7 +267,7 @@ function StudentLayoutInner({ children }) {
       <div className="hidden lg:flex" style={{ minHeight:'100dvh', position:'relative', zIndex:1 }}>
         <div style={{ width:'100%', display:'flex', alignItems:'flex-start' }}>
           {/* Sidebar — fixed on the left, with breathing room */}
-          <div style={{ position:'sticky', top:0, height:'100dvh', flexShrink:0, padding:'0 8px' }}>
+          <div style={{ position:'sticky', top:0, height:'100dvh', flexShrink:0, padding:'0 12px 0 20px' }}>
             <StudentSidebar active={active.id} dark={dark} />
           </div>
           {/* Main column — topbar fixed at top, content scrolls */}

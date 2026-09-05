@@ -63,11 +63,8 @@ export function HintBlock({ hint }) {
   )
 }
 
-// ─── EXPLANATION BLOCK ────────────────────────────────────────────────────────
-// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, svg_diagram, illustration_prompt, study_tip }
-export function ExplanationBlock({ explanation, isCorrect, dark }) {
-  if (!explanation) return null
-
+// ─── EXPLANATION CONTENT (shared between inline and modal) ─────────────────────
+function ExplanationContent({ explanation, isCorrect }) {
   const concept      = explanation.concept       ?? ''
   const formulaBox   = explanation.formula_box   ?? ''
   const variablesKey = explanation.variables_key ?? []
@@ -81,85 +78,157 @@ export function ExplanationBlock({ explanation, isCorrect, dark }) {
     : []
 
   const hasSteps = steps.length > 0
-  const bgColor  = dark ? 'rgba(255,255,255,.04)' : '#fff'
 
   return (
-    <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:bgColor, boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)' }}>
+    <>
+      {concept && <div style={{ fontSize:14, fontWeight:800, color:BLUE, marginBottom:intro?6:0 }}>{concept}</div>}
+      {intro && <p style={{ fontSize:14, color:'var(--text-sec)', lineHeight:1.65, margin:`${concept?4:0}px 0 ${(formulaBox||hasSteps||svgDiagram)?12:0}px` }}>{intro}</p>}
 
-      {/* Header */}
-      <div style={{ padding:'16px 18px 14px', borderBottom:(formulaBox||hasSteps||svgDiagram)?'1px solid var(--border)':'none' }}>
+      <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>
+
+      {/* SVG diagram */}
+      {svgDiagram && svgDiagram.trim().toLowerCase().startsWith('<svg') && (
+        <div style={{ borderRadius:12, overflow:'hidden', border:'1px solid var(--border)', background:'#fff', marginBottom:14 }}>
+          <div style={{ padding:'6px 12px', background:'var(--bg-subtle)', borderBottom:'1px solid var(--border)' }}>
+            <span style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em' }}>Diagram</span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'center', padding:12, overflowX:'auto' }}
+            dangerouslySetInnerHTML={{ __html: svgDiagram.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/\son\w+="[^"]*"/gi,'') }}/>
+        </div>
+      )}
+
+      {/* Steps */}
+      {hasSteps && (
+        <div style={{ borderRadius:12, border:'1px solid var(--border)', overflow:'hidden', marginBottom:14 }}>
+          {steps.map((step, si) => {
+            const lines = Array.isArray(step.lines) ? step.lines : []
+            return (
+              <div key={si} style={{ borderBottom:si<steps.length-1?'1px solid var(--border)':'none', padding:'13px 16px', background:'rgba(6,42,120,.015)' }}>
+                <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                  <div style={{ height:22, borderRadius:999, background:`${BLUE}18`, border:`1px solid ${BLUE}35`, padding:'0 10px', display:'flex', alignItems:'center', flexShrink:0, marginTop:2 }}>
+                    <span style={{ fontSize:11, fontWeight:900, color:BLUE, whiteSpace:'nowrap' }}>Step {si + 1}</span>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    {step.title && <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:lines.length?6:0, lineHeight:1.4 }}>{step.title}</div>}
+                    {lines.map((line, li) => {
+                      const mathLine = (typeof line==='string' && line.includes('\\') && !line.includes('$')) ? `$${line.trim()}$` : line
+                      return (
+                        <div key={li} style={{ fontSize:15, lineHeight:2.2, overflowX:'auto' }}>
+                          <MathText text={mathLine} as="span" className=""/>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Answer note */}
+      {answerNote && (
+        <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:studyTip?14:0 }}>
+          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+            <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
+          </div>
+          <span style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', lineHeight:1.65 }}>{answerNote}</span>
+        </div>
+      )}
+
+      {/* Study tip */}
+      {studyTip && (
+        <div style={{ padding:'11px 14px', borderRadius:11, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.25)', display:'flex', alignItems:'flex-start', gap:9 }}>
+          <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
+          <div>
+            <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
+            <span style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6 }}>{studyTip}</span>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── EXPLANATION MODAL (mobile full-screen) ────────────────────────────────────
+function ExplanationModal({ explanation, isCorrect, onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,.6)', backdropFilter:'blur(4px)', display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+      {/* Tap backdrop to close */}
+      <div style={{ flex:1 }} onClick={onClose}/>
+      <div style={{ background:'var(--bg-base)', borderRadius:'20px 20px 0 0', maxHeight:'82dvh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        {/* Handle bar */}
+        <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 4px' }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
+        </div>
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 18px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          <span style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)' }}>Explanation</span>
+          <button onClick={onClose} style={{ width:28, height:28, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-subtle)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tert)', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
+        </div>
+        {/* Scrollable content */}
+        <div style={{ overflowY:'auto', padding:'16px 18px 32px', flex:1 }}>
+          <ExplanationContent explanation={explanation} isCorrect={isCorrect}/>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EXPLANATION BLOCK ────────────────────────────────────────────────────────
+// On mobile: shows a compact "View Explanation" button that opens a bottom-sheet modal.
+// On desktop: renders the full explanation inline (the side-column handles this on study mode,
+//             but inline is used for ReviewSession and other contexts).
+// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, svg_diagram, illustration_prompt, study_tip }
+export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = false }) {
+  const [modalOpen, setModalOpen] = React.useState(false)
+  if (!explanation) return null
+
+  // Quick answer note for the compact mobile preview (before opening modal)
+  const answerNote = explanation.answer_note ?? explanation.correct ?? ''
+  const concept    = explanation.concept ?? ''
+
+  if (mobileModal) {
+    return (
+      <>
+        {/* Compact preview strip */}
+        <div style={{ marginTop:14, borderRadius:14, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', overflow:'hidden' }}>
+          <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:concept?4:0 }}>Explanation</div>
+              {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{concept}</div>}
+            </div>
+            <button onClick={() => setModalOpen(true)}
+              style={{ flexShrink:0, padding:'8px 14px', borderRadius:10, border:`1.5px solid ${BLUE}`, background:`${BLUE}12`, color:BLUE, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+              View →
+            </button>
+          </div>
+          {answerNote && (
+            <div style={{ padding:'10px 16px', display:'flex', alignItems:'flex-start', gap:8 }}>
+              <div style={{ width:18, height:18, borderRadius:5, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                <span style={{ fontSize:10, color:'#fff', fontWeight:900 }}>✓</span>
+              </div>
+              <span style={{ fontSize:13, color:'var(--text-prim)', lineHeight:1.6 }}>{answerNote}</span>
+            </div>
+          )}
+        </div>
+        {modalOpen && (
+          <ExplanationModal explanation={explanation} isCorrect={isCorrect} onClose={() => setModalOpen(false)}/>
+        )}
+      </>
+    )
+  }
+
+  // Full inline rendering (desktop, review side column, etc.)
+  return (
+    <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)', overflow:'hidden' }}>
+      <div style={{ padding:'16px 18px 14px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:concept?6:0 }}>
           Explanation
         </div>
-        {concept && <div style={{ fontSize:14, fontWeight:800, color:BLUE }}>{concept}</div>}
-        {intro && <p style={{ fontSize:14, color:'var(--text-sec)', lineHeight:1.65, margin:`${concept?8:4}px 0 0` }}>{intro}</p>}
       </div>
-
       <div style={{ padding:'16px 18px', display:'flex', flexDirection:'column', gap:14 }}>
-
-        <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>
-
-        {/* SVG diagram */}
-        {svgDiagram && svgDiagram.trim().toLowerCase().startsWith('<svg') && (
-          <div style={{ borderRadius:12, overflow:'hidden', border:'1px solid var(--border)', background:'#fff' }}>
-            <div style={{ padding:'6px 12px', background:'var(--bg-subtle)', borderBottom:'1px solid var(--border)' }}>
-              <span style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em' }}>Diagram</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'center', padding:12, overflowX:'auto' }}
-              dangerouslySetInnerHTML={{ __html: svgDiagram.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/\son\w+="[^"]*"/gi,'') }}/>
-          </div>
-        )}
-
-        {/* Steps */}
-        {hasSteps && (
-          <div style={{ borderRadius:12, border:'1px solid var(--border)', overflow:'hidden' }}>
-            {steps.map((step, si) => {
-              const lines = Array.isArray(step.lines) ? step.lines : []
-              return (
-                <div key={si} style={{ borderBottom:si<steps.length-1?'1px solid var(--border)':'none', padding:'13px 16px', background:dark?'rgba(255,255,255,.02)':'rgba(6,42,120,.015)' }}>
-                  <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                    <div style={{ height:22, borderRadius:999, background:`${BLUE}18`, border:`1px solid ${BLUE}35`, padding:'0 10px', display:'flex', alignItems:'center', flexShrink:0, marginTop:2 }}>
-                      <span style={{ fontSize:11, fontWeight:900, color:BLUE, whiteSpace:'nowrap' }}>Step {si + 1}</span>
-                    </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      {step.title && <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:lines.length?6:0, lineHeight:1.4 }}>{step.title}</div>}
-                      {lines.map((line, li) => {
-                        const mathLine = (typeof line==='string' && line.includes('\\') && !line.includes('$')) ? `$${line.trim()}$` : line
-                        return (
-                          <div key={li} style={{ fontSize:15, lineHeight:2.2, overflowX:'auto' }}>
-                            <MathText text={mathLine} as="span" className=""/>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Answer note */}
-        {answerNote && (
-          <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10 }}>
-            <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-              <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
-            </div>
-            <span style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', lineHeight:1.65 }}>{answerNote}</span>
-          </div>
-        )}
-
-        {/* Study tip */}
-        {studyTip && (
-          <div style={{ padding:'11px 14px', borderRadius:11, background:dark?'rgba(255,184,0,.08)':'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.25)', display:'flex', alignItems:'flex-start', gap:9 }}>
-            <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
-            <div>
-              <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
-              <span style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6 }}>{studyTip}</span>
-            </div>
-          </div>
-        )}
-
+        <ExplanationContent explanation={explanation} isCorrect={isCorrect}/>
       </div>
     </div>
   )

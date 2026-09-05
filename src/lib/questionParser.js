@@ -242,15 +242,34 @@ GOOD: "A student choosing B has confused osmotic pressure with turgor pressure �
 PART 3 — TEXT & MATHEMATICAL FORMATTING (CRITICAL)
 ═══════════════════════════════════════════════
 
-UNDERLINED WORDS (English, Use of English):
-  Exam papers print certain words underlined (e.g. "Choose the synonym for the
-  UNDERLINED word"). In plain text, indicate underlines with **double asterisks**
-  so the UI can render them bold/underlined.
-  e.g. "Choose the word nearest in meaning to the **underlined** word in the sentence:
-       The politician was **garrulous** during the debate."
-  NEVER leave a question that says "the underlined word" without including the
-  actual underlined word in the question_text using **word** markers.
-  If the original PDF uses italics for emphasis, use *single asterisks* for italics.
+UNDERLINED WORDS (English, Use of English) — CRITICAL:
+  Exam papers print certain words underlined (e.g. "Choose the synonym for the UNDERLINED word").
+  In plain text, indicate underlines with **double asterisks** so the UI can render them bold/underlined.
+
+  RULE: NEVER leave a question that says "the underlined word" or "the underlined letters" without
+  identifying and marking the actual underlined word/letters using **word** markers.
+
+  CORRECT: "Choose the word nearest in meaning to **garrulous** in the sentence:
+            The politician was **garrulous** during the debate."
+  WRONG:   "Choose the word nearest in meaning to the underlined word in the sentence:
+            The politician was garrulous during the debate."
+            ← The student cannot see which word is underlined!
+
+  CORRECT: "Choose the option in which the underlined letters sound the same as **ch** in **ch**urch."
+  WRONG:   "Choose the option with the same underlined letter sound." ← useless without the word
+
+  If the original PDF uses italics for emphasis or to indicate a word, use *single asterisks* for italics:
+  e.g. "The word *ephemeral* is best replaced by..."
+
+FILL-IN-THE-GAP / CLOZE QUESTIONS — CRITICAL:
+  The gap/blank MUST be clearly shown in question_text as _____ (five underscores) or [...].
+  NEVER omit the gap — without it the question is unanswerable.
+
+  CORRECT: "The policeman ran _____ the armed robbers who had fled."
+  WRONG:   "The policeman ran the armed robbers who had fled." ← gap is missing
+
+  If the gap has a word or clause after it that connects back to the sentence, include it:
+  CORRECT: "He behaved _____ a manner that surprised everyone."
 
 WORD STRESS MARKS (English phonetics):
   Use ˈ (primary stress) and ˌ (secondary stress) directly as characters.
@@ -310,10 +329,28 @@ SPACING — CRITICAL:
   Always keep spaces between all words.
   Never join words that were on separate lines in the PDF.
 
+CHEMICAL FORMULAE — SUBSCRIPTS (CRITICAL for Chemistry questions):
+  Chemical formulae in question_text and options MUST use KaTeX subscript notation, not plain text.
+  Wrap every formula in $...$ and use _{} for subscripts, ^{} for charges.
+
+  ✓  $\\text{H}_2\\text{O}$                           — water
+  ✓  $\\text{H}_2\\text{SO}_4$                        — sulfuric acid
+  ✓  $\\text{CO}_2$                                    — carbon dioxide
+  ✓  $\\text{Ca(OH)}_2$                                — calcium hydroxide
+  ✓  $\\text{C}_6\\text{H}_{12}\\text{O}_6$           — glucose (brace two-digit subscripts!)
+  ✓  $2\\text{H}_2 + \\text{O}_2 \\rightarrow 2\\text{H}_2\\text{O}$  — balanced equation
+  ✓  $\\text{Na}^+$,  $\\text{SO}_4^{2-}$             — ionic charges use ^{}
+  ✗  H2O   H₂O   H2SO4   (plain text or Unicode glyphs — NEVER use these)
+
+  COEFFICIENT RULE: the number before a formula in a balanced equation may go inside the $ block:
+    $2\\text{NaCl}$ or $\\text{2NaCl}$ — both fine. Never write 2NaCl in plain text.
+  TWO-DIGIT SUBSCRIPTS: always brace them — $\\text{C}_{12}$ not $\\text{C}_12$
+
 SYMBOLS (inside $ only — these are KaTeX commands, not plain text characters):
   × → \\times    ÷ → \\div    ± → \\pm    ∴ → \\therefore
   ≤ → \\leq      ≥ → \\geq    ≠ → \\neq   ∞ → \\infty
   π → \\pi       α → \\alpha  β → \\beta  θ → \\theta
+  → → \\rightarrow  (use in chemical equations)
 
 EVERY mathematical expression — no matter how short — goes inside $...$
 Plain prose text (question_text, answer_note, hint, study_tip) uses Unicode directly:

@@ -820,6 +820,130 @@ function GoalsSummary({ profile, onEdit }) {
 }
 
 
+// ── BACK-TO-SCHOOL PROMO CARD ────────────────────────────────────────────────
+// Shows during September 2026 promo window.
+// Replaces the static "Upgrade to Premium" card.
+
+const PROMO_END = new Date('2026-10-01T00:00:00')  // end of September — when promo expires
+
+function usePromoCountdown() {
+  const [remaining, setRemaining] = useState('')
+  const [days, setDays]           = useState(0)
+
+  useEffect(() => {
+    function tick() {
+      const now  = new Date()
+      const diff = PROMO_END - now
+
+      if (diff <= 0) {
+        setRemaining('Expired')
+        setDays(0)
+        return
+      }
+
+      const d = Math.floor(diff / 86400000)
+      const h = Math.floor((diff % 86400000) / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setDays(d)
+      setRemaining(
+        d > 0
+          ? `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`
+          : `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+      )
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const isActive = new Date() < PROMO_END
+  return { remaining, days, isActive }
+}
+
+function BackToSchoolCard({ plan }) {
+  const { remaining, days, isActive } = usePromoCountdown()
+  const isPremium = plan === 'premium'
+
+  // ── Premium user — already subscribed ──────────────────────────────────────
+  if (isPremium) {
+    return (
+      <div style={{ borderRadius:18, padding:'20px', background:`linear-gradient(135deg,${NAVY},${BLUE})`, position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', top:-20, right:-20, width:120, height:120, borderRadius:'50%', background:'rgba(255,255,255,.06)', pointerEvents:'none' }}/>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+          <span style={{ fontSize:20 }}>👑</span>
+          <span style={{ fontSize:14, fontWeight:900, color:GOLD }}>Premium Active</span>
+        </div>
+        <div style={{ fontSize:12, color:'rgba(255,255,255,.65)', lineHeight:1.5 }}>
+          You have full access to ExamPrep — unlimited questions, all subjects, and everything we ship next.
+        </div>
+      </div>
+    )
+  }
+
+  // ── Promo expired — generic CTA ────────────────────────────────────────────
+  if (!isActive) {
+    return (
+      <div style={{ borderRadius:18, padding:'20px', background:`linear-gradient(135deg,${NAVY},${BLUE})`, position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', top:-20, right:-20, width:120, height:120, borderRadius:'50%', background:'rgba(255,255,255,.06)', pointerEvents:'none' }}/>
+        <div style={{ fontSize:13, fontWeight:900, color:'#fff', marginBottom:4 }}>👑 Upgrade to Premium</div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,.6)', lineHeight:1.5, marginBottom:14 }}>Unlimited practice, all subjects, and more.</div>
+        <button style={{ width:'100%', padding:'11px', borderRadius:11, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:13, background:GOLD, color:NAVY }}>⚡ Activate Premium</button>
+      </div>
+    )
+  }
+
+  // ── Promo active — Back-to-School offer ────────────────────────────────────
+  const urgencyColor = days <= 3 ? RED : days <= 7 ? ORANGE : GOLD
+
+  return (
+    <div style={{ borderRadius:18, overflow:'hidden', position:'relative', background:`linear-gradient(135deg,${NAVY} 0%,#0c2360 55%,#1548b8 100%)` }}>
+      {/* Decorative orbs */}
+      <div style={{ position:'absolute', top:-30, right:-20, width:160, height:160, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,184,0,.15) 0%,transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ position:'absolute', bottom:-20, left:-10, width:100, height:100, borderRadius:'50%', background:'radial-gradient(circle,rgba(24,183,242,.12) 0%,transparent 70%)', pointerEvents:'none' }}/>
+
+      {/* Tag */}
+      <div style={{ padding:'14px 20px 0', display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ padding:'3px 10px', borderRadius:999, background:`${GOLD}25`, border:`1px solid ${GOLD}50`, fontSize:10, fontWeight:900, color:GOLD, letterSpacing:'.08em', textTransform:'uppercase' }}>
+          🎒 Back-to-School Deal
+        </div>
+      </div>
+
+      {/* Main message */}
+      <div style={{ padding:'12px 20px 16px' }}>
+        <div style={{ fontSize:20, fontWeight:900, color:'#fff', letterSpacing:'-.03em', lineHeight:1.2, marginBottom:6 }}>
+          Full access, free<br/>for all of September.
+        </div>
+        <div style={{ fontSize:12, color:'rgba(255,255,255,.6)', lineHeight:1.6, marginBottom:16 }}>
+          You're on the Back-to-School plan — explore everything ExamPrep has to offer, completely free this month.
+          Subscribe in September and lock in <span style={{ color:GOLD, fontWeight:800 }}>50% off</span> your first year.
+        </div>
+
+        {/* Countdown */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:12, background:'rgba(255,255,255,.06)', border:`1px solid rgba(255,255,255,.12)`, marginBottom:14 }}>
+          <span style={{ fontSize:16 }}>⏳</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'rgba(255,255,255,.4)', marginBottom:2 }}>Offer ends in</div>
+            <div style={{ fontSize:15, fontWeight:900, color:urgencyColor, fontVariantNumeric:'tabular-nums', letterSpacing:'.02em' }}>{remaining}</div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'rgba(255,255,255,.4)', marginBottom:2 }}>Your plan</div>
+            <div style={{ fontSize:12, fontWeight:800, color:'rgba(255,255,255,.85)' }}>Free Access ✓</div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <button style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:900, fontSize:14, background:GOLD, color:NAVY, boxShadow:`0 4px 16px ${GOLD}40`, letterSpacing:'-.01em' }}>
+          ⚡ Subscribe Now — 50% Off
+        </button>
+        <div style={{ marginTop:8, textAlign:'center', fontSize:10, color:'rgba(255,255,255,.35)', fontWeight:600 }}>
+          Price locks in at September rate · Cancel anytime
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const router              = useRouter()
@@ -909,13 +1033,8 @@ export default function ProfilePage() {
           <GoalsSummary profile={profile} onEdit={focus => setSheet({ type: 'goals', focus })} />
         </div>
 
-        {/* Premium card */}
-        <div style={{ borderRadius: 18, padding: '20px', background: `linear-gradient(135deg,${NAVY},${BLUE})`, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,.06)', pointerEvents: 'none' }} />
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#fff', marginBottom: 4 }}>👑 Upgrade to Premium</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', lineHeight: 1.5, marginBottom: 14 }}>Unlimited practice, AI explanations, offline mode and more.</div>
-          <button style={{ width: '100%', padding: '11px', borderRadius: 11, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 900, fontSize: 13, background: GOLD, color: NAVY }}>⚡ Activate Premium</button>
-        </div>
+        {/* Back-to-School promo / Premium card */}
+        <BackToSchoolCard plan={profile?.plan ?? 'free'} />
 
         {/* Settings */}
         <div>

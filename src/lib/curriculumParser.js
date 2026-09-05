@@ -146,8 +146,16 @@ export function parseCurriculum(rawText) {
       )
       delete sub.exam_tag
 
-      // Strip lesson-specific fields — not needed for question mapping
-      delete sub.objectives
+      // Normalise objectives — preserve for theory questions and flashcard generation
+      if (!Array.isArray(sub.objectives)) {
+        sub.objectives = []
+      } else {
+        sub.objectives = sub.objectives
+          .filter(o => typeof o === 'string' && o.trim())
+          .map(o => o.trim())
+      }
+
+      // Strip lesson-specific fields — not needed at import time
       delete sub.lesson_status
       delete sub.lesson_generated
       delete sub.lesson_content
@@ -189,7 +197,7 @@ export function buildCurriculumPrompt(subject, examTypes) {
 Subject: ${subject}
 Exam(s): ${examLabel}
 
-I am going to give you the official syllabus. Your job is to produce a structured JSON topic tree for this subject. This tree is used to tag past exam questions — NOT to write lessons.
+I am going to give you the official syllabus. Your job is to produce a structured JSON topic tree for this subject. This tree is used to tag past exam questions AND to store the official learning objectives for each subtopic.
 
 RULES:
 - Break the syllabus into topics, each with specific subtopics
@@ -198,7 +206,11 @@ RULES:
 - Mark each topic and subtopic with exam_types: which exam(s) it appears in
 - exam_types must be an array containing only: ${exams.map(e => `"${e}"`).join(', ')}
 - If a topic appears in multiple exams in this list, include all relevant exams in the array
-- Do NOT include objectives, lesson content, or any other fields — only titles and exam_types
+- For each subtopic, include an "objectives" array: the official ${examLabel} behavioural objectives for that subtopic
+  - Write each objective as a short action phrase starting with a verb: "define", "state", "explain", "calculate", "describe", "compare", "deduce", "account for", etc.
+  - These come directly from the official ${examLabel} syllabus — be precise and complete
+  - Aim for 2–5 objectives per subtopic; a single subtopic rarely has more than 6
+  - Example: ["define acids and bases in terms of proton transfer", "distinguish between strong and weak acids", "calculate the pH of simple solutions"]
 
 Return ONLY valid JSON. No markdown, no explanation, no preamble.
 
@@ -214,7 +226,8 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
         {
           "id": "subtopic_001a",
           "title": "",
-          "exam_types": ${examTypesJson}
+          "exam_types": ${examTypesJson},
+          "objectives": ["", ""]
         }
       ]
     }
@@ -239,6 +252,10 @@ Break this topic into specific, searchable subtopics for past question tagging.
 Each subtopic title should match the kind of label you'd find on a past question.
 Mark exam_types for each subtopic: only use ${exams.map(e => `"${e}"`).join(' or ')}.
 
+For each subtopic, include an "objectives" array: the official ${examLabel} behavioural objectives.
+Write each as a short verb-led action phrase (e.g. "state Newton's laws of motion", "calculate velocity from displacement-time graphs").
+Aim for 2–5 objectives per subtopic.
+
 Return ONLY valid JSON:
 
 {
@@ -248,7 +265,8 @@ Return ONLY valid JSON:
     {
       "id": "sub_001",
       "title": "",
-      "exam_types": ${examTypesJson}
+      "exam_types": ${examTypesJson},
+      "objectives": ["", ""]
     }
   ]
 }`
@@ -282,7 +300,14 @@ export function parseSingleTopic(rawText) {
     if (!sub.title && sub.name) sub.title = sub.name
     sub.exam_types = normaliseExamTypes(sub.exam_types ?? sub.exam_tag, parentExamTypes)
     delete sub.exam_tag
-    delete sub.objectives
+    // Normalise objectives for single-topic imports too
+    if (!Array.isArray(sub.objectives)) {
+      sub.objectives = []
+    } else {
+      sub.objectives = sub.objectives
+        .filter(o => typeof o === 'string' && o.trim())
+        .map(o => o.trim())
+    }
   })
 
   if (errors.length > 0) return { valid: false, errors, data: null }

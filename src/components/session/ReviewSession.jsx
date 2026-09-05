@@ -60,13 +60,15 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
             overflow-y: auto !important; flex-direction: column !important;
             padding: 24px 28px 100px 28px !important;
           }
+          /* On desktop: hide the inline explanation inside the Q column — it lives in the right column instead */
           .rev-q-col .inline-explanation { display: none !important; }
-          .rev-mobile-nav { display: none !important; }
         }
         @media (max-width: 1023px) {
+          /* On mobile: hide the right-column (desktop only) — inline explanation inside Q column is the only one */
           .rev-exp-col { display: none !important; }
-          .rev-q-col { flex: 1 !important; min-height: 0 !important; overflow-y: auto !important; padding: 20px 16px 80px !important; }
-          .rev-mobile-nav { display: none !important; }
+          /* Make sure inline-explanation IS visible on mobile */
+          .rev-q-col .inline-explanation { display: block !important; }
+          .rev-q-col { flex: 1 !important; min-height: 0 !important; overflow-y: auto !important; padding: 20px 16px 100px !important; }
         }
       `}</style>
 

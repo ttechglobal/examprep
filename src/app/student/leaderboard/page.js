@@ -333,6 +333,7 @@ export default function LeaderboardPage() {
   const [period,     setPeriod]     = useState('week')
   const [board,      setBoard]      = useState([])
   const [loading,    setLoading]    = useState(true)
+  const [isFallback, setIsFallback] = useState(false)
   const [schoolName, setSchoolName] = useState(profile?.school_name ?? null)
   const [cohortName, setCohortName] = useState(null)
 
@@ -356,6 +357,7 @@ export default function LeaderboardPage() {
     if (cached && cached.length > 0) { setBoard(cached); setLoading(false); return }
 
     setLoading(true)
+    setIsFallback(false)
     try {
       const endpoint = sc === 'school'
         ? `/api/leaderboard/school?limit=20&period=${per}`
@@ -369,6 +371,7 @@ export default function LeaderboardPage() {
       // Only cache non-empty results — empty may be a transient failure
       if (list.length > 0) writeCache(sc, per, list)
       setBoard(list)
+      setIsFallback(!!data.fallback)
     } catch {
       setBoard([])
     } finally {
@@ -447,6 +450,15 @@ export default function LeaderboardPage() {
               {/* My rank banner */}
               {!loading && board.length > 0 && myId && (
                 <MyRankBanner board={board} myId={myId} xp={xp}/>
+              )}
+              {/* Fallback notice — shown when question_attempts is empty for the window */}
+              {!loading && isFallback && period !== 'all' && board.length > 0 && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:12, background:'rgba(255,184,0,.08)', border:'1px solid rgba(255,184,0,.25)' }}>
+                  <span style={{ fontSize:14 }}>ℹ️</span>
+                  <span style={{ fontSize:11, color:'var(--text-tert)', lineHeight:1.5 }}>
+                    Showing all-time XP — weekly data will populate as students practise this week.
+                  </span>
+                </div>
               )}
 
               <BoardDisplay board={board} myId={myId} loading={loading} scope={scope}/>

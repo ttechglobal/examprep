@@ -158,12 +158,15 @@ export default async function AdminDashboardPage() {
   const db = svc()
 
   // Parallel fetch — all independent
+  // Previously: question_attempts fetched .limit(5000) rows just to count them.
+  // Now: two COUNT queries (total + correct) — zero data transfer, same result.
   const [
     { data: questions },
     { data: students },
     { data: schools },
     { data: subjects },
-    { data: attempts },
+    { count: totalAttempts },
+    { count: correctCount },
     { data: recentQs },
     { data: pendingReviews },
   ] = await Promise.all([
@@ -171,7 +174,8 @@ export default async function AdminDashboardPage() {
     db.from('profiles').select('id, created_at').eq('role', 'student'),
     db.from('schools').select('id, name').eq('is_active', true),
     db.from('subjects').select('id, name, exam_type').eq('is_active', true),
-    db.from('question_attempts').select('id, is_correct').limit(5000),
+    db.from('question_attempts').select('*', { count: 'exact', head: true }),
+    db.from('question_attempts').select('*', { count: 'exact', head: true }).eq('is_correct', true),
     db.from('questions').select('id, question_text, subject_id, created_at').order('created_at', { ascending: false }).limit(6),
     db.from('questions').select('id').eq('is_active', false).limit(1),
   ])
@@ -181,9 +185,7 @@ export default async function AdminDashboardPage() {
   const totalStudents = students?.length ?? 0
   const totalSchools  = schools?.length ?? 0
   const totalSubjects = subjects?.length ?? 0
-  const totalAttempts = attempts?.length ?? 0
-  const correctCount  = (attempts ?? []).filter(a => a.is_correct).length
-  const successRate   = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
+  const successRate   = (totalAttempts ?? 0) > 0 ? Math.round(((correctCount ?? 0) / (totalAttempts ?? 1)) * 100) : 0
   const hasPending    = (pendingReviews?.length ?? 0) > 0
 
   const weekAgo     = new Date(Date.now() - 7 * 86400000).toISOString()

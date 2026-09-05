@@ -21,16 +21,16 @@ const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
 const PURPLE = '#7C3AED'
 
-const BOARD_KEY = 'ep_leaderboard_cache'
-const BOARD_TTL = 600_000
+const BOARD_KEY  = 'ep_lb_national_week'   // matches leaderboard page cache key
+const BOARD_TTL  = 2 * 60 * 1000           // 2 minutes — same as leaderboard page
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
 
 const GREETINGS = [
-  n => `Your goals are waiting, ${n}.`,
-  n => `Ready to practise, ${n}?`,
-  n => `Keep the momentum going, ${n}.`,
-  n => `Consistent effort every day, ${n}.`,
+  { pre: 'Ready to',   em: 'practise?',    sub: 'Your goals are waiting.' },
+  { pre: 'Let\'s go,', em: 'crush it.',     sub: 'Every question takes you closer.' },
+  { pre: 'Back at it,',em: 'keep going.',   sub: 'Consistent effort is what separates you.' },
+  { pre: 'Time to',    em: 'level up.',     sub: 'Sharpen your skills and crush your goals.' },
 ]
 
 
@@ -54,9 +54,10 @@ function PageGrid({ left, right }) {
 
 
 // ─── HERO ─────────────────────────────────────────────────────────────────────
-// Clean. No level badge. Mascot + two lines of headline + one CTA.
+// Name lives in the headline — lighter weight so it doesn't compete.
+// Greeting rotates daily across 4 variants.
 function Hero({ name }) {
-  const greeting = GREETINGS[Math.floor(Date.now() / 86400000) % GREETINGS.length](name)
+  const g = GREETINGS[Math.floor(Date.now() / 86400000) % GREETINGS.length]
 
   return (
     <Link href="/student/practice" style={{ textDecoration: 'none', display: 'block' }}>
@@ -71,12 +72,17 @@ function Hero({ name }) {
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 40% 60% at 80% 100%, rgba(255,184,0,.07) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ flex: 1, padding: '36px 0 36px 32px', zIndex: 2 }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', lineHeight: 1.15, letterSpacing: '-.03em', marginBottom: 8 }}>
-            Ready to<br />
-            <span style={{ color: '#4A9EF8' }}>practise?</span>
+          {/* Name — light weight, sits above the main line */}
+          <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,.45)', letterSpacing: '.01em', marginBottom: 4 }}>
+            {name},
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.42)', fontWeight: 500, lineHeight: 1.55, marginBottom: 28 }}>
-            {greeting}
+          {/* Headline — two lines, em in brand blue */}
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', lineHeight: 1.15, letterSpacing: '-.03em', marginBottom: 8 }}>
+            {g.pre}<br />
+            <span style={{ color: '#4A9EF8' }}>{g.em}</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.38)', fontWeight: 500, lineHeight: 1.55, marginBottom: 28 }}>
+            {g.sub}
           </div>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 10,
@@ -278,7 +284,7 @@ function LeaderboardSnap({ board, myId }) {
         <Link href="/student/leaderboard" style={{ fontSize: 11, fontWeight: 700, color: BLUE, textDecoration: 'none' }}>See all →</Link>
       </div>
       <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 14 }}>
-        Global · this week
+        National · this week
       </div>
 
       {!board.length ? (
@@ -358,8 +364,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!isReady || isGuest) return
     try {
-      const cached = JSON.parse(localStorage.getItem(BOARD_KEY) || '{}')
-      if (cached.data?.length && (Date.now() - (cached.ts || 0)) < BOARD_TTL) {
+      const cached = JSON.parse(localStorage.getItem(BOARD_KEY) || 'null')
+      if (cached?.data?.length && (Date.now() - (cached.ts || 0)) < BOARD_TTL) {
         setBoard(cached.data); setMyId(cached.myId ?? null); return
       }
     } catch {}
@@ -369,7 +375,7 @@ export default function HomePage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
-        const res = await fetch('/api/leaderboard/global?limit=6&period=week')
+        const res = await fetch('/api/leaderboard/national?limit=6&period=week')
         if (!res.ok) return
         const data = await res.json()
         const lb = data?.leaderboard ?? []

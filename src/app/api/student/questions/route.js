@@ -65,9 +65,13 @@ export async function GET(request) {
       return q
     }
 
+    // Include explanation, hint, instruction_text, and passage_text so the
+    // session can show explanations and English instruction banners without
+    // a second round-trip. The payload increase is acceptable for session quality.
     const SELECT = `
-      id, question_text, options, correct_answer, explanation, hint,
-      year, difficulty, source,
+      id, question_text, options, correct_answer,
+      year, difficulty,
+      explanation, hint, instruction_text, passage_text,
       topic_id, subject_id,
       topics   ( id, name ),
       subjects ( id, name )
@@ -86,53 +90,45 @@ export async function GET(request) {
 
     let questions = []
 
-    if (availableYears.length === 0) {
-      // ── 3a. No year data at all — fetch a flat pool and shuffle ─────────────
+    // ── 3b. Single pooled fetch — sample JS-side for year spread ───────────
+    // Old approach: N parallel queries (one per year) = N round-trips.
+    // New approach: one query with a 4× pool, shuffle + slice in JS.
+    // Year spread is preserved: we oversample (4× count), then pick questions
+    // proportionally from each year group in JS — zero extra round-trips.
+    {
+      const POOL_SIZE = Math.min(count * 4, 200)  // never over-fetch
       let q = service.from('questions').select(SELECT)
-      q = applyBase(q).limit(count)
+      q = applyBase(q).limit(POOL_SIZE)
       const { data, error } = await q
       if (error) {
-        console.error('[questions] flat fetch error:', error.message)
+        console.error('[questions] pool fetch error:', error.message)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      questions = data ?? []
-    } else {
-      // ── 3b. Year-bucketed fetch ───────────────────────────────────────────
-      // Quotas are derived directly from `count` (the number of questions the
-      // caller actually requested). 5 questions requested → 5 total fetched
-      // across years. 50 requested → 50 total. Never over- or under-fetch.
-      //
-      // Cap year buckets at `count` — no point making more parallel queries
-      // than questions needed (e.g. 25 years for 5 questions → use 5 buckets,
-      // 1 question each, from the 5 most-recent years).
-      const MAX_BUCKETS = count
-      const bucketYears = availableYears.length > MAX_BUCKETS
-        ? availableYears.slice(availableYears.length - MAX_BUCKETS)  // most recent years
-        : availableYears
-      const numYears    = bucketYears.length
-      const basePerYear = Math.max(1, Math.floor(count / numYears))
-      // Remainder slots go to the most-recent years for better coverage
-      const remainder   = count - basePerYear * numYears
-      const yearQuotas  = bucketYears.map((year, i) => ({
-        year,
-        quota: basePerYear + (i >= numYears - remainder ? 1 : 0),
-      }))
+      const pool = data ?? []
 
-      // Fetch all year buckets in parallel — small targeted queries on indexed year column
-      const fetches = yearQuotas.map(({ year, quota }) => {
-        let q = service.from('questions').select(SELECT)
-        q = applyBase(q).eq('year', year).limit(quota + 2)
-        return q.then(res => res.data ?? [])
-      })
-
-      const buckets = await Promise.all(fetches)
-
-      // Merge, deduplicate by id
-      const seen = new Set()
-      for (const bucket of buckets) {
-        for (const row of bucket) {
-          if (!seen.has(row.id)) { seen.add(row.id); questions.push(row) }
+      if (availableYears.length > 1 && pool.length > count) {
+        // Distribute proportionally across years in JS — no extra DB round-trips
+        const byYear = {}
+        for (const q of pool) {
+          const y = q.year ?? '__none__'
+          if (!byYear[y]) byYear[y] = []
+          byYear[y].push(q)
         }
+        const years   = Object.keys(byYear)
+        const perYear = Math.max(1, Math.ceil(count / years.length))
+        const picked  = []
+        for (const y of years) {
+          const bucket = byYear[y]
+          // Shuffle bucket so we don't always pick the same questions
+          for (let i = bucket.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [bucket[i], bucket[j]] = [bucket[j], bucket[i]]
+          }
+          picked.push(...bucket.slice(0, perYear))
+        }
+        questions = picked
+      } else {
+        questions = pool
       }
     }
 
@@ -174,24 +170,25 @@ export async function GET(request) {
 
     // ── 6. Shape output ───────────────────────────────────────────────────────
     const shaped = selected.map(q => ({
-      id:             q.id,
-      text:           q.question_text,
-      options:        q.options,
-      correct_answer: q.correct_answer,
-      explanation:    q.explanation ?? null,
-      hint:           q.hint        ?? null,
-      year:           q.year        ?? null,
-      difficulty:     q.difficulty  ?? 'medium',
-      source:         q.source      ?? 'past_paper',
-      topic_id:       q.topic_id    ?? null,
-      topic_name:     q.topics?.name    ?? null,
-      subject_id:     q.subject_id  ?? null,
-      subject_name:   q.subjects?.name  ?? null,
+      id:               q.id,
+      text:             q.question_text,
+      options:          q.options,
+      correct_answer:   q.correct_answer,
+      explanation:      q.explanation      ?? null,
+      hint:             q.hint             ?? null,
+      instruction_text: q.instruction_text ?? null,
+      passage_text:     q.passage_text     ?? null,
+      year:             q.year        ?? null,
+      difficulty:       q.difficulty  ?? 'medium',
+      topic_id:         q.topic_id    ?? null,
+      topic_name:       q.topics?.name    ?? null,
+      subject_id:       q.subject_id  ?? null,
+      subject_name:     q.subjects?.name  ?? null,
     }))
 
     return NextResponse.json(
       { questions: shaped, count: shaped.length, exam, mode },
-      { headers: { 'Cache-Control': 'private, max-age=0' } }
+      { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } }
     )
 
   } catch (err) {

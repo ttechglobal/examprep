@@ -23,7 +23,7 @@ const SELECT_COLS_SAFE = [
 ].join(', ')
 
 // Extended columns added by migration (may not exist yet).
-const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded'
+const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at'
 
 // Try extended select; fall back to safe if the DB rejects unknown columns.
 async function selectProfile(db, userId) {
@@ -67,6 +67,8 @@ export async function GET() {
     subjects_waec: data.subjects_waec ?? (examType === 'WAEC' ? (data.subjects ?? []) : []),
     subjects_jamb: data.subjects_jamb ?? (examType === 'JAMB' ? (data.subjects ?? []) : []),
     onboarded:     data.onboarded     ?? true,
+    plan:          data.plan          ?? 'free',
+    plan_expires_at: data.plan_expires_at ?? null,
   }
   return NextResponse.json(normalised)
 }

@@ -20,30 +20,32 @@ export async function GET(request) {
 
     const service = db()
 
-    // Get topics for this subject
-    const { data: topics, error } = await service
-      .from('topics')
-      .select('id, name, order_index, exam_type')
-      .eq('subject_id', subjectId)
-      .order('order_index', { ascending: true })
+    // Run both queries in parallel — topics + question counts arrive together.
+    // Previously sequential: query 2 waited for query 1 to finish first.
+    const [topicsResult, allQCountsResult] = await Promise.all([
+      service
+        .from('topics')
+        .select('id, name, order_index, exam_type')
+        .eq('subject_id', subjectId)
+        .order('order_index', { ascending: true }),
+      service
+        .from('questions')
+        .select('topic_id')
+        .eq('subject_id', subjectId)   // filter at subject level — topic IDs unknown yet
+        .eq('is_active', true),
+    ])
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (topicsResult.error) return NextResponse.json({ error: topicsResult.error.message }, { status: 500 })
 
-    const topicList = topics ?? []
+    const topicList = topicsResult.data ?? []
     if (!topicList.length) return NextResponse.json([])
 
-    // Filter by exam type
+    // Filter by exam type (JS-side, no extra query)
     const filtered = topicList.filter(t =>
       !t.exam_type || t.exam_type === exam || t.exam_type === 'BOTH'
     )
 
-    // Count questions per topic
-    const topicIds = filtered.map(t => t.id)
-    const { data: qCounts } = await service
-      .from('questions')
-      .select('topic_id')
-      .in('topic_id', topicIds)
-      .eq('is_active', true)
+    const qCounts = allQCountsResult.data
 
     const countMap = {}
     ;(qCounts ?? []).forEach(q => {

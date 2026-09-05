@@ -436,7 +436,55 @@ HINT EXAMPLES — CHEMISTRY
   Organic chem:     "Identify the functional group first — that tells you the reaction type."
   Atomic structure: "Count total electrons, then fill shell 1 (max 2), shell 2 (max 8), shell 3 (max 8)."`,
 
-    extraRules: '',
+    extraRules: `
+CHEMICAL FORMULAE & EQUATIONS — SUBSCRIPTS (CRITICAL)
+Chemistry questions and explanations contain chemical formulae. Subscripts in formulae MUST be
+rendered correctly using KaTeX so students read proper chemical notation.
+
+RULE: Every chemical formula that appears in a step line, answer_note, or question_text MUST be
+wrapped in $...$ and use _{} for subscripts and ^{} for superscripts.
+
+SUBSCRIPT EXAMPLES (numbers after element symbols):
+  ✓  $\\text{H}_2\\text{O}$           — water (subscript 2)
+  ✓  $\\text{H}_2\\text{SO}_4$        — sulfuric acid
+  ✓  $\\text{CO}_2$                   — carbon dioxide
+  ✓  $\\text{NaOH}$                   — sodium hydroxide (no subscript needed)
+  ✓  $\\text{Ca(OH)}_2$               — calcium hydroxide
+  ✓  $\\text{NH}_3$                   — ammonia
+  ✓  $\\text{CaCO}_3$                 — calcium carbonate
+  ✓  $\\text{CH}_3\\text{COOH}$       — acetic acid
+  ✓  $\\text{C}_6\\text{H}_{12}\\text{O}_6$  — glucose (subscript 12 needs braces)
+  ✗  H2O  (never plain text — subscript won't show)
+  ✗  H₂O  (Unicode subscript glyph — inconsistent rendering on all devices)
+
+COEFFICIENTS (numbers before formulae in balanced equations):
+  ✓  $2\\text{H}_2\\text{O}$          — 2 molecules of water (coefficient 2 in front)
+  ✓  $2\\text{H}_2 + \\text{O}_2 \\rightarrow 2\\text{H}_2\\text{O}$
+  ✗  2H2O  (plain text — never)
+  ✗  2H₂O  (Unicode — never)
+
+MULTI-SUBSCRIPT numbers (two or more digits): MUST use braces:
+  ✓  $\\text{C}_6\\text{H}_{12}\\text{O}_6$   — brace 12 because it is two digits
+  ✓  $\\text{Ca}_3(\\text{PO}_4)_2$           — brace both subscripts
+  ✗  $\\text{C}_6\\text{H}_12\\text{O}_6$     — 12 without braces renders as "1" then plain "2"
+
+IONIC CHARGES (superscripts):
+  ✓  $\\text{Na}^+$,  $\\text{Mg}^{2+}$,  $\\text{Cl}^-$,  $\\text{SO}_4^{2-}$
+  ✗  Na+  or  SO4 2-  (plain text)
+
+BALANCED EQUATIONS IN STEP LINES:
+  Each equation line is one step. Use \\rightarrow (→) for reaction arrow. Example:
+  { "title": "Balanced equation", "lines": ["$2\\\\text{H}_2 + \\\\text{O}_2 \\\\rightarrow 2\\\\text{H}_2\\\\text{O}$"] }
+
+STATE SYMBOLS (if needed):
+  ✓  $\\text{NaCl}_{(aq)}$,  $\\text{CO}_{2(g)}$,  $\\text{H}_2\\text{O}_{(l)}$
+
+SHORT RULE TO REMEMBER:
+  • Any number that is part of a chemical formula → subscript with _{}
+  • Any charge → superscript with ^{}
+  • Any coefficient before a formula → plain number before the $ block, OR inside the $ block: $2\\\\text{H}_2\\\\text{O}$
+  • Always wrap the whole formula in $...$
+`,
   },
 
   // ── BIOLOGY ──────────────────────────────────────────────────────────────────
@@ -454,10 +502,9 @@ Numerical biology questions that need steps:
   Photosynthesis rate calc:      3–4 steps — given / formula / substitute / answer
   Population / ecology stats:    3–4 steps — given / formula / compute
 
-Recall and process questions (set [] — explain in "correct"):
+Recall and process questions (set [] — explain in "correct" + "answer_note"):
   Cell structure, organelles, osmosis, diffusion, respiration, photosynthesis process,
-  classification, ecological relationships, menstrual cycle, blood groups (ABO logic —
-  only the probability crosses need steps, not the blood type definitions)
+  classification, ecological relationships, menstrual cycle, blood groups
 
 ⚠️ DECISION RULE — read this before every question:
   Does the question give numbers to compute (size, ratio, rate)? → use steps
@@ -477,92 +524,231 @@ CALCULATION SHAPE (magnification, genetics ratios):
     { "title": "Write formula",  "lines": ["$M = \\frac{I}{A}$"] },
     { "title": "Substitute",     "lines": ["$M = \\frac{40}{0.2}$"] },
     { "title": "State answer",   "lines": ["$M = 200\\times$"] }
-  ]`,
+  ]
+
+═══════════════════════════
+BIOLOGY EXPLANATION DEPTH — CRITICAL
+═══════════════════════════
+
+Biology explanations must teach the MECHANISM, not just name the answer.
+A student who reads the explanation must be able to answer any similar biology question —
+not just this one. Every answer_note and correct field must do three things:
+
+  1. NAME the correct answer (1 sentence)
+  2. EXPLAIN WHY it is correct — the biological mechanism, process, or principle (2–3 sentences)
+  3. CONNECT to the bigger concept — how does this relate to what the student is studying?
+
+PROCESS QUESTIONS ("What happens during X?" / "Describe the process of X"):
+  Never give a one-line answer. Walk through the process step by step in the explanation:
+  e.g. "During aerobic respiration, glucose is first broken down in the cytoplasm through
+  glycolysis (producing 2 ATP and pyruvate). The pyruvate then enters the mitochondria,
+  where the Krebs cycle and electron transport chain generate a further 34–36 ATP molecules.
+  Oxygen acts as the final electron acceptor, producing water as a by-product."
+
+STRUCTURE/FUNCTION QUESTIONS ("What is the function of X?" / "Which organelle does Y?"):
+  Name the organelle, give its function, AND explain how the structure enables the function:
+  e.g. "Mitochondria are the site of aerobic respiration. They have a folded inner membrane
+  (cristae) which increases the surface area for the electron transport chain, maximising
+  ATP production. That is why metabolically active cells — like muscle cells — contain
+  more mitochondria."
+
+COMPARISON QUESTIONS ("Distinguish between X and Y"):
+  Explain both sides of the comparison in parallel structure:
+  e.g. "Osmosis is the movement of water molecules only, through a selectively permeable
+  membrane, from a region of high water potential to low water potential. Diffusion, by
+  contrast, is the movement of ANY molecules (gases, ions, dissolved substances) from a
+  region of high concentration to low concentration, and does not require a membrane."
+
+ECOLOGY/CLASSIFICATION QUESTIONS:
+  Give the principle, then give a concrete example tied to the question:
+  e.g. "Producers (autotrophs) make their own food through photosynthesis — they are always
+  the first link in any food chain. In this question, grass is the producer because it
+  converts sunlight into glucose. All other organisms in the chain depend on this stored energy."
+
+WRONG OPTIONS — BIOLOGY SPECIFIC:
+  Biology wrong options reflect specific common student confusions. Identify the exact mix-up:
+  • Confusing osmosis with diffusion → explain the membrane + water-only rule
+  • Confusing mitosis with meiosis → explain cell count + chromosome count outcome
+  • Confusing aerobic with anaerobic products → name the correct products for each
+  • Confusing the roles of xylem and phloem → xylem = water up, phloem = food both ways
+  • Confusing photosynthesis inputs/outputs → CO₂ + H₂O + light IN → glucose + O₂ OUT
+
+LANGUAGE — biology specific:
+  Use the real biological terms (mitochondria, photosynthesis, cytoplasm, etc.) but always
+  explain what they mean in plain English the first time. Never assume the student knows
+  a term they may have confused. Write at the level of a smart 15-year-old who just missed
+  this question and wants to understand it properly.`,
 
     illustration: `
 ILLUSTRATION — BIOLOGY
+Biology is visual. Diagrams are not optional extras — they are how students understand the subject.
 Two fields to fill for every diagram: illustration_title and illustration_prompt.
 
 illustration_title — short label shown above the diagram in the UI (4–7 words max).
-  GOOD: "Osmosis — Water Movement Across Membrane" / "Punnett Square — Tall × Dwarf Cross" / "Simplified Animal Cell"
+  GOOD: "Osmosis — Water Movement Across Membrane" / "Punnett Square — Tall × Dwarf Cross" / "Animal Cell — Labelled Organelles"
   BAD: "Biology diagram" / "Illustration" / "Cell diagram"
   Set "" when illustration_prompt is "".
 
-illustration_prompt — precise SVG code brief. Generate when the VISUAL STRUCTURE or PROCESS DIRECTION is the core of the question.
+illustration_prompt — precise SVG code brief. BIOLOGY DIAGRAMS ARE REQUIRED MORE OFTEN THAN OTHER SUBJECTS.
+The default for biology is: generate a diagram. The exception is when it genuinely adds nothing (pure recall text).
 
-INCLUDE:
-  • Osmosis / diffusion diagrams: two compartments separated by a membrane — label concentrations (hypertonic/hypotonic or solute %, water potential ψ), large blue arrow showing direction of water movement
-  • Punnett squares: 2×2 grid — label parent genotypes across top and side, fill four cells with offspring genotypes, show phenotype ratio below the grid
-  • Cell diagrams: animal cell (circle outline) or plant cell (rectangle outline) — show ONLY organelles relevant to the question; label with leader lines
-  • Food chain / web: boxes connected by arrows — energy flows from left to right; label each trophic level; arrow = "energy transferred to"
-  • Reflex arc: five labelled boxes in sequence — Receptor → Sensory Neuron → Relay Neuron → Motor Neuron → Effector — connected by arrows, spinal cord shown as oval around relay neuron
-  • Heart structure: simplified cross-section showing four chambers (RA, LA, RV, LV), aorta, pulmonary artery/vein — label only parts tested in the question
-  • Leaf cross-section: layers from top to bottom — upper epidermis, palisade mesophyll, spongy mesophyll, lower epidermis, stoma — label only tested parts
+INCLUDE — generate for ALL of these (this list is mandatory, not optional):
+  • Osmosis / diffusion: two compartments separated by a membrane — label concentrations (solute %, hypertonic/hypotonic),
+    water potential (ψ), and a bold blue arrow showing direction of net water movement
+  • Cell structure: animal cell (rounded outline) or plant cell (rectangle with right angles) — draw and label EVERY organelle
+    relevant to the question: nucleus (large oval, indigo fill), mitochondria (oval with inner folds, green), chloroplast
+    (oval with thylakoid stacks, dark green, plant cells only), cell wall (thick outer rectangle, plants), vacuole (large
+    central space, plants), cell membrane (just inside cell wall for plant cells). Use leader lines with arrowheads.
+  • Punnett squares: 2×2 grid — parent genotypes above and to the left, four offspring genotype cells, phenotype ratio below
+  • Photosynthesis diagram: leaf cross-section showing palisade mesophyll, guard cells/stoma, chloroplasts;
+    arrows showing CO₂ in, O₂ out, sunlight (from above), glucose produced — label every arrow
+  • Respiration diagram: simple flow diagram — Glucose + O₂ → CO₂ + H₂O + ATP (aerobic); or Glucose → Lactic acid / Ethanol + CO₂ (anaerobic)
+  • Food chain / food web: labelled boxes (producer → primary → secondary → tertiary consumer) connected by arrows;
+    arrows mean "eaten by" / "energy transferred to"; label each organism and its trophic level
+  • Reflex arc: five labelled boxes in sequence — Receptor → Sensory Neuron → Relay Neuron (inside spinal cord oval)
+    → Motor Neuron → Effector — with arrows showing nerve impulse direction
+  • Heart structure: simplified 4-chamber cross-section (RA, LA, RV, LV), aorta above left ventricle,
+    pulmonary artery from right ventricle, pulmonary vein to left atrium, vena cava to right atrium;
+    colour oxygenated blood red (#ef4444), deoxygenated blue (#3b82f6); arrows showing blood flow direction
+  • Blood cell types: labelled drawings of red blood cell (biconcave disc shape), white blood cell (irregular nucleus),
+    platelet (small fragment) — use when question asks to identify or compare blood cell types
+  • Leaf cross-section: horizontal layers top to bottom — cuticle, upper epidermis, palisade mesophyll (tall tightly-packed cells
+    with chloroplasts), spongy mesophyll (loose cells with air spaces), lower epidermis, guard cells with stoma opening;
+    arrows showing gas exchange (CO₂ in, O₂ out for photosynthesis)
+  • Kidney nephron: simplified tubule diagram — glomerulus, Bowman's capsule, proximal tubule, loop of Henle, distal tubule,
+    collecting duct; arrows showing filtration, reabsorption, secretion
+  • DNA / genetic diagrams: double helix with labelled base pairs (A-T, G-C) when the question is about DNA structure;
+    chromosome diagram when question is about meiosis/mitosis stages
+  • Ecological pyramids: pyramid of numbers, biomass, or energy — labelled with trophic levels and relative sizes
+  • Menstrual cycle graph: x-axis = days (1–28), line for LH surge (day 14), FSH, oestrogen, progesterone phases labelled
 
-EXCLUDE — always "" for:
-  • Pure recall definitions ("what is a mitochondrion", "define osmosis")
-  • Classification questions (kingdom, phylum — no diagram changes recall)
-  • Any concept fully explained in one or two sentences
+EXCLUDE — always "" only for:
+  • Pure recall definitions that are fully answered in one sentence ("what is a mitochondrion", "define osmosis")
+  • Classification recall (listing kingdom/phylum — no visual helps)
   • Magnification calculation questions (the steps carry everything)
+  • Any question where the text explanation is genuinely complete and a diagram adds nothing new
 
-VALUES RULE: genotype ratios, concentration values, percentage figures — MUST match your steps.
+⚠️ BIOLOGY RULE: if in doubt, INCLUDE the diagram. A student who sees a labelled diagram learns more than one
+who reads the same information as text. Biology is built on visual understanding. Always err on the side of drawing.
+
+VALUES RULE: genotype ratios, concentration values, percentage figures, day numbers — MUST match your steps.
 
 SVG CONVENTIONS:
   • viewBox "0 0 400 300", white background rect
-  • Cell outlines: stroke #1f2937 w2, fill none; plant cell corners are right-angled, animal cell is rounded
-  • Organelle fills: nucleus #4f46e540 stroke #4f46e5; mitochondria #10b98140 stroke #10b981; chloroplast #16a34a40 stroke #16a34a
-  • Process arrows (water movement, energy flow): stroke #4f46e5, stroke-width 3, filled arrowhead
+  • Cell outlines: stroke #1f2937 w2; plant cell has right-angled corners, animal cell is rounded (rx=20)
+  • Organelle fills: nucleus #4f46e540 stroke #4f46e5 w2; mitochondria #10b98140 stroke #10b981 w1.5; chloroplast #16a34a40 stroke #16a34a w1.5; vacuole #e0f2fe stroke #0ea5e9 w1
+  • Process arrows (water movement, energy flow, nerve impulse): stroke #4f46e5 w3, filled arrowhead — make these BOLD and clear
+  • Oxygenated blood: fill #fee2e2 stroke #ef4444; deoxygenated: fill #dbeafe stroke #3b82f6
   • Punnett square grid: stroke #1f2937 w1.5, cell font-size 16 font-weight bold, dominant allele uppercase
-  • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
+  • Leader lines for labels: thin dashed line (stroke-dasharray 4 2) from label to structure
+  • All labels: font-size 13–14px minimum, font-family "system-ui, sans-serif", fill #1f2937 unless coloured for emphasis
   • End with: "Generate SVG code."
 
 ── EXAMPLE 1 — Osmosis (5% solution left, 15% solution right, water moves right from steps) ──
 illustration_title: "Osmosis — Water Movement from Low to High Solute Concentration"
 illustration_prompt: "SVG code brief: viewBox 0 0 400 300. White background rect.
- Left compartment rectangle (30,50)→(185,250): stroke #1f2937 w2 fill #dbeafe. Label '5% sucrose solution' at (107,280) text-anchor middle font-size 12 fill #1f2937. Label 'Low solute' at (107,90) text-anchor middle font-size 13 fill #6b7280. Label 'High water potential (ψ)' at (107,108) text-anchor middle font-size 11 fill #6b7280.
- Right compartment rectangle (215,50)→(370,250): stroke #1f2937 w2 fill #bfdbfe. Label '15% sucrose solution' at (292,280) text-anchor middle font-size 12 fill #1f2937. Label 'High solute' at (292,90) text-anchor middle font-size 13 fill #6b7280. Label 'Low water potential (ψ)' at (292,108) text-anchor middle font-size 11 fill #6b7280.
- Semipermeable membrane: dashed vertical line (200,50)→(200,250) stroke #1f2937 w3 stroke-dasharray 8 4. Label 'Semipermeable membrane' at (200,38) text-anchor middle font-size 12 fill #1f2937.
- Large water movement arrow (160,150)→(240,150): stroke #4f46e5 w4 arrowhead at (240,150) fill #4f46e5. Label 'Water moves by osmosis →' at (200,175) text-anchor middle font-size 13 fill #4f46e5 font-weight bold.
- Diagram title 'Osmosis — Net Movement of Water' at (200,295) text-anchor middle fill #6b7280 font-size 12. Generate SVG code."
+ Left compartment rectangle (30,50)→(188,250): stroke #1f2937 w2 fill #dbeafe. Label '5% sucrose' at (109,85) text-anchor middle font-size 13 fill #1f2937 font-weight bold. Label 'Low solute concentration' at (109,105) text-anchor middle font-size 11 fill #6b7280. Label 'High water potential (ψ)' at (109,122) text-anchor middle font-size 11 fill #3b82f6.
+ Right compartment rectangle (212,50)→(370,250): stroke #1f2937 w2 fill #bfdbfe. Label '15% sucrose' at (291,85) text-anchor middle font-size 13 fill #1f2937 font-weight bold. Label 'High solute concentration' at (291,105) text-anchor middle font-size 11 fill #6b7280. Label 'Low water potential (ψ)' at (291,122) text-anchor middle font-size 11 fill #3b82f6.
+ Semipermeable membrane: dashed vertical line (200,50)→(200,250) stroke #1f2937 w3 stroke-dasharray 8 4. Label 'Semipermeable' at (200,35) text-anchor middle font-size 11 fill #1f2937. Label 'membrane' at (200,47) text-anchor middle font-size 11 fill #1f2937.
+ Large water movement arrow: polygon arrowhead pointing right at (240,155), shaft from (160,155) to (232,155): stroke #4f46e5 w5 fill #4f46e5. Label 'Net water movement' at (200,180) text-anchor middle font-size 13 fill #4f46e5 font-weight bold. Label '(by osmosis)' at (200,195) text-anchor middle font-size 12 fill #4f46e5.
+ Small water molecules represented as 'H₂O' text in each compartment: '••• H₂O •••' at (109,170) font-size 13 fill #3b82f6 text-anchor middle; '• H₂O •' at (291,170) font-size 13 fill #3b82f6 text-anchor middle (fewer on right = lower water potential).
+ Diagram title 'Osmosis — Net Movement of Water Molecules' at (200,278) text-anchor middle fill #6b7280 font-size 11. Generate SVG code."
 
-── EXAMPLE 2 — Punnett Square (Tt × Tt, tall=T dominant, dwarf=t recessive from steps) ──
+── EXAMPLE 2 — Animal Cell (question about organelle functions) ──
+illustration_title: "Animal Cell — Labelled Organelles"
+illustration_prompt: "SVG code brief: viewBox 0 0 400 300. White background rect.
+ Cell outline: ellipse cx=200 cy=150 rx=170 ry=120 stroke #1f2937 w2.5 fill #fefce8. (rounded, no cell wall)
+ Cell membrane label: 'Cell membrane' at (380,230) font-size 12 fill #1f2937. Dashed leader line from (370,225) to (330,220) stroke #6b7280 stroke-dasharray 4 2 w1.
+ Nucleus: ellipse cx=175 cy=140 rx=45 ry=38 fill #4f46e540 stroke #4f46e5 w2. Inner nucleolus: ellipse cx=175 cy=140 rx=14 ry=12 fill #4f46e5 opacity 0.4. Label 'Nucleus' at (80,98) font-size 12 fill #4f46e5 font-weight bold. Dashed leader from (125,115) to (145,128) stroke #4f46e5 stroke-dasharray 4 2 w1. Label 'Nucleolus' at (80,115) font-size 11 fill #4f46e5.
+ Mitochondria (2 oval shapes): ellipse cx=275 cy=120 rx=28 ry=15 fill #10b98140 stroke #10b981 w1.5; inner fold lines at y=115,120,125 stroke #10b981 w1. ellipse cx=255 cy=185 rx=28 ry=15 fill #10b98140 stroke #10b981 w1.5. Label 'Mitochondria' at (325,95) font-size 12 fill #10b981 font-weight bold. Dashed leader from (320,100) to (300,118) stroke #10b981 stroke-dasharray 4 2 w1.
+ Endoplasmic reticulum: wavy lines near nucleus at x=220-240 y=130-160 stroke #f59e0b w1.5. Label 'Endoplasmic reticulum' at (330,160) font-size 11 fill #f59e0b. Dashed leader (325,162) to (245,152) stroke #f59e0b stroke-dasharray 4 2 w1.
+ Ribosomes: small circles r=3 fill #6b7280 at (220,135),(228,145),(218,155),(232,130). Label 'Ribosomes' at (340,200) font-size 11 fill #6b7280. Dashed leader (335,198) to (228,148) stroke #6b7280 stroke-dasharray 4 2 w1.
+ Diagram title 'Animal Cell (not to scale)' at (200,285) text-anchor middle fill #6b7280 font-size 12. Generate SVG code."
+
+── EXAMPLE 3 — Punnett Square (Tt × Tt, tall=T dominant, dwarf=t recessive from steps) ──
 illustration_title: "Punnett Square — Tall Plant Cross (Tt × Tt)"
 illustration_prompt: "SVG code brief: viewBox 0 0 400 300. White background rect.
- Parent genotype labels: 'P₁: Tt' at (50,30) font-size 15 font-weight bold fill #1f2937. '×' at (200,30) font-size 15 fill #6b7280. 'P₂: Tt' at (310,30) font-size 15 font-weight bold fill #1f2937.
- Column gametes above grid: 'T' at (175,72) font-size 16 font-weight bold fill #4f46e5. 't' at (285,72) font-size 16 font-weight bold fill #6b7280.
- Row gametes left of grid: 'T' at (82,130) font-size 16 font-weight bold fill #4f46e5. 't' at (82,200) font-size 16 font-weight bold fill #6b7280.
- Grid outline (110,88)→(330,238): 4 cells, each 110×75. Stroke #1f2937 w2.
- Vertical divider (220,88)→(220,238): stroke #1f2937 w1.5.
- Horizontal divider (110,163)→(330,163): stroke #1f2937 w1.5.
- Cell contents: 'TT' at (165,132) font-size 17 font-weight bold fill #4f46e5. 'Tt' at (275,132) font-size 17 font-weight bold fill #4f46e5. 'Tt' at (165,202) font-size 17 font-weight bold fill #4f46e5. 'tt' at (275,202) font-size 17 font-weight bold fill #6b7280.
- Ratio label below: 'Phenotype ratio: 3 Tall : 1 Dwarf' at (220,260) text-anchor middle font-size 13 fill #1f2937.
- Diagram title 'Punnett Square — Monohybrid Cross' at (200,285) text-anchor middle fill #6b7280 font-size 12. Generate SVG code."
+ Parent genotype labels: 'Parent 1: Tt' at (60,28) font-size 14 font-weight bold fill #1f2937. '×' at (200,28) font-size 16 fill #6b7280. 'Parent 2: Tt' at (310,28) font-size 14 font-weight bold fill #1f2937.
+ Gamete header row: 'Gametes →' at (60,65) font-size 12 fill #6b7280. Column gametes above grid: 'T' at (175,70) font-size 17 font-weight bold fill #4f46e5. 't' at (290,70) font-size 17 font-weight bold fill #6b7280.
+ Row gametes left of grid: 'T' at (82,128) font-size 17 font-weight bold fill #4f46e5. 't' at (82,198) font-size 17 font-weight bold fill #6b7280.
+ Grid outline: rect (105,85)→(335,235) stroke #1f2937 w2 fill none. 4 cells each 115×75.
+ Vertical divider (220,85)→(220,235): stroke #1f2937 w1.5.
+ Horizontal divider (105,160)→(335,160): stroke #1f2937 w1.5.
+ Cell contents: 'TT' at (162,130) font-size 18 font-weight bold fill #4f46e5 text-anchor middle. 'Tt' at (277,130) font-size 18 font-weight bold fill #4f46e5 text-anchor middle. 'Tt' at (162,200) font-size 18 font-weight bold fill #4f46e5 text-anchor middle. 'tt' at (277,200) font-size 18 font-weight bold fill #9ca3af text-anchor middle.
+ Ratio box below grid: rect (105,242)→(335,270) fill #f0fdf4 stroke #16a34a w1. 'Phenotype ratio: 3 Tall (T_) : 1 Dwarf (tt)' at (220,259) text-anchor middle font-size 12 fill #16a34a font-weight bold.
+ Diagram title 'Monohybrid Cross — Punnett Square' at (200,288) text-anchor middle fill #6b7280 font-size 11. Generate SVG code."
 
-── EXAMPLE 3 — Food Chain (Grass → Grasshopper → Frog → Snake from steps) ──
-illustration_title: "Food Chain — Grassland Ecosystem"
+── EXAMPLE 4 — Photosynthesis Process (question on raw materials and products) ──
+illustration_title: "Photosynthesis — Inputs, Process, and Outputs"
 illustration_prompt: "SVG code brief: viewBox 0 0 400 300. White background rect.
- Box 1 (Grass): rect (20,120)→(90,180) rx=6 stroke #16a34a w2 fill #dcfce7. Label 'Grass' at (55,155) text-anchor middle font-size 13 fill #16a34a font-weight bold. Label 'Producer' at (55,170) text-anchor middle font-size 11 fill #6b7280.
- Arrow 1→2: (90,150)→(120,150) stroke #4f46e5 w2.5 arrowhead at (120,150).
- Box 2 (Grasshopper): rect (120,120)→(210,180) rx=6 stroke #1f2937 w2 fill #f3f4f6. Label 'Grasshopper' at (165,150) text-anchor middle font-size 12 fill #1f2937. Label 'Primary consumer' at (165,168) text-anchor middle font-size 10 fill #6b7280.
- Arrow 2→3: (210,150)→(240,150) stroke #4f46e5 w2.5 arrowhead at (240,150).
- Box 3 (Frog): rect (240,120)→(310,180) rx=6 stroke #1f2937 w2 fill #f3f4f6. Label 'Frog' at (275,150) text-anchor middle font-size 13 fill #1f2937. Label 'Secondary consumer' at (275,168) text-anchor middle font-size 10 fill #6b7280.
- Arrow 3→4: (310,150)→(340,150) stroke #4f46e5 w2.5 arrowhead at (340,150).
- Box 4 (Snake): rect (340,120)→(390,180) rx=6 stroke #1f2937 w2 fill #fef3c7. Label 'Snake' at (365,150) text-anchor middle font-size 12 fill #b45309. Label 'Tertiary' at (365,168) text-anchor middle font-size 10 fill #6b7280.
- Label 'Energy flow →' at (200,105) text-anchor middle font-size 13 fill #4f46e5.
- Diagram title 'Food Chain — Grassland' at (200,285) text-anchor middle fill #6b7280 font-size 13. Generate SVG code."
+ Central leaf shape: ellipse cx=200 cy=150 rx=90 ry=65 fill #dcfce7 stroke #16a34a w2.5. Midrib line (200,85)→(200,215) stroke #16a34a w2. Two side veins from midrib angled outward stroke #16a34a w1.
+ Label 'Chloroplast' at (200,150) text-anchor middle font-size 12 fill #16a34a font-weight bold. Label '(inside leaf cells)' at (200,165) text-anchor middle font-size 10 fill #6b7280.
+ Sunlight arrow: from (200,20) downward to (200,85) stroke #f59e0b w3 arrowhead at (200,85). Label '☀ Sunlight (energy)' at (200,12) text-anchor middle font-size 12 fill #f59e0b font-weight bold.
+ CO₂ arrow in: from (30,150) to (110,150) stroke #6b7280 w2.5 arrowhead at (110,150). Label 'CO₂ in' at (25,138) font-size 12 fill #6b7280. Label '(from air)' at (25,152) font-size 10 fill #6b7280.
+ H₂O arrow in: from (30,200) to (110,185) stroke #3b82f6 w2.5 arrowhead at (110,185). Label 'H₂O in' at (18,200) font-size 12 fill #3b82f6. Label '(from roots)' at (18,214) font-size 10 fill #3b82f6.
+ O₂ arrow out: from (290,150) to (375,150) stroke #10b981 w2.5 arrowhead at (375,150). Label 'O₂ out' at (338,138) font-size 12 fill #10b981. Label '(released)' at (340,152) font-size 10 fill #10b981.
+ Glucose arrow out: from (290,185) to (365,200) stroke #4f46e5 w2.5 arrowhead at (365,200). Label 'Glucose' at (345,192) font-size 12 fill #4f46e5. Label '(stored)' at (348,207) font-size 10 fill #4f46e5.
+ Summary equation below: '6CO₂ + 6H₂O + light → C₆H₁₂O₆ + 6O₂' at (200,270) text-anchor middle font-size 12 fill #1f2937 font-weight bold.
+ Diagram title 'Photosynthesis in a Leaf Cell' at (200,288) text-anchor middle fill #6b7280 font-size 11. Generate SVG code."
 
-BAD (never vague): "Draw a cell." / "Show osmosis." / "Illustrate the food chain."`,
+── EXAMPLE 5 — Reflex Arc ──
+illustration_title: "Reflex Arc — Pathway of a Nerve Impulse"
+illustration_prompt: "SVG code brief: viewBox 0 0 400 300. White background rect.
+ Five labelled boxes in sequence left to right:
+ Box 1 (Receptor): rect (15,120)→(80,160) rx=5 fill #fef3c7 stroke #f59e0b w2. Label 'Receptor' at (47,143) text-anchor middle font-size 11 fill #b45309 font-weight bold. Label '(skin/muscle)' at (47,156) text-anchor middle font-size 9 fill #6b7280.
+ Arrow 1→2: (80,140)→(108,140) stroke #4f46e5 w2.5 arrowhead at (108,140).
+ Box 2 (Sensory Neuron): rect (108,120)→(175,160) rx=5 fill #dbeafe stroke #3b82f6 w2. Label 'Sensory' at (141,138) text-anchor middle font-size 11 fill #1d4ed8. Label 'Neuron' at (141,152) text-anchor middle font-size 11 fill #1d4ed8.
+ Arrow 2→spinal: (175,140)→(195,140) stroke #4f46e5 w2.5 arrowhead at (195,140).
+ Spinal cord oval (around relay neuron): ellipse cx=215 cy=150 rx=28 ry=45 fill #f3e8ff stroke #7c3aed w2 stroke-dasharray 6 3. Label 'Spinal' at (215,130) text-anchor middle font-size 10 fill #7c3aed. Label 'cord' at (215,142) text-anchor middle font-size 10 fill #7c3aed.
+ Box 3 (Relay Neuron) inside oval: rect (200,147)→(230,165) rx=3 fill #ede9fe stroke #7c3aed w1.5. Label 'Relay' at (215,158) text-anchor middle font-size 10 fill #7c3aed font-weight bold.
+ Arrow spinal→4: (243,140)→(258,140) stroke #4f46e5 w2.5 arrowhead at (258,140).
+ Box 4 (Motor Neuron): rect (258,120)→(325,160) rx=5 fill #dbeafe stroke #3b82f6 w2. Label 'Motor' at (291,138) text-anchor middle font-size 11 fill #1d4ed8. Label 'Neuron' at (291,152) text-anchor middle font-size 11 fill #1d4ed8.
+ Arrow 4→5: (325,140)→(345,140) stroke #4f46e5 w2.5 arrowhead at (345,140).
+ Box 5 (Effector): rect (345,120)→(395,160) rx=5 fill #fef3c7 stroke #f59e0b w2. Label 'Effector' at (370,138) text-anchor middle font-size 11 fill #b45309 font-weight bold. Label '(muscle)' at (370,152) text-anchor middle font-size 9 fill #6b7280.
+ Direction label: 'Nerve impulse direction →' at (200,100) text-anchor middle font-size 12 fill #4f46e5.
+ Diagram title 'Reflex Arc — Nerve Impulse Pathway' at (200,285) text-anchor middle fill #6b7280 font-size 11. Generate SVG code."
+
+BAD (never vague): "Draw a cell." / "Show osmosis." / "Illustrate the food chain." / "Diagram showing the process."`,
 
     hintGuide: `
 HINT EXAMPLES — BIOLOGY
-  Magnification:   "Magnification = image size ÷ actual size — check your units are the same."
-  Genetics:        "Write out the parental genotypes, list the gametes, then fill in the Punnett square."
-  Osmosis:         "Water moves from a region of high water potential to low water potential."
-  Respiration:     "Decide whether conditions are aerobic or anaerobic — that determines the products."
-  Photosynthesis:  "Think about which raw materials go IN and what products come OUT of the chloroplast."
-  Ecology:         "Producers always start a food chain — they make their own food from sunlight."`,
+  Magnification:   "Magnification = image size ÷ actual size — check your units are the same before dividing."
+  Genetics:        "Write out the parental genotypes first, list the possible gametes, then fill in the Punnett square."
+  Osmosis:         "Water always moves from a region of high water potential (low solute) to low water potential (high solute)."
+  Diffusion:       "Think about the direction of the concentration gradient — particles always move from high to low."
+  Aerobic resp:    "Aerobic respiration needs oxygen and produces CO₂, water, and a large amount of ATP."
+  Anaerobic resp:  "Without oxygen, animals produce lactic acid; plants and yeast produce ethanol and CO₂."
+  Photosynthesis:  "Think about what goes IN to the leaf (CO₂, H₂O, light) and what comes OUT (glucose, O₂)."
+  Cell organelles: "Match the function to the organelle — energy production is mitochondria, protein synthesis is ribosomes."
+  Ecology:         "Producers always start a food chain — they are the only organisms that make their own food from sunlight."
+  Blood/transport: "Oxygenated blood travels away from the heart in arteries; deoxygenated blood returns via veins."`,
 
-    extraRules: '',
+    extraRules: `
+BIOLOGY EXPLANATION QUALITY RULE (RECALL DECISION RULE)
+Your explanation must teach the UNDERLYING PRINCIPLE, not just confirm the answer.
+A student who reads your explanation must be able to answer any similar biology question —
+not just this one.
+
+MINIMUM LENGTH FOR RECALL QUESTIONS:
+  answer_note: minimum 3 sentences (name + mechanism + context/connection)
+  correct:     same as answer_note (they are the same field)
+
+MINIMUM CONTENT BY QUESTION TYPE:
+  Organelle function → name organelle + function + WHY the structure suits the function
+  Process question → describe the sequence of events, not just the outcome
+  Comparison → explain BOTH sides with parallel structure (X does A; Y does B, not A)
+  Ecology/food chain → name the trophic level + what that means in terms of energy flow
+  Genetics → explain the inheritance pattern + what dominant/recessive means here
+  Adaptation → link the structural feature to the survival advantage it provides
+
+NEVER acceptable in biology:
+  ✗ "The correct answer is A. This is the definition of osmosis." ← no mechanism explained
+  ✗ "Mitochondria produce energy." ← incomplete — how? What process? What molecule?
+  ✗ "The answer is diffusion because particles move from high to low concentration." ← too brief
+
+ALWAYS required:
+  ✓ Name the concept → explain the mechanism → connect to the question's specific context
+`,
   },
 
   // ── ECONOMICS ────────────────────────────────────────────────────────────────
@@ -726,23 +912,57 @@ HINT EXAMPLES — HUMANITIES & LANGUAGE
   Literature:        "Think about the CHARACTER'S motivation — why would they say or do that at this point?"`,
 
     extraRules: `
-INSTRUCTION TEXT — ENGLISH & LANGUAGE QUESTIONS
+INSTRUCTION TEXT — ENGLISH & LANGUAGE QUESTIONS (MANDATORY)
 Many exam questions depend on a section instruction printed once for a group of questions.
-Students see questions in random CBT order, so each question must be self-contained.
+Students see questions in random CBT order — each question MUST be self-contained.
+A student who sees only the question_text must know exactly what they are being asked to do.
 
-Set instruction_text when the question type is:
-  Fill-the-blank / cloze:     "Choose the option that best fills the gap."
-  Synonym / nearest meaning:  "Choose the word nearest in meaning to the underlined word."
-  Antonym / opposite:         "Choose the word opposite in meaning to the underlined word."
-  Sentence completion:        "Choose the option that best completes the sentence."
-  Word stress / phonetics:    "Identify the word with the same stress pattern as the given word."
-  Rhyme:                      "Which word rhymes with the word given?"
-  Grammar correction:         "Choose the option that correctly fills the gap."
-  Comprehension:              "Answer based on the passage above." (passage goes in passage_text)
+⚠️ THIS IS NOT OPTIONAL. Every English/language question must have instruction_text unless
+the question is 100% self-contained (e.g. a direct grammar question with a full sentence).
+
+MANDATORY — set instruction_text for ALL of these question types:
+  Fill-the-blank / cloze:      "Choose the option that best fills the gap."
+  Synonym / nearest meaning:   "Choose the option nearest in meaning to the underlined word."
+  Antonym / opposite meaning:  "Choose the option most nearly opposite in meaning to the underlined word."
+  Sentence completion:         "Choose the option that best completes the sentence."
+  Word stress / phonetics:     "Identify the option that has the same stress pattern as the given word."
+  Rhyme:                       "Choose the word that rhymes with the word given."
+  Grammar / error correction:  "Choose the option that correctly completes the sentence."
+  Comprehension:               "Read the passage carefully and answer the question that follows."
+  Oral English (consonants):   "Identify the option in which the underlined letters have the same sound as in the given word."
+  Register / register shift:   "Choose the option that best describes the register used in the passage."
 
 If the instruction appears verbatim in the PDF → copy it exactly.
 If the instruction is missing but the type is clear → write it using the standard phrasing above.
-If the question is self-contained → instruction_text: null`,
+If the question is genuinely self-contained (a direct standalone grammar rule question) → instruction_text: null
+
+UNDERLINED WORDS — CRITICAL RULE:
+When the question asks about an "underlined word" or "the underlined letters", that word MUST
+appear in question_text enclosed in **double asterisks** (markdown bold/underline marker).
+NEVER leave "the underlined word" in question_text without including the actual word in **bold**.
+
+  CORRECT: "In the following sentence, choose the word nearest in meaning to **garrulous**:
+            The politician was **garrulous** during the debate."
+  WRONG:   "Choose the word nearest in meaning to the underlined word in the sentence:
+            The politician was garrulous during the debate."
+            ← Student cannot tell which word is underlined without **markers**
+
+  CORRECT: "Choose the option in which the underlined letters have the same sound as in '**ch**urch'."
+  WRONG:   "Choose the option in which the underlined letters have the same sound." ← missing the word
+
+ITALIC WORDS (words in italics in the original paper):
+  Use *single asterisks* for words shown in italics in the original.
+  e.g. "The word *ephemeral* is best replaced by which of the following?"
+
+FILL-IN-THE-GAP:
+  The blank/gap must be clearly shown as _____ (five underscores) or [...] in question_text.
+  CORRECT: "The child ran _____ the road without looking."
+  WRONG:   "The child ran the road without looking." ← gap is invisible
+
+PASSAGE TEXT:
+  When comprehension questions depend on a reading passage, copy the FULL passage into passage_text.
+  Do NOT summarise or truncate. Students in CBT see the question alone — the passage must travel with it.
+`,
   },
 }
 

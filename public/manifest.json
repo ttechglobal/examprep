@@ -2,12 +2,14 @@
   "name": "ExamPrep A1",
   "short_name": "ExamPrep",
   "description": "Prepare for WAEC and JAMB with confidence",
-  "start_url": "/student/dashboard",
+  "start_url": "/student/home",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0c0d12",
+  "orientation": "portrait",
+  "background_color": "#062A78",
   "theme_color": "#062A78",
-  "orientation": "portrait-primary",
   "categories": ["education"],
+  "lang": "en",
   "icons": [
     {
       "src": "/images/examprep_logo.png",
@@ -22,25 +24,20 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/images/examprep_logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "ExamPrep Dashboard"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Practice",
+      "short_name": "Practice",
+      "description": "Start a practice session",
       "url": "/student/practice",
-      "description": "Start a practice session"
+      "icons": [{ "src": "/images/examprep_logo.png", "sizes": "96x96" }]
     },
     {
-      "name": "Dashboard",
-      "url": "/student/dashboard",
-      "description": "Go to your dashboard"
+      "name": "Daily Challenge",
+      "short_name": "Daily",
+      "description": "Today's daily challenge",
+      "url": "/student/daily-challenge",
+      "icons": [{ "src": "/images/examprep_logo.png", "sizes": "96x96" }]
     }
   ]
 }

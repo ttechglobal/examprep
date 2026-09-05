@@ -57,9 +57,10 @@ const SECTIONS = {
     items: [
       { href: '/admin/dashboard',          label: 'Hub',          icon: '◼' },
       { href: '/admin/users',              label: 'Students',     icon: '👤' },
-      { href: '/admin/schools',            label: 'Schools',      icon: '🏫' },
-      { href: '/admin/access-codes',       label: 'Access Codes', icon: '🎟' },
-      { href: '/admin/analytics',          label: 'Analytics',    icon: '📈' },
+      { href: '/admin/schools',             label: 'Schools',       icon: '🏫' },
+      { href: '/admin/early-access-leads', label: 'Early Access',  icon: '📋' },
+      { href: '/admin/access-codes',       label: 'Access Codes',  icon: '🎟' },
+      { href: '/admin/analytics',          label: 'Analytics',     icon: '📈' },
       { href: '/admin/reviewers',          label: 'Reviewers',    icon: '👁' },
     ],
   },
@@ -70,7 +71,7 @@ function getSectionForPath(pathname) {
   if (['/admin/curriculum', '/admin/subjects-manager', '/admin/core-topics',
        '/admin/flashcards', '/admin/video-lessons'].some(p => pathname.startsWith(p))) return 'content'
   if (['/admin/users', '/admin/schools', '/admin/access-codes',
-       '/admin/analytics', '/admin/reviewers'].some(p => pathname.startsWith(p))) return 'platform'
+       '/admin/analytics', '/admin/reviewers', '/admin/early-access-leads'].some(p => pathname.startsWith(p))) return 'platform'
   return 'questions'
 }
 

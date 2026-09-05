@@ -153,10 +153,31 @@ export async function GET(request) {
       }
 
       if (!Object.keys(xpMap).length) {
-        // No activity in this window — return empty (not a fallback to all-time)
+        // No question_attempts in this window yet — fall back to total_points from profiles.
+        // This happens when: (a) inserts were failing historically, (b) no one practised yet.
+        // This ensures students see real XP on the school board immediately,
+        // even before question_attempts has been populated by the fixed session/save route.
+        const { data: fallbackProfiles } = await service
+          .from('profiles')
+          .select('id, full_name, streak_days, total_points')
+          .in('id', studentIds)
+
+        leaderboard = (fallbackProfiles ?? [])
+          .filter(p => (p.total_points ?? 0) > 0)
+          .sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0))
+          .slice(0, limit)
+          .map((p, i) => ({
+            rank:        i + 1,
+            student_id:  p.id,
+            name:        p.full_name  ?? 'Student',
+            xp:          p.total_points ?? 0,
+            streak_days: p.streak_days  ?? 0,
+            fallback:    true,  // signals to client that this is all-time XP, not window XP
+          }))
+
         return NextResponse.json({
           scope: 'school', period, school_name: schoolName, cohort_name: cohortName,
-          leaderboard: [],
+          leaderboard, fallback: true,
         })
       }
 

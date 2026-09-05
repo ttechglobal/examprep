@@ -44,10 +44,12 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get school admin profile
+  // Run profile + school info + cohorts in parallel — saves one sequential round-trip.
+  // Previously: getUser → profile → [school, cohorts] = 3 sequential waterfalls.
+  // Now: getUser → [profile, school lookup via join, cohorts] = 2.
   const { data: adminProfile } = await db
     .from('profiles')
-    .select('school_id, role')
+    .select('school_id, role, schools(id, name, city, state)')
     .eq('id', user.id)
     .single()
 
@@ -56,16 +58,14 @@ export async function GET() {
   }
 
   const schoolId = adminProfile.school_id
+  const school   = adminProfile.schools ?? null
 
-  // Parallel: school info + all cohorts + active cohort
-  const [
-    { data: school },
-    { data: allCohorts },
-  ] = await Promise.all([
-    db.from('schools').select('id, name, city, state').eq('id', schoolId).single(),
-    db.from('cohorts').select('id, name, session, invite_code, invite_active, is_active, created_at')
-      .eq('school_id', schoolId).order('created_at', { ascending: false }),
-  ])
+  // Now just cohorts — school info came from the profile join above
+  const { data: allCohorts } = await db
+    .from('cohorts')
+    .select('id, name, session, invite_code, invite_active, is_active, created_at')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false })
 
   const activeCohort = (allCohorts ?? []).find(c => c.is_active) ?? null
 
@@ -120,8 +120,9 @@ export async function GET() {
       .select('id, full_name, exam_type, subjects, created_at')
       .in('id', studentIds),
 
+    // Lean select — subtopic_id not used in dashboard aggregation, dropped to cut payload
     db.from('question_attempts')
-      .select('student_id, is_correct, created_at, subject_id, topic_id, subtopic_id, time_spent_secs, subjects(name), topics(name)')
+      .select('student_id, is_correct, created_at, subject_id, topic_id, subjects(name), topics(name)')
       .in('student_id', studentIds)
       .gte('created_at', thirtyDaysAgo),
 
@@ -204,11 +205,8 @@ export async function GET() {
       subjectMastery[sid] = Math.round(scores.reduce((a,b)=>a+b,0) / scores.length)
     })
 
-    // Avg time per question for this student (last 30 days)
-    const timedAttempts = attempts.filter(a => a.time_spent_secs != null)
-    const avgTimeSecs = timedAttempts.length > 0
-      ? Math.round(timedAttempts.reduce((a,b) => a + (b.time_spent_secs ?? 0), 0) / timedAttempts.length)
-      : null
+    // avgTimeSecs removed — time_spent_secs dropped from SELECT to reduce payload
+    const avgTimeSecs = null
 
     return {
       id,
@@ -322,15 +320,24 @@ export async function GET() {
     weeklyEngagement.push({ label, active })
   }
 
-  return NextResponse.json({
-    school,
-    cohort:           activeCohort,
-    allCohorts:       allCohorts ?? [],
-    summary:          { totalStudents: studentIds.length, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek },
-    students:         enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
-    subjectTopics,
-    weeklyEngagement,
-    atRisk,
-    atRiskSegmented,
-  })
+  return NextResponse.json(
+    {
+      school,
+      cohort:           activeCohort,
+      allCohorts:       allCohorts ?? [],
+      summary:          { totalStudents: studentIds.length, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek },
+      students:         enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
+      subjectTopics,
+      weeklyEngagement,
+      atRisk,
+      atRiskSegmented,
+    },
+    {
+      headers: {
+        // 2 min fresh cache; serve stale for up to 5 min while revalidating in background.
+        // School data changes only when students practice — this avoids refetching on every tab switch.
+        'Cache-Control': 'private, max-age=120, stale-while-revalidate=300',
+      },
+    }
+  )
 }

@@ -18,6 +18,24 @@ import DailyChallenge from '@/components/student/DailyChallenge'
 import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
 
+// ── Subject ID cache — persists resolved UUIDs across sessions
+// Avoids a network round-trip every time the practice page loads.
+const SUBJ_ID_CACHE_KEY = 'ep_subject_ids'
+const SUBJ_ID_CACHE_TTL = 24 * 60 * 60 * 1000  // 24 hours (subjects rarely change)
+function readSubjectIdCache(exam) {
+  try {
+    const c = JSON.parse(localStorage.getItem(SUBJ_ID_CACHE_KEY) || 'null')
+    if (!c || Date.now() - (c.ts || 0) > SUBJ_ID_CACHE_TTL) return null
+    return c[exam] ?? null
+  } catch { return null }
+}
+function writeSubjectIdCache(exam, subjects) {
+  try {
+    const c = JSON.parse(localStorage.getItem(SUBJ_ID_CACHE_KEY) || '{}')
+    localStorage.setItem(SUBJ_ID_CACHE_KEY, JSON.stringify({ ...c, [exam]: subjects, ts: Date.now() }))
+  } catch {}
+}
+
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
 const CYAN   = '#18B7F2'
@@ -622,6 +640,7 @@ export default function PracticePage() {
   }, [profileSubjectKey]) // eslint-disable-line
 
   async function loadSubjects(examTab, currentProfile) {
+    // 1. In-memory cache (same session, tab not closed)
     if (subjectCache.current[examTab]) {
       setSubjects(subjectCache.current[examTab])
       return
@@ -637,12 +656,23 @@ export default function PracticePage() {
       return
     }
 
-    // Show name-only stubs immediately — UI is never blank
+    // 2. localStorage cache — skip the network on repeat visits
+    const lsCached = readSubjectIdCache(examTab)
+    if (lsCached?.length) {
+      // Validate names still match the profile (subjects may have changed)
+      const cachedNames = new Set(lsCached.map(s => s.name))
+      if (names.every(n => cachedNames.has(n))) {
+        subjectCache.current[examTab] = lsCached
+        setSubjects(lsCached)
+        return
+      }
+    }
+
+    // 3. Show name-only stubs immediately — UI is never blank
     const stubs = names.map(n => ({ id: null, name: n }))
     setSubjects(stubs)
 
-    // Background fetch to resolve real IDs (needed to start a session).
-    // API is name-based, no auth required, cached 5 min server-side.
+    // 4. Background fetch to resolve real IDs, then cache for next visit
     setLoadingSubjects(true)
     try {
       const res  = await fetch(`/api/student/subjects?exam=${examTab}&names=${encodeURIComponent(names.join(','))}`)
@@ -651,6 +681,7 @@ export default function PracticePage() {
         ? data.map(s => ({ id: s.id, name: s.name }))
         : stubs
       subjectCache.current[examTab] = rows
+      writeSubjectIdCache(examTab, rows)  // persist for next visit
       setSubjects(rows)
     } catch {
       // Keep stubs — subjects still visible, IDs resolve on retry
@@ -729,8 +760,33 @@ export default function PracticePage() {
         {!hasSubjects && !loadingSubjects
           ? <NoSubjectsPrompt isGuest={isGuest} />
           : <>
-              <DailyChallenge profile={profile} />
+              {/* Active exam + subject strip — always visible so users know what they're practising */}
+              <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:18, padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, minWidth:0, flex:1 }}>
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Practising</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:5 }}>
+                        <span style={{ fontSize:16 }}>{getIcon(subjects.find(s => s)?.name ?? '')}</span>
+                        {loadingSubjects
+                          ? <span style={{ color:'var(--text-tert)' }}>Loading…</span>
+                          : subjects.length > 0
+                            ? subjects.map((s,i) => <span key={s.id ?? i}>{i > 0 && <span style={{ color:'var(--text-tert)', margin:'0 2px' }}>·</span>}{s.name}</span>)
+                            : <span style={{ color:'var(--text-tert)' }}>No subjects</span>
+                        }
+                      </span>
+                      <span style={{ fontSize:11, fontWeight:800, padding:'2px 9px', borderRadius:999, background:`${BLUE}12`, color:BLUE, border:`1px solid ${BLUE}25` }}>{exam}</span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => openSheet('custom')}
+                  style={{ flexShrink:0, padding:'8px 16px', borderRadius:12, border:`1.5px solid ${BLUE}`, background:`${BLUE}10`, color:BLUE, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                  Change →
+                </button>
+              </div>
+
               <PracticeModeCards onStart={openSheet} dark={dark} />
+              <DailyChallenge profile={profile} />
               <SessionHistory />
             </>
         }

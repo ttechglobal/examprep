@@ -46,11 +46,12 @@ const db = () => svcClient(
 
 const MAX_ATTEMPTS = 2
 
-// XP for completing — drops per attempt used
+// XP for completing — correct only
+// 1st try correct = 50, 2nd try correct = 25, both wrong = 0
 function xpForCompletion(attemptsUsed, correct) {
-  if (!correct) return 5              // participation XP even if both wrong
-  if (attemptsUsed === 1) return 50   // got it first try
-  return 25                           // got it second try
+  if (!correct) return 0
+  if (attemptsUsed === 1) return 50
+  return 25
 }
 
 function todayStr() {

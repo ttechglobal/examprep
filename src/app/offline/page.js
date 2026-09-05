@@ -17,10 +17,10 @@ export default function OfflinePage() {
           </p>
         </div>
         <a
-          href="/student/dashboard"
+          href="/student/home"
           className="block w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors text-center"
         >
-          Back to dashboard
+          Back to home
         </a>
       </div>
     </div>

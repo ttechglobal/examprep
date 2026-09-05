@@ -26,6 +26,20 @@ import { readLocalSessions } from '@/components/student/SessionHistory'
 import Link from 'next/link'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Mastery API cache — 5 min localStorage cache to avoid re-aggregating on every visit
+const MASTERY_CACHE_TTL = 5 * 60 * 1000  // 5 minutes
+function masteryKey(exam, period, subjectId = '') { return `ep_mastery_${exam}_${period}_${subjectId}` }
+function readMasteryCache(key) {
+  try {
+    const c = JSON.parse(localStorage.getItem(key) || 'null')
+    if (!c || Date.now() - (c.ts || 0) > MASTERY_CACHE_TTL) return null
+    return c.data
+  } catch { return null }
+}
+function writeMasteryCache(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })) } catch {}
+}
+
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
 const CYAN   = '#18B7F2'
@@ -651,10 +665,21 @@ export default function ProgressPage() {
 
     if (isGuest) return
     try {
+      const cKey    = masteryKey(currentExam, currentPeriod)
+      const cached  = readMasteryCache(cKey)
+      if (cached?.subjects?.length) {
+        setSubjects(cached.subjects)
+        setActiveSubj(prev => {
+          const stillValid = prev && cached.subjects.find(s => s.subject_id === prev.subject_id)
+          return stillValid || cached.subjects[0]
+        })
+        return  // fresh cache — skip network
+      }
       const res  = await fetch(`/api/student/mastery?exam=${currentExam}&period=${currentPeriod}`)
       if (!res.ok) return
       const data = await res.json()
       if (data.subjects?.length) {
+        writeMasteryCache(cKey, data)
         setSubjects(data.subjects)
         setActiveSubj(prev => {
           const stillValid = prev && data.subjects.find(s => s.subject_id === prev.subject_id)
@@ -696,13 +721,17 @@ export default function ProgressPage() {
       } catch {}
     })()
 
-    // Background server fetch for auth users
+    // Background server fetch for auth users — with 5 min localStorage cache
     if (isGuest) return
     ;(async () => {
       try {
+        const cKey   = masteryKey(exam, period, activeSubj.subject_id)
+        const cached = readMasteryCache(cKey)
+        if (cached) { setInsight(cached); return }
         const res  = await fetch(`/api/student/mastery?exam=${exam}&subject=${activeSubj.subject_id}&period=${period}`)
         if (!res.ok) return
         const data = await res.json()
+        writeMasteryCache(cKey, data)
         setInsight(data)
       } catch {}
     })()

@@ -438,3 +438,36 @@ button, a, [role="button"] {
   .school-mobile-bottom { display: none !important; }
   .school-content       { margin-left: 240px; }
 }
+
+/* ── School dashboard responsive grids ────────────────────────────────────── */
+/* stats-grid: 4 cols desktop → 2 cols tablet → 2 cols mobile (not 4 on phone) */
+.stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+.two-col    { grid-template-columns: 1fr !important; }
+.three-col  { grid-template-columns: 1fr !important; }
+
+@media (min-width: 640px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+  .two-col    { grid-template-columns: 1fr 1fr !important; }
+  .three-col  { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (min-width: 1024px) {
+  .stats-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 14px !important; }
+  .two-col    { grid-template-columns: 1fr 1fr !important; }
+  .three-col  { grid-template-columns: repeat(3, 1fr) !important; }
+}
+
+/* ── School content padding: tighter on mobile ──────────────────────────── */
+.school-content main {
+  padding: 20px 16px 100px !important;
+}
+@media (min-width: 768px) {
+  .school-content main {
+    padding: 28px 24px 80px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .school-content main {
+    padding: 32px 28px 60px !important;
+  }
+}

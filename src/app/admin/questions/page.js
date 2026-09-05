@@ -578,8 +578,127 @@ function QuestionList({ source, subjects }) {
     setSelected(updated)
   }
 
+  const [yearCounts,    setYearCounts]    = useState({})
+  const [deleting,      setDeleting]      = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+
+  // Load year counts whenever subject + exam filters are set (to detect duplicates)
+  useEffect(() => {
+    if (!filterSubject || !filterExam) { setYearCounts({}); return }
+    const p = new URLSearchParams()
+    p.set('source', source)
+    p.set('subjectId', filterSubject)
+    p.set('examType', filterExam)
+    p.set('yearCounts', 'true')
+    fetch(`/api/admin/questions?${p}`)
+      .then(r => r.json())
+      .then(d => setYearCounts(d.yearCounts ?? {}))
+      .catch(() => {})
+  }, [filterSubject, filterExam, source])
+
+  async function handleDeleteConfirmed() {
+    if (!deleteConfirm) return
+    setDeleting(true)
+    try {
+      const p = new URLSearchParams()
+      if (deleteConfirm.subjectId) p.set('subjectId', deleteConfirm.subjectId)
+      if (deleteConfirm.examType)  p.set('examType',  deleteConfirm.examType)
+      if (deleteConfirm.year)      p.set('year',       deleteConfirm.year)
+      p.set('hard', 'true')
+      const res = await fetch(`/api/admin/questions/bulk-delete?${p}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Delete failed')
+      setDeleteConfirm(null)
+      setFilterYear(deleteConfirm.year ? '' : filterYear)
+      load()
+      setYearCounts(prev => {
+        const next = { ...prev }
+        if (deleteConfirm.year) delete next[deleteConfirm.year]
+        return next
+      })
+    } catch (e) {
+      alert('Delete failed: ' + e.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const yearCountValues  = Object.values(yearCounts).filter(Boolean)
+  const medianCount      = yearCountValues.length
+    ? yearCountValues.slice().sort((a,b)=>a-b)[Math.floor(yearCountValues.length/2)]
+    : 0
+  const suspiciousYears  = Object.entries(yearCounts)
+    .filter(([, c]) => c > medianCount * 1.7 && c > 30)
+    .map(([y]) => y)
+
   return (
     <>
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="text-3xl text-center">🗑️</div>
+            <p className="font-black text-gray-900 text-center text-base">Delete {deleteConfirm.label}?</p>
+            <p className="text-sm text-gray-500 text-center leading-relaxed">
+              This will permanently delete <strong>{deleteConfirm.count} questions</strong>. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDeleteConfirmed} disabled={deleting}
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white text-sm font-black disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Yes, delete all'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate year warning */}
+      {suspiciousYears.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-3 items-start">
+          <span className="text-lg flex-shrink-0">⚠️</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-black text-amber-800">Possible duplicate import detected</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Year{suspiciousYears.length > 1 ? 's' : ''} <strong>{suspiciousYears.join(', ')}</strong> ha{suspiciousYears.length > 1 ? 've' : 's'} far more questions than other years — a year may have been imported twice. Filter by year below and delete the duplicates.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Year count overview */}
+      {Object.keys(yearCounts).length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+          <p className="text-xs font-black text-gray-600 mb-2">Questions per year — click to filter · 🗑️ to delete all</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(yearCounts).sort((a,b) => b[0].localeCompare(a[0])).map(([y, c]) => {
+              const isSusp = suspiciousYears.includes(y)
+              return (
+                <div key={y} className={`flex items-center rounded-lg border text-xs font-bold overflow-hidden ${
+                  isSusp ? 'border-amber-300' : filterYear === y ? 'border-indigo-400' : 'border-gray-200'
+                }`}>
+                  <button onClick={() => { setFilterYear(prev => prev === y ? '' : y); setPage(1) }}
+                    className={`px-2.5 py-1.5 flex items-center gap-1.5 ${
+                      isSusp ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                             : filterYear === y ? 'bg-indigo-50 text-indigo-700' : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}>
+                    {y} <span className={`font-black ${isSusp ? 'text-amber-600' : 'text-gray-400'}`}>{c}</span>
+                    {isSusp && <span>⚠️</span>}
+                  </button>
+                  <button
+                    title={`Delete all ${c} questions for ${y}`}
+                    onClick={() => setDeleteConfirm({ year: y, subjectId: filterSubject, examType: filterExam, count: c, label: `all ${y} questions` })}
+                    className="px-2 py-1.5 border-l border-gray-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                    🗑️
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <select value={filterExam} onChange={e => { setFilterExam(e.target.value); setPage(1) }}
@@ -642,10 +761,27 @@ function QuestionList({ source, subjects }) {
         </button>
       </div>
 
-      {/* Count */}
+      {/* Count + delete current filter */}
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{total.toLocaleString()} question{total !== 1 ? 's' : ''}</span>
-        {totalPages > 1 && <span>Page {page}/{totalPages}</span>}
+        <div className="flex items-center gap-3">
+          {totalPages > 1 && <span>Page {page}/{totalPages}</span>}
+          {total > 0 && filterSubject && filterExam && (
+            <button
+              onClick={() => setDeleteConfirm({
+                year: filterYear || null,
+                subjectId: filterSubject,
+                examType: filterExam,
+                count: total,
+                label: filterYear
+                  ? `all ${total} questions for ${filterYear}`
+                  : `all ${total} questions matching current filters`,
+              })}
+              className="text-red-500 hover:text-red-700 font-bold border border-red-200 hover:border-red-400 rounded-lg px-2.5 py-1 transition-colors">
+              🗑️ Delete {filterYear ? `${filterYear} (${total})` : `all (${total})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* List */}

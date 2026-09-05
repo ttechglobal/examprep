@@ -32,10 +32,10 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url)
 
-  const subjectId   = searchParams.get('subject')
+  const subjectId   = searchParams.get('subject') ?? searchParams.get('subjectId')
   const topicId     = searchParams.get('topic')
   const subtopicId  = searchParams.get('subtopic')
-  const examType    = searchParams.get('exam')
+  const examType    = searchParams.get('exam') ?? searchParams.get('examType')
   const difficulty  = searchParams.get('difficulty')
   const source      = searchParams.get('source')
   const untagged    = searchParams.get('untagged')
@@ -45,11 +45,26 @@ export async function GET(request) {
   const missingImg  = searchParams.get('missing_image')
   const year        = searchParams.get('year')
   const search      = searchParams.get('search')
+  const yearCounts  = searchParams.get('yearCounts') === 'true'
   const page        = parseInt(searchParams.get('page')  ?? '1')
-  const limit       = Math.min(parseInt(searchParams.get('limit') ?? '25'), 100)
+  const limit       = Math.min(parseInt(searchParams.get('limit') ?? searchParams.get('perPage') ?? '25'), 100)
   const offset      = (page - 1) * limit
 
   const db = svc()
+
+  // ── yearCounts mode: return { year: count } map for this subject+exam ───────
+  if (yearCounts && subjectId && examType) {
+    let q = db.from('questions').select('year').eq('is_active', true)
+    q = q.eq('subject_id', subjectId).eq('exam_type', examType)
+    if (source) q = q.eq('source', source)
+    const { data, error } = await q.limit(5000)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const counts = {}
+    for (const row of (data ?? [])) {
+      if (row.year) counts[row.year] = (counts[row.year] ?? 0) + 1
+    }
+    return NextResponse.json({ yearCounts: counts })
+  }
 
   const selectClause = `
     id, question_text, correct_answer, difficulty,
