@@ -221,7 +221,7 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
 
   // Full inline rendering (desktop, review side column, etc.)
   return (
-    <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)', overflow:'hidden' }}>
+    <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)' }}>
       <div style={{ padding:'16px 18px 14px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:concept?6:0 }}>
           Explanation

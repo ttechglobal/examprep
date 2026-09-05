@@ -371,30 +371,25 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode = 'c
 
             {/* ── STEP 1 ── */}
             {step === 1 && (<>
-              {/* Mode selector */}
+              {/* Mode selector — compact horizontal chip row so subject/exam is immediately visible */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.1em' }}>Mode</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <style>{`.ms-chip-row::-webkit-scrollbar{display:none}`}</style>
+                <div className="ms-chip-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none', paddingBottom: 4 }}>
                   {[
-                    { key: 'topic',  emoji: '📋', label: 'Topic Practice',  tag: 'Targeted',   color: '#0891b2', desc: 'Drill questions from one specific topic.' },
-                    { key: 'custom', emoji: '🎛️', label: 'Custom Practice', tag: 'You choose',  color: BLUE,     desc: 'Pick subject, question count, time limit and mode.' },
-                    { key: 'quick5', emoji: '⚡', label: 'Quick 5',          tag: '~4 min',     color: GREEN,    desc: '5 random questions. Fast and focused.' },
-                    { key: 'timed',  emoji: '⏱️', label: 'Speed Round',     tag: 'Race it',    color: ORANGE,   desc: 'Race through questions under a time limit.' },
-                    { key: 'mock',   emoji: '📝', label: 'Mock Exam',        tag: 'Full sim',   color: PURPLE,   desc: 'A full-length timed exam simulation.' },
+                    { key: 'topic',  emoji: '📋', label: 'Topic Practice',  color: '#0891b2' },
+                    { key: 'custom', emoji: '🎛️', label: 'Custom Practice', color: BLUE     },
+                    { key: 'quick5', emoji: '⚡', label: 'Quick 5',          color: GREEN    },
+                    { key: 'timed',  emoji: '⏱️', label: 'Speed Round',     color: ORANGE   },
+                    { key: 'mock',   emoji: '📝', label: 'Mock Exam',        color: PURPLE   },
                   ].map(m => {
                     const on = mode === m.key
                     return (
                       <button key={m.key} onClick={() => setMode(m.key)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 16, border: `2px solid ${on ? m.color : 'var(--border)'}`, background: on ? `${m.color}0d` : 'var(--bg-subtle)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', transition: 'all .15s' }}>
-                        <div style={{ width: 44, height: 44, borderRadius: 14, background: on ? `${m.color}20` : 'var(--bg-card)', border: `1.5px solid ${on ? m.color + '40' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{m.emoji}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
-                            <span style={{ fontSize: 14, fontWeight: 900, color: on ? m.color : 'var(--text-prim)' }}>{m.label}</span>
-                            <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: on ? `${m.color}18` : 'var(--bg-card)', color: on ? m.color : 'var(--text-tert)', border: `1px solid ${on ? m.color + '30' : 'var(--border)'}` }}>{m.tag}</span>
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>{m.desc}</div>
-                        </div>
-                        {on && <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}
+                        style={{ flexShrink: 0, scrollSnapAlign: 'start', display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 999, border: `2px solid ${on ? m.color : 'var(--border)'}`, background: on ? `${m.color}12` : 'var(--bg-subtle)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 16 }}>{m.emoji}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: on ? m.color : 'var(--text-sec)' }}>{m.label}</span>
+                        {on && <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill={m.color} /><path d="M4 7l2 2 4-4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /></svg>}
                       </button>
                     )
                   })}
@@ -740,7 +735,7 @@ export default function PracticePage() {
       `}</style>
 
       {/* Quick links */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         <Link href="/student/profile" style={{ textDecoration: 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--text-tert)' }}>
             📚 Edit subjects
@@ -760,31 +755,6 @@ export default function PracticePage() {
         {!hasSubjects && !loadingSubjects
           ? <NoSubjectsPrompt isGuest={isGuest} />
           : <>
-              {/* Active exam + subject strip — always visible so users know what they're practising */}
-              <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:18, padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, minWidth:0, flex:1 }}>
-                  <div>
-                    <div style={{ fontSize:10, fontWeight:700, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Practising</div>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                      <span style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:5 }}>
-                        <span style={{ fontSize:16 }}>{getIcon(subjects.find(s => s)?.name ?? '')}</span>
-                        {loadingSubjects
-                          ? <span style={{ color:'var(--text-tert)' }}>Loading…</span>
-                          : subjects.length > 0
-                            ? subjects.map((s,i) => <span key={s.id ?? i}>{i > 0 && <span style={{ color:'var(--text-tert)', margin:'0 2px' }}>·</span>}{s.name}</span>)
-                            : <span style={{ color:'var(--text-tert)' }}>No subjects</span>
-                        }
-                      </span>
-                      <span style={{ fontSize:11, fontWeight:800, padding:'2px 9px', borderRadius:999, background:`${BLUE}12`, color:BLUE, border:`1px solid ${BLUE}25` }}>{exam}</span>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={() => openSheet('custom')}
-                  style={{ flexShrink:0, padding:'8px 16px', borderRadius:12, border:`1.5px solid ${BLUE}`, background:`${BLUE}10`, color:BLUE, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-                  Change →
-                </button>
-              </div>
-
               <PracticeModeCards onStart={openSheet} dark={dark} />
               <DailyChallenge profile={profile} />
               <SessionHistory />

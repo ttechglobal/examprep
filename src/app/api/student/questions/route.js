@@ -57,21 +57,30 @@ export async function GET(request) {
     }
 
     // ── 2. Shared filter helper ───────────────────────────────────────────────
-    const applyBase = (q) => {
-      q = q.eq('is_active', true)
-           .in('subject_id', resolvedSubjectIds)
-           .or(`exam_type.eq.${exam},exam_type.eq.BOTH`)
+    // The questions table has two columns for exam filtering:
+    //   exam_types  — new array column  e.g. ['WAEC'] or ['WAEC','JAMB']
+    //   exam_type   — legacy string column e.g. 'WAEC' | 'JAMB' | 'BOTH'
+    // We try exam_types first (contains), fall back to exam_type (in) if needed.
+    const legacyValues = [exam, 'BOTH']
+
+    const applyBase = (q, useArrayCol = true) => {
+      q = q.eq('is_active', true).in('subject_id', resolvedSubjectIds)
+      if (useArrayCol) {
+        q = q.contains('exam_types', [exam])
+      } else {
+        q = q.in('exam_type', legacyValues)
+      }
       if (topicId) q = q.eq('topic_id', topicId)
       return q
     }
 
-    // Include explanation, hint, instruction_text, and passage_text so the
-    // session can show explanations and English instruction banners without
-    // a second round-trip. The payload increase is acceptable for session quality.
+
+
+
     const SELECT = `
       id, question_text, options, correct_answer,
       year, difficulty,
-      explanation, hint, instruction_text, passage_text,
+      explanation, passage_text,
       topic_id, subject_id,
       topics   ( id, name ),
       subjects ( id, name )
@@ -81,28 +90,40 @@ export async function GET(request) {
     // Select only the year column so Postgres can use an index.
     // Limit to 500 rows — enough to surface every distinct year in any realistic
     // question bank without pulling the entire table just to find unique values.
-    let yearQuery = service.from('questions').select('year')
-    yearQuery = applyBase(yearQuery).not('year', 'is', null).limit(500)
-    const { data: yearRows } = await yearQuery
+    let yearRows = null
+    {
+      const { data, error } = await applyBase(service.from('questions').select('year'), true)
+        .not('year', 'is', null).limit(500)
+      if (error || !data?.length) {
+        const fb = await applyBase(service.from('questions').select('year'), false)
+          .not('year', 'is', null).limit(500)
+        yearRows = fb.data ?? []
+      } else {
+        yearRows = data ?? []
+      }
+    }
 
     // Build a sorted, deduplicated list of years
-    const availableYears = [...new Set((yearRows ?? []).map(r => r.year).filter(Boolean))].sort()
+    const availableYears = [...new Set((yearRows).map(r => r.year).filter(Boolean))].sort()
 
     let questions = []
 
     // ── 3b. Single pooled fetch — sample JS-side for year spread ───────────
-    // Old approach: N parallel queries (one per year) = N round-trips.
-    // New approach: one query with a 4× pool, shuffle + slice in JS.
-    // Year spread is preserved: we oversample (4× count), then pick questions
-    // proportionally from each year group in JS — zero extra round-trips.
+    // Try exam_types[] first, fall back to legacy exam_type string column.
     {
       const POOL_SIZE = Math.min(count * 4, 200)  // never over-fetch
-      let q = service.from('questions').select(SELECT)
-      q = applyBase(q).limit(POOL_SIZE)
-      const { data, error } = await q
-      if (error) {
-        console.error('[questions] pool fetch error:', error.message)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+      let primaryQ = applyBase(service.from('questions').select(SELECT), true).limit(POOL_SIZE)
+      let { data, error } = await primaryQ
+
+      if (error || !data?.length) {
+        // Fall back to legacy exam_type string column
+        let fallbackQ = applyBase(service.from('questions').select(SELECT), false).limit(POOL_SIZE)
+        const fb = await fallbackQ
+        if (fb.error) {
+          console.error('[questions] pool fetch error (both attempts):', fb.error.message)
+          return NextResponse.json({ error: fb.error.message }, { status: 500 })
+        }
+        data = fb.data ?? []
       }
       const pool = data ?? []
 
@@ -193,6 +214,10 @@ export async function GET(request) {
 
   } catch (err) {
     console.error('[student/questions] unexpected error:', err)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Server error',
+      detail: err?.message ?? String(err),
+      stack: err?.stack?.split('\n').slice(0, 6),
+    }, { status: 500 })
   }
 }

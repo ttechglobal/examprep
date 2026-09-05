@@ -366,7 +366,7 @@ export function QuestionCard({
 
       {/* Nav buttons — hidden when parent owns them */}
       {!hideNav && (
-        <div style={{ marginTop:18, display:'flex', gap:10 }}>
+        <div className="qcard-nav" style={{ marginTop:18, display:'flex', gap:10 }}>
           {hasPrev && (
             <button onClick={onPrev}
               style={{ flex:1, padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'transparent', color:'var(--text-sec)', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>

@@ -133,22 +133,26 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
         </div>
       </div>
 
-      {/* ── BOTTOM BAR — desktop: Prev/Next; mobile: QuestionNav ── */}
-      <div className="rev-bottom-bar" style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', padding:'12px 20px', gap:12, flexShrink:0, display:'flex' }}>
-        <button onClick={handlePrev} disabled={rIndex === 0}
-          style={{ flex:1, padding:'12px', borderRadius:13, border:'1px solid var(--border)', cursor:rIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'transparent', color:rIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:rIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          Prev
-        </button>
-        <button onClick={handleNext}
-          style={{ flex:2, padding:'12px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-          {isLast ? 'Back to Results' : 'Next →'}
-        </button>
+      {/* ── BOTTOM BAR — Prev/Next on desktop; numbered grid on mobile ── */}
+      <div style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
+        {/* Numbered grid — mobile only */}
+        <div className="rev-mobile-nav-inner">
+          <QuestionNav total={questions.length} current={rIndex} answerMap={navMap} onJump={setRIndex} sessionType="study"/>
+        </div>
+        {/* Prev / Next buttons */}
+        <div style={{ padding:'10px 20px 12px', display:'flex', gap:12 }}>
+          <button onClick={handlePrev} disabled={rIndex === 0}
+            style={{ flex:1, padding:'12px', borderRadius:13, border:'1px solid var(--border)', cursor:rIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'transparent', color:rIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:rIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Prev
+          </button>
+          <button onClick={handleNext}
+            style={{ flex:2, padding:'12px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            {isLast ? 'Back to Results' : 'Next →'}
+          </button>
+        </div>
       </div>
-
-      <div className="rev-mobile-nav" style={{ flexShrink:0 }}>
-        <QuestionNav total={questions.length} current={rIndex} answerMap={navMap} onJump={setRIndex} sessionType="study"/>
-      </div>
+      <style>{`.rev-mobile-nav-inner { display: none; } @media (max-width: 1023px) { .rev-mobile-nav-inner { display: block; } }`}</style>
     </div>
   )
 }
