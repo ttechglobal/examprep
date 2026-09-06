@@ -82,11 +82,38 @@ SVG CONVENTIONS — apply to every brief:
   • Dashed measurement lines: stroke-dasharray "6 3", stroke #6b7280
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif", fill #1f2937
   • End with: "Generate SVG code."
-⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
-  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
-  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
-  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
-  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
+⚠️ ACCURACY PROTOCOL — complete all 4 steps before writing a single coordinate:
+
+  STEP A — ACCURACY GATE (do this FIRST, before writing any SVG):
+    Ask yourself these questions out loud in your reasoning:
+    • What EXACTLY does this diagram show? Name every element I plan to draw.
+    • Am I 100% certain of the correct shape, position, and label of each element?
+    • For electron shells: have I confirmed the exact configuration from atomic number?
+    • For apparatus: am I certain of every component name and its correct position in the setup?
+    • For biological structures: am I certain of which organelles are present, their shapes, and their correct labels?
+    • For energy profiles: am I certain of reactant vs product energy levels and which is higher?
+    • For ray diagrams: am I certain of the direction of bending and which medium is denser?
+    • For circuits: am I certain of series vs parallel arrangement and component symbols?
+    If ANY answer is "not sure" → set illustration_prompt to "" immediately. Do not proceed.
+
+  STEP B — COORDINATE SPECIFICATION:
+    Write the SVG brief with exact numbers for every element. No element may be described vaguely.
+    Every shape needs: exact position (cx/cy or x/y/width/height), size, fill, stroke, stroke-width.
+    Every arrow needs: exact start point, exact end point, stroke width ≥ 2, arrowhead specified.
+    Every label needs: exact x/y, font-size (minimum 13px), fill colour.
+
+  STEP C — LABEL COMPLETENESS CHECK:
+    Every component must have a label with its correct scientific name.
+    Every measurement visible in the diagram must match the values from your steps — not the raw question.
+    Every arrow must show direction. Unlabelled arrows mislead students.
+
+  STEP D — QUALITY GATE:
+    Re-read your brief. Ask: "If an AI generates SVG from this brief exactly as written,
+    will the result be accurate, readable, and genuinely useful to a student?"
+    If no → rewrite or set to "".
+
+  A wrong diagram is actively worse than no diagram. A vague or lazy brief produces a wrong diagram.
+  When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Cylinder (r=4 cm, h=14 cm from steps) ──
 illustration_title: "Cylinder — Radius 4 cm, Height 14 cm"
@@ -244,11 +271,38 @@ SVG CONVENTIONS:
   • Angle arcs: stroke #6b7280, radius 32–40
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
-⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
-  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
-  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
-  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
-  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
+⚠️ ACCURACY PROTOCOL — complete all 4 steps before writing a single coordinate:
+
+  STEP A — ACCURACY GATE (do this FIRST, before writing any SVG):
+    Ask yourself these questions out loud in your reasoning:
+    • What EXACTLY does this diagram show? Name every element I plan to draw.
+    • Am I 100% certain of the correct shape, position, and label of each element?
+    • For electron shells: have I confirmed the exact configuration from atomic number?
+    • For apparatus: am I certain of every component name and its correct position in the setup?
+    • For biological structures: am I certain of which organelles are present, their shapes, and their correct labels?
+    • For energy profiles: am I certain of reactant vs product energy levels and which is higher?
+    • For ray diagrams: am I certain of the direction of bending and which medium is denser?
+    • For circuits: am I certain of series vs parallel arrangement and component symbols?
+    If ANY answer is "not sure" → set illustration_prompt to "" immediately. Do not proceed.
+
+  STEP B — COORDINATE SPECIFICATION:
+    Write the SVG brief with exact numbers for every element. No element may be described vaguely.
+    Every shape needs: exact position (cx/cy or x/y/width/height), size, fill, stroke, stroke-width.
+    Every arrow needs: exact start point, exact end point, stroke width ≥ 2, arrowhead specified.
+    Every label needs: exact x/y, font-size (minimum 13px), fill colour.
+
+  STEP C — LABEL COMPLETENESS CHECK:
+    Every component must have a label with its correct scientific name.
+    Every measurement visible in the diagram must match the values from your steps — not the raw question.
+    Every arrow must show direction. Unlabelled arrows mislead students.
+
+  STEP D — QUALITY GATE:
+    Re-read your brief. Ask: "If an AI generates SVG from this brief exactly as written,
+    will the result be accurate, readable, and genuinely useful to a student?"
+    If no → rewrite or set to "".
+
+  A wrong diagram is actively worse than no diagram. A vague or lazy brief produces a wrong diagram.
+  When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Refraction (incidence 30°, refraction 19°, air→glass from steps) ──
 illustration_title: "Refraction of Light — Air to Glass (30° → 19°)"
@@ -393,11 +447,38 @@ SVG CONVENTIONS:
   • Dashed lines: stroke-dasharray "6 3", stroke #6b7280
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
-⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
-  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
-  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
-  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
-  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
+⚠️ ACCURACY PROTOCOL — complete all 4 steps before writing a single coordinate:
+
+  STEP A — ACCURACY GATE (do this FIRST, before writing any SVG):
+    Ask yourself these questions out loud in your reasoning:
+    • What EXACTLY does this diagram show? Name every element I plan to draw.
+    • Am I 100% certain of the correct shape, position, and label of each element?
+    • For electron shells: have I confirmed the exact configuration from atomic number?
+    • For apparatus: am I certain of every component name and its correct position in the setup?
+    • For biological structures: am I certain of which organelles are present, their shapes, and their correct labels?
+    • For energy profiles: am I certain of reactant vs product energy levels and which is higher?
+    • For ray diagrams: am I certain of the direction of bending and which medium is denser?
+    • For circuits: am I certain of series vs parallel arrangement and component symbols?
+    If ANY answer is "not sure" → set illustration_prompt to "" immediately. Do not proceed.
+
+  STEP B — COORDINATE SPECIFICATION:
+    Write the SVG brief with exact numbers for every element. No element may be described vaguely.
+    Every shape needs: exact position (cx/cy or x/y/width/height), size, fill, stroke, stroke-width.
+    Every arrow needs: exact start point, exact end point, stroke width ≥ 2, arrowhead specified.
+    Every label needs: exact x/y, font-size (minimum 13px), fill colour.
+
+  STEP C — LABEL COMPLETENESS CHECK:
+    Every component must have a label with its correct scientific name.
+    Every measurement visible in the diagram must match the values from your steps — not the raw question.
+    Every arrow must show direction. Unlabelled arrows mislead students.
+
+  STEP D — QUALITY GATE:
+    Re-read your brief. Ask: "If an AI generates SVG from this brief exactly as written,
+    will the result be accurate, readable, and genuinely useful to a student?"
+    If no → rewrite or set to "".
+
+  A wrong diagram is actively worse than no diagram. A vague or lazy brief produces a wrong diagram.
+  When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Electron Shell Diagram (Sodium, 2,8,1 from steps) ──
 illustration_title: "Electron Shell Diagram — Sodium (Na, Z=11)"
@@ -658,11 +739,38 @@ SVG CONVENTIONS:
   • Leader lines for labels: thin dashed line (stroke-dasharray 4 2) from label to structure
   • All labels: font-size 13–14px minimum, font-family "system-ui, sans-serif", fill #1f2937 unless coloured for emphasis
   • End with: "Generate SVG code."
-⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
-  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
-  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
-  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
-  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
+⚠️ ACCURACY PROTOCOL — complete all 4 steps before writing a single coordinate:
+
+  STEP A — ACCURACY GATE (do this FIRST, before writing any SVG):
+    Ask yourself these questions out loud in your reasoning:
+    • What EXACTLY does this diagram show? Name every element I plan to draw.
+    • Am I 100% certain of the correct shape, position, and label of each element?
+    • For electron shells: have I confirmed the exact configuration from atomic number?
+    • For apparatus: am I certain of every component name and its correct position in the setup?
+    • For biological structures: am I certain of which organelles are present, their shapes, and their correct labels?
+    • For energy profiles: am I certain of reactant vs product energy levels and which is higher?
+    • For ray diagrams: am I certain of the direction of bending and which medium is denser?
+    • For circuits: am I certain of series vs parallel arrangement and component symbols?
+    If ANY answer is "not sure" → set illustration_prompt to "" immediately. Do not proceed.
+
+  STEP B — COORDINATE SPECIFICATION:
+    Write the SVG brief with exact numbers for every element. No element may be described vaguely.
+    Every shape needs: exact position (cx/cy or x/y/width/height), size, fill, stroke, stroke-width.
+    Every arrow needs: exact start point, exact end point, stroke width ≥ 2, arrowhead specified.
+    Every label needs: exact x/y, font-size (minimum 13px), fill colour.
+
+  STEP C — LABEL COMPLETENESS CHECK:
+    Every component must have a label with its correct scientific name.
+    Every measurement visible in the diagram must match the values from your steps — not the raw question.
+    Every arrow must show direction. Unlabelled arrows mislead students.
+
+  STEP D — QUALITY GATE:
+    Re-read your brief. Ask: "If an AI generates SVG from this brief exactly as written,
+    will the result be accurate, readable, and genuinely useful to a student?"
+    If no → rewrite or set to "".
+
+  A wrong diagram is actively worse than no diagram. A vague or lazy brief produces a wrong diagram.
+  When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Osmosis (5% solution left, 15% solution right, water moves right from steps) ──
 illustration_title: "Osmosis — Water Movement from Low to High Solute Concentration"
@@ -850,11 +958,38 @@ SVG CONVENTIONS:
   • Shifted curve: same colour as original, stroke-dasharray "8 4", labelled with subscript
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
-⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
-  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
-  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
-  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
-  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
+⚠️ ACCURACY PROTOCOL — complete all 4 steps before writing a single coordinate:
+
+  STEP A — ACCURACY GATE (do this FIRST, before writing any SVG):
+    Ask yourself these questions out loud in your reasoning:
+    • What EXACTLY does this diagram show? Name every element I plan to draw.
+    • Am I 100% certain of the correct shape, position, and label of each element?
+    • For electron shells: have I confirmed the exact configuration from atomic number?
+    • For apparatus: am I certain of every component name and its correct position in the setup?
+    • For biological structures: am I certain of which organelles are present, their shapes, and their correct labels?
+    • For energy profiles: am I certain of reactant vs product energy levels and which is higher?
+    • For ray diagrams: am I certain of the direction of bending and which medium is denser?
+    • For circuits: am I certain of series vs parallel arrangement and component symbols?
+    If ANY answer is "not sure" → set illustration_prompt to "" immediately. Do not proceed.
+
+  STEP B — COORDINATE SPECIFICATION:
+    Write the SVG brief with exact numbers for every element. No element may be described vaguely.
+    Every shape needs: exact position (cx/cy or x/y/width/height), size, fill, stroke, stroke-width.
+    Every arrow needs: exact start point, exact end point, stroke width ≥ 2, arrowhead specified.
+    Every label needs: exact x/y, font-size (minimum 13px), fill colour.
+
+  STEP C — LABEL COMPLETENESS CHECK:
+    Every component must have a label with its correct scientific name.
+    Every measurement visible in the diagram must match the values from your steps — not the raw question.
+    Every arrow must show direction. Unlabelled arrows mislead students.
+
+  STEP D — QUALITY GATE:
+    Re-read your brief. Ask: "If an AI generates SVG from this brief exactly as written,
+    will the result be accurate, readable, and genuinely useful to a student?"
+    If no → rewrite or set to "".
+
+  A wrong diagram is actively worse than no diagram. A vague or lazy brief produces a wrong diagram.
+  When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Demand and Supply Equilibrium ──
 illustration_title: "Demand and Supply — Market Equilibrium"

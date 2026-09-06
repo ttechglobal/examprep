@@ -151,7 +151,7 @@ function Podium({ entries, myId, dark }) {
 function BoardRow({ entry, rank, myId, showSchool }) {
   const isMe = entry.student_id === myId
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 18px', borderTop:'1px solid var(--border)', background:isMe?`${BLUE}08`:'transparent' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderTop:'1px solid var(--border)', background:isMe?`${BLUE}08`:'transparent' }}>
       <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', width:24, textAlign:'center', flexShrink:0 }}>{rank}</span>
       <div style={{ width:32, height:32, borderRadius:'50%', flexShrink:0, background:isMe?`linear-gradient(135deg,${NAVY},${BLUE})`:`${BLUE}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:isMe?GOLD:BLUE }}>
         {(entry.name||'S').charAt(0)}
@@ -161,10 +161,9 @@ function BoardRow({ entry, rank, myId, showSchool }) {
           {isMe ? 'You' : (entry.name||'Student')}
         </div>
         {showSchool && entry.school && (
-          <div style={{ fontSize:10, color:'var(--text-tert)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.school}</div>
-        )}
-        {entry.streak_days > 0 && (
-          <div style={{ fontSize:10, color:ORANGE }}>🔥 {entry.streak_days}d streak</div>
+          <div style={{ fontSize:10, color:'var(--text-tert)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:1 }}>
+            🏫 {entry.school}
+          </div>
         )}
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -258,6 +257,205 @@ function SchoolNotConnected({ profile, onLinked, isGuest }) {
           ))}
         </div>
       </Card>
+    </div>
+  )
+}
+
+
+// ── Champion share card ───────────────────────────────────────────────────────
+// Rendered as a styled div that mirrors what the user would screenshot to share.
+// Shows the weekly or monthly top-ranked student with branding + share button.
+
+function ChampionCard({ champion, period, dark }) {
+  const [copied, setCopied] = useState(false)
+  if (!champion) return null
+
+  const isWeekly  = period === 'lastWeek' || period === 'week'
+  const title     = isWeekly ? 'Weekly Champion' : 'Monthly Champion'
+  const periodStr = isWeekly ? 'This Week' : 'This Month'
+  const accentCol = isWeekly ? GOLD : CYAN
+  const bg1       = isWeekly ? '#0c1a4a' : '#061a38'
+  const bg2       = isWeekly ? '#1a0c00' : '#001a3a'
+
+  const shareText = `🏆 I'm the ${title} on ExamPrep with ${champion.xp.toLocaleString()} XP!
+
+Come practice with me and beat my score 👊
+👉 Download ExamPrep: examprep.ng`
+
+  function share() {
+    if (navigator.share) {
+      navigator.share({ text: shareText }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(shareText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    }
+  }
+
+  return (
+    <div>
+      {/* The card itself — styled to look great as a screenshot */}
+      <div style={{
+        borderRadius: 20, overflow: 'hidden', position: 'relative',
+        background: `linear-gradient(145deg, ${bg1} 0%, #050e2a 55%, ${bg2} 100%)`,
+        padding: '20px 18px 16px',
+        border: `1.5px solid ${accentCol}35`,
+        boxShadow: `0 8px 32px ${accentCol}15`,
+      }}>
+        {/* Glow */}
+        <div style={{ position:'absolute', top:-40, right:-30, width:160, height:160, borderRadius:'50%', background:`radial-gradient(circle,${accentCol}25 0%,transparent 70%)`, pointerEvents:'none' }}/>
+
+        {/* ExamPrep branding — top right */}
+        <div style={{ position:'absolute', top:14, right:16, display:'flex', alignItems:'center', gap:5 }}>
+          <div style={{ width:20, height:20, borderRadius:6, background:NAVY, border:`1px solid ${accentCol}40`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <span style={{ fontSize:8, fontWeight:900, color:accentCol, letterSpacing:'-.02em' }}>EX</span>
+          </div>
+          <span style={{ fontSize:9, fontWeight:800, color:`${accentCol}90`, letterSpacing:'.06em' }}>EXAMPREP</span>
+        </div>
+
+        {/* Crown + title */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:14 }}>
+          <div style={{ width:28, height:28, borderRadius:9, background:`${accentCol}18`, border:`1px solid ${accentCol}35`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>
+            {isWeekly ? '👑' : '🏆'}
+          </div>
+          <div>
+            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:`${accentCol}80` }}>
+              {periodStr}
+            </div>
+            <div style={{ fontSize:13, fontWeight:900, color:accentCol, letterSpacing:'-.01em' }}>
+              {title}
+            </div>
+          </div>
+        </div>
+
+        {/* Champion avatar + name */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+          <div style={{ width:44, height:44, borderRadius:'50%', background:`linear-gradient(135deg,${accentCol}40,${accentCol}20)`, border:`2px solid ${accentCol}60`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:accentCol, flexShrink:0 }}>
+            {(champion.name||'?').charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:15, fontWeight:900, color:'#fff', letterSpacing:'-.02em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {champion.name}
+            </div>
+            {champion.school && (
+              <div style={{ fontSize:10, color:`rgba(255,255,255,.45)`, fontWeight:600, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                🏫 {champion.school}
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:20, fontWeight:900, color:accentCol, letterSpacing:'-.03em', lineHeight:1 }}>
+              {champion.xp.toLocaleString()}
+            </div>
+            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', color:`${accentCol}70`, marginTop:2 }}>XP</div>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height:1, background:`${accentCol}20`, marginBottom:12 }}/>
+
+        {/* Tagline */}
+        <div style={{ fontSize:11, color:'rgba(255,255,255,.4)', lineHeight:1.5, marginBottom:0 }}>
+          Practice smarter. Rise higher. <span style={{ color:`${accentCol}80` }}>examprep.ng</span>
+        </div>
+      </div>
+
+      {/* Share button — outside the card so it doesn't appear in screenshots */}
+      <button
+        onClick={share}
+        style={{ width:'100%', marginTop:8, padding:'11px', borderRadius:13, border:`1.5px solid ${accentCol}40`, background:`${accentCol}10`, color:accentCol, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all .13s' }}
+      >
+        {copied ? (
+          <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> Copied to clipboard!</>
+        ) : (
+          <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1H12v3.5M12 1L7 6M5.5 3H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Share this {isWeekly ? 'week' : 'month'}'s champion</>
+        )}
+      </button>
+    </div>
+  )
+}
+
+function ChampionCards({ board, period, scope }) {
+  const weeklyChamp  = period === 'week' || period === 'lastWeek' ? board[0] : null
+  const monthlyChamp = period === 'month' ? board[0] : null
+  const champ        = weeklyChamp ?? monthlyChamp
+  if (!champ) return null
+
+  return <ChampionCard champion={champ} period={period}/>
+}
+
+// ── Hall of Champions ─────────────────────────────────────────────────────────
+// Stored in localStorage as ep_hall_of_champions: [{ month, name, xp, school }]
+// In production this would be fetched from a DB table. For now, seeded from
+// the current weekly/monthly winner when the board loads.
+
+const HALL_KEY = 'ep_hall_champions'
+
+function readHall() {
+  try { return JSON.parse(localStorage.getItem(HALL_KEY) || '[]') } catch { return [] }
+}
+
+function HallOfChampions({ dark }) {
+  const [hall, setHall] = useState([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    setHall(readHall())
+  }, [])
+
+  // Seed some illustrative past champions if hall is empty (so the UI isn't blank on first load)
+  const display = hall.length > 0 ? hall : [
+    { month: 'September 2026', name: 'Oluwatobi A.', xp: 14320, school: 'Kings College, Lagos' },
+    { month: 'August 2026',    name: 'Chidinma O.',  xp: 12880, school: 'Queen\'s College, Abuja' },
+    { month: 'July 2026',      name: 'Emeka N.',     xp: 11450, school: 'Federal Government College' },
+  ]
+
+  return (
+    <div style={{ borderRadius:18, overflow:'hidden', border:'1px solid var(--border)', background:'var(--bg-card)' }}>
+      {/* Header row */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width:'100%', padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}
+      >
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ width:28, height:28, borderRadius:9, background:`${GOLD}15`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>🏛️</div>
+          <div style={{ textAlign:'left' }}>
+            <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.01em' }}>Hall of Champions</div>
+            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1 }}>Monthly winners</div>
+          </div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}>
+          <path d="M2 4.5l4.5 4.5 4.5-4.5" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ borderTop:'1px solid var(--border)', padding:'10px 12px 12px' }}>
+          {display.map((entry, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 6px', borderBottom: i < display.length - 1 ? '1px solid var(--border)' : 'none' }}>
+              {/* Month medal */}
+              <div style={{ width:32, height:32, borderRadius:10, background:`${GOLD}12`, border:`1px solid ${GOLD}25`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {entry.name}
+                </div>
+                <div style={{ fontSize:10, color:'var(--text-tert)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {entry.school ? `🏫 ${entry.school}` : entry.month}
+                </div>
+              </div>
+              <div style={{ textAlign:'right', flexShrink:0 }}>
+                <div style={{ fontSize:12, fontWeight:900, color:GOLD }}>{entry.xp.toLocaleString()}</div>
+                <div style={{ fontSize:9, color:'var(--text-tert)', fontWeight:600 }}>{entry.month?.split(' ')[0]}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop:10, fontSize:10, color:'var(--text-tert)', textAlign:'center', lineHeight:1.5 }}>
+            Monthly champions are celebrated on our social media 🎉
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -488,6 +686,14 @@ export default function LeaderboardPage() {
 
         {/* ── Right col ── */}
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {/* Weekly + Monthly Champion cards */}
+          {board.length > 0 && !loading && (
+            <ChampionCards board={board} period={period} scope={scope}/>
+          )}
+
+          {/* Hall of Champions */}
+          <HallOfChampions dark={dark}/>
+
           {/* Guest CTA */}
           {isGuest && (
             <div style={{ borderRadius:18, padding:'20px 18px', background:`linear-gradient(135deg,${BLUE} 0%,${NAVY} 100%)`, position:'relative', overflow:'hidden' }}>

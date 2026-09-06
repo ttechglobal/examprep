@@ -38,66 +38,160 @@ const FORMULA_SUBJECTS = new Set([
 function buildFlashcardPrompt(subjectName, topicName, objectives, extraContext) {
   const isMathSci = /physics|chemistry|mathematics|further math|biology|economics/i.test(subjectName)
   const objBlock = objectives?.trim()
-    ? `\nLearning objectives for this topic (use these to determine scope and card count):\n${objectives}`
+    ? `\nCURRICULUM OBJECTIVES FOR THIS TOPIC:\n${objectives}`
     : ''
-  const extra = extraContext?.trim() ? `\nAdditional context: ${extraContext}` : ''
+  const extra = extraContext?.trim() ? `\nAdditional context from admin: ${extraContext}` : ''
 
-  // Count subtopic blocks to guide the AI on how many cards to generate
+  // Recommend a range but do not make it a hard target
   const subtopicCount = objectives ? (objectives.match(/^\S[^\n]+:\s*$/gm) ?? []).length : 0
-  const cardGuidance = subtopicCount >= 6
-    ? `Generate ${Math.max(subtopicCount * 2, 16)}–${Math.max(subtopicCount * 3, 28)} cards. Every subtopic block and every numbered objective above needs at least one card.`
+  const cardRange = subtopicCount >= 6
+    ? '16–28'
     : subtopicCount >= 3
-    ? `Generate 12–20 cards. Every subtopic and every objective listed above must produce at least one card.`
-    : `Generate 8–14 cards covering every distinct concept in this topic.`
+    ? '10–18'
+    : '8–14'
 
-  return `You are creating study flashcards for Nigerian secondary school students (WAEC/JAMB exams).
+  return `You are the lead educator at ExamPrep, a Nigerian secondary school exam platform for WAEC and JAMB students. Your job is to create a set of high-quality flashcards for the topic below.
 
 Subject: ${subjectName}
 Topic: ${topicName}${objBlock}${extra}
 
-HOW MANY CARDS TO GENERATE
-${cardGuidance}
-Think like an educator: count the objectives above, then generate enough cards so every distinct testable idea is covered. A topic with 8 subtopics and 24 objectives needs more cards than a topic with 3 subtopics. Do not default to an arbitrary fixed number.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE PRINCIPLE — RETRIEVAL PRACTICE, NOT SUMMARIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Every flashcard is a retrieval-practice task, not a mini-lesson.
+A student should be able to hold the front in their mind, attempt to recall the answer, then flip and check themselves.
+Never write a card that a student can answer by pattern-matching without actually knowing the concept.
 
-CARD QUALITY RULES
-- front_text: one clear question or key term (max 130 chars). Vary types: definitions, "state X", "explain why", "identify", "compare", calculation prompts.
-- back_text: precise, examinable answer in plain SS3-level English (max 220 chars).
-- hint: gentle nudge that does NOT give away the answer. null if the question is already self-guiding.
-- mnemonic: only if genuinely useful and accurate. null otherwise.
-- difficulty: easy = pure recall/definition · medium = explain a concept · hard = application or calculation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 — IDENTIFY ATOMIC KNOWLEDGE UNITS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before writing any card, map out the knowledge in this topic:
+- What are the individual facts, principles, relationships, and procedures a student must remember?
+- Break complex objectives into their smallest independently-retrievable pieces.
+- Do NOT force one card per objective. One objective may produce 3 good cards. Another may produce 0 if it covers trivial information.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 — CHOOSE THE RIGHT CARD TYPE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For each knowledge unit, choose the card type that best tests it. Prefer types 1–3 over type 4 wherever possible.
+
+TYPE 1 — EXPLANATION (highest priority)
+  Why does X happen?
+  How does X work?
+  What is the relationship between X and Y?
+  What would happen if [condition] changed?
+  How are X and Y different?
+
+TYPE 2 — APPLICATION
+  Given [this situation], what happens?
+  Which principle explains why [observation]?
+  Calculate / predict / deduce X.
+
+TYPE 3 — MISCONCEPTION CHALLENGE
+  Does [common wrong belief] — true or false? Why?
+  A student says [incorrect claim]. What is wrong with this?
+  Use these for the most important misconceptions Nigerian SS3 students make on this topic.
+
+TYPE 4 — CORE RECALL (use sparingly — only for facts worth memorising)
+  Define X. / State X. / Identify X.
+  Only use recall cards for definitions, laws, units, and facts that a student genuinely must have memorised word-for-word.
+
+FORBIDDEN: Do not create more than 3 pure definition/recall cards unless the topic is specifically vocabulary-heavy (e.g. English Language). Do not create a vocabulary deck.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 — WRITE THE CARDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+front_text rules:
+- Ask a question the student must RECALL, not recognise.
+- Never use a term alone as the front ("Osmosis" is a poor front — "What causes water to move by osmosis?" is better).
+- One clear, specific question per card. Max 130 characters.
+
+back_text rules:
+- Contain only what is needed to answer the question completely and correctly.
+- Prefer 1–3 concise sentences. Do not pad.
+- For explanation cards: include the mechanism, not just the conclusion.
+  Bad:  "Temperature increases diffusion rate."
+  Good: "Higher temperature gives particles more kinetic energy, so they move faster and cross membranes more rapidly."
+- For calculations: show the formula and a worked example.${isMathSci ? '\n- Always show the key formula on calculation cards.' : ''}
+
+hint: null always. Do not include hints.
+mnemonic: Include ONLY if there is a genuinely memorable, accurate trick (e.g. an acronym that is actually used in Nigerian classrooms). Otherwise null. Do not invent mnemonics.
+
+difficulty — based on COGNITIVE DEMAND, not question type:
+  easy   = direct recall of a single familiar fact or definition
+  medium = explain a mechanism, distinguish between concepts, or connect two ideas
+  hard   = apply knowledge to an unfamiliar situation, predict an outcome, multi-step reasoning, or calculation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATOMICITY — ONE IDEA PER CARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Each card tests exactly ONE independently retrievable idea.
+- If an answer contains two or more unrelated facts, split it into two cards.
+- Do not ask for long lists unless memorising the complete list is itself the objective.
+- A student must know exactly what to retrieve before flipping the card.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CARD COUNT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Recommended range: ${cardRange} cards.
+Generate the minimum number of HIGH-QUALITY cards needed to cover the important knowledge.
+Do NOT create cards to reach a target number. Do NOT create cards for trivial facts.
+Do NOT create two cards that test essentially the same knowledge unit.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMATTING
-- No LaTeX. Plain text maths only: "v² = u² + 2as" not "$v^2$"
-- Superscripts: m² cm³ s⁻¹ · Greek: Δ θ π μ λ Ω ρ ±
-${isMathSci ? '- For calculation cards, show the key formula on the back' : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- No LaTeX. Plain text maths only: "v² = u² + 2as"
+- Superscripts: m² cm³ s⁻¹ m/s² · Greek: Δ θ π μ λ Ω ρ ±
+- Write at SS3 level — clear, precise, exam-appropriate English.
 
-ILLUSTRATIONS — ACCURACY FIRST
-illustration_prompt is for cards where the diagram IS what is being tested (e.g. "Label this diagram", "Identify this structure", "What does this circuit look like?").
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ILLUSTRATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+illustration_prompt is only for cards where a diagram IS the thing being tested — e.g. "Identify this structure", "What does this circuit show?", "Label the parts of X."
+The illustration must support retrieval, not decorate the card.
 
-Before writing any illustration_prompt, do both checks:
-  1. ACCURACY CHECK: Are you certain of the exact correct diagram for this item — correct electron shell counts, correct apparatus labelling, correct biological structure, correct geometry? If any doubt exists, set null. A wrong diagram actively harms students.
-  2. NECESSITY CHECK: Can a student answer this card from text alone? If yes, set null.
+Before writing any illustration_prompt, silently check BOTH:
+  1. ACCURACY: Are you 100% certain of exact details — correct electron shells, correct labelling, correct geometry? If any doubt, set null. A wrong diagram harms students.
+  2. NECESSITY: Can the student answer this card from text alone? If yes, set null.
 
-If both checks pass, write a FULLY SPECIFIED SVG brief with exact coordinates:
-  • viewBox "0 0 400 300", white background rect filling full viewBox
-  • Main outlines: stroke #1f2937 stroke-width 2
-  • Key/highlighted element: fill or stroke #4f46e5
-  • Labels: font-size 14px minimum, font-family "system-ui, sans-serif", fill #1f2937
-  • Dashed lines: stroke-dasharray "6 3" stroke #6b7280
-  • Every element needs exact coordinates (cx cy r, or x y width height) — no vague instructions
-  • End the brief with: "Generate SVG code."
-  • The final output must start with <svg — not a standalone viewBox attribute
+If both pass, write a FULLY SPECIFIED SVG brief:
+  • viewBox "0 0 400 300", white background rect
+  • Outlines: stroke #1f2937 stroke-width 2
+  • Key element: fill or stroke #4f46e5
+  • Labels: font-size 14px, font-family "system-ui, sans-serif", fill #1f2937
+  • Every element must have exact coordinates — no vague instructions
+  • End with: "Generate SVG code."
+  • Output must start with <svg
 
-Set illustration_prompt to null for: definitions, recall, equations, calculations, anything text can fully explain.
+Set illustration_prompt null for: definitions, explanations, equations, calculations, anything text can fully explain.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUALITY CHECK — RUN THIS BEFORE OUTPUT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For every card, silently verify:
+  ✓ Does this test something the student genuinely needs to remember?
+  ✓ Is exactly ONE idea being tested?
+  ✓ Does the front require active retrieval, not passive recognition?
+  ✓ Is the answer completely correct and supported by the curriculum?
+  ✓ Is the answer no longer than necessary?
+  ✓ Is this card substantially different from every other card in the set?
+  ✓ Is the difficulty label honest?
+  ✓ Would a good teacher consider this card worth revising?
+
+Delete or rewrite any card that fails these checks. Prefer fewer excellent cards over many mediocre ones.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Return ONLY a valid JSON array — no markdown fences, no text outside the array:
 [
   {
-    "front_text": "Question or term here",
-    "back_text": "Answer here",
-    "hint": "Nudge here or null",
-    "mnemonic": "Memory trick or null",
-    "difficulty": "easy",
+    "front_text": "Question requiring active recall",
+    "back_text": "Precise, complete answer in 1–3 sentences",
+    "hint": null,
+    "mnemonic": null,
+    "difficulty": "medium",
     "illustration_prompt": null
   }
 ]`
@@ -452,11 +546,32 @@ export default function AdminFlashcardsPage() {
   const [previewItems,  setPreviewItems]  = useState([])   // editable preview
   const [svgMap,        setSvgMap]        = useState({})    // idx → svg code for cards with illustration_prompt
   const [copied,        setCopied]        = useState(false)
+  const [viewAll,       setViewAll]       = useState(false)
+  const [allCards,      setAllCards]      = useState([])
+  const [loadingAll,    setLoadingAll]    = useState(false)
+  const [allSearch,     setAllSearch]     = useState('')
+  const [allSubjFilter, setAllSubjFilter] = useState('')
 
   // Derived step for progress bar
   const step = !topicGroup ? 1 : !showPrompt ? 2 : validation?.ok ? (saving ? 4 : 3) : 3
 
   function showToast(msg, color='#4ade80') { setToast({msg,color}); setTimeout(()=>setToast(null),3200) }
+
+  async function loadAllCards() {
+    setLoadingAll(true)
+    const { data } = await db.from('flashcards')
+      .select('id,front_text,back_text,difficulty,subject_id,topic_id,subjects(name),topics(name)')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(500)
+    setAllCards(data ?? [])
+    setLoadingAll(false)
+  }
+
+  async function openViewAll() {
+    setViewAll(true)
+    if (!allCards.length) await loadAllCards()
+  }
 
   // Load subjects once
   useEffect(() => {
@@ -614,7 +729,7 @@ export default function AdminFlashcardsPage() {
           front_text: item.front_text, back_text: item.back_text,
           hint: item.hint??null, mnemonic: item.mnemonic??null,
           difficulty: item.difficulty, topic_id: tid, subject_id: subject.id, is_active: true,
-          svg_code: (svgMap[previewItems.indexOf(item)]??'').trim()||null,
+          // svg_code omitted — column not yet in DB schema; add migration first
         } : {
           label: item.label, formula_plain: item.formula_plain,
           formula_latex: item.formula_latex??null, description: item.description??null,
@@ -680,8 +795,9 @@ export default function AdminFlashcardsPage() {
           <button style={{ padding:'9px 16px', borderRadius:10, background:'transparent', border:'1px solid var(--border)', color:'var(--text-tert)', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
             ⓘ How it works
           </button>
-          <button style={{ padding:'9px 16px', borderRadius:10, background:'var(--bg-inset)', border:'none', color:'var(--text-prim)', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-            ☰ View all {tab === 'flashcards' ? 'Flashcards' : 'Formulas'}
+          <button onClick={openViewAll} style={{ padding:'9px 16px', borderRadius:10, background:'var(--bg-inset)', border:'none', color:'var(--text-prim)', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><rect x="1" y="7" width="12" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.4"/></svg>
+            View All {tab === 'flashcards' ? 'Flashcards' : 'Formulas'}
           </button>
         </div>
       </div>
@@ -703,64 +819,83 @@ export default function AdminFlashcardsPage() {
       {/* Main 2-panel layout */}
       <div style={{ display:'grid', gridTemplateColumns:'240px 1fr', gap:20, alignItems:'start' }}>
 
-        {/* ── LEFT PANEL ── */}
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        {/* ── LEFT PANEL — dropdowns ── */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
 
-          {/* 1. Choose Subject — compact scrollable list */}
-          <div style={{ ...S.card, maxHeight:220, display:'flex', flexDirection:'column' }}>
-            <div style={{ padding:'10px 14px 8px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <span style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:6 }}>
-                <span style={{ width:20, height:20, borderRadius:'50%', background:BLUE, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:900 }}>1</span>
+          {/* 1. Subject dropdown */}
+          <div style={S.card}>
+            <div style={{ padding:'10px 14px 8px', borderBottom:'1px solid var(--border)' }}>
+              <span style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ width:20, height:20, borderRadius:'50%', background:BLUE, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:900, color:'#fff' }}>1</span>
                 Subject
               </span>
             </div>
-            <div style={{ overflowY:'auto', flex:1, padding:'4px 0' }}>
-              {subjects
-                .filter(s => tab==='formulas' ? FORMULA_SUBJECTS.has(s.name.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim()) : true)
-                .map(s => {
-                  const base = s.name.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim()
-                  const on = subject?.id === s.id
-                  return (
-                    <button key={s.id} onClick={()=>pickSubject(s)} style={S.sideBtn(on)}>
-                      <span style={{ fontSize:12 }}>{base}</span>
-                      {on && <span style={{ fontSize:9, color:BLUE }}>●</span>}
-                    </button>
-                  )
-                })}
+            <div style={{ padding:'10px 12px' }}>
+              <div style={{ position:'relative' }}>
+                <select
+                  value={subject?.id ?? ''}
+                  onChange={e => {
+                    const s = subjects.find(x => x.id === e.target.value)
+                    if (s) pickSubject(s)
+                  }}
+                  style={{ width:'100%', padding:'9px 32px 9px 11px', borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', color: subject ? 'var(--text-prim)' : 'var(--text-tert)', fontSize:13, fontFamily:'inherit', cursor:'pointer', appearance:'none', outline:'none' }}
+                >
+                  <option value="">— Select subject —</option>
+                  {subjects
+                    .filter(s => tab==='formulas' ? FORMULA_SUBJECTS.has(s.name.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim()) : true)
+                    .map(s => {
+                      const base = s.name.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim()
+                      return <option key={s.id} value={s.id}>{base}</option>
+                    })}
+                </select>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+                  <path d="M2 4l4 4 4-4" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             </div>
           </div>
 
-          {/* 2. Choose Topic */}
-          {subject && (
-            <div style={{ ...S.card, maxHeight:480, overflowY:'auto' }}>
-              <div style={{ padding:'12px 14px 8px', borderBottom:'1px solid var(--border)', position:'sticky', top:0, background:'var(--bg-card)', zIndex:1 }}>
-                <span style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-                  <span style={{ width:22, height:22, borderRadius:'50%', background:'var(--bg-inset)', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, color:'var(--text-tert)' }}>2</span>
-                  Choose Topic
-                </span>
+          {/* 2. Topic dropdown */}
+          <div style={S.card}>
+            <div style={{ padding:'10px 14px 8px', borderBottom:'1px solid var(--border)' }}>
+              <span style={{ fontSize:11, fontWeight:800, color:'var(--text-prim)', display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ width:20, height:20, borderRadius:'50%', background: subject ? 'var(--bg-inset)' : 'var(--border)', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:900, color:'var(--text-tert)' }}>2</span>
+                Topic
+              </span>
+            </div>
+            <div style={{ padding:'10px 12px' }}>
+              {/* Search filter for topics */}
+              {subject && topicGroups.length > 8 && (
                 <input
                   value={topicSearch} onChange={e=>setTopicSearch(e.target.value)}
-                  placeholder="Search topics…"
-                  style={{ ...S.input, padding:'7px 10px', fontSize:12 }}
+                  placeholder="Filter topics…"
+                  style={{ ...S.input, marginBottom:8, fontSize:12, padding:'7px 10px' }}
                 />
+              )}
+              <div style={{ position:'relative' }}>
+                <select
+                  value={topicGroup?.name ?? ''}
+                  onChange={e => {
+                    const g = filteredTopics.find(x => x.name === e.target.value)
+                    if (g) pickTopicGroup(g)
+                  }}
+                  disabled={!subject || loadingSubj}
+                  style={{ width:'100%', padding:'9px 32px 9px 11px', borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', color: topicGroup ? 'var(--text-prim)' : 'var(--text-tert)', fontSize:13, fontFamily:'inherit', cursor: subject ? 'pointer' : 'not-allowed', appearance:'none', outline:'none', opacity: subject ? 1 : 0.5 }}
+                >
+                  <option value="">{loadingSubj ? 'Loading topics…' : subject ? '— Select topic —' : '— Select a subject first —'}</option>
+                  {filteredTopics.map(g => (
+                    <option key={g.name} value={g.name}>
+                      {g.name}{g.hasObjectives ? ' ✓' : ''}{g.topicIds.length > 1 ? ` (×${g.topicIds.length})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+                  <path d="M2 4l4 4 4-4" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
-              <div style={{ padding:'6px 0' }}>
-                {loadingSubj ? (
-                  <p style={{ padding:'12px 14px', fontSize:11, color:'var(--text-sec)' }}>Loading…</p>
-                ) : filteredTopics.length === 0 ? (
-                  <p style={{ padding:'12px 14px', fontSize:11, color:'var(--text-sec)' }}>No topics found</p>
-                ) : filteredTopics.map(g => (
-                  <button key={g.name} onClick={()=>pickTopicGroup(g)} style={S.sideBtn(topicGroup?.name===g.name)}>
-                    <span style={{ flex:1, textAlign:'left', lineHeight:1.3 }}>{g.name}</span>
-                    <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-                      {g.hasObjectives && <span style={{ fontSize:8, fontWeight:800, color:'#4ade80', background:'rgba(74,222,128,.1)', borderRadius:3, padding:'1px 4px' }}>OBJ</span>}
-                      {g.topicIds.length > 1 && <span style={{ fontSize:8, fontWeight:800, color:'#4ade80', background:'rgba(74,222,128,.08)', borderRadius:3, padding:'1px 4px' }}>×{g.topicIds.length}</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {loadingObj && <p style={{ fontSize:11, color:'var(--text-tert)', margin:'6px 0 0', display:'flex', alignItems:'center', gap:5 }}><span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', border:'2px solid var(--border)', borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/> Loading objectives…</p>}
             </div>
-          )}
+          </div>
 
           {/* Saved count */}
           {topicGroup && (
@@ -777,7 +912,7 @@ export default function AdminFlashcardsPage() {
               <div style={{ fontSize:9, fontWeight:800, color:'#60a5fa', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>💡 Tip</div>
               <p style={{ fontSize:11, color:'var(--text-sec)', margin:0, lineHeight:1.5 }}>
                 {tab==='flashcards'
-                  ? 'Flashcards are not tied to any exam — students from WAEC, JAMB, and IGCSE can all use them.'
+                  ? 'Topics marked ✓ have curriculum objectives auto-loaded.'
                   : 'Saving once covers WAEC, JAMB, and other exam variants automatically.'}
               </p>
             </div>
@@ -965,6 +1100,101 @@ export default function AdminFlashcardsPage() {
           )}
         </div>
       </div>
+      {/* ── VIEW ALL MODAL ── */}
+      {viewAll && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(6,42,120,.55)', backdropFilter:'blur(4px)', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'32px 16px', overflowY:'auto' }}>
+          <div style={{ width:'100%', maxWidth:900, background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', boxShadow:'0 24px 80px rgba(0,0,0,.35)', overflow:'hidden' }}>
+            {/* Modal header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 22px', borderBottom:'1px solid var(--border)', background:'var(--bg-subtle)' }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>All Flashcards</div>
+                <div style={{ fontSize:12, color:'var(--text-tert)', marginTop:2 }}>{allCards.length} cards in the library</div>
+              </div>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                {/* Subject filter */}
+                <div style={{ position:'relative' }}>
+                  <select value={allSubjFilter} onChange={e=>setAllSubjFilter(e.target.value)}
+                    style={{ padding:'7px 28px 7px 10px', borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', color:'var(--text-prim)', fontSize:12, fontFamily:'inherit', cursor:'pointer', appearance:'none', outline:'none' }}>
+                    <option value="">All subjects</option>
+                    {[...new Set(allCards.map(c=>c.subjects?.name).filter(Boolean))].sort().map(n=>(
+                      <option key={n} value={n}>{n.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim()}</option>
+                    ))}
+                  </select>
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+                    <path d="M2 4l4 4 4-4" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                {/* Search */}
+                <div style={{ position:'relative' }}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+                    <circle cx="7" cy="7" r="5" stroke="var(--text-tert)" strokeWidth="1.6"/>
+                    <path d="M11 11l3 3" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round"/>
+                  </svg>
+                  <input value={allSearch} onChange={e=>setAllSearch(e.target.value)}
+                    placeholder="Search cards…"
+                    style={{ padding:'7px 10px 7px 28px', borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', color:'var(--text-prim)', fontSize:12, fontFamily:'inherit', outline:'none', width:200 }}/>
+                </div>
+                <button onClick={()=>loadAllCards()} title="Refresh" style={{ width:32, height:32, borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M14 8A6 6 0 112 8" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round"/><path d="M14 4v4h-4" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+                <button onClick={()=>{setViewAll(false);setAllSearch('');setAllSubjFilter('')}}
+                  style={{ width:32, height:32, borderRadius:9, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:'var(--text-tert)' }}>✕</button>
+              </div>
+            </div>
+
+            {/* Card table */}
+            <div style={{ maxHeight:'70vh', overflowY:'auto', padding:'16px 20px' }}>
+              {loadingAll ? (
+                <div style={{ display:'flex', justifyContent:'center', padding:'40px 0' }}>
+                  <div style={{ width:28, height:28, borderRadius:'50%', border:'3px solid var(--border)', borderTopColor:BLUE, animation:'spin .7s linear infinite' }}/>
+                </div>
+              ) : (() => {
+                const q = allSearch.toLowerCase()
+                const filtered = allCards.filter(c => {
+                  const subj = c.subjects?.name?.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim() ?? ''
+                  if (allSubjFilter && c.subjects?.name !== allSubjFilter) return false
+                  if (q && !c.front_text?.toLowerCase().includes(q) && !c.back_text?.toLowerCase().includes(q)) return false
+                  return true
+                })
+                if (!filtered.length) return (
+                  <div style={{ textAlign:'center', padding:'48px 0', color:'var(--text-tert)', fontSize:13 }}>
+                    {allCards.length === 0 ? 'No flashcards in the library yet.' : 'No cards match your search.'}
+                  </div>
+                )
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {filtered.map(c => {
+                      const dc = c.difficulty==='easy'?GREEN:c.difficulty==='hard'?RED:GOLD
+                      const db_ = c.difficulty==='easy'?'rgba(34,197,94,.1)':c.difficulty==='hard'?'rgba(248,113,113,.09)':'rgba(255,184,0,.1)'
+                      const subjName = c.subjects?.name?.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i,'').trim() ?? ''
+                      const topicName = c.topics?.name ?? ''
+                      return (
+                        <div key={c.id} style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'12px 14px', borderRadius:12, background:'var(--bg-subtle)', border:'1px solid var(--border)' }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5, flexWrap:'wrap' }}>
+                              {subjName && <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:999, background:`${BLUE}12`, color:BLUE }}>{subjName}</span>}
+                              {topicName && <span style={{ fontSize:10, color:'var(--text-tert)', fontWeight:600 }}>{topicName}</span>}
+                              <span style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, color:dc, background:db_, textTransform:'capitalize' }}>{c.difficulty}</span>
+                            </div>
+                            <p style={{ fontSize:13, fontWeight:700, color:'var(--text-prim)', margin:'0 0 4px', lineHeight:1.4 }}>{c.front_text}</p>
+                            <p style={{ fontSize:12, color:'var(--text-sec)', margin:0, lineHeight:1.5 }}>{c.back_text}</p>
+                          </div>
+                          <button onClick={async()=>{
+                            if(!confirm(`Delete this card?`)) return
+                            const res = await fetch(`/api/admin/flashcards?id=${c.id}`,{method:'DELETE'})
+                            if(res.ok){setAllCards(p=>p.filter(x=>x.id!==c.id));showToast('Deleted','#FFB800')}
+                            else showToast('Delete failed','#f87171')
+                          }} style={{ width:26, height:26, borderRadius:7, background:'rgba(248,113,113,.08)', border:'1px solid rgba(248,113,113,.2)', color:'#f87171', cursor:'pointer', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
