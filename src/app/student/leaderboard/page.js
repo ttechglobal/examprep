@@ -111,8 +111,8 @@ function Avatar({ name, size=36, idx=0, isMe=false }) {
 function Podium({ entries, myId, dark }) {
   if (entries.length < 3) return null
   const order          = [entries[1], entries[0], entries[2]]
-  const heights        = [90, 115, 72]
-  const sizes          = [58, 72, 52]
+  const heights        = [52, 68, 40]
+  const sizes          = [38, 48, 34]
   const platformColors = [
     dark?'rgba(24,183,242,.25)':'rgba(24,183,242,.18)',
     dark?'rgba(255,184,0,.35)':'rgba(255,184,0,.28)',
@@ -122,20 +122,20 @@ function Podium({ entries, myId, dark }) {
   const ranks = [2, 1, 3]
 
   return (
-    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'center', gap:10, padding:'8px 0', marginBottom:20 }}>
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'center', gap:4, padding:'6px 12px', marginBottom:12 }}>
       {order.map((entry, col) => {
         const isMe    = entry?.student_id === myId
         const isFirst = col === 1
         return (
-          <div key={col} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, maxWidth:col===1?180:150 }}>
-            {isFirst ? <div style={{ fontSize:20, marginBottom:4 }}>👑</div> : <div style={{ height:24 }}/>}
-            <div style={{ width:24, height:24, borderRadius:'50%', background:medalColors[col], display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:'#fff', marginBottom:6 }}>{ranks[col]}</div>
-            <div style={{ marginBottom:8 }}>
+          <div key={col} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:1, maxWidth:col===1?120:100, minWidth:0 }}>
+            {isFirst ? <div style={{ fontSize:16, marginBottom:3 }}>👑</div> : <div style={{ height:19 }}/>}
+            <div style={{ width:20, height:20, borderRadius:'50%', background:medalColors[col], display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:900, color:'#fff', marginBottom:5 }}>{ranks[col]}</div>
+            <div style={{ marginBottom:5 }}>
               <Avatar name={entry?.name||'?'} size={sizes[col]} idx={col} isMe={isMe}/>
             </div>
-            <div style={{ textAlign:'center', marginBottom:10 }}>
-              <div style={{ fontSize:isFirst?13:12, fontWeight:900, color:isMe?BLUE:'var(--text-prim)' }}>{entry?.name||'—'}</div>
-              <div style={{ fontSize:isFirst?15:13, fontWeight:900, color:isFirst?GOLD:BLUE, marginTop:3 }}>{(entry?.xp||0).toLocaleString()} XP</div>
+            <div style={{ textAlign:'center', marginBottom:6 }}>
+              <div style={{ fontSize:isFirst?11:10, fontWeight:800, color:isMe?BLUE:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'90%' }}>{entry?.name||'—'}</div>
+              <div style={{ fontSize:isFirst?12:11, fontWeight:900, color:isFirst?GOLD:BLUE, marginTop:2 }}>{(entry?.xp||0).toLocaleString()} XP</div>
             </div>
             <div style={{ width:'100%', height:heights[col], borderRadius:'12px 12px 0 0', background:platformColors[col], border:`1px solid ${medalColors[col]}50`, borderBottom:'none', display:'flex', alignItems:'center', justifyContent:'center' }}>
               {isFirst && <div style={{ fontSize:18, opacity:.4 }}>⭐</div>}
@@ -151,7 +151,7 @@ function Podium({ entries, myId, dark }) {
 function BoardRow({ entry, rank, myId, showSchool }) {
   const isMe = entry.student_id === myId
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderTop:'1px solid var(--border)', background:isMe?`${BLUE}08`:'transparent' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderTop:'1px solid var(--border)', background:isMe?`${BLUE}08`:'transparent' }}>
       <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', width:24, textAlign:'center', flexShrink:0 }}>{rank}</span>
       <div style={{ width:32, height:32, borderRadius:'50%', flexShrink:0, background:isMe?`linear-gradient(135deg,${NAVY},${BLUE})`:`${BLUE}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:isMe?GOLD:BLUE }}>
         {(entry.name||'S').charAt(0)}
@@ -262,30 +262,25 @@ function SchoolNotConnected({ profile, onLinked, isGuest }) {
 }
 
 
-// ── Champion share card ───────────────────────────────────────────────────────
-// Rendered as a styled div that mirrors what the user would screenshot to share.
-// Shows the weekly or monthly top-ranked student with branding + share button.
+// ── Champion card (sidebar, shareable) ───────────────────────────────────────
+// Full ExamPrep branding. Deep navy base. Large faded "ExamPrep" wordmark as
+// background watermark. Gold accent. Designed to look great as a screenshot.
 
-function ChampionCard({ champion, period, dark }) {
+function ChampionCard({ champion, period }) {
   const [copied, setCopied] = useState(false)
   if (!champion) return null
 
-  const isWeekly  = period === 'lastWeek' || period === 'week'
-  const title     = isWeekly ? 'Weekly Champion' : 'Monthly Champion'
-  const periodStr = isWeekly ? 'This Week' : 'This Month'
-  const accentCol = isWeekly ? GOLD : CYAN
-  const bg1       = isWeekly ? '#0c1a4a' : '#061a38'
-  const bg2       = isWeekly ? '#1a0c00' : '#001a3a'
+  const isWeekly  = period === 'week' || period === 'lastWeek'
+  const label     = isWeekly ? "Last Week's Champion" : "Last Month's Champion"
+  const periodTag = isWeekly ? 'Last Week' : 'Last Month'
+  const initial   = (champion.name || '?').charAt(0).toUpperCase()
 
-  const shareText = `🏆 I'm the ${title} on ExamPrep with ${champion.xp.toLocaleString()} XP!
-
-Come practice with me and beat my score 👊
-👉 Download ExamPrep: examprep.ng`
+  const shareText = `👑 ${champion.name} was ExamPrep's ${label}!\n\n📊 ${champion.xp.toLocaleString()} XP earned\n${champion.school ? '🏫 ' + champion.school + '\n' : ''}\nThink you can beat that? Come practice on ExamPrep 👊\n👉 examprep.ng`
 
   function share() {
-    if (navigator.share) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
       navigator.share({ text: shareText }).catch(() => {})
-    } else {
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(shareText)
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
@@ -294,169 +289,238 @@ Come practice with me and beat my score 👊
 
   return (
     <div>
-      {/* The card itself — styled to look great as a screenshot */}
+      {/* ─── Shareable card ─── */}
       <div style={{
-        borderRadius: 20, overflow: 'hidden', position: 'relative',
-        background: `linear-gradient(145deg, ${bg1} 0%, #050e2a 55%, ${bg2} 100%)`,
-        padding: '20px 18px 16px',
-        border: `1.5px solid ${accentCol}35`,
-        boxShadow: `0 8px 32px ${accentCol}15`,
+        borderRadius: 20, position: 'relative', overflow: 'hidden',
+        // On-brand ExamPrep navy gradient — not a random dark colour
+        background: 'linear-gradient(148deg, #040e24 0%, #062A78 55%, #041566 100%)',
+        padding: '20px 18px 18px',
+        border: '1.5px solid rgba(18,100,229,.45)',
+        boxShadow: '0 12px 48px rgba(6,42,120,.55), 0 0 0 1px rgba(255,184,0,.05) inset',
       }}>
-        {/* Glow */}
-        <div style={{ position:'absolute', top:-40, right:-30, width:160, height:160, borderRadius:'50%', background:`radial-gradient(circle,${accentCol}25 0%,transparent 70%)`, pointerEvents:'none' }}/>
 
-        {/* ExamPrep branding — top right */}
-        <div style={{ position:'absolute', top:14, right:16, display:'flex', alignItems:'center', gap:5 }}>
-          <div style={{ width:20, height:20, borderRadius:6, background:NAVY, border:`1px solid ${accentCol}40`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <span style={{ fontSize:8, fontWeight:900, color:accentCol, letterSpacing:'-.02em' }}>EX</span>
-          </div>
-          <span style={{ fontSize:9, fontWeight:800, color:`${accentCol}90`, letterSpacing:'.06em' }}>EXAMPREP</span>
+        {/* ── Background watermark: large faded ExamPrep wordmark ── */}
+        <div aria-hidden="true" style={{
+          position: 'absolute', bottom: 6, right: -2,
+          fontSize: 46, fontWeight: 900, letterSpacing: '-.06em',
+          color: 'rgba(255,255,255,.09)',
+          fontFamily: 'inherit', pointerEvents: 'none',
+          whiteSpace: 'nowrap', lineHeight: 1,
+          userSelect: 'none',
+        }}>
+          ExamPrep
         </div>
 
-        {/* Crown + title */}
-        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:14 }}>
-          <div style={{ width:28, height:28, borderRadius:9, background:`${accentCol}18`, border:`1px solid ${accentCol}35`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>
-            {isWeekly ? '👑' : '🏆'}
-          </div>
-          <div>
-            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:`${accentCol}80` }}>
-              {periodStr}
-            </div>
-            <div style={{ fontSize:13, fontWeight:900, color:accentCol, letterSpacing:'-.01em' }}>
-              {title}
-            </div>
-          </div>
-        </div>
+        {/* ── Background: subtle diagonal blue stripe ── */}
+        <div aria-hidden="true" style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: '100%',
+          backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0px, rgba(255,255,255,.015) 1px, transparent 1px, transparent 28px)',
+          pointerEvents: 'none',
+        }}/>
 
-        {/* Champion avatar + name */}
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-          <div style={{ width:44, height:44, borderRadius:'50%', background:`linear-gradient(135deg,${accentCol}40,${accentCol}20)`, border:`2px solid ${accentCol}60`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:accentCol, flexShrink:0 }}>
-            {(champion.name||'?').charAt(0).toUpperCase()}
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15, fontWeight:900, color:'#fff', letterSpacing:'-.02em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {champion.name}
-            </div>
-            {champion.school && (
-              <div style={{ fontSize:10, color:`rgba(255,255,255,.45)`, fontWeight:600, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                🏫 {champion.school}
+        {/* ── Gold accent bar at top ── */}
+        <div aria-hidden="true" style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+          background: 'linear-gradient(90deg, #FFB800, #FF6A00 60%, transparent)',
+          pointerEvents: 'none',
+        }}/>
+
+        {/* ── Top bar: logo mark + wordmark left, period pill right ── */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, position:'relative', zIndex:1 }}>
+          {/* Logo: real ExamPrep logo image */}
+          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+            <img
+              src="/images/examprep_logo.png"
+              alt="ExamPrep"
+              width={80}
+              height={22}
+              style={{ objectFit:'contain', flexShrink:0, filter:'brightness(0) invert(1)', opacity:.85 }}
+              onError={e => {
+                // Fallback: navy square with E if image missing
+                e.currentTarget.style.display = 'none'
+                e.currentTarget.nextSibling.style.display = 'flex'
+              }}
+            />
+            {/* Fallback shown only if logo fails to load */}
+            <div style={{ display:'none', alignItems:'center', gap:6 }}>
+              <div style={{ width:26, height:26, borderRadius:7, background:'#1264E5', border:'1.5px solid rgba(255,184,0,.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 10L6 1.5l3.5 8.5" stroke="#FFB800" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M4 6.5h4" stroke="#FFB800" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
               </div>
-            )}
+              <span style={{ fontSize:11, fontWeight:900, color:'rgba(255,255,255,.7)', letterSpacing:'.05em' }}>ExamPrep</span>
+            </div>
           </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <div style={{ fontSize:20, fontWeight:900, color:accentCol, letterSpacing:'-.03em', lineHeight:1 }}>
+          {/* Period pill */}
+          <div style={{ padding:'3px 10px', borderRadius:999, background:'rgba(255,184,0,.12)', border:'1px solid rgba(255,184,0,.3)' }}>
+            <span style={{ fontSize:9, fontWeight:900, color:'#FFB800', textTransform:'uppercase', letterSpacing:'.1em' }}>{periodTag}</span>
+          </div>
+        </div>
+
+        {/* ── Crown + label ── */}
+        <div style={{ textAlign:'center', marginBottom:12, position:'relative', zIndex:1 }}>
+          <div style={{ fontSize:30, lineHeight:1, filter:'drop-shadow(0 3px 8px rgba(255,184,0,.5))' }}>👑</div>
+          <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.2em', color:'rgba(255,184,0,.6)', marginTop:5 }}>
+            {label}
+          </div>
+        </div>
+
+        {/* ── Avatar: blue ring, gold inner, rank badge ── */}
+        <div style={{ display:'flex', justifyContent:'center', marginBottom:12, position:'relative', zIndex:1 }}>
+          <div style={{ position:'relative' }}>
+            {/* Outer ring — ExamPrep blue */}
+            <div style={{
+              width:68, height:68, borderRadius:'50%',
+              background: 'linear-gradient(135deg, #1264E5 0%, #062A78 100%)',
+              padding: 2.5,
+              boxShadow: '0 0 0 4px rgba(18,100,229,.2), 0 6px 20px rgba(6,42,120,.5)',
+            }}>
+              {/* Inner: gold initial */}
+              <div style={{
+                width:'100%', height:'100%', borderRadius:'50%',
+                background: 'linear-gradient(135deg, rgba(255,184,0,.25) 0%, rgba(255,184,0,.08) 100%)',
+                border: '1.5px solid rgba(255,184,0,.4)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:24, fontWeight:900, color:'#FFB800',
+              }}>
+                {initial}
+              </div>
+            </div>
+            {/* Rank #1 badge */}
+            <div style={{
+              position:'absolute', bottom:-2, right:-2,
+              width:22, height:22, borderRadius:'50%',
+              background: '#FFB800',
+              border: '2px solid #040e24',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:10, fontWeight:900, color:'#040e24',
+            }}>1</div>
+          </div>
+        </div>
+
+        {/* ── Name + school ── */}
+        <div style={{ textAlign:'center', marginBottom:14, position:'relative', zIndex:1 }}>
+          <div style={{ fontSize:16, fontWeight:900, color:'#fff', letterSpacing:'-.02em', lineHeight:1.25, marginBottom:4 }}>
+            {champion.name}
+          </div>
+          {champion.school && (
+            <div style={{ fontSize:10, color:'rgba(255,255,255,.4)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              🏫 {champion.school}
+            </div>
+          )}
+        </div>
+
+        {/* ── XP score — gold, centred ── */}
+        <div style={{ display:'flex', justifyContent:'center', marginBottom:16, position:'relative', zIndex:1 }}>
+          <div style={{
+            padding:'10px 24px', borderRadius:14, textAlign:'center',
+            background:'rgba(255,184,0,.07)',
+            border:'1.5px solid rgba(255,184,0,.2)',
+          }}>
+            <div style={{ fontSize:28, fontWeight:900, color:'#FFB800', letterSpacing:'-.04em', lineHeight:1 }}>
               {champion.xp.toLocaleString()}
             </div>
-            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', color:`${accentCol}70`, marginTop:2 }}>XP</div>
+            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:'rgba(255,184,0,.5)', marginTop:3 }}>
+              XP Earned
+            </div>
           </div>
         </div>
 
-        {/* Divider */}
-        <div style={{ height:1, background:`${accentCol}20`, marginBottom:12 }}/>
-
-        {/* Tagline */}
-        <div style={{ fontSize:11, color:'rgba(255,255,255,.4)', lineHeight:1.5, marginBottom:0 }}>
-          Practice smarter. Rise higher. <span style={{ color:`${accentCol}80` }}>examprep.ng</span>
+        {/* ── Footer: tagline left, domain right ── */}
+        <div style={{
+          borderTop:'1px solid rgba(255,255,255,.06)', paddingTop:11,
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          position:'relative', zIndex:1,
+        }}>
+          <span style={{ fontSize:10, color:'rgba(255,255,255,.22)', lineHeight:1.4, fontStyle:'italic' }}>
+            Practice smarter. Rise higher.
+          </span>
+          <span style={{ fontSize:10, fontWeight:800, color:'rgba(255,184,0,.45)', letterSpacing:'.04em' }}>
+            examprep.ng
+          </span>
         </div>
       </div>
 
-      {/* Share button — outside the card so it doesn't appear in screenshots */}
+      {/* Share button — sits below the card, not inside it */}
       <button
         onClick={share}
-        style={{ width:'100%', marginTop:8, padding:'11px', borderRadius:13, border:`1.5px solid ${accentCol}40`, background:`${accentCol}10`, color:accentCol, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6, transition:'all .13s' }}
+        style={{
+          width:'100%', marginTop:8, padding:'12px', borderRadius:14,
+          border:'1.5px solid rgba(18,100,229,.4)',
+          background:'rgba(18,100,229,.08)',
+          color:'#1264E5',
+          fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+          transition:'all .13s',
+        }}
       >
         {copied ? (
-          <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> Copied to clipboard!</>
+          <>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Copied!
+          </>
         ) : (
-          <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1H12v3.5M12 1L7 6M5.5 3H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Share this {isWeekly ? 'week' : 'month'}'s champion</>
+          <>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1H12v3.5M12 1L7 6M5.5 3H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Share {isWeekly ? "last week's" : "this month's"} champion
+          </>
         )}
       </button>
     </div>
   )
 }
 
-function ChampionCards({ board, period, scope }) {
-  const weeklyChamp  = period === 'week' || period === 'lastWeek' ? board[0] : null
-  const monthlyChamp = period === 'month' ? board[0] : null
-  const champ        = weeklyChamp ?? monthlyChamp
-  if (!champ) return null
-
-  return <ChampionCard champion={champ} period={period}/>
+function ChampionCards({ board, period }) {
+  // Only show for a COMPLETED period — last week or this month.
+  // "This Week" is still in progress so there's no champion yet.
+  const show = period === 'week' || period === 'lastWeek' || period === 'month'
+  if (!show || !board[0]) return null
+  return <ChampionCard champion={board[0]} period={period}/>
 }
 
-// ── Hall of Champions ─────────────────────────────────────────────────────────
-// Stored in localStorage as ep_hall_of_champions: [{ month, name, xp, school }]
-// In production this would be fetched from a DB table. For now, seeded from
-// the current weekly/monthly winner when the board loads.
+// ── Hall of Champions link card ────────────────────────────────────────────────
+// Points to /student/leaderboard/hall — the full page with real data.
+// Shows the most recent champion fetched from the API.
 
-const HALL_KEY = 'ep_hall_champions'
-
-function readHall() {
-  try { return JSON.parse(localStorage.getItem(HALL_KEY) || '[]') } catch { return [] }
-}
-
-function HallOfChampions({ dark }) {
-  const [hall, setHall] = useState([])
-  const [open, setOpen] = useState(false)
+function HallOfChampionsPreview() {
+  const [latest,   setLatest]   = useState(null)
+  const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
-    setHall(readHall())
+    fetch('/api/leaderboard/champions?limit=1')
+      .then(r => r.json())
+      .then(d => {
+        setLatest(d.champions?.[0] ?? null)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
-  // Seed some illustrative past champions if hall is empty (so the UI isn't blank on first load)
-  const display = hall.length > 0 ? hall : [
-    { month: 'September 2026', name: 'Oluwatobi A.', xp: 14320, school: 'Kings College, Lagos' },
-    { month: 'August 2026',    name: 'Chidinma O.',  xp: 12880, school: 'Queen\'s College, Abuja' },
-    { month: 'July 2026',      name: 'Emeka N.',     xp: 11450, school: 'Federal Government College' },
-  ]
-
   return (
-    <div style={{ borderRadius:18, overflow:'hidden', border:'1px solid var(--border)', background:'var(--bg-card)' }}>
-      {/* Header row */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{ width:'100%', padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}
-      >
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ width:28, height:28, borderRadius:9, background:`${GOLD}15`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>🏛️</div>
-          <div style={{ textAlign:'left' }}>
-            <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.01em' }}>Hall of Champions</div>
-            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1 }}>Monthly winners</div>
-          </div>
+    <Link href="/student/leaderboard/hall" style={{ textDecoration:'none', display:'block' }}>
+      <div style={{ borderRadius:18, border:'1px solid var(--border)', background:'var(--bg-card)', padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer', transition:'all .13s' }}>
+        {/* Icon */}
+        <div style={{ width:38, height:38, borderRadius:12, background:`rgba(255,184,0,.1)`, border:`1px solid rgba(255,184,0,.22)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
+          🏛️
         </div>
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}>
-          <path d="M2 4.5l4.5 4.5 4.5-4.5" stroke="var(--text-tert)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-
-      {open && (
-        <div style={{ borderTop:'1px solid var(--border)', padding:'10px 12px 12px' }}>
-          {display.map((entry, i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 6px', borderBottom: i < display.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              {/* Month medal */}
-              <div style={{ width:32, height:32, borderRadius:10, background:`${GOLD}12`, border:`1px solid ${GOLD}25`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>
-                {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {entry.name}
-                </div>
-                <div style={{ fontSize:10, color:'var(--text-tert)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {entry.school ? `🏫 ${entry.school}` : entry.month}
-                </div>
-              </div>
-              <div style={{ textAlign:'right', flexShrink:0 }}>
-                <div style={{ fontSize:12, fontWeight:900, color:GOLD }}>{entry.xp.toLocaleString()}</div>
-                <div style={{ fontSize:9, color:'var(--text-tert)', fontWeight:600 }}>{entry.month?.split(' ')[0]}</div>
-              </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.01em' }}>Hall of Champions</div>
+          {loading ? (
+            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:2 }}>Loading…</div>
+          ) : latest ? (
+            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              Latest: {latest.name} · {latest.month}
             </div>
-          ))}
-          <div style={{ marginTop:10, fontSize:10, color:'var(--text-tert)', textAlign:'center', lineHeight:1.5 }}>
-            Monthly champions are celebrated on our social media 🎉
-          </div>
+          ) : (
+            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:2 }}>Monthly champions · View all</div>
+          )}
         </div>
-      )}
-    </div>
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink:0, opacity:.4 }}>
+          <path d="M4 2l5 4.5L4 11" stroke="var(--text-prim)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </Link>
   )
 }
 
@@ -478,10 +542,13 @@ function BoardDisplay({ board, myId, loading, scope }) {
 
   return (
     <Card>
+      <style>{`.lb-rows{padding:0 4px}@media(min-width:480px){.lb-rows{padding:0}}`}</style>
       {board.length >= 3 && <Podium entries={board.slice(0,3)} myId={myId} dark={false}/>}
-      {board.slice(board.length >= 3 ? 3 : 0).map((entry, i) => (
-        <BoardRow key={entry.student_id} entry={entry} rank={(board.length >= 3 ? 3 : 0) + i + 1} myId={myId} showSchool={scope === 'national'}/>
-      ))}
+      <div className="lb-rows">
+        {board.slice(board.length >= 3 ? 3 : 0).map((entry, i) => (
+          <BoardRow key={entry.student_id} entry={entry} rank={(board.length >= 3 ? 3 : 0) + i + 1} myId={myId} showSchool={scope === 'national'}/>
+        ))}
+      </div>
     </Card>
   )
 }
@@ -688,11 +755,11 @@ export default function LeaderboardPage() {
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           {/* Weekly + Monthly Champion cards */}
           {board.length > 0 && !loading && (
-            <ChampionCards board={board} period={period} scope={scope}/>
+            <ChampionCards board={board} period={period}/>
           )}
 
-          {/* Hall of Champions */}
-          <HallOfChampions dark={dark}/>
+          {/* Hall of Champions — links to /student/leaderboard/hall */}
+          <HallOfChampionsPreview/>
 
           {/* Guest CTA */}
           {isGuest && (

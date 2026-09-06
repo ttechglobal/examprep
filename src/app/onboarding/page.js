@@ -1,32 +1,50 @@
 'use client'
 // src/app/onboarding/page.js
-// 4-step onboarding: Username → Exam type → Subjects → Mascot intro
-// Offline-first: all steps persist to localStorage as they complete.
-// Supabase write happens only on final step, falls back to guest session.
+// 4-step onboarding: Username → Exam → Survey → Account → Welcome
+//
+// CHANGES from previous version:
+//  - ZaraOwl SVG replaced with /images/zara_studybuddy.png everywhere
+//  - Google sign-in removed (not live yet)
+//  - Subjects step removed (didn't reflect in app)
+//  - New survey step: university course + study time — personal, fast, no wrong answer
+//  - Answers stored in localStorage ep_guest for future personalisation use
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/contexts/ThemeContext'
 
-// ─── SUBJECTS ────────────────────────────────────────────────────────────────
-const ALL_SUBJECTS = [
-  { name: 'Mathematics',           exams: ['WAEC','JAMB'] },
-  { name: 'Biology',               exams: ['WAEC','JAMB'] },
-  { name: 'Chemistry',             exams: ['WAEC','JAMB'] },
-  { name: 'Physics',               exams: ['WAEC','JAMB'] },
-  { name: 'Economics',             exams: ['WAEC','JAMB'] },
-  { name: 'Government',            exams: ['WAEC','JAMB'] },
-  { name: 'Geography',             exams: ['WAEC','JAMB'] },
-  { name: 'Commerce',              exams: ['WAEC','JAMB'] },
-  { name: 'Further Mathematics',   exams: ['WAEC','JAMB'] },
-  { name: 'English Language',      exams: ['WAEC']        },
-  { name: 'Literature in English', exams: ['WAEC']        },
-  { name: 'Agricultural Science',  exams: ['WAEC']        },
-  { name: 'Accounting',            exams: ['WAEC','JAMB'] },
-  { name: 'Christian Religious Studies', exams: ['WAEC','JAMB'] },
-]
+// ─── MASCOT ──────────────────────────────────────────────────────────────────
+// Uses the real ExamPrep mascot image. Falls back gracefully if image missing.
+function Zara({ size = 90, style: extraStyle = {} }) {
+  const [err, setErr] = useState(false)
+  if (err) {
+    // Fallback: simple illustrated circle with initials
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: 'linear-gradient(135deg,#1264E5,#062A78)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: size * 0.4, fontWeight: 900, color: '#FFB800',
+        flexShrink: 0, ...extraStyle,
+      }}>
+        Z
+      </div>
+    )
+  }
+  return (
+    <img
+      src="/images/zara_studybuddy.png"
+      alt="Zara, your ExamPrep study buddy"
+      width={size}
+      height={size}
+      onError={() => setErr(true)}
+      style={{ objectFit: 'contain', flexShrink: 0, ...extraStyle }}
+    />
+  )
+}
 
+// ─── QUOTES ──────────────────────────────────────────────────────────────────
 const ZARA_QUOTES = [
   "Every question you answer today is a mark you won't leave on the table.",
   "Small wins every day. That's how champions are made.",
@@ -34,68 +52,16 @@ const ZARA_QUOTES = [
   "The student who shows up consistently always wins.",
 ]
 
-// ─── ZARA SVG ────────────────────────────────────────────────────────────────
-function ZaraOwl({ size = 80, expression = 'happy', className = '' }) {
-  const eyeColor = expression === 'excited' ? '#FFB800' : '#18B7F2'
-  return (
-    <svg width={size} height={size} viewBox="0 0 80 90" aria-label="Zara your study buddy" className={className}>
-      {/* Body */}
-      <ellipse cx="40" cy="62" rx="26" ry="26" fill="#1a1f3c"/>
-      {/* Head */}
-      <ellipse cx="40" cy="36" rx="24" ry="22" fill="#1a1f3c"/>
-      {/* Tummy */}
-      <ellipse cx="40" cy="66" rx="16" ry="18" fill="#f5c57a"/>
-      {/* Wings */}
-      <ellipse cx="15" cy="64" rx="10" ry="16" fill="#141830" transform="rotate(-10 15 64)"/>
-      <ellipse cx="65" cy="64" rx="10" ry="16" fill="#141830" transform="rotate(10 65 64)"/>
-      {/* Eye whites */}
-      <ellipse cx="30" cy="34" rx="9" ry="10" fill="#fff"/>
-      <ellipse cx="50" cy="34" rx="9" ry="10" fill="#fff"/>
-      {/* Irises */}
-      <circle cx="30" cy="34" r="6.5" fill={eyeColor}/>
-      <circle cx="50" cy="34" r="6.5" fill={eyeColor}/>
-      {/* Pupils */}
-      <circle cx="30" cy="34" r="3.5" fill="#1a1f3c"/>
-      <circle cx="50" cy="34" r="3.5" fill="#1a1f3c"/>
-      {/* Shine */}
-      <circle cx="31.5" cy="32.5" r="1.2" fill="#fff"/>
-      <circle cx="51.5" cy="32.5" r="1.2" fill="#fff"/>
-      {/* Beak */}
-      <polygon points="40,38 36,44 44,44" fill="#FFB800"/>
-      {/* Ear tufts */}
-      <polygon points="20,18 14,6 26,12" fill="#1a1f3c"/>
-      <polygon points="60,18 66,6 54,12" fill="#1a1f3c"/>
-      {/* Grad cap */}
-      <rect x="22" y="16" width="36" height="4" rx="1.5" fill="#FFB800"/>
-      <polygon points="40,10 24,18 40,20 56,18" fill="#FFB800"/>
-      <line x1="56" y1="17" x2="59" y2="25" stroke="#FFB800" strokeWidth="1.5"/>
-      <circle cx="59" cy="26" r="2.5" fill="#FFB800"/>
-      {/* Feet */}
-      {[33,47].map(x => (
-        <g key={x}>
-          <line x1={x} y1="86" x2={x-4} y2="90" stroke="#FFB800" strokeWidth="2" strokeLinecap="round"/>
-          <line x1={x} y1="86" x2={x} y2="90" stroke="#FFB800" strokeWidth="2" strokeLinecap="round"/>
-          <line x1={x} y1="86" x2={x+4} y2="90" stroke="#FFB800" strokeWidth="2" strokeLinecap="round"/>
-        </g>
-      ))}
-      {/* Stars */}
-      <circle cx="6" cy="24" r="1.5" fill="#FFB800" opacity=".7"/>
-      <circle cx="72" cy="18" r="1.2" fill="#FFB800" opacity=".5"/>
-      <circle cx="74" cy="46" r="1" fill="#fff" opacity=".4"/>
-    </svg>
-  )
-}
-
-// ─── STEP DOTS ────────────────────────────────────────────────────────────────
+// ─── STEP DOTS ───────────────────────────────────────────────────────────────
 function StepDots({ current, total }) {
   return (
     <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
       {Array.from({ length: total }).map((_, i) => (
         <div key={i} style={{
           height: 6,
-          width: i === current ? 20 : 6,
+          width: i === current ? 22 : 6,
           borderRadius: 3,
-          background: i === current ? '#1264E5' : 'var(--border-strong)',
+          background: i <= current ? '#1264E5' : 'var(--border-strong)',
           transition: 'all .25s ease',
         }}/>
       ))}
@@ -103,7 +69,7 @@ function StepDots({ current, total }) {
   )
 }
 
-// ─── 3D CTA BUTTON ──────────────────────────────────────────────────────────
+// ─── 3D CTA BUTTON ───────────────────────────────────────────────────────────
 function Cta({ onClick, disabled, loading, children }) {
   const [pressed, setPressed] = useState(false)
   return (
@@ -120,7 +86,9 @@ function Cta({ onClick, disabled, loading, children }) {
         border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
         letterSpacing: '-.01em',
         transform: pressed ? 'translateY(4px)' : 'translateY(0)',
-        boxShadow: pressed || disabled ? '0 2px 0 #0a3fa0' : '0 6px 0 #0a3fa0, 0 10px 24px rgba(18,100,229,.25)',
+        boxShadow: pressed || disabled
+          ? '0 2px 0 #0a3fa0'
+          : '0 6px 0 #0a3fa0, 0 10px 24px rgba(18,100,229,.25)',
         transition: 'transform .1s, box-shadow .1s, background .2s',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       }}
@@ -130,9 +98,21 @@ function Cta({ onClick, disabled, loading, children }) {
           width: 18, height: 18, borderRadius: '50%',
           border: '2.5px solid rgba(255,255,255,.3)',
           borderTopColor: '#fff',
-          animation: 'spin .7s linear infinite',
+          animation: 'ob-spin .7s linear infinite',
         }}/>
       ) : children}
+    </button>
+  )
+}
+
+// ─── BACK LINK ────────────────────────────────────────────────────────────────
+function BackLink({ onClick }) {
+  return (
+    <button onClick={onClick} className="text-tertiary" style={{
+      background: 'none', border: 'none', fontSize: 13, fontWeight: 600,
+      cursor: 'pointer', padding: '10px 0', textAlign: 'center', width: '100%',
+    }}>
+      ← Back
     </button>
   )
 }
@@ -149,8 +129,7 @@ function ThemeToggle() {
         border: '1px solid var(--border-strong)',
         background: 'var(--bg-card)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', fontSize: 16,
-        flexShrink: 0,
+        cursor: 'pointer', fontSize: 16, flexShrink: 0,
       }}
     >
       {dark ? '☀️' : '🌙'}
@@ -158,10 +137,12 @@ function ThemeToggle() {
   )
 }
 
-// ─── STEP 1: USERNAME ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 1 — USERNAME
+// ─────────────────────────────────────────────────────────────────────────────
 function StepUsername({ onNext }) {
-  const [value, setValue] = useState('')
-  const [error, setError] = useState('')
+  const [value,    setValue]    = useState('')
+  const [error,    setError]    = useState('')
   const [checking, setChecking] = useState(false)
   const inputRef = useRef(null)
 
@@ -171,41 +152,41 @@ function StepUsername({ onNext }) {
   const valid = clean.length >= 3
 
   async function handleNext() {
-    if (!valid) { setError('Username must be at least 3 characters — letters, numbers, underscores only.'); return }
-    setChecking(true)
-    setError('')
-    // Check uniqueness in Supabase profiles
+    if (!valid) { setError('At least 3 characters — letters, numbers, underscores only.'); return }
+    setChecking(true); setError('')
     try {
       const supabase = createClient()
       const { data } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('username', clean)
-        .maybeSingle()
-      if (data) { setError('That username is taken — try another.'); setChecking(false); return }
-    } catch {
-      // If offline or error, allow through — will validate on submit
-    }
+        .from('profiles').select('username').eq('username', clean).maybeSingle()
+      if (data) { setError('That username is taken — try another one.'); setChecking(false); return }
+    } catch { /* offline — allow through */ }
     setChecking(false)
     onNext({ username: clean })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
-      {/* Zara + greeting */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-        <ZaraOwl size={90} expression="happy"/>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      {/* Mascot + greeting */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+        <div style={{ position: 'relative' }}>
+          <div style={{
+            position: 'absolute', inset: -12, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(18,100,229,.15), transparent 70%)',
+            filter: 'blur(10px)',
+          }}/>
+          <Zara size={100}/>
+        </div>
         <div style={{ textAlign: 'center' }}>
-          <h1 className="text-primary" style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.15, marginBottom: 8 }}>
+          <h1 className="text-primary" style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.15, marginBottom: 6 }}>
             Hey! I'm Zara 👋
           </h1>
           <p className="text-secondary" style={{ fontSize: 14, lineHeight: 1.6 }}>
-            I'll be your study buddy. What should I call you?
+            I'll be your study buddy.<br/>What should I call you?
           </p>
         </div>
       </div>
 
-      {/* Input */}
+      {/* Username input */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
         <label className="text-tertiary" style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>
           Choose a username
@@ -221,30 +202,25 @@ function StepUsername({ onNext }) {
             style={{
               width: '100%', padding: '14px 48px 14px 16px',
               borderRadius: 14, fontSize: 15, fontWeight: 600,
-              border: `1.5px solid ${error ? 'var(--danger)' : valid && value ? 'var(--success)' : 'var(--border-strong)'}`,
-              background: 'var(--bg-card)',
-              color: 'var(--text-prim)',
-              outline: 'none',
-              transition: 'border-color .15s',
+              border: `1.5px solid ${error ? 'var(--danger)' : valid && value ? '#22c55e' : 'var(--border-strong)'}`,
+              background: 'var(--bg-card)', color: 'var(--text-prim)',
+              outline: 'none', transition: 'border-color .15s',
             }}
           />
-          {valid && (
+          {valid && !error && (
             <div style={{
               position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-              width: 22, height: 22, borderRadius: '50%',
-              background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 22, height: 22, borderRadius: '50%', background: '#22c55e',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>✓</span>
             </div>
           )}
         </div>
-        {error ? (
-          <p style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
-        ) : (
-          <p className="text-tertiary" style={{ fontSize: 11 }}>
-            Letters, numbers and underscores. Max 20 chars.
-          </p>
-        )}
+        {error
+          ? <p style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>{error}</p>
+          : <p className="text-tertiary" style={{ fontSize: 11 }}>Letters, numbers and underscores · Max 20 chars</p>
+        }
       </div>
 
       <div style={{ marginTop: 'auto', paddingTop: 24 }}>
@@ -256,7 +232,9 @@ function StepUsername({ onNext }) {
   )
 }
 
-// ─── STEP 2: EXAM TYPE ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 2 — EXAM TYPE
+// ─────────────────────────────────────────────────────────────────────────────
 function StepExamType({ onNext, onBack }) {
   const [selected, setSelected] = useState([])
 
@@ -270,30 +248,30 @@ function StepExamType({ onNext, onBack }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <div style={{ marginBottom: 28 }}>
         <h2 className="text-primary" style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.2, marginBottom: 8 }}>
           Which exams are<br/>you sitting?
         </h2>
         <p className="text-secondary" style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Select one or both. Content and questions are filtered to match each exam.
+          Select one or both. Past questions and content are matched to each exam.
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
         {exams.map(({ id, label, sub, icon }) => {
           const on = selected.includes(id)
           return (
             <button key={id} onClick={() => toggle(id)} style={{
               padding: '16px', borderRadius: 16,
-              border: `1.5px solid ${on ? '#062A78' : 'var(--border-strong)'}`,
-              background: on ? 'rgba(6,42,120,.06)' : 'var(--bg-card)',
+              border: `1.5px solid ${on ? '#1264E5' : 'var(--border-strong)'}`,
+              background: on ? 'rgba(18,100,229,.06)' : 'var(--bg-card)',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14,
               transition: 'all .15s', textAlign: 'left',
             }}>
               <div style={{
-                width: 44, height: 44, borderRadius: 12, fontSize: 20,
-                background: on ? 'rgba(6,42,120,.1)' : 'var(--bg-subtle)',
+                width: 46, height: 46, borderRadius: 13, fontSize: 22,
+                background: on ? 'rgba(18,100,229,.1)' : 'var(--bg-subtle)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>{icon}</div>
               <div style={{ flex: 1 }}>
@@ -302,8 +280,8 @@ function StepExamType({ onNext, onBack }) {
               </div>
               <div style={{
                 width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                border: `2px solid ${on ? '#062A78' : 'var(--border-strong)'}`,
-                background: on ? '#062A78' : 'transparent',
+                border: `2px solid ${on ? '#1264E5' : 'var(--border-strong)'}`,
+                background: on ? '#1264E5' : 'transparent',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {on && <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>✓</span>}
@@ -317,10 +295,10 @@ function StepExamType({ onNext, onBack }) {
       <div style={{
         padding: '12px 14px', borderRadius: 14,
         background: 'var(--bg-subtle)', border: '1px solid var(--border)',
-        display: 'flex', gap: 10, alignItems: 'flex-start',
+        display: 'flex', gap: 10, alignItems: 'center',
       }}>
-        <ZaraOwl size={28} expression="happy"/>
-        <p className="text-secondary" style={{ fontSize: 12, lineHeight: 1.55 }}>
+        <Zara size={32}/>
+        <p className="text-secondary" style={{ fontSize: 12, lineHeight: 1.55, flex: 1 }}>
           Most SS3 students sit both. Shared topics appear once — exam-specific content is clearly labelled.
         </p>
       </div>
@@ -329,108 +307,171 @@ function StepExamType({ onNext, onBack }) {
         <Cta onClick={() => onNext({ exams: selected })} disabled={selected.length === 0}>
           Continue →
         </Cta>
-        <button onClick={onBack} className="text-tertiary" style={{
-          background: 'none', border: 'none', fontSize: 13, fontWeight: 600,
-          cursor: 'pointer', padding: '8px 0',
-        }}>← Back</button>
+        <BackLink onClick={onBack}/>
       </div>
     </div>
   )
 }
 
-// ─── STEP 3: SUBJECTS ────────────────────────────────────────────────────────
-function StepSubjects({ data, onNext, onBack }) {
-  const { exams } = data
-  const visible = ALL_SUBJECTS.filter(s => s.exams.some(e => exams.includes(e)))
-  const [selected, setSelected] = useState(['Mathematics', 'Biology'])
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 3 — SURVEY (replaces subjects)
+// Two warm questions: university course aspiration + preferred study time
+// Answers saved in ep_guest.survey — ready for future personalisation
+// ─────────────────────────────────────────────────────────────────────────────
+const POPULAR_COURSES = [
+  'Medicine & Surgery', 'Engineering', 'Law', 'Pharmacy',
+  'Computer Science', 'Architecture', 'Accounting', 'Nursing',
+  'Mass Communication', 'Economics', 'Business Admin', 'Education',
+]
 
-  function toggle(name) {
-    setSelected(p => p.includes(name) ? p.filter(s => s !== name) : [...p, name])
+const STUDY_TIMES = [
+  { id: 'morning',    label: 'Morning',    sub: '5am – 10am',  icon: '🌅' },
+  { id: 'afternoon',  label: 'Afternoon',  sub: '12pm – 4pm',  icon: '☀️' },
+  { id: 'evening',    label: 'Evening',    sub: '6pm – 9pm',   icon: '🌆' },
+  { id: 'night',      label: 'Late night', sub: '9pm – 1am',   icon: '🌙' },
+]
+
+function StepSurvey({ onNext, onBack, data }) {
+  const [course,      setCourse]      = useState('')
+  const [customCourse,setCustomCourse]= useState('')
+  const [studyTime,   setStudyTime]   = useState('')
+  const [showCustom,  setShowCustom]  = useState(false)
+
+  const username = data.username || 'you'
+
+  function handleCourseSelect(c) {
+    if (c === '__other__') { setShowCustom(true); setCourse(''); return }
+    setShowCustom(false); setCustomCourse(''); setCourse(c)
+  }
+
+  const finalCourse = showCustom ? customCourse.trim() : course
+  const canContinue = studyTime !== ''   // course is optional — no wrong answer
+
+  function handleNext() {
+    onNext({
+      survey: {
+        aspired_course: finalCourse || null,
+        study_time:     studyTime,
+      }
+    })
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 22 }}>
         <h2 className="text-primary" style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.2, marginBottom: 8 }}>
-          Pick your subjects
+          Let's personalise<br/>your experience
         </h2>
         <p className="text-secondary" style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Choose at least one. Add or change subjects from your profile anytime.
+          Two quick questions. No wrong answers.
         </p>
       </div>
 
-      {/* Chips */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-        {visible.map(({ name, exams: subExams }) => {
-          const on = selected.includes(name)
-          const bothExams = subExams.length > 1
-          return (
-            <button key={name} onClick={() => toggle(name)} style={{
-              padding: '9px 14px', borderRadius: 999,
-              border: `1.5px solid ${on ? '#062A78' : 'var(--border-strong)'}`,
-              background: on ? 'rgba(6,42,120,.07)' : 'var(--bg-card)',
-              color: on ? '#062A78' : 'var(--text-sec)',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              transition: 'all .12s',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              {on && <span style={{ fontSize: 10, fontWeight: 900 }}>✓</span>}
-              {name}
-              {!bothExams && (
-                <span style={{
-                  fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4,
-                  background: on ? 'rgba(6,42,120,.12)' : 'var(--bg-subtle)',
-                  color: 'var(--text-tert)',
-                }}>WAEC</span>
-              )}
-            </button>
-          )
-        })}
+      {/* Q1 — Course aspiration */}
+      <div style={{ marginBottom: 22 }}>
+        <p className="text-primary" style={{ fontSize: 13, fontWeight: 800, marginBottom: 12 }}>
+          What course do you want to study in university? <span className="text-tertiary" style={{ fontWeight: 600 }}>(optional)</span>
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {POPULAR_COURSES.map(c => {
+            const on = course === c && !showCustom
+            return (
+              <button key={c} onClick={() => handleCourseSelect(c)} style={{
+                padding: '8px 14px', borderRadius: 999,
+                border: `1.5px solid ${on ? '#1264E5' : 'var(--border-strong)'}`,
+                background: on ? 'rgba(18,100,229,.08)' : 'var(--bg-card)',
+                color: on ? '#1264E5' : 'var(--text-sec)',
+                fontSize: 12, fontWeight: on ? 800 : 600,
+                cursor: 'pointer', transition: 'all .12s',
+              }}>
+                {on && '✓ '}{c}
+              </button>
+            )
+          })}
+          <button onClick={() => handleCourseSelect('__other__')} style={{
+            padding: '8px 14px', borderRadius: 999,
+            border: `1.5px solid ${showCustom ? '#1264E5' : 'var(--border-strong)'}`,
+            background: showCustom ? 'rgba(18,100,229,.08)' : 'var(--bg-card)',
+            color: showCustom ? '#1264E5' : 'var(--text-tert)',
+            fontSize: 12, fontWeight: showCustom ? 800 : 600,
+            cursor: 'pointer', transition: 'all .12s',
+          }}>
+            Other…
+          </button>
+        </div>
+        {showCustom && (
+          <input
+            autoFocus
+            value={customCourse}
+            onChange={e => setCustomCourse(e.target.value)}
+            placeholder="Type your course…"
+            style={{
+              marginTop: 10, width: '100%', padding: '12px 14px', borderRadius: 12,
+              border: '1.5px solid #1264E5', background: 'var(--bg-card)',
+              fontSize: 14, color: 'var(--text-prim)', outline: 'none',
+            }}
+          />
+        )}
       </div>
 
-      {/* Count */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 0', borderTop: '1px solid var(--border)',
-        marginBottom: 4,
-      }}>
-        <span className="text-secondary" style={{ fontSize: 12 }}>Selected</span>
-        <span className="text-primary" style={{ fontSize: 12, fontWeight: 800 }}>
-          {selected.length} subject{selected.length !== 1 ? 's' : ''}
-        </span>
+      {/* Q2 — Study time */}
+      <div style={{ marginBottom: 8 }}>
+        <p className="text-primary" style={{ fontSize: 13, fontWeight: 800, marginBottom: 12 }}>
+          When do you usually study best?
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {STUDY_TIMES.map(({ id, label, sub, icon }) => {
+            const on = studyTime === id
+            return (
+              <button key={id} onClick={() => setStudyTime(id)} style={{
+                padding: '13px 12px', borderRadius: 14, textAlign: 'left',
+                border: `1.5px solid ${on ? '#1264E5' : 'var(--border-strong)'}`,
+                background: on ? 'rgba(18,100,229,.06)' : 'var(--bg-card)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, transition: 'all .12s',
+              }}>
+                <span style={{ fontSize: 20 }}>{icon}</span>
+                <div>
+                  <div className="text-primary" style={{ fontSize: 13, fontWeight: on ? 800 : 700 }}>{label}</div>
+                  <div className="text-secondary" style={{ fontSize: 10 }}>{sub}</div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Cta onClick={() => onNext({ subjects: selected })} disabled={selected.length === 0}>
-          Continue with {selected.length} subject{selected.length !== 1 ? 's' : ''} →
+      <div style={{ marginTop: 'auto', paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Cta onClick={handleNext} disabled={!canContinue}>
+          Continue →
         </Cta>
-        <button onClick={onBack} className="text-tertiary" style={{
-          background: 'none', border: 'none', fontSize: 13, fontWeight: 600,
-          cursor: 'pointer', padding: '8px 0',
-        }}>← Back</button>
+        <BackLink onClick={onBack}/>
       </div>
     </div>
   )
 }
 
-
-// ─── STEP 3b: OPTIONAL ACCOUNT CREATION ─────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 4 — ACCOUNT CREATION (Google removed)
+// ─────────────────────────────────────────────────────────────────────────────
 function StepAccount({ data, onNext, onBack }) {
-  const [email,        setEmail]        = useState('')
-  const [password,     setPassword]     = useState('')
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState('')
-  const [oauthLoading, setOauthLoading] = useState(false)
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
 
-  function saveGuestLocally() {
-    const subjectsWaec = data.exams.includes('WAEC') ? data.subjects : []
-    const subjectsJamb = data.exams.includes('JAMB') ? data.subjects : []
-    localStorage.setItem('ep_guest', JSON.stringify({
-      username: data.username, full_name: data.username,
-      exams: data.exams, subjects: data.subjects,
-      subjects_waec: subjectsWaec, subjects_jamb: subjectsJamb,
-      onboarded: true,
-    }))
+  function buildGuestPayload() {
+    return {
+      username:   data.username,
+      full_name:  data.username,
+      exams:      data.exams ?? [],
+      exam_type:  data.exams?.[0] ?? 'WAEC',
+      exam_types: data.exams ?? [],
+      subjects:   [],
+      subjects_waec: [],
+      subjects_jamb: [],
+      survey:     data.survey ?? {},
+      onboarded:  true,
+    }
   }
 
   async function handleEmailSignup() {
@@ -438,231 +479,201 @@ function StepAccount({ data, onNext, onBack }) {
       setError('Enter a valid email and a password with at least 6 characters.')
       return
     }
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     try {
       const supabase = createClient()
       const { error: signUpErr } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
+        email: email.trim(), password,
         options: { data: { username: data.username, full_name: data.username } },
       })
       if (signUpErr) { setError(signUpErr.message); setLoading(false); return }
-      saveGuestLocally()
+      localStorage.setItem('ep_guest', JSON.stringify(buildGuestPayload()))
       onNext({ accountCreated: true })
     } catch (e) { setError(e.message); setLoading(false) }
   }
 
-  async function handleGoogle() {
-    setOauthLoading(true)
-    setError('')
-    try {
-      saveGuestLocally()
-      const supabase = createClient()
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: `${window.location.origin}/student/home` },
-      })
-    } catch (e) { setError(e.message); setOauthLoading(false) }
-  }
-
   return (
-    <div style={{ display:'flex', flexDirection:'column', flex:1 }}>
-      <div style={{ marginBottom:20 }}>
-        <h2 className="text-primary" style={{ fontSize:22, fontWeight:900, letterSpacing:'-.03em', marginBottom:8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <div style={{ marginBottom: 20 }}>
+        <h2 className="text-primary" style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-.03em', marginBottom: 8 }}>
           Save your progress
         </h2>
-        <p className="text-secondary" style={{ fontSize:13, lineHeight:1.65 }}>
-          Create a free account to save your stats, join the leaderboard, and connect to your school. You can skip this and do it later.
+        <p className="text-secondary" style={{ fontSize: 13, lineHeight: 1.65 }}>
+          Create a free account so your stats and progress are saved. You can also skip and do this later.
         </p>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:20 }}>
+      {/* Benefit pills */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 22 }}>
         {[
-          { icon:'\u{1F3C6}', text:'Join leaderboard' },
-          { icon:'\u{1F3EB}', text:'Connect school' },
-          { icon:'\u{1F4CA}', text:'Track progress' },
-          { icon:'\u{1F504}', text:'Sync across devices' },
+          { icon: '🏆', text: 'Join the leaderboard' },
+          { icon: '🏫', text: 'Connect your school'  },
+          { icon: '📊', text: 'Track your progress'  },
+          { icon: '🔄', text: 'Sync across devices'  },
         ].map(b => (
           <div key={b.text} style={{
-            display:'flex', alignItems:'center', gap:8,
-            background:'var(--bg-card)', border:'1px solid var(--border)',
-            borderRadius:10, padding:'10px 12px',
-            fontSize:12, fontWeight:600, color:'var(--text-sec)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '10px 12px',
+            fontSize: 12, fontWeight: 600, color: 'var(--text-sec)',
           }}>
-            <span style={{ fontSize:15 }}>{b.icon}</span>{b.text}
+            <span style={{ fontSize: 15 }}>{b.icon}</span>{b.text}
           </div>
         ))}
       </div>
 
-      <button
-        onClick={handleGoogle}
-        disabled={oauthLoading || loading}
-        style={{
-          width:'100%', padding:'13px 16px', borderRadius:12,
-          border:'1.5px solid var(--border-strong)',
-          background:'var(--bg-card)',
-          display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-          fontSize:14, fontWeight:700, color:'var(--text-prim)',
-          cursor:'pointer', marginBottom:12,
-          opacity: (oauthLoading || loading) ? 0.6 : 1,
-        }}
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
-        {oauthLoading ? 'Redirecting...' : 'Continue with Google'}
-      </button>
-
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-        <div style={{ flex:1, height:1, background:'var(--border)' }}/>
-        <span className="text-tertiary" style={{ fontSize:11, fontWeight:600 }}>or</span>
-        <div style={{ flex:1, height:1, background:'var(--border)' }}/>
+      {/* Email + password */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 4 }}>
+        <input
+          type="email"
+          placeholder="Email address"
+          value={email}
+          onChange={e => { setEmail(e.target.value); setError('') }}
+          style={{
+            width: '100%', padding: '13px 14px', borderRadius: 12,
+            border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
+            fontSize: 14, color: 'var(--text-prim)', outline: 'none',
+          }}
+        />
+        <input
+          type="password"
+          placeholder="Password (min 6 characters)"
+          value={password}
+          onChange={e => { setPassword(e.target.value); setError('') }}
+          style={{
+            width: '100%', padding: '13px 14px', borderRadius: 12,
+            border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
+            fontSize: 14, color: 'var(--text-prim)', outline: 'none',
+          }}
+        />
       </div>
 
-      <input
-        type="email" placeholder="Email address"
-        value={email} onChange={e => { setEmail(e.target.value); setError('') }}
-        style={{
-          width:'100%', padding:'13px 14px', borderRadius:12,
-          border:'1.5px solid var(--border-strong)', background:'var(--bg-card)',
-          fontSize:14, color:'var(--text-prim)', marginBottom:10,
-        }}
-      />
-      <input
-        type="password" placeholder="Password (min 6 characters)"
-        value={password} onChange={e => { setPassword(e.target.value); setError('') }}
-        style={{
-          width:'100%', padding:'13px 14px', borderRadius:12,
-          border:'1.5px solid var(--border-strong)', background:'var(--bg-card)',
-          fontSize:14, color:'var(--text-prim)', marginBottom:10,
-        }}
-      />
+      {error && <p style={{ fontSize: 12, color: '#ef5d4e', marginBottom: 8, fontWeight: 600 }}>{error}</p>}
 
-      {error && <p style={{ fontSize:12, color:'#ef5d4e', marginBottom:8, fontWeight:600 }}>{error}</p>}
+      <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Cta onClick={handleEmailSignup} loading={loading}>
+          Create account &amp; continue
+        </Cta>
 
-      <Cta onClick={handleEmailSignup} loading={loading} disabled={oauthLoading}>
-        Create account &amp; continue
-      </Cta>
+        <button
+          onClick={() => {
+            localStorage.setItem('ep_guest', JSON.stringify(buildGuestPayload()))
+            onNext({ accountCreated: false })
+          }}
+          disabled={loading}
+          style={{
+            background: 'none', border: 'none', fontSize: 13, fontWeight: 600,
+            color: 'var(--text-tert)', cursor: 'pointer', padding: '14px 0 4px',
+            textAlign: 'center', width: '100%',
+          }}
+        >
+          Skip for now — I'll create an account later
+        </button>
 
-      <button
-        onClick={() => onNext({ accountCreated: false })}
-        disabled={loading || oauthLoading}
-        style={{
-          background:'none', border:'none', fontSize:13, fontWeight:600,
-          color:'var(--text-tert)', cursor:'pointer', padding:'14px 0 4px',
-          textAlign:'center', width:'100%',
-        }}
-      >
-        Skip for now &mdash; I'll create an account later
-      </button>
-
-      <button onClick={onBack} style={{
-        background:'none', border:'none', fontSize:12, fontWeight:600,
-        cursor:'pointer', padding:'8px 0', color:'var(--text-tert)',
-      }}>
-        ← Back
-      </button>
+        <BackLink onClick={onBack}/>
+      </div>
     </div>
   )
 }
 
-// ─── STEP 4: MASCOT INTRO ────────────────────────────────────────────────────
-function StepMascot({ data, onFinish }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 5 — WELCOME
+// ─────────────────────────────────────────────────────────────────────────────
+function StepWelcome({ data, onFinish }) {
   const [loading, setLoading] = useState(false)
-  const { username, exams, subjects } = data
+  const { username, exams = [], survey = {} } = data
 
   const quoteIndex = Math.floor(Date.now() / 86400000) % ZARA_QUOTES.length
   const quote = ZARA_QUOTES[quoteIndex]
 
-  // Mock quests preview
-  const previewQuests = [
-    { icon: '📐', text: `Solve 5 ${subjects[0] || 'Maths'} questions`, xp: 20 },
+  const studyTimeLabel = STUDY_TIMES.find(t => t.id === survey.study_time)?.label ?? null
+
+  const previewItems = [
+    { icon: '📐', text: `Practice past questions`, xp: 20 },
+    { icon: '🃏', text: 'Study with flashcards', xp: 10 },
     { icon: '⚡', text: 'Complete a Speed Round', xp: 15 },
   ]
 
   async function handleStart() {
     setLoading(true)
-    // Generate a stable local user ID if one doesn't exist yet
-    let localId = localStorage.getItem('ep_local_id')
-    if (!localId) {
-      localId = 'local_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
-      localStorage.setItem('ep_local_id', localId)
+    // Ensure local ID exists
+    if (!localStorage.getItem('ep_local_id')) {
+      localStorage.setItem('ep_local_id', 'local_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
     }
-    // Save to localStorage immediately (offline-first)
-    // subjects split by exam so subject picker can read them per-exam
-    const subjectsWaec = exams.includes('WAEC') ? subjects : []
-    const subjectsJamb = exams.includes('JAMB') ? subjects : []
-    const setup = {
-      local_id:      localId,
+    // ep_guest should already be set in StepAccount — refresh to be safe
+    const existing = (() => { try { return JSON.parse(localStorage.getItem('ep_guest') || '{}') } catch { return {} } })()
+    localStorage.setItem('ep_guest', JSON.stringify({
+      ...existing,
       username,
-      full_name:     username,          // so layout name display works immediately
+      full_name: username,
       exams,
-      exam_type:     exams[0] ?? 'WAEC', // singular — what pages read
-      exam_types:    exams,             // array — matches Supabase shape
-      subjects,
-      subjects_waec: subjectsWaec,
-      subjects_jamb: subjectsJamb,
-      onboarded:     true,
-      createdAt:     Date.now(),
-    }
-    localStorage.setItem('ep_guest', JSON.stringify(setup))
-    // Also store name for topbar instant display
+      exam_type:  exams[0] ?? 'WAEC',
+      exam_types: exams,
+      survey,
+      onboarded: true,
+      createdAt: Date.now(),
+    }))
     try { localStorage.setItem('ep_student_name', username) } catch {}
 
-    // Try to persist to Supabase (anonymous session)
+    // Try Supabase persist
     try {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
+        // survey_data stores aspired_course + study_time from onboarding survey.
+        // Add column once in Supabase: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS survey_data jsonb;
         await supabase.from('profiles').upsert({
-          id:            session.user.id,
+          id:          session.user.id,
           username,
-          full_name:     username,
-          exam_types:    exams,
-          subjects,
-          subjects_waec: subjectsWaec,
-          subjects_jamb: subjectsJamb,
-          onboarded:     true,
+          full_name:   username,
+          exam_types:  exams,
+          subjects:    [],
+          onboarded:   true,
+          survey_data: survey ?? {},
         })
       }
-    } catch {
-      // Offline — localStorage already saved, continue as guest
-    }
+    } catch { /* offline — localStorage already saved */ }
 
     onFinish()
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'center' }}>
-      {/* Zara large + glow */}
-      <div style={{ position: 'relative', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Big mascot with glow */}
+      <div style={{ position: 'relative', marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
         <div style={{
-          position: 'absolute', width: 120, height: 120, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(18,100,229,.2), transparent 70%)',
-          filter: 'blur(12px)',
+          position: 'absolute', width: 140, height: 140, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(18,100,229,.18), transparent 70%)',
+          filter: 'blur(14px)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         }}/>
-        <ZaraOwl size={110} expression="excited"/>
+        <Zara size={120}/>
       </div>
 
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+      <div style={{ textAlign: 'center', marginBottom: 22, width: '100%' }}>
         <h2 className="text-primary" style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.03em', marginBottom: 8 }}>
-          Let's go, {username}! 🎉
+          You're all set, {username}! 🎉
         </h2>
+        {studyTimeLabel && (
+          <p className="text-secondary" style={{ fontSize: 12, marginBottom: 4 }}>
+            We'll remind you to study in the <strong>{studyTimeLabel.toLowerCase()}</strong> 📖
+          </p>
+        )}
         <p className="text-secondary" style={{ fontSize: 13, lineHeight: 1.65, fontStyle: 'italic' }}>
           "{quote}"
         </p>
       </div>
 
-      {/* Quest preview */}
+      {/* Quick-start preview */}
       <div style={{
         width: '100%', borderRadius: 16,
         border: '1px solid var(--border)', background: 'var(--bg-card)',
-        padding: '14px', marginBottom: 8,
+        padding: '14px', marginBottom: 16,
       }}>
         <p className="text-tertiary" style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 12 }}>
-          Today's quests (preview)
+          Start here
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {previewQuests.map((q, i) => (
+          {previewItems.map((q, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '10px 12px', borderRadius: 12,
@@ -671,13 +682,14 @@ function StepMascot({ data, onFinish }) {
               <div style={{
                 width: 30, height: 30, borderRadius: 9,
                 background: 'var(--bg-inset)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, flexShrink: 0,
               }}>{q.icon}</div>
               <div className="text-primary" style={{ flex: 1, fontSize: 12, fontWeight: 700 }}>{q.text}</div>
               <div style={{
                 padding: '3px 8px', borderRadius: 999,
                 background: 'rgba(255,184,0,.12)', border: '1px solid rgba(255,184,0,.2)',
-                fontSize: 10, fontWeight: 800, color: '#d97706', display: 'flex', alignItems: 'center', gap: 3,
+                fontSize: 10, fontWeight: 800, color: '#d97706',
               }}>
                 ⚡ +{q.xp} XP
               </div>
@@ -687,29 +699,17 @@ function StepMascot({ data, onFinish }) {
       </div>
 
       {/* Exam pills */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {exams.map(e => (
-          <div key={e} style={{
-            padding: '4px 12px', borderRadius: 999,
-            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
-            fontSize: 11, fontWeight: 700, color: 'var(--text-sec)',
-          }}>📋 {e}</div>
-        ))}
-        {subjects.slice(0, 3).map(s => (
-          <div key={s} style={{
-            padding: '4px 12px', borderRadius: 999,
-            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
-            fontSize: 11, fontWeight: 700, color: 'var(--text-sec)',
-          }}>{s}</div>
-        ))}
-        {subjects.length > 3 && (
-          <div style={{
-            padding: '4px 12px', borderRadius: 999,
-            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
-            fontSize: 11, fontWeight: 700, color: 'var(--text-tert)',
-          }}>+{subjects.length - 3} more</div>
-        )}
-      </div>
+      {exams.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {exams.map(e => (
+            <div key={e} style={{
+              padding: '4px 12px', borderRadius: 999,
+              background: 'rgba(18,100,229,.08)', border: '1px solid rgba(18,100,229,.2)',
+              fontSize: 11, fontWeight: 700, color: '#1264E5',
+            }}>📋 {e}</div>
+          ))}
+        </div>
+      )}
 
       <div style={{ width: '100%', marginTop: 'auto' }}>
         <Cta onClick={handleStart} loading={loading}>
@@ -724,69 +724,54 @@ function StepMascot({ data, onFinish }) {
   )
 }
 
-// ─── MAIN ONBOARDING PAGE ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN ONBOARDING PAGE
+// Steps: 0=Username  1=Exam  2=Survey  3=Account  4=Welcome
+// ─────────────────────────────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const router = useRouter()
-  const { dark, toggle } = useTheme()
-  const [step, setStep] = useState(0) // 0–4 (0=username, 1=exam, 2=subjects, 3=account, 4=mascot)
-  const [formData, setFormData] = useState({})
-  const [checking, setChecking] = useState(true)
+  const router             = useRouter()
+  const { dark, toggle }   = useTheme()
+  const [step, setStep]    = useState(0)
+  const [formData, setFD]  = useState({})
+  const [checking, setChk] = useState(true)
 
-  // Check if already onboarded
+  // Skip if already onboarded
   useEffect(() => {
-    // Check localStorage first (offline-first)
     try {
       const guest = JSON.parse(localStorage.getItem('ep_guest') || '{}')
       if (guest.onboarded) { router.replace('/student/home'); return }
     } catch {}
-
-    // Check Supabase session
     createClient().auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         createClient().from('profiles').select('onboarded').eq('id', session.user.id).maybeSingle()
           .then(({ data }) => {
             if (data?.onboarded) { router.replace('/student/home'); return }
-            setChecking(false)
+            setChk(false)
           })
-      } else {
-        setChecking(false)
-      }
+      } else { setChk(false) }
     })
   }, [router])
 
   function advance(stepData) {
     const next = { ...formData, ...stepData }
-    setFormData(next)
-    // Persist each step to localStorage as we go (offline-first)
+    setFD(next)
     localStorage.setItem('ep_onboarding_progress', JSON.stringify({ step: step + 1, data: next }))
     setStep(s => s + 1)
   }
 
-  function goBack() {
-    setStep(s => Math.max(0, s - 1))
-  }
-
-  function finish() {
-    router.push('/student/home')
-  }
-
   if (checking) return (
-    <div className="bg-base" style={{
-      minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: '50%',
-        border: '3px solid var(--border-strong)',
-        borderTopColor: '#1264E5',
-        animation: 'spin .7s linear infinite',
-      }}/>
+    <div className="bg-base" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--border-strong)', borderTopColor: '#1264E5', animation: 'ob-spin .7s linear infinite' }}/>
+      <style>{`@keyframes ob-spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
+
+  const TOTAL_STEPS = 5
 
   return (
     <>
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes ob-spin { to { transform: rotate(360deg) } }
         * { box-sizing: border-box; }
         input::placeholder { color: var(--text-tert); }
         input:focus { outline: none; border-color: #1264E5 !important; box-shadow: 0 0 0 3px rgba(18,100,229,.12); }
@@ -797,37 +782,26 @@ export default function OnboardingPage() {
         <div style={{ maxWidth: 420, width: '100%', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column', padding: '0 20px' }}>
 
           {/* TOP BAR */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '16px 0 8px',
-          }}>
-            {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0 8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: 8,
-                background: '#1a1f3c',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 900, color: '#FFB800',
-              }}>E</div>
-              <span className="text-secondary" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
-                ExamPrep
-              </span>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#062A78', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: '#FFB800' }}>E</div>
+              <span className="text-secondary" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>ExamPrep</span>
             </div>
             <ThemeToggle/>
           </div>
 
           {/* STEP DOTS */}
           <div style={{ padding: '12px 0 20px' }}>
-            <StepDots current={step} total={5}/>
+            <StepDots current={step} total={TOTAL_STEPS}/>
           </div>
 
           {/* STEP CONTENT */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: 32 }}>
-            {step === 0 && <StepUsername onNext={advance}/>}
-            {step === 1 && <StepExamType onNext={advance} onBack={goBack}/>}
-            {step === 2 && <StepSubjects data={formData} onNext={advance} onBack={goBack}/>}
-            {step === 3 && <StepAccount data={formData} onNext={advance} onBack={goBack}/>}
-            {step === 4 && <StepMascot data={formData} onFinish={finish}/>}
+            {step === 0 && <StepUsername  onNext={advance}/>}
+            {step === 1 && <StepExamType  onNext={advance} onBack={() => setStep(0)}/>}
+            {step === 2 && <StepSurvey    onNext={advance} onBack={() => setStep(1)} data={formData}/>}
+            {step === 3 && <StepAccount   onNext={advance} onBack={() => setStep(2)} data={formData}/>}
+            {step === 4 && <StepWelcome   onFinish={() => router.push('/student/home')} data={formData}/>}
           </div>
 
         </div>
