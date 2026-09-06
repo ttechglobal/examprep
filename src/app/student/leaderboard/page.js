@@ -111,8 +111,8 @@ function Avatar({ name, size=36, idx=0, isMe=false }) {
 function Podium({ entries, myId, dark }) {
   if (entries.length < 3) return null
   const order          = [entries[1], entries[0], entries[2]]
-  const heights        = [110, 140, 90]
-  const sizes          = [68, 84, 62]
+  const heights        = [90, 115, 72]
+  const sizes          = [58, 72, 52]
   const platformColors = [
     dark?'rgba(24,183,242,.25)':'rgba(24,183,242,.18)',
     dark?'rgba(255,184,0,.35)':'rgba(255,184,0,.28)',
@@ -511,21 +511,19 @@ export default function LeaderboardPage() {
             </Card>
           )}
 
-          {/* About */}
-          <Card style={{ padding:'18px' }}>
-            <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', marginBottom:12 }}>About Leaderboard</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {[
-                { icon:'⭐', text:'Earn XP by practising questions and completing daily challenges.' },
-                { icon:'🏫', text:'School leaderboard shows rankings within your school. Connect using the school code from your teacher.' },
-                { icon:'📊', text:'Your performance trends are shared with your school if you\'re connected.' },
-                { icon:'📅', text:'Weekly board resets every Monday.' },
-              ].map((item,i) => (
-                <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                  <div style={{ width:30, height:30, borderRadius:9, background:dark?'rgba(255,255,255,.05)':'rgba(18,100,229,.06)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>{item.icon}</div>
-                  <div style={{ fontSize:11, color:'var(--text-tert)', lineHeight:1.5, paddingTop:4 }}>{item.text}</div>
-                </div>
-              ))}
+          {/* Challenges — coming soon */}
+          <Card style={{ padding:'18px', position:'relative', overflow:'hidden' }}>
+            <div style={{ position:'absolute', inset:0, background:'var(--bg-card)', opacity:.82, zIndex:1, borderRadius:20 }}/>
+            <div style={{ position:'absolute', inset:0, zIndex:2, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 }}>
+              <span style={{ fontSize:26 }}>⚡</span>
+              <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>Challenges</div>
+              <div style={{ padding:'4px 12px', borderRadius:999, background:`${GOLD}18`, border:`1.5px solid ${GOLD}40`, fontSize:11, fontWeight:800, color:GOLD }}>COMING SOON</div>
+              <div style={{ fontSize:11, color:'var(--text-tert)', textAlign:'center', maxWidth:180, lineHeight:1.5 }}>Weekly challenges with rewards for top performers.</div>
+            </div>
+            {/* Blurred preview */}
+            <div style={{ filter:'blur(3px)', pointerEvents:'none' }}>
+              <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>Weekly Challenge</div>
+              {[1,2,3].map(i => <div key={i} style={{ height:36, borderRadius:10, background:'var(--bg-subtle)', marginBottom:8 }}/>)}
             </div>
           </Card>
         </div>

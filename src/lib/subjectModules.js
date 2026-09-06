@@ -82,6 +82,11 @@ SVG CONVENTIONS — apply to every brief:
   • Dashed measurement lines: stroke-dasharray "6 3", stroke #6b7280
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif", fill #1f2937
   • End with: "Generate SVG code."
+⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
+  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
+  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
+  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
+  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Cylinder (r=4 cm, h=14 cm from steps) ──
 illustration_title: "Cylinder — Radius 4 cm, Height 14 cm"
@@ -239,6 +244,11 @@ SVG CONVENTIONS:
   • Angle arcs: stroke #6b7280, radius 32–40
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
+⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
+  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
+  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
+  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
+  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Refraction (incidence 30°, refraction 19°, air→glass from steps) ──
 illustration_title: "Refraction of Light — Air to Glass (30° → 19°)"
@@ -383,6 +393,11 @@ SVG CONVENTIONS:
   • Dashed lines: stroke-dasharray "6 3", stroke #6b7280
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
+⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
+  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
+  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
+  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
+  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Electron Shell Diagram (Sodium, 2,8,1 from steps) ──
 illustration_title: "Electron Shell Diagram — Sodium (Na, Z=11)"
@@ -643,6 +658,11 @@ SVG CONVENTIONS:
   • Leader lines for labels: thin dashed line (stroke-dasharray 4 2) from label to structure
   • All labels: font-size 13–14px minimum, font-family "system-ui, sans-serif", fill #1f2937 unless coloured for emphasis
   • End with: "Generate SVG code."
+⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
+  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
+  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
+  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
+  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Osmosis (5% solution left, 15% solution right, water moves right from steps) ──
 illustration_title: "Osmosis — Water Movement from Low to High Solute Concentration"
@@ -728,6 +748,12 @@ BIOLOGY EXPLANATION QUALITY RULE (RECALL DECISION RULE)
 Your explanation must teach the UNDERLYING PRINCIPLE, not just confirm the answer.
 A student who reads your explanation must be able to answer any similar biology question —
 not just this one.
+
+FORMATTING — BIOLOGY EXPLANATIONS:
+  Use **double asterisks** around key biological terms (e.g. **mitochondria**, **osmosis**, **ATP**).
+  Use *single asterisks* around classifications (e.g. *aerobic*, *autotroph*).
+  Separate distinct ideas with \n (newline) — 2–3 ideas maximum per explanation.
+  Example: "**Osmosis** is the net diffusion of water molecules across a semi-permeable membrane\nWater moves from a region of *high water potential* to *low water potential*\nThis is a passive process — no energy is required."
 
 MINIMUM LENGTH FOR RECALL QUESTIONS:
   answer_note: minimum 3 sentences (name + mechanism + context/connection)
@@ -824,6 +850,11 @@ SVG CONVENTIONS:
   • Shifted curve: same colour as original, stroke-dasharray "8 4", labelled with subscript
   • All labels: font-size 14px minimum, font-family "system-ui, sans-serif"
   • End with: "Generate SVG code."
+⚠️ ACCURACY BEFORE DRAWING — follow this order for every diagram:
+  Step 1 — VERIFY: Confirm the correct diagram in your reasoning before specifying it. For biological structures: confirm the correct organelles, their positions, and labels. For apparatus: confirm every component name and its correct position in the setup. For atomic/electron diagrams: confirm shell configuration from atomic number. For energy profiles: confirm reactant vs product energy levels. If you are not certain, set illustration_prompt to "".
+  Step 2 — SPECIFY: Write the SVG brief with exact coordinates. Every element must have explicit numbers — no vague instructions.
+  Step 3 — LABEL: Every component must be labelled with its correct scientific name. Incomplete labelling actively misleads students.
+  A wrong diagram is worse than no diagram. When in doubt, set illustration_prompt to "".
 
 ── EXAMPLE 1 — Demand and Supply Equilibrium ──
 illustration_title: "Demand and Supply — Market Equilibrium"
@@ -890,6 +921,13 @@ HINT EXAMPLES — ECONOMICS
 STEPS — HUMANITIES & LANGUAGE
 "steps": [] always. No calculation steps for these subjects.
 Explain everything in the "correct" field using plain English.
+
+FORMATTING — HUMANITIES & LANGUAGE EXPLANATIONS:
+  Use **double asterisks** around key terms, rule names, and the correct concept (renders as bold).
+  Use *single asterisks* around secondary terms or classifications (renders as italic).
+  Use \n (newline) between distinct ideas — do not write a single wall of text.
+  Example (English): "**Garrulous** means excessively talkative\n*Loquacious* is a close synonym, but garrulous specifically implies an annoying quality\nThe key distinction is the negative connotation — 'talkative' is neutral."
+  Example (Government): "The **Executive arm** of government implements laws\nIn Nigeria, this is headed by the President at the federal level\nIt is distinct from the *Legislature* (makes laws) and *Judiciary* (interprets laws)."
 
 Subjects in this group: English Language, Use of English, Literature in English,
 Government, History, CRK, IRK, Yoruba, Igbo, Hausa, French, Commerce (non-numerical),

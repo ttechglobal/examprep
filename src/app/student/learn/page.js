@@ -111,23 +111,22 @@ function Hero({ name, dark }) {
 // ─── LEARN TOOLS ─────────────────────────────────────────────────────────────
 const TOOLS = [
   { key:'flashcards', icon:<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="6" width="20" height="14" rx="3" fill="rgba(255,255,255,.25)"/><rect x="6" y="2" width="20" height="14" rx="3" fill="rgba(255,255,255,.18)"/><rect x="4" y="4" width="20" height="15" rx="3" fill="rgba(255,255,255,.9)"/><text x="14" y="15" textAnchor="middle" fontSize="11" fill={PURPLE} fontWeight="900">?</text></svg>, bg:`linear-gradient(135deg,${PURPLE} 0%,#5b21b6 100%)`, glowColor:PURPLE, label:'Flashcards', tags:['Active Recall','Smart Practice'], tagColor:PURPLE, desc:'Guess the answer before you flip. Practice, learn and earn XP!', dailyLabel:'Daily Goal', dailyVal:14, dailyMax:20, dailyUnit:'cards', ctaLabel:'Start Studying', ctaColor:PURPLE, href:'/student/learn/flashcards' },
+  { key:'key_concepts', icon:<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="3" width="22" height="22" rx="4" fill="rgba(255,255,255,.15)"/><path d="M9 10h10M9 14h7M9 18h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>, bg:`linear-gradient(135deg,${CYAN} 0%,#0e7490 100%)`, glowColor:CYAN, label:'Key Concepts', tags:['Understand','Remember'], tagColor:CYAN, desc:'Core concepts for every topic, explained clearly and concisely.', dailyLabel:'Daily Goal', dailyVal:5, dailyMax:10, dailyUnit:'concepts', ctaLabel:'Explore Concepts', ctaColor:CYAN, href:'/student/learn/concepts' },
   { key:'formulas',   icon:<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="3" width="22" height="22" rx="4" fill="rgba(255,255,255,.15)"/><text x="14" y="19" textAnchor="middle" fontSize="15" fill="#fff" fontWeight="900">fx</text></svg>, bg:`linear-gradient(135deg,${GREEN} 0%,#15803d 100%)`, glowColor:GREEN, label:'Key Formulas', tags:['Memorise','Understand','Apply'], tagColor:GREEN, desc:'Learn key formulas with examples and quick checks.', dailyLabel:'Daily Goal', dailyVal:8, dailyMax:15, dailyUnit:'formulas', ctaLabel:'Explore Formulas', ctaColor:GREEN, href:'/student/learn/formulas' },
 ]
 
 function LearnToolCard({ tool, subjects, dark }) {
-  return (
+  const isLive = tool.key === 'flashcards'
+
+  if (!isLive) return (
     <Card style={{ display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
-      {/* Coming Soon overlay */}
       <div style={{ position:'absolute', inset:0, background:'var(--bg-card)', opacity:.88, zIndex:2, borderRadius:20 }}/>
       <div style={{ position:'absolute', inset:0, zIndex:3, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10 }}>
         <div style={{ fontSize:28, marginBottom:4 }}>🔧</div>
         <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>{tool.label}</div>
-        <div style={{ padding:'5px 14px', borderRadius:999, background:`${tool.tagColor}18`, border:`1.5px solid ${tool.tagColor}40`, fontSize:11, fontWeight:800, color:tool.tagColor, letterSpacing:'.06em' }}>
-          COMING SOON
-        </div>
+        <div style={{ padding:'5px 14px', borderRadius:999, background:`${tool.tagColor}18`, border:`1.5px solid ${tool.tagColor}40`, fontSize:11, fontWeight:800, color:tool.tagColor, letterSpacing:'.06em' }}>COMING SOON</div>
         <div style={{ fontSize:11, color:'var(--text-tert)', textAlign:'center', maxWidth:200, lineHeight:1.5 }}>{tool.desc}</div>
       </div>
-      {/* Card content (blurred behind overlay) */}
       <div style={{ padding:'22px 22px 0', display:'flex', gap:14, alignItems:'flex-start', filter:'blur(2px)' }}>
         <div style={{ width:56, height:56, borderRadius:18, background:tool.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{tool.icon}</div>
         <div style={{ flex:1, minWidth:0 }}>
@@ -138,6 +137,28 @@ function LearnToolCard({ tool, subjects, dark }) {
       <div style={{ padding:'16px 22px 20px', filter:'blur(2px)', marginTop:16 }}>
         <div style={{ height:8, borderRadius:999, background:'var(--bg-subtle)' }}/>
         <div style={{ marginTop:12, height:46, borderRadius:13, background:tool.ctaColor, opacity:.5 }}/>
+      </div>
+    </Card>
+  )
+
+  return (
+    <Card style={{ display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <div style={{ padding:'22px 22px 0', display:'flex', gap:14, alignItems:'flex-start' }}>
+        <div style={{ width:56, height:56, borderRadius:18, background:tool.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:`0 6px 20px ${tool.glowColor}40` }}>{tool.icon}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:4 }}>
+            <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)' }}>{tool.label}</div>
+            <div style={{ padding:'2px 8px', borderRadius:999, background:`${tool.tagColor}15`, fontSize:10, fontWeight:800, color:tool.tagColor, border:`1px solid ${tool.tagColor}30` }}>LIVE</div>
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.5 }}>{tool.desc}</div>
+        </div>
+      </div>
+      <div style={{ padding:'18px 22px 22px', marginTop:8 }}>
+        <Link href={tool.href} style={{ textDecoration:'none', display:'block' }}>
+          <button style={{ width:'100%', padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:tool.ctaColor, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 ${tool.glowColor}60` }}>
+            {tool.ctaLabel} →
+          </button>
+        </Link>
       </div>
     </Card>
   )

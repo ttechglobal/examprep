@@ -114,10 +114,17 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
               dark={dark}
               alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
               reviewMode={true}
-              hideExplanation={false}
+              hideExplanation={true}
               hideHint={true}
               hideNav={true}
             />
+          )}
+          {/* View Explanation button — mobile only, shows below options */}
+          {q?.explanation && (
+            <div className="rev-expl-btn" style={{ marginTop:16 }}>
+              <style>{`.rev-expl-btn{display:none}@media(max-width:1023px){.rev-expl-btn{display:block}}`}</style>
+              <ExplanationBlock explanation={q.explanation} isCorrect={a?.isCorrect} dark={dark} mobileModal={true}/>
+            </div>
           )}
         </div>
 

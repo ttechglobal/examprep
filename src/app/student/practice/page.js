@@ -622,7 +622,7 @@ export default function PracticePage() {
   // Fire when profile becomes available OR when subjects change (e.g. after profile save)
   // Use a fingerprint that captures: who the user is + what subjects they have
   const profileSubjectKey = profile
-    ? `${profile.id ?? 'guest'}_${profile.exam_type ?? ''}_${(profile.subjects_waec ?? profile.subjects ?? []).join(',')}`
+    ? `${profile.id ?? 'guest'}_${profile.exam_type ?? ''}_${(profile.subjects_waec ?? profile.subjects ?? []).join(',')}_${(profile.subjects_jamb ?? []).join(',')}`
     : null
 
   useEffect(() => {
@@ -641,10 +641,21 @@ export default function PracticePage() {
       return
     }
 
-    // Extract names from local profile — zero latency
-    const names = examTab === 'WAEC'
+    // Extract names from local profile — zero latency.
+    // Normalize exam-specific English names: WAEC="English Language", JAMB="Use of English".
+    // Onboarding sometimes stores the WAEC name in subjects_jamb — fix it here so the
+    // API lookup and the UI both show the right name.
+    const JAMB_NAME_NORM = { 'English Language': 'Use of English' }
+    const WAEC_NAME_NORM = { 'Use of English': 'English Language' }
+    function normName(n) {
+      if (examTab === 'JAMB') return JAMB_NAME_NORM[n] ?? n
+      if (examTab === 'WAEC') return WAEC_NAME_NORM[n] ?? n
+      return n
+    }
+    const rawNames = examTab === 'WAEC'
       ? (currentProfile?.subjects_waec ?? currentProfile?.subjects ?? [])
       : (currentProfile?.subjects_jamb ?? currentProfile?.subjects ?? [])
+    const names = rawNames.map(normName)
 
     if (!names.length) {
       setSubjects([])
@@ -687,6 +698,8 @@ export default function PracticePage() {
 
   function handleExamChange(e) {
     setExam(e)
+    // Clear in-memory cache so switching exam tabs always re-normalizes names
+    subjectCache.current = {}
     loadSubjects(e, profile)
   }
 

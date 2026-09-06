@@ -232,11 +232,20 @@ PART 2 — WRITE THE EXPLANATION
   GOOD: "Section 14 of the 1999 Nigerian Constitution defines Nigeria as a democratic state. Option C quotes this correctly."
   BAD: ["Step 1: identify root word", "Step 2: match synonym"] — never steps for language/humanities.
 
+"correct" field — FORMATTING RULES (critical for readability):
+  Use **double asterisks** around key terms, principles, and the correct concept name (these render as bold).
+  Use *single asterisks* around classifications or secondary terms (these render as italic).
+  If your explanation naturally has 2–3 distinct ideas, separate them with \n (newline) — the UI renders each on a new line.
+  Example: "**Osmosis** is the net movement of water molecules\nIt moves from a region of *high water potential* to *low water potential*\nThis continues until equilibrium is reached."
+  Never use bullet points or numbered lists — prose only, formatted with **bold**, *italic*, and \n breaks.
+  Minimum 3 sentences for recall questions — name the concept, explain the mechanism, give context.
+
 "wrong_options": for EACH wrong option (B, C, D — and E if present), explain the specific mistake.
 Always include ALL wrong options — the UI shows only the one the student picked, but we store all of them.
-Each explanation: (1) what the student was probably thinking, (2) why that is wrong, (3) the correct principle.
+Each entry: (1) what the student was probably thinking, (2) the specific error, (3) the correct principle briefly.
+Use **bold** for the key term that distinguishes the wrong option from the right one.
 BAD: "This option is incorrect."
-GOOD: "A student choosing B has confused osmotic pressure with turgor pressure — osmosis depends on water potential difference, not pressure alone."
+GOOD: "A student choosing B has confused **osmotic pressure** with **turgor pressure** — osmosis depends on water potential difference, not pressure alone."
 
 ═══════════════════════════════════════════════
 PART 3 — TEXT & MATHEMATICAL FORMATTING (CRITICAL)

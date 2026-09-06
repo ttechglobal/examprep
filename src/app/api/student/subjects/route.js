@@ -37,11 +37,25 @@ export async function GET(request) {
       headers: { 'Cache-Control': `public, max-age=${CACHE_SECS}, stale-while-revalidate=600` }
     })
 
+    // Subject name aliases: WAEC="English Language" ↔ JAMB="Use of English".
+    // The DB may store the subject under either name regardless of exam_type,
+    // so we query with both aliases and normalise the returned name to match
+    // what the client requested.
+    const NAME_ALIASES = {
+      'Use of English':  'English Language',
+      'English Language': 'Use of English',
+    }
+    // Build the expanded query list: for any aliased name, also look up the alias
+    const queryNames = [...new Set(names.flatMap(n => [n, NAME_ALIASES[n]].filter(Boolean)))]
+    // Map alias→requested name so we can rename the row before returning
+    const aliasToRequested = {}
+    names.forEach(n => { if (NAME_ALIASES[n]) aliasToRequested[NAME_ALIASES[n]] = n })
+
     const db = svc()
     const { data: rows } = await db
       .from('subjects')
       .select('id, name, slug, exam_type')
-      .in('name', names)
+      .in('name', queryNames)
       .eq('exam_type', examParam)
       .eq('is_active', true)
 
@@ -50,7 +64,11 @@ export async function GET(request) {
 
     return NextResponse.json(
       (rows ?? [])
-        .map(s => ({ id: s.id, name: s.name, slug: s.slug, exam_type: s.exam_type }))
+        .map(s => {
+          // If the DB returned an alias, rename it to what the client requested
+          const clientName = aliasToRequested[s.name] ?? s.name
+          return { id: s.id, name: clientName, slug: s.slug, exam_type: s.exam_type }
+        })
         .sort((a, b) => (nameOrder[a.name] ?? 99) - (nameOrder[b.name] ?? 99)),
       { headers: { 'Cache-Control': `public, max-age=${CACHE_SECS}, stale-while-revalidate=600` } }
     )

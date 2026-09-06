@@ -4,6 +4,41 @@
 
 import React from 'react'
 import { MathText } from '@/lib/mathRenderer'
+
+// ─── RICH TEXT RENDERER ──────────────────────────────────────────────────────
+// Handles **bold**, *italic*, and \n line breaks inside explanation text.
+// Safe — does not use dangerouslySetInnerHTML.
+function RichText({ text, style }) {
+  if (!text) return null
+  // Split on line breaks first, then render inline bold/italic per segment
+  const paragraphs = String(text).split(/\n+/).filter(Boolean)
+  return (
+    <span style={style}>
+      {paragraphs.map((para, pi) => {
+        // Parse **bold** and *italic* tokens
+        const parts = []
+        let remaining = para
+        let key = 0
+        const tokenRe = /\*\*(.+?)\*\*|\*(.+?)\*/g
+        let lastIdx = 0
+        let match
+        while ((match = tokenRe.exec(remaining)) !== null) {
+          if (match.index > lastIdx) parts.push(<span key={key++}>{remaining.slice(lastIdx, match.index)}</span>)
+          if (match[1] !== undefined) parts.push(<strong key={key++} style={{ fontWeight:800, color:'inherit' }}>{match[1]}</strong>)
+          else if (match[2] !== undefined) parts.push(<em key={key++} style={{ fontStyle:'italic', color:'inherit' }}>{match[2]}</em>)
+          lastIdx = match.index + match[0].length
+        }
+        if (lastIdx < remaining.length) parts.push(<span key={key++}>{remaining.slice(lastIdx)}</span>)
+        return (
+          <span key={pi}>
+            {pi > 0 && <br/>}
+            {parts.length > 0 ? parts : para}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
 import { BLUE, GREEN, GOLD, ORANGE } from './SessionUtils'
 
 // ─── FORMULA BOX ─────────────────────────────────────────────────────────────
@@ -76,7 +111,6 @@ function ExplanationContent({ explanation, isCorrect }) {
   const steps = Array.isArray(explanation.steps)
     ? explanation.steps.filter(s => s && (s.title || (Array.isArray(s.lines) && s.lines.length)))
     : []
-
   const hasSteps = steps.length > 0
 
   return (
@@ -129,10 +163,10 @@ function ExplanationContent({ explanation, isCorrect }) {
       {/* Answer note */}
       {answerNote && (
         <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:studyTip?14:0 }}>
-          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
             <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
           </div>
-          <span style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', lineHeight:1.65 }}>{answerNote}</span>
+          <RichText text={answerNote} style={{ fontSize:14, fontWeight:500, color:'var(--text-prim)', lineHeight:1.7 }}/>
         </div>
       )}
 
@@ -142,7 +176,7 @@ function ExplanationContent({ explanation, isCorrect }) {
           <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
           <div>
             <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
-            <span style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6 }}>{studyTip}</span>
+            <RichText text={studyTip} style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.65 }}/>
           </div>
         </div>
       )}

@@ -307,13 +307,13 @@ function LeaderboardSnap({ board, myId }) {
               {i < 3 ? medals[i] : i + 1}
             </span>
             <div style={{ width: 27, height: 27, borderRadius: '50%', flexShrink: 0, background: isMe ? BLUE : `${BLUE}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: isMe ? '#fff' : BLUE }}>
-              {(entry.first_name || '?').charAt(0)}
+              {(entry.name || 'S').charAt(0)}
             </div>
             <span style={{ flex: 1, fontSize: 12, fontWeight: isMe ? 800 : 600, color: isMe ? BLUE : 'var(--text-prim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {isMe ? 'You' : entry.first_name}
+              {isMe ? 'You' : entry.name}
             </span>
             <span style={{ fontSize: 11, fontWeight: 800, color: isMe ? BLUE : 'var(--text-tert)', flexShrink: 0 }}>
-              {(entry.points || 0).toLocaleString()}
+              {(entry.xp || 0).toLocaleString()}
             </span>
           </div>
         )

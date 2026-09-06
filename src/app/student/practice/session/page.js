@@ -60,7 +60,10 @@ export default function PracticeSessionPage() {
     if (cfg.topic_id)   p.set('topic_id',   cfg.topic_id)
 
     fetch(`/api/student/questions?${p}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail ?? d.error ?? `Server error ${r.status}`) })
+        return r.json()
+      })
       .then(data => {
         if (!data.questions?.length) {
           setErrMsg(`No questions found for ${cfg.subjects?.join(', ')}.`)
@@ -71,8 +74,8 @@ export default function PracticeSessionPage() {
         try { localStorage.setItem('ep_pending_session', JSON.stringify({ session_id: sessionIdRef.current, config: cfg, savedAt: Date.now() })) } catch {}
         setPhase('session')
       })
-      .catch(() => {
-        setErrMsg('Failed to load questions. Check your connection and try again.')
+      .catch(err => {
+        setErrMsg(err?.message || 'Failed to load questions. Check your connection and try again.')
         setPhase('error')
       })
   }, [])
@@ -260,8 +263,8 @@ export default function PracticeSessionPage() {
         @media (max-width: 1023px) {
           .session-nav-col { display: none !important; }
           .session-exp-col { display: none !important; }
-          /* leave room for the fixed bottom nav bar */
-          .session-q-col { padding-bottom: 180px !important; }
+          /* leave room for the fixed Prev/Next bar at the bottom */
+          .session-q-col { padding-bottom: 80px !important; }
           /* hide QuestionCard's inline nav on mobile — bottom bar handles it */
           .session-q-col .qcard-nav { display: none !important; }
         }
@@ -321,6 +324,11 @@ export default function PracticeSessionPage() {
 
           {/* CENTRE: question card */}
           <div className="session-q-col" style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
+            {/* Mobile: numbered question grid inside the scroll area, above the card */}
+            <div className="session-q-nav-mobile" style={{ marginBottom:16 }}>
+              <QuestionNav total={questions.length} current={qIndex} answerMap={navAnswerMap} onJump={setQIndex} sessionType={sessionType} inline={true}/>
+            </div>
+            <style>{`.session-q-nav-mobile{display:none}@media(max-width:1023px){.session-q-nav-mobile{display:block}}`}</style>
             {q && (
               <QuestionCard
                 key={q.id + '-' + qIndex}
@@ -355,35 +363,25 @@ export default function PracticeSessionPage() {
           )}
         </div>
 
-        {/* BOTTOM: mobile only — numbered grid + Prev/Next/Submit */}
-        <div className="session-nav-bottom" style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
-          <QuestionNav
-            total={questions.length}
-            current={qIndex}
-            answerMap={navAnswerMap}
-            onJump={setQIndex}
-            sessionType={sessionType}
-            inline={false}
-          />
-          <div style={{ padding:'0 14px 12px', display:'flex', gap:10 }}>
-            <button
-              onClick={() => setQIndex(i => Math.max(0, i - 1))}
-              disabled={qIndex === 0}
-              style={{ flex:1, padding:'12px', borderRadius:13, border:'1px solid var(--border)', cursor:qIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:14, background:'transparent', color:qIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:qIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Prev
-            </button>
-            <button
-              onClick={() => {
-                const isLast = qIndex >= questions.length - 1
-                if (isLast) { setDialogMode('submit'); setPendingMap(answerMap); setShowEnd(true) }
-                else setQIndex(i => i + 1)
-              }}
-              style={{ flex:2, padding:'12px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {qIndex >= questions.length - 1 ? 'Submit' : 'Next'}
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </div>
+        {/* BOTTOM: mobile only — Prev / Next / Submit */}
+        <div className="session-nav-bottom" style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', padding:'10px 14px 12px', display:'flex', gap:10, flexShrink:0 }}>
+          <button
+            onClick={() => setQIndex(i => Math.max(0, i - 1))}
+            disabled={qIndex === 0}
+            style={{ flex:1, padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:qIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:14, background:'transparent', color:qIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:qIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Prev
+          </button>
+          <button
+            onClick={() => {
+              const isLast = qIndex >= questions.length - 1
+              if (isLast) { setDialogMode('submit'); setPendingMap(answerMap); setShowEnd(true) }
+              else setQIndex(i => i + 1)
+            }}
+            style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            {qIndex >= questions.length - 1 ? 'Submit' : 'Next'}
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
         </div>
       </div>
     </>

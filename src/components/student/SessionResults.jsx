@@ -265,27 +265,29 @@ export default function SessionResults({ questions, answers, config, xpAwarded, 
               </div>
             </div>
 
-            {/* Card 3: Session summary */}
-            <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'20px', animation:'fadeUp .5s .3s both' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:4 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v6l3.5 2" stroke={BLUE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="7" r="6" stroke={BLUE} strokeWidth="1.5"/></svg>
-                <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Session Summary</div>
+            {/* Card 3: XP + Rewards (Session Summary removed — duplicate of stats strip above) */}
+            <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', padding:'20px', animation:'fadeUp .5s .3s both', display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                <span style={{ fontSize:20 }}>🏆</span>
+                <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Your Rewards</div>
               </div>
-              <div style={{ height:1, background:'var(--border)', margin:'14px 0' }}/>
-              {[
-                { label:'Total Questions',     value:`${total}`,                                    color:'var(--text-prim)' },
-                { label:'Correct',             value:`${correct} (${pct(correct,total)}%)`,         color:GREEN  },
-                { label:'Incorrect',           value:`${incorrect} (${pct(incorrect,total)}%)`,     color:RED    },
-                { label:'Skipped',             value:`${skipped} (${pct(skipped,total)}%)`,         color:ORANGE },
-                { label:'Avg time / question', value:`${avgSecs}s`,                                 color:'var(--text-sec)' },
-                { label:'XP Earned',           value:`+${xpAwarded} XP`,                            color:GOLD   },
-                { label:'Current Streak',      value:`🔥 ${streakDays} day${streakDays!==1?'s':''}`, color:ORANGE },
-              ].map((r, i, arr) => (
-                <div key={r.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:i<arr.length-1?'1px solid var(--border)':'none' }}>
-                  <span style={{ fontSize:12, color:'var(--text-tert)', fontWeight:600 }}>{r.label}</span>
-                  <span style={{ fontSize:13, fontWeight:900, color:r.color }}>{r.value}</span>
+              <div style={{ height:1, background:'var(--border)' }}/>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:14, background:`${GOLD}10`, border:`1px solid ${GOLD}30` }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:'var(--text-sec)' }}>XP Earned</span>
+                  <span style={{ fontSize:20, fontWeight:900, color:GOLD }}>+{xpAwarded}</span>
                 </div>
-              ))}
+                {streakDays > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:14, background:`${ORANGE}10`, border:`1px solid ${ORANGE}30` }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:'var(--text-sec)' }}>Current Streak</span>
+                    <span style={{ fontSize:16, fontWeight:900, color:ORANGE }}>🔥 {streakDays}d</span>
+                  </div>
+                )}
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:14, background:`${BLUE}08`, border:`1px solid ${BLUE}20` }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:'var(--text-sec)' }}>Avg / question</span>
+                  <span style={{ fontSize:14, fontWeight:900, color:BLUE }}>{avgSecs}s</span>
+                </div>
+              </div>
             </div>
           </div>
 

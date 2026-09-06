@@ -80,6 +80,21 @@ const ALL_SUBJECTS_JAMB = [
   'Accounting', 'Christian Religious Studies',
 ]
 
+// ── Subject name normalization ────────────────────────────────────────────────
+// WAEC uses "English Language"; JAMB uses "Use of English".
+// Onboarding and legacy data sometimes stores the wrong name for JAMB.
+// Always normalize before display and before API calls.
+const JAMB_NAME_MAP = { 'English Language': 'Use of English' }
+const WAEC_NAME_MAP = { 'Use of English': 'English Language' }
+function normalizeForExam(name, exam) {
+  if (exam === 'JAMB') return JAMB_NAME_MAP[name] ?? name
+  if (exam === 'WAEC') return WAEC_NAME_MAP[name] ?? name
+  return name
+}
+function normalizeSubjectsForExam(names, exam) {
+  return names.map(n => normalizeForExam(n, exam))
+}
+
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 function Card({ children, style = {} }) {
@@ -293,7 +308,7 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
   })
   const [currentExam,  setCurrentExam] = useState(null)
   const [waecSubjects, setWaecSubjects]= useState(profile?.subjects_waec ?? [])
-  const [jambSubjects, setJambSubjects]= useState(profile?.subjects_jamb ?? [])
+  const [jambSubjects, setJambSubjects]= useState(normalizeSubjectsForExam(profile?.subjects_jamb ?? [], 'JAMB'))
   const [allSubjects,  setAllSubjects] = useState([])
   const [loadingSubjs, setLoadingSubjs]= useState(false)
   const [saving,       setSaving]      = useState(false)
@@ -302,10 +317,21 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
   useEffect(() => {
     if (!currentExam) return
 
+    // Always merge the available list with any currently-selected subjects
+    // that might not be in the list (e.g. saved under a different exam name).
+    // This guarantees every selected subject is visible so the user can see
+    // and deselect them even if they were stored incorrectly during onboarding.
+    function mergeWithSelected(list) {
+      const currentSelected = currentExam === 'WAEC' ? waecSubjects : jambSubjects
+      const inList = new Set(list)
+      const extras = currentSelected.filter(s => !inList.has(s))
+      // Prepend orphaned subjects so they appear first (highlighted, easy to remove)
+      return extras.length ? [...extras, ...list] : list
+    }
+
     if (isGuest) {
-      // Guests use the hardcoded list — no API call needed
-      const list = currentExam === 'WAEC' ? ALL_SUBJECTS_WAEC : ALL_SUBJECTS_JAMB
-      setAllSubjects(list)
+      const base = currentExam === 'WAEC' ? ALL_SUBJECTS_WAEC : ALL_SUBJECTS_JAMB
+      setAllSubjects(mergeWithSelected(base))
       return
     }
 
@@ -325,13 +351,15 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
           const priority = n => /english/i.test(n) ? 0 : /mathematics/i.test(n) ? 1 : 2
           return priority(a) - priority(b) || a.localeCompare(b)
         })
-        setAllSubjects(names)
+        setAllSubjects(mergeWithSelected(names))
       })
       .catch(() => {
-        // Fall back to hardcoded list if API fails
-        setAllSubjects(currentExam === 'WAEC' ? ALL_SUBJECTS_WAEC : ALL_SUBJECTS_JAMB)
+        const base = currentExam === 'WAEC' ? ALL_SUBJECTS_WAEC : ALL_SUBJECTS_JAMB
+        setAllSubjects(mergeWithSelected(base))
       })
       .finally(() => setLoadingSubjs(false))
+  // waecSubjects/jambSubjects intentionally omitted — only re-run when exam changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentExam, isGuest])
 
   function toggleExam(exam) {
@@ -340,11 +368,15 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
 
   function toggleSubject(name, exam) {
     if (exam === 'WAEC') {
-      setWaecSubjects(prev => prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name])
+      setWaecSubjects(prev => {
+        if (prev.includes(name)) return prev.filter(s => s !== name)  // always allow deselect
+        if (prev.length >= 9) return prev   // WAEC: only block adding beyond 9
+        return [...prev, name]
+      })
     } else {
       setJambSubjects(prev => {
-        if (prev.includes(name)) return prev.filter(s => s !== name)
-        if (prev.length >= 4) return prev
+        if (prev.includes(name)) return prev.filter(s => s !== name)  // always allow deselect
+        if (prev.length >= 4) return prev   // JAMB: only block adding beyond 4
         return [...prev, name]
       })
     }
@@ -432,16 +464,27 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
               const subs = exam === 'WAEC' ? waecSubjects : jambSubjects
               return (
                 <div key={exam} onClick={() => { setCurrentExam(exam); setStep(2) }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', borderRadius: 13, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{exam} Subjects</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>
-                      {subs.length > 0
-                        ? subs.slice(0, 3).join(', ') + (subs.length > 3 ? ` +${subs.length - 3} more` : '')
-                        : 'Tap to select subjects'}
+                  style={{ borderRadius: 13, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', marginBottom: 8, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{exam} Subjects</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>
+                        {subs.length > 0
+                          ? `${subs.length} subject${subs.length !== 1 ? 's' : ''} selected — tap to edit`
+                          : 'Tap to select subjects'}
+                      </div>
                     </div>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  {subs.length > 0 && (
+                    <div style={{ padding: '0 12px 12px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {subs.map(name => (
+                        <span key={name} style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-prim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 13 }}>{si(name)}</span> {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -466,13 +509,19 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
         Back to exams
       </button>
 
-      {isJAMB && (
-        <div style={{ padding: '10px 14px', borderRadius: 11, background: `${ORANGE}10`, border: `1px solid ${ORANGE}30`, marginBottom: 16 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: ORANGE, margin: 0 }}>
-            JAMB requires exactly 4 subjects — <strong>{selected.length}</strong> selected
-          </p>
-        </div>
-      )}
+      <div style={{ padding: '10px 14px', borderRadius: 11, background: `${ORANGE}10`, border: `1px solid ${ORANGE}30`, marginBottom: 16 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: ORANGE, margin: 0 }}>
+          {isJAMB ? (
+            selected.length > 4
+              ? <><strong style={{ color: RED }}>Too many! Remove {selected.length - 4} subject{selected.length - 4 !== 1 ? 's' : ''}</strong> — JAMB requires exactly 4</>
+              : selected.length === 4
+              ? <>JAMB: <strong>4 subjects selected</strong> — you're good! Tap any to deselect.</>
+              : <>JAMB: pick exactly <strong>4 subjects</strong> — {selected.length} of 4 selected</>
+          ) : (
+            <>WAEC: pick up to <strong>9 subjects</strong> — {selected.length} of 9 selected</>
+          )}
+        </p>
+      </div>
 
       {loadingSubjs ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
@@ -483,10 +532,11 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
           {allSubjects.map(name => {
             const on     = selected.includes(name)
             const color  = sc(name)
-            const capped = isJAMB && !on && selected.length >= 4
+            // Can always deselect. Can only add if under the limit.
+            const addBlocked = !on && selected.length >= (isJAMB ? 4 : 9)
             return (
-              <button key={name} onClick={() => !capped && toggleSubject(name, currentExam)}
-                style={{ padding: '14px 12px', borderRadius: 14, cursor: capped ? 'not-allowed' : 'pointer', border: `2px solid ${on ? color : 'var(--border)'}`, background: on ? `${color}12` : 'var(--bg-card)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, fontFamily: 'inherit', textAlign: 'left', opacity: capped ? 0.4 : 1, transition: 'all .12s' }}>
+              <button key={name} onClick={() => !addBlocked && toggleSubject(name, currentExam)}
+                style={{ padding: '14px 12px', borderRadius: 14, cursor: addBlocked ? 'not-allowed' : 'pointer', border: `2px solid ${on ? color : 'var(--border)'}`, background: on ? `${color}12` : 'var(--bg-card)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, fontFamily: 'inherit', textAlign: 'left', opacity: addBlocked ? 0.4 : 1, transition: 'all .12s' }}>
                 <span style={{ fontSize: 20 }}>{si(name)}</span>
                 <span style={{ fontSize: 12, fontWeight: on ? 800 : 600, color: on ? color : 'var(--text-prim)', lineHeight: 1.3 }}>{name}</span>
                 {on && (
@@ -500,9 +550,18 @@ function SubjectsSheet({ profile, isGuest, onClose, onSaved }) {
         </div>
       )}
 
+      {isJAMB && selected.length !== 4 && (
+        <div style={{ padding: '10px 14px', borderRadius: 11, background: `${RED}10`, border: `1px solid ${RED}30`, marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: RED, margin: 0 }}>
+            {selected.length > 4
+              ? `Remove ${selected.length - 4} subject${selected.length - 4 !== 1 ? 's' : ''} — JAMB requires exactly 4.`
+              : `Pick ${4 - selected.length} more subject${4 - selected.length !== 1 ? 's' : ''} — JAMB requires exactly 4.`}
+          </p>
+        </div>
+      )}
       <button onClick={() => { setStep(1); setAllSubjects([]) }}
         style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 900, fontSize: 15, background: `linear-gradient(135deg,${NAVY},${BLUE})`, color: '#fff', boxShadow: `0 4px 16px ${BLUE}40` }}>
-        Done — {selected.length} subject{selected.length !== 1 ? 's' : ''} selected
+        {isJAMB && selected.length === 4 ? '✓ Done — 4 subjects selected' : `Done — ${selected.length} subject${selected.length !== 1 ? 's' : ''} selected`}
       </button>
     </Sheet>
   )
@@ -768,10 +827,7 @@ function AvatarCard({ profile, xp, isGuest, onEditInfo, onLinked }) {
           </div>
         )}
 
-        <button onClick={onEditInfo}
-          style={{ width: '100%', padding: '11px', borderRadius: 12, border: `1.5px solid ${BLUE}`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, background: 'transparent', color: BLUE, marginTop: 12 }}>
-          Edit Profile
-        </button>
+
       </div>
     </Card>
   )
@@ -987,6 +1043,20 @@ export default function ProfilePage() {
     <>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @media (min-width: 1024px) {
+          .prof-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 300px !important;
+            gap: 24px !important;
+            align-items: start !important;
+          }
+          .prof-col-left  { grid-column: 1; }
+          .prof-col-right { grid-column: 2; }
+        }
+      `}</style>
+
       {/* Guest banner */}
       {isGuest && (
         <div style={{ borderRadius: 16, padding: '16px 18px', background: `${ORANGE}08`, border: `1.5px solid ${ORANGE}30`, marginBottom: 4 }}>
@@ -998,67 +1068,90 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
-        <AvatarCard profile={profile} xp={xp} isGuest={isGuest} onEditInfo={() => setSheet({ type: 'info' })} onLinked={patchProfile} />
+      <div className="prof-grid" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Exams & Subjects */}
-        <div>
-          <SectionLabel action={<button onClick={() => setSheet({ type: 'subjects' })} style={{ fontSize: 12, fontWeight: 700, color: BLUE, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Edit →</button>}>
-            Exams & Subjects
-          </SectionLabel>
-          <Card>
-            {['WAEC', 'JAMB'].map((exam, i) => {
-              const subs = exam === 'WAEC' ? profile?.subjects_waec : profile?.subjects_jamb
-              return (
-                <div key={exam} onClick={() => setSheet({ type: 'subjects' })}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px', borderBottom: i === 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{exam}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>
-                      {subs?.length ? subs.slice(0, 3).join(', ') + (subs.length > 3 ? ` +${subs.length - 3}` : '') : 'Not set up'}
+        {/* LEFT COL — Avatar + Exams & Subjects + Goals & Targets */}
+        <div className="prof-col-left" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <AvatarCard profile={profile} xp={xp} isGuest={isGuest} onEditInfo={() => setSheet({ type: 'info' })} onLinked={patchProfile} />
+
+          {/* Exams & Subjects */}
+          <div>
+            <SectionLabel action={<button onClick={() => setSheet({ type: 'subjects' })} style={{ fontSize: 12, fontWeight: 700, color: BLUE, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Edit →</button>}>
+              Exams & Subjects
+            </SectionLabel>
+            <Card>
+              {['WAEC', 'JAMB'].map((exam, i) => {
+                const rawSubs = exam === 'WAEC' ? profile?.subjects_waec : profile?.subjects_jamb
+                const subs = normalizeSubjectsForExam(rawSubs ?? [], exam)
+                const isLast = i === 1
+                return (
+                  <div key={exam} onClick={() => setSheet({ type: 'subjects' })}
+                    style={{ cursor: 'pointer', borderBottom: !isLast ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)' }}>{exam}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>
+                          {subs?.length
+                            ? `${subs.length} subject${subs.length !== 1 ? 's' : ''}`
+                            : 'Not set up'}
+                        </div>
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </div>
+                    {subs?.length > 0 && (
+                      <div style={{ padding: '0 12px 12px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {subs.map(name => (
+                          <span key={name} style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-prim)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <span style={{ fontSize: 12 }}>{si(name)}</span> {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </div>
-              )
-            })}
+                )
+              })}
+            </Card>
+          </div>
+
+          {/* Goals & Targets */}
+          <div>
+            <SectionLabel action={<button onClick={() => setSheet({ type: 'goals', focus: null })} style={{ fontSize: 12, fontWeight: 700, color: BLUE, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Edit →</button>}>
+              Goals & Targets
+            </SectionLabel>
+            <GoalsSummary profile={profile} onEdit={focus => setSheet({ type: 'goals', focus })} />
+          </div>
+        </div>
+
+        {/* RIGHT COL — Promo, Settings, Help */}
+        <div className="prof-col-right" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Upgrade / promo card */}
+          <BackToSchoolCard plan={profile?.plan ?? 'free'} />
+
+          {/* Settings */}
+          <div>
+            <SectionLabel>Settings</SectionLabel>
+            <Card style={{ marginBottom: 10 }}>
+              <Row icon="🎨" label="Appearance"    value={dark ? 'Dark Mode' : 'Light Mode'} onTap={toggle} />
+              <Row icon="🔔" label="Notifications" value="On" />
+              <Row icon="🌐" label="Language"      value="English" last />
+            </Card>
+            {!isGuest && (
+              <button onClick={logout}
+                style={{ width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${RED}30`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, background: 'transparent', color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M7 16H3a1 1 0 01-1-1V3a1 1 0 011-1h4M12 13l4-4-4-4M16 9H7" stroke={RED} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Log Out
+              </button>
+            )}
+          </div>
+
+          {/* Help */}
+          <Card>
+            {[['❓', 'Help Center'], ['💬', 'Contact Support'], ['📩', 'Send Feedback']].map(([icon, label], i) => (
+              <Row key={i} icon={icon} label={label} last={i === 2} />
+            ))}
           </Card>
         </div>
 
-        {/* Goals & Targets */}
-        <div>
-          <SectionLabel action={<button onClick={() => setSheet({ type: 'goals', focus: null })} style={{ fontSize: 12, fontWeight: 700, color: BLUE, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Edit →</button>}>
-            Goals & Targets
-          </SectionLabel>
-          <GoalsSummary profile={profile} onEdit={focus => setSheet({ type: 'goals', focus })} />
-        </div>
-
-        {/* Back-to-School promo / Premium card */}
-        <BackToSchoolCard plan={profile?.plan ?? 'free'} />
-
-        {/* Settings */}
-        <div>
-          <SectionLabel>Settings</SectionLabel>
-          <Card style={{ marginBottom: 10 }}>
-            <Row icon="🎨" label="Appearance"    value={dark ? 'Dark Mode' : 'Light Mode'} onTap={toggle} />
-            <Row icon="🔔" label="Notifications" value="On" />
-            <Row icon="🌐" label="Language"      value="English" last />
-          </Card>
-          {!isGuest && (
-            <button onClick={logout}
-              style={{ width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${RED}30`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 14, background: 'transparent', color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M7 16H3a1 1 0 01-1-1V3a1 1 0 011-1h4M12 13l4-4-4-4M16 9H7" stroke={RED} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              Log Out
-            </button>
-          )}
-        </div>
-
-        {/* Help */}
-        <Card>
-          {[['❓', 'Help Center'], ['💬', 'Contact Support'], ['📩', 'Send Feedback']].map(([icon, label], i) => (
-            <Row key={i} icon={icon} label={label} last={i === 2} />
-          ))}
-        </Card>
       </div>
 
       {/* Sheets */}

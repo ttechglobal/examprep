@@ -165,7 +165,7 @@ export function QuestionCard({
     setRevealed(reviewMode || (isStudy && alreadyAnswered !== null))
     setStudyAttempts(0)
     setStudyWrong(false)
-  }, [qIndex, question.id, reviewMode])
+  }, [qIndex, question.id, reviewMode, alreadyAnswered])
 
   function handleSelect(opt, idx) {
     if (reviewMode) return
@@ -192,9 +192,10 @@ export function QuestionCard({
         }
       }
     } else {
-      // In practice mode revealed stays false, so guard against re-selection
-      // by checking alreadyAnswered directly instead of relying on revealed.
-      if (revealed || alreadyAnswered !== null) return
+      // Practice / mock mode: allow re-selection until the session is submitted.
+      // Only block if revealed (which never happens in practice mode — it stays
+      // false until the full session ends and the review screen loads).
+      if (revealed) return
       setSelected(idx)
       // Notify parent immediately so mock mode can track without waiting for Next
       const isCorrect = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)
