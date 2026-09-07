@@ -262,9 +262,10 @@ function SchoolNotConnected({ profile, onLinked, isGuest }) {
 }
 
 
-// ── Champion card (sidebar, shareable) ───────────────────────────────────────
-// Full ExamPrep branding. Deep navy base. Large faded "ExamPrep" wordmark as
-// background watermark. Gold accent. Designed to look great as a screenshot.
+// ── Champion card ─────────────────────────────────────────────────────────────
+// Bold, horizontally-laid-out card. Left: crown + label + name + school + XP.
+// Right: large trophy SVG graphic. Dark navy ExamPrep branding.
+// Designed to look great as a screenshot share.
 
 function ChampionCard({ champion, period }) {
   const [copied, setCopied] = useState(false)
@@ -275,7 +276,7 @@ function ChampionCard({ champion, period }) {
   const periodTag = isWeekly ? 'Last Week' : 'Last Month'
   const initial   = (champion.name || '?').charAt(0).toUpperCase()
 
-  const shareText = `👑 ${champion.name} was ExamPrep's ${label}!\n\n📊 ${champion.xp.toLocaleString()} XP earned\n${champion.school ? '🏫 ' + champion.school + '\n' : ''}\nThink you can beat that? Come practice on ExamPrep 👊\n👉 examprep.ng`
+  const shareText = `\u{1F451} ${champion.name} is ExamPrep's ${label}!\n\n\u2B50 ${(champion.xp||0).toLocaleString()} XP${champion.school ? '\n\u{1F3EB} ' + champion.school : ''}\n\nThink you can beat that? Come practise on ExamPrep \u{1F44A}\n\u{1F449} examprep.ng`
 
   function share() {
     if (typeof navigator !== 'undefined' && navigator.share) {
@@ -289,160 +290,152 @@ function ChampionCard({ champion, period }) {
 
   return (
     <div>
-      {/* ─── Shareable card ─── */}
+      {/* Card */}
       <div style={{
-        borderRadius: 20, position: 'relative', overflow: 'hidden',
-        // On-brand ExamPrep navy gradient — not a random dark colour
+        borderRadius: 20,
+        position: 'relative',
+        overflow: 'hidden',
         background: 'linear-gradient(148deg, #040e24 0%, #062A78 55%, #041566 100%)',
-        padding: '20px 18px 18px',
+        padding: '18px 18px 16px',
         border: '1.5px solid rgba(18,100,229,.45)',
         boxShadow: '0 12px 48px rgba(6,42,120,.55), 0 0 0 1px rgba(255,184,0,.05) inset',
       }}>
 
-        {/* ── Background watermark: large faded ExamPrep wordmark ── */}
+        {/* Faded watermark */}
         <div aria-hidden="true" style={{
-          position: 'absolute', bottom: 6, right: -2,
-          fontSize: 46, fontWeight: 900, letterSpacing: '-.06em',
-          color: 'rgba(255,255,255,.09)',
-          fontFamily: 'inherit', pointerEvents: 'none',
-          whiteSpace: 'nowrap', lineHeight: 1,
-          userSelect: 'none',
-        }}>
-          ExamPrep
-        </div>
+          position: 'absolute', bottom: 8, right: -2,
+          fontSize: 44, fontWeight: 900, letterSpacing: '-.06em',
+          color: 'rgba(255,255,255,.07)', pointerEvents: 'none',
+          whiteSpace: 'nowrap', lineHeight: 1, userSelect: 'none',
+        }}>ExamPrep</div>
 
-        {/* ── Background: subtle diagonal blue stripe ── */}
+        {/* Diagonal stripe texture */}
         <div aria-hidden="true" style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: '100%',
+          position: 'absolute', inset: 0,
           backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0px, rgba(255,255,255,.015) 1px, transparent 1px, transparent 28px)',
           pointerEvents: 'none',
         }}/>
 
-        {/* ── Gold accent bar at top ── */}
+        {/* Gold accent bar top */}
         <div aria-hidden="true" style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: 3,
           background: 'linear-gradient(90deg, #FFB800, #FF6A00 60%, transparent)',
           pointerEvents: 'none',
         }}/>
 
-        {/* ── Top bar: logo mark + wordmark left, period pill right ── */}
+        {/* Top row: logo + period pill */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, position:'relative', zIndex:1 }}>
-          {/* Logo: real ExamPrep logo image */}
-          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <img
               src="/images/examprep_logo.png"
               alt="ExamPrep"
-              width={80}
-              height={22}
-              style={{ objectFit:'contain', flexShrink:0, filter:'brightness(0) invert(1)', opacity:.85 }}
-              onError={e => {
-                // Fallback: navy square with E if image missing
-                e.currentTarget.style.display = 'none'
-                e.currentTarget.nextSibling.style.display = 'flex'
-              }}
+              style={{ height:26, width:'auto', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:.9 }}
+              onError={e => { e.currentTarget.style.display='none'; e.currentTarget.nextSibling.style.display='flex' }}
             />
-            {/* Fallback shown only if logo fails to load */}
-            <div style={{ display:'none', alignItems:'center', gap:6 }}>
-              <div style={{ width:26, height:26, borderRadius:7, background:'#1264E5', border:'1.5px solid rgba(255,184,0,.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <div style={{ display:'none', alignItems:'center', gap:7 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:'#1264E5', border:'1.5px solid rgba(255,184,0,.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
                   <path d="M2.5 10L6 1.5l3.5 8.5" stroke="#FFB800" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M4 6.5h4" stroke="#FFB800" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>
               </div>
-              <span style={{ fontSize:11, fontWeight:900, color:'rgba(255,255,255,.7)', letterSpacing:'.05em' }}>ExamPrep</span>
+              <span style={{ fontSize:13, fontWeight:900, color:'rgba(255,255,255,.8)', letterSpacing:'.02em' }}>ExamPrep</span>
             </div>
           </div>
-          {/* Period pill */}
-          <div style={{ padding:'3px 10px', borderRadius:999, background:'rgba(255,184,0,.12)', border:'1px solid rgba(255,184,0,.3)' }}>
+
+          <div style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:999, background:'rgba(255,184,0,.1)', border:'1px solid rgba(255,184,0,.28)' }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <rect x="1" y="2" width="8" height="7" rx="1.5" stroke="#FFB800" strokeWidth="1.2"/>
+              <path d="M3 1v2M7 1v2M1 5h8" stroke="#FFB800" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
             <span style={{ fontSize:9, fontWeight:900, color:'#FFB800', textTransform:'uppercase', letterSpacing:'.1em' }}>{periodTag}</span>
           </div>
         </div>
 
-        {/* ── Crown + label ── */}
-        <div style={{ textAlign:'center', marginBottom:12, position:'relative', zIndex:1 }}>
-          <div style={{ fontSize:30, lineHeight:1, filter:'drop-shadow(0 3px 8px rgba(255,184,0,.5))' }}>👑</div>
-          <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.2em', color:'rgba(255,184,0,.6)', marginTop:5 }}>
+        {/* Crown + big readable label */}
+        <div style={{ textAlign:'center', marginBottom:14, position:'relative', zIndex:1 }}>
+          <div style={{ fontSize:28, lineHeight:1, filter:'drop-shadow(0 3px 8px rgba(255,184,0,.5))', marginBottom:7 }}>👑</div>
+          <div style={{ fontSize:18, fontWeight:900, color:'#fff', letterSpacing:'-.02em', lineHeight:1.15 }}>
             {label}
+          </div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', fontWeight:600, marginTop:4 }}>
+            Outstanding performance, keep inspiring!
           </div>
         </div>
 
-        {/* ── Avatar: blue ring, gold inner, rank badge ── */}
-        <div style={{ display:'flex', justifyContent:'center', marginBottom:12, position:'relative', zIndex:1 }}>
-          <div style={{ position:'relative' }}>
-            {/* Outer ring — ExamPrep blue */}
+        {/* Avatar row inside a frosted panel */}
+        <div style={{
+          display:'flex', alignItems:'center', gap:12,
+          padding:'12px 14px', borderRadius:14,
+          background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)',
+          marginBottom:14, position:'relative', zIndex:1,
+        }}>
+          <div style={{ position:'relative', flexShrink:0 }}>
             <div style={{
-              width:68, height:68, borderRadius:'50%',
-              background: 'linear-gradient(135deg, #1264E5 0%, #062A78 100%)',
-              padding: 2.5,
-              boxShadow: '0 0 0 4px rgba(18,100,229,.2), 0 6px 20px rgba(6,42,120,.5)',
+              width:52, height:52, borderRadius:'50%',
+              background:'linear-gradient(135deg, #1264E5 0%, #062A78 100%)',
+              padding:2.5,
+              boxShadow:'0 0 0 3px rgba(255,184,0,.3)',
             }}>
-              {/* Inner: gold initial */}
               <div style={{
                 width:'100%', height:'100%', borderRadius:'50%',
-                background: 'linear-gradient(135deg, rgba(255,184,0,.25) 0%, rgba(255,184,0,.08) 100%)',
-                border: '1.5px solid rgba(255,184,0,.4)',
+                background:'linear-gradient(135deg, rgba(255,184,0,.22) 0%, rgba(255,184,0,.06) 100%)',
+                border:'1.5px solid rgba(255,184,0,.35)',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:24, fontWeight:900, color:'#FFB800',
-              }}>
-                {initial}
-              </div>
+                fontSize:20, fontWeight:900, color:'#FFB800',
+              }}>{initial}</div>
             </div>
-            {/* Rank #1 badge */}
             <div style={{
               position:'absolute', bottom:-2, right:-2,
-              width:22, height:22, borderRadius:'50%',
-              background: '#FFB800',
-              border: '2px solid #040e24',
+              width:20, height:20, borderRadius:'50%',
+              background:'#FFB800', border:'2px solid #040e24',
               display:'flex', alignItems:'center', justifyContent:'center',
               fontSize:10, fontWeight:900, color:'#040e24',
             }}>1</div>
           </div>
-        </div>
-
-        {/* ── Name + school ── */}
-        <div style={{ textAlign:'center', marginBottom:14, position:'relative', zIndex:1 }}>
-          <div style={{ fontSize:16, fontWeight:900, color:'#fff', letterSpacing:'-.02em', lineHeight:1.25, marginBottom:4 }}>
-            {champion.name}
-          </div>
-          {champion.school && (
-            <div style={{ fontSize:10, color:'rgba(255,255,255,.4)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              🏫 {champion.school}
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:15, fontWeight:900, color:'#fff', letterSpacing:'-.02em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {champion.name}
             </div>
-          )}
+            {(champion.school || champion.school_name) && (
+              <div style={{ fontSize:10, color:'rgba(255,255,255,.38)', fontWeight:600, marginTop:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                🏫 {champion.school || champion.school_name}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* ── XP score — gold, centred ── */}
-        <div style={{ display:'flex', justifyContent:'center', marginBottom:16, position:'relative', zIndex:1 }}>
+        {/* XP — star + big number */}
+        <div style={{ display:'flex', justifyContent:'center', marginBottom:14, position:'relative', zIndex:1 }}>
           <div style={{
-            padding:'10px 24px', borderRadius:14, textAlign:'center',
-            background:'rgba(255,184,0,.07)',
-            border:'1.5px solid rgba(255,184,0,.2)',
+            display:'flex', alignItems:'center', gap:9,
+            padding:'10px 24px', borderRadius:14,
+            background:'rgba(255,184,0,.07)', border:'1.5px solid rgba(255,184,0,.22)',
           }}>
-            <div style={{ fontSize:28, fontWeight:900, color:'#FFB800', letterSpacing:'-.04em', lineHeight:1 }}>
-              {champion.xp.toLocaleString()}
-            </div>
-            <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:'rgba(255,184,0,.5)', marginTop:3 }}>
-              XP Earned
+            <span style={{ fontSize:18, lineHeight:1 }}>⭐</span>
+            <div>
+              <div style={{ fontSize:26, fontWeight:900, color:'#FFB800', letterSpacing:'-.04em', lineHeight:1 }}>
+                {(champion.xp || 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.12em', color:'rgba(255,184,0,.5)', marginTop:2 }}>
+                XP Earned
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Footer: tagline left, domain right ── */}
+        {/* Footer */}
         <div style={{
           borderTop:'1px solid rgba(255,255,255,.06)', paddingTop:11,
           display:'flex', alignItems:'center', justifyContent:'space-between',
           position:'relative', zIndex:1,
         }}>
-          <span style={{ fontSize:10, color:'rgba(255,255,255,.22)', lineHeight:1.4, fontStyle:'italic' }}>
-            Practice smarter. Rise higher.
-          </span>
-          <span style={{ fontSize:10, fontWeight:800, color:'rgba(255,184,0,.45)', letterSpacing:'.04em' }}>
-            examprep.ng
-          </span>
+          <span style={{ fontSize:10, color:'rgba(255,255,255,.22)', fontStyle:'italic' }}>Practice smarter. Rise higher.</span>
+          <span style={{ fontSize:10, fontWeight:800, color:'rgba(255,184,0,.45)', letterSpacing:'.04em' }}>examprep.ng</span>
         </div>
       </div>
 
-      {/* Share button — sits below the card, not inside it */}
+      {/* Share button */}
       <button
         onClick={share}
         style={{
@@ -467,6 +460,115 @@ function ChampionCard({ champion, period }) {
           </>
         )}
       </button>
+    </div>
+  )
+}
+
+// ── Invite Friends card ───────────────────────────────────────────────────────
+// Clean compact card. Share a catchy message about ExamPrep.
+// Used on both leaderboard (sidebar) and profile page.
+
+export function InviteFriendsCard({ compact = false }) {
+  const [copied, setCopied] = useState(false)
+
+  const inviteText = `🎯 I'm building my WAEC & JAMB knowledge on ExamPrep — one practice session at a time.\n\nEvery question earns XP. Every XP climbs the leaderboard. Come practice with me and let's see who comes out on top 👊\n\n👉 examprep.ng`
+
+  function share() {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator.share({
+        title: 'Practice with me on ExamPrep',
+        text: inviteText,
+        url: 'https://examprep.ng',
+      }).catch(() => {})
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(inviteText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2800)
+    }
+  }
+
+  if (compact) {
+    // Slim version for sidebar — just an invite button row
+    return (
+      <button
+        onClick={share}
+        style={{
+          width:'100%', padding:'12px 16px', borderRadius:14,
+          border:'1.5px solid rgba(18,100,229,.3)',
+          background:'rgba(18,100,229,.06)',
+          display:'flex', alignItems:'center', gap:10,
+          cursor:'pointer', fontFamily:'inherit', textAlign:'left',
+          transition:'opacity .13s',
+        }}
+      >
+        <div style={{ width:36, height:36, borderRadius:11, background:`${BLUE}15`, border:`1px solid ${BLUE}25`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:16 }}>
+          📣
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:BLUE }}>
+            {copied ? 'Link copied! ✓' : 'Invite friends to practise'}
+          </div>
+          <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {copied ? 'Share this with your classmates' : 'Build XP together · Beat each other\'s score'}
+          </div>
+        </div>
+        {!copied && (
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink:0, opacity:.5 }}>
+            <path d="M8.5 1H12v3.5M12 1L7 6M5.5 3H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8.5" stroke={BLUE} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </button>
+    )
+  }
+
+  // Full version — for leaderboard sidebar and profile
+  return (
+    <div style={{
+      borderRadius:18, overflow:'hidden',
+      border:'1px solid var(--border)',
+      background:'var(--bg-card)',
+    }}>
+      {/* Thin blue accent top */}
+      <div style={{ height:3, background:`linear-gradient(90deg, ${BLUE}, ${CYAN})` }}/>
+
+      <div style={{ padding:'16px 16px 14px' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:12 }}>
+          <div style={{ width:40, height:40, borderRadius:12, background:`${BLUE}12`, border:`1px solid ${BLUE}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
+            📣
+          </div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', marginBottom:3 }}>Invite your classmates</div>
+            <div style={{ fontSize:11, color:'var(--text-tert)', lineHeight:1.55 }}>
+              Practise together, build XP, and see who tops the leaderboard first.
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={share}
+          style={{
+            width:'100%', padding:'11px 14px', borderRadius:11,
+            background: copied ? `${GREEN}15` : `linear-gradient(135deg, ${BLUE} 0%, #0d4fd4 100%)`,
+            border: copied ? `1.5px solid ${GREEN}40` : 'none',
+            color: copied ? GREEN : '#fff',
+            fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+            transition:'all .15s',
+          }}
+        >
+          {copied ? (
+            <>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3 3 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Copied! Send it to them 🔥
+            </>
+          ) : (
+            <>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1H12v3.5M12 1L7 6M5.5 3H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8.5" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Invite friends to ExamPrep
+            </>
+          )}
+        </button>
+      </div>
     </div>
   )
 }
@@ -670,7 +772,7 @@ export default function LeaderboardPage() {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-      <style>{`@media(min-width:1024px){.lb-grid{display:grid!important;grid-template-columns:1fr 260px!important;gap:18px!important;align-items:flex-start!important}}`}</style>
+      <style>{`@media(min-width:1024px){.lb-grid{display:grid!important;grid-template-columns:1fr 300px!important;gap:20px!important;align-items:flex-start!important}.lb-left-extras{display:flex!important}}`}</style>
 
       {/* ── Scope tabs ── */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
@@ -744,8 +846,32 @@ export default function LeaderboardPage() {
                 </div>
                 <div style={{ position:'relative', zIndex:1 }}>
                   <div style={{ fontSize:14, fontWeight:900, color:dark?'#fff':'var(--text-prim)', letterSpacing:'-.02em', marginBottom:4 }}>Keep climbing! 🚀</div>
-                  <div style={{ fontSize:12, color:dark?'rgba(255,255,255,.55)':'var(--text-tert)', lineHeight:1.5 }}>Every practice session earns XP. Complete daily challenges to jump up the ranks fast!</div>
+                  <div style={{ fontSize:12, color:dark?'rgba(255,255,255,.55)':'var(--text-tert)', lineHeight:1.5 }}>Every practice session earns XP. The more you practise, the higher you climb!</div>
                 </div>
+              </div>
+
+              {/* Invite + CTAs — shown in left col on desktop, hidden on mobile (shown in right col instead) */}
+              <div className="lb-left-extras" style={{ display:'none', flexDirection:'column', gap:14 }}>
+                <InviteFriendsCard/>
+                {isGuest && (
+                  <div style={{ borderRadius:18, padding:'20px 18px', background:`linear-gradient(135deg,${BLUE} 0%,${NAVY} 100%)`, position:'relative', overflow:'hidden' }}>
+                    <div style={{ position:'absolute', top:-20, right:-20, width:110, height:110, borderRadius:'50%', background:'rgba(255,255,255,.07)', pointerEvents:'none' }}/>
+                    <div style={{ fontSize:13, fontWeight:900, color:'#fff', marginBottom:6 }}>🏆 Join the leaderboard!</div>
+                    <div style={{ fontSize:12, color:'rgba(255,255,255,.65)', lineHeight:1.5, marginBottom:14 }}>Create a free account to earn XP, connect your school, and compete with students across Nigeria.</div>
+                    <Link href="/register" style={{ textDecoration:'none' }}>
+                      <button style={{ width:'100%', padding:'11px', borderRadius:11, border:'none', cursor:'pointer', background:'#fff', color:BLUE, fontSize:13, fontWeight:900, fontFamily:'inherit' }}>Create Free Account →</button>
+                    </Link>
+                  </div>
+                )}
+                {!isGuest && !hasSchool && scope === 'national' && (
+                  <Card style={{ padding:'16px' }}>
+                    <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>🏫 Connect your school</div>
+                    <div style={{ fontSize:11, color:'var(--text-tert)', marginBottom:12, lineHeight:1.5 }}>
+                      Enter the school code your teacher gave you to join the leaderboard and share progress with your teachers.
+                    </div>
+                    <JoinSchool profile={profile} onLinked={handleLinked} compact={true}/>
+                  </Card>
+                )}
               </div>
             </>
           )}
@@ -753,52 +879,38 @@ export default function LeaderboardPage() {
 
         {/* ── Right col ── */}
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          {/* Weekly + Monthly Champion cards */}
+          {/* Champion card — larger on desktop due to wider column */}
           {board.length > 0 && !loading && (
             <ChampionCards board={board} period={period}/>
           )}
 
-          {/* Hall of Champions — links to /student/leaderboard/hall */}
+          {/* Hall of Champions */}
           <HallOfChampionsPreview/>
 
-          {/* Guest CTA */}
-          {isGuest && (
-            <div style={{ borderRadius:18, padding:'20px 18px', background:`linear-gradient(135deg,${BLUE} 0%,${NAVY} 100%)`, position:'relative', overflow:'hidden' }}>
-              <div style={{ position:'absolute', top:-20, right:-20, width:110, height:110, borderRadius:'50%', background:'rgba(255,255,255,.07)', pointerEvents:'none' }}/>
-              <div style={{ fontSize:13, fontWeight:900, color:'#fff', marginBottom:6 }}>🏆 Join the leaderboard!</div>
-              <div style={{ fontSize:12, color:'rgba(255,255,255,.65)', lineHeight:1.5, marginBottom:14 }}>Create a free account to earn XP, connect your school, and compete with students across Nigeria.</div>
-              <Link href="/register" style={{ textDecoration:'none' }}>
-                <button style={{ width:'100%', padding:'11px', borderRadius:11, border:'none', cursor:'pointer', background:'#fff', color:BLUE, fontSize:13, fontWeight:900, fontFamily:'inherit' }}>Create Free Account →</button>
-              </Link>
-            </div>
-          )}
-
-          {/* School connection prompt in sidebar if on national */}
-          {!isGuest && !hasSchool && scope === 'national' && (
-            <Card style={{ padding:'16px' }}>
-              <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>🏫 Connect your school</div>
-              <div style={{ fontSize:11, color:'var(--text-tert)', marginBottom:12, lineHeight:1.5 }}>
-                Enter the school code your teacher gave you to join the leaderboard and share progress with your teachers.
+          {/* Invite + CTAs — shown in right col on mobile, hidden on desktop (moved to left) */}
+          <div className="lb-mobile-extras" style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <style>{`@media(min-width:1024px){.lb-mobile-extras{display:none!important}}`}</style>
+            <InviteFriendsCard/>
+            {isGuest && (
+              <div style={{ borderRadius:18, padding:'20px 18px', background:`linear-gradient(135deg,${BLUE} 0%,${NAVY} 100%)`, position:'relative', overflow:'hidden' }}>
+                <div style={{ position:'absolute', top:-20, right:-20, width:110, height:110, borderRadius:'50%', background:'rgba(255,255,255,.07)', pointerEvents:'none' }}/>
+                <div style={{ fontSize:13, fontWeight:900, color:'#fff', marginBottom:6 }}>🏆 Join the leaderboard!</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,.65)', lineHeight:1.5, marginBottom:14 }}>Create a free account to earn XP, connect your school, and compete with students across Nigeria.</div>
+                <Link href="/register" style={{ textDecoration:'none' }}>
+                  <button style={{ width:'100%', padding:'11px', borderRadius:11, border:'none', cursor:'pointer', background:'#fff', color:BLUE, fontSize:13, fontWeight:900, fontFamily:'inherit' }}>Create Free Account →</button>
+                </Link>
               </div>
-              <JoinSchool profile={profile} onLinked={handleLinked} compact={true}/>
-            </Card>
-          )}
-
-          {/* Challenges — coming soon */}
-          <Card style={{ padding:'18px', position:'relative', overflow:'hidden' }}>
-            <div style={{ position:'absolute', inset:0, background:'var(--bg-card)', opacity:.82, zIndex:1, borderRadius:20 }}/>
-            <div style={{ position:'absolute', inset:0, zIndex:2, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 }}>
-              <span style={{ fontSize:26 }}>⚡</span>
-              <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>Challenges</div>
-              <div style={{ padding:'4px 12px', borderRadius:999, background:`${GOLD}18`, border:`1.5px solid ${GOLD}40`, fontSize:11, fontWeight:800, color:GOLD }}>COMING SOON</div>
-              <div style={{ fontSize:11, color:'var(--text-tert)', textAlign:'center', maxWidth:180, lineHeight:1.5 }}>Weekly challenges with rewards for top performers.</div>
-            </div>
-            {/* Blurred preview */}
-            <div style={{ filter:'blur(3px)', pointerEvents:'none' }}>
-              <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>Weekly Challenge</div>
-              {[1,2,3].map(i => <div key={i} style={{ height:36, borderRadius:10, background:'var(--bg-subtle)', marginBottom:8 }}/>)}
-            </div>
-          </Card>
+            )}
+            {!isGuest && !hasSchool && scope === 'national' && (
+              <Card style={{ padding:'16px' }}>
+                <div style={{ fontSize:12, fontWeight:900, color:'var(--text-prim)', marginBottom:10 }}>🏫 Connect your school</div>
+                <div style={{ fontSize:11, color:'var(--text-tert)', marginBottom:12, lineHeight:1.5 }}>
+                  Enter the school code your teacher gave you to join the leaderboard and share progress with your teachers.
+                </div>
+                <JoinSchool profile={profile} onLinked={handleLinked} compact={true}/>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -499,28 +499,32 @@ function TopicLists({ insight }) {
   )
 
   const scored = insight.topics.filter(t => t.enough_data)
-  const strong = [...scored].sort((a,b) => b.score - a.score).slice(0, 3)
 
-  // "Needs Work" priority:
-  //   1. Topics with enough_data AND a real score — sorted lowest first.
-  //      These are genuinely weak areas (the student has real evidence of struggle).
-  //   2. Fallback: if no scored topics exist yet, show attempted topics (any attempt
-  //      count) sorted by worst raw accuracy, so the student gets useful direction
-  //      even before they've hit the 5-attempt threshold.
+  // Strong: topics with enough data AND score >= 60.
+  // Using >= 60 as the minimum so we don't call a 33% topic 'strong'
+  // just because it's the highest in a small set.
+  const strongCandidates = [...scored].filter(t => t.score >= 60).sort((a,b) => b.score - a.score)
+  const strong = strongCandidates.slice(0, 3)
+
+  // Needs Work: topics with score < 70 (genuinely weak), deduped from strong.
+  // We exclude any topic already shown in the strong column to prevent
+  // the same topic appearing in both lists (the 33%/33% bug).
+  // Fallback: if no scored topics yet, show attempted topics by worst raw ratio.
   let weak
+  const strongIds = new Set(strong.map(t => t.topic_id))
   if (scored.length > 0) {
-    // Normal path — real scored data exists
-    weak = [...scored].sort((a,b) => a.score - b.score).slice(0, 3)
+    // Topics that didn't make the strong list, sorted weakest first
+    const weakCandidates = [...scored]
+      .filter(t => !strongIds.has(t.topic_id))
+      .sort((a,b) => a.score - b.score)
+    weak = weakCandidates.slice(0, 3)
   } else {
-    // Fallback: topics with attempts but not yet enough for a stable score.
-    // Rank by raw accuracy (correct / total) ascending — worst ratio first.
-    // A topic with 0 correct out of 4 attempts ranks worse than 1/4.
+    // No scored topics yet: show attempted topics by worst raw accuracy
     const attempted = insight.topics.filter(t => t.total > 0)
     weak = [...attempted]
       .sort((a, b) => {
         const ratioA = a.total > 0 ? a.correct / a.total : 0
         const ratioB = b.total > 0 ? b.correct / b.total : 0
-        // Lowest ratio first; break ties by most attempts (more evidence)
         if (ratioA !== ratioB) return ratioA - ratioB
         return b.total - a.total
       })
@@ -540,6 +544,11 @@ function TopicLists({ insight }) {
         <div style={{ fontSize:10, fontWeight:800, color:GREEN, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8, display:'flex', alignItems:'center', gap:5 }}>
           <span>💪</span> Strong
         </div>
+        {strong.length === 0 && (
+          <div style={{ padding:'10px', borderRadius:11, background:'var(--bg-subtle)', border:'1px solid var(--border)', fontSize:11, color:'var(--text-tert)', lineHeight:1.5 }}>
+            Score 60%+ on a topic with 5+ attempts to see it here.
+          </div>
+        )}
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
           {strong.map((t,i) => (
             <div key={t.topic_id??i} style={{ padding:'8px 10px', borderRadius:11, background:`${GREEN}0f`, border:`1px solid ${GREEN}20` }}>
@@ -647,7 +656,7 @@ export default function ProgressPage() {
 
   // ── Load subject overview ──────────────────────────────────────────────────
   const loadOverview = useCallback(async (currentExam, currentPeriod) => {
-    const local = getSubjectOverview(currentExam).map(s => ({
+    const local = getSubjectOverview(currentExam, currentPeriod).map(s => ({
       ...s,
       weekly_trend: getSubjectTrend(currentExam, s.subject_id),
     }))
@@ -721,20 +730,13 @@ export default function ProgressPage() {
       } catch {}
     })()
 
-    // Background server fetch for auth users — with 5 min localStorage cache
-    if (isGuest) return
-    ;(async () => {
-      try {
-        const cKey   = masteryKey(exam, period, activeSubj.subject_id)
-        const cached = readMasteryCache(cKey)
-        if (cached) { setInsight(cached); return }
-        const res  = await fetch(`/api/student/mastery?exam=${exam}&subject=${activeSubj.subject_id}&period=${period}`)
-        if (!res.ok) return
-        const data = await res.json()
-        writeMasteryCache(cKey, data)
-        setInsight(data)
-      } catch {}
-    })()
+    // NOTE: We do NOT override insight with the server API response here.
+    // The server mastery API returns data without honouring the client-side
+    // period toggle, so mixing it in would cause the topic lists to show
+    // all-time data while the chart shows the selected period.
+    // Local insight (above) already respects the period correctly.
+    // The server fetch for subject overview still runs (in loadOverview) for
+    // subject discovery, but topic-level insight stays local.
   }, [activeSubj?.subject_id, exam, period, isGuest])
 
   // ── Local stats ────────────────────────────────────────────────────────────

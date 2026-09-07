@@ -327,7 +327,7 @@ export function getSubjectTrend(exam, subjectId, maxWeeks = 12) {
  * @param {string} exam
  * @returns {Array<{ subject_id, subject_name, total_attempts, scored_topics, subject_score }>}
  */
-export function getSubjectOverview(exam) {
+export function getSubjectOverview(exam, periodDays = 0) {
   try {
     const data = read()
     const examData = data[exam]
@@ -337,8 +337,10 @@ export function getSubjectOverview(exam) {
       let total = 0, scoredTopics = 0, scoreSum = 0
 
       for (const topic of Object.values(subject.topics)) {
-        total += topic.attempts.length
-        const { score, enough_data } = computeScore(topic.attempts)
+        // Filter by period so tab scores match the selected window, not all-time
+        const filtered = filterByDays(topic.attempts, periodDays)
+        total += filtered.length
+        const { score, enough_data } = computeScore(filtered)
         if (enough_data) { scoredTopics++; scoreSum += score }
       }
 
