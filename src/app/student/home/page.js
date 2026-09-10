@@ -11,7 +11,7 @@ import Link                    from 'next/link'
 import { usePoints }           from '@/contexts/PointsContext'
 import { useTheme }            from '@/contexts/ThemeContext'
 import { useStudentUser }      from '@/app/student/layout'
-import DailyChallenge          from '@/components/student/DailyChallenge'
+// import DailyChallenge          from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
 import { readWeeklyActivity, readLocalStreak } from '@/lib/localSessionSync'
 
 const NAVY   = '#062A78'
@@ -399,7 +399,8 @@ export default function HomePage() {
       left={<>
         <Hero name={name} />
         {isGuest && <GuestNudge />}
-        <DailyChallenge profile={profile} />
+        {/* <DailyChallenge profile={profile} /> */}
+        {/* Daily Challenge hidden — returning as theory/harder format */}
         <ExamTargets profile={profile} exams={exams} />
       </>}
       right={<>

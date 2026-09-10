@@ -18,7 +18,7 @@
 //   hideHint        — suppress hint (mock mode)
 //   hideNav         — suppress nav buttons (parent owns them)
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import { BLUE, GREEN, RED, GOLD, ORANGE, LETTERS, normaliseOptions, checkCorrect } from './SessionUtils'
 import { HintBlock, ExplanationBlock } from './ExplanationBlock'
@@ -119,7 +119,7 @@ function FlagModal({ questionId, onClose }) {
   )
 }
 
-export function QuestionCard({
+export const QuestionCard = forwardRef(function QuestionCard({
   question,
   qIndex,
   total,
@@ -135,7 +135,7 @@ export function QuestionCard({
   hideExplanation = false,
   hideHint        = false,
   hideNav         = false,
-}) {
+}, ref) {
   const isStudy = sessionType === 'study'
 
   // Keep options in their original A/B/C/D order.
@@ -152,6 +152,21 @@ export function QuestionCard({
   useEffect(() => { injectMathStyles() }, [])
 
   const [selected,      setSelected]      = useState(alreadyAnswered?.selectedIdx ?? null)
+  // selectedRef mirrors `selected` state synchronously — used by parent via
+  // ref.getSelection() so the mobile bottom bar always reads the live value
+  // without depending on React's async state flush cycle.
+  const selectedRef = useRef(alreadyAnswered?.selectedIdx ?? null)
+
+  // Expose getSelection() to parent via ref — returns { selectedIdx, isCorrect }
+  useImperativeHandle(ref, () => ({
+    getSelection: () => {
+      const idx  = selectedRef.current
+      const opts = shuffledOptions.map(o => o.text)
+      const isCorrect = idx !== null ? checkCorrect(opts, idx, question.correct_answer) : false
+      return { selectedIdx: idx, isCorrect }
+    }
+  }), [shuffledOptions, question.correct_answer])
+
   // In practice mode, navigating back to an answered question must NOT reveal
   // the answer — the student should see their prior selection highlighted but
   // no ✓/✗ coloring and no explanation until the full session ends.
@@ -161,7 +176,9 @@ export function QuestionCard({
   const [studyWrong,    setStudyWrong]    = useState(false)
 
   useEffect(() => {
-    setSelected(alreadyAnswered?.selectedIdx ?? null)
+    const init = alreadyAnswered?.selectedIdx ?? null
+    selectedRef.current = init
+    setSelected(init)
     setRevealed(reviewMode || (isStudy && alreadyAnswered !== null))
     setStudyAttempts(0)
     setStudyWrong(false)
@@ -171,6 +188,7 @@ export function QuestionCard({
     if (reviewMode) return
     if (isStudy) {
       if (revealed) return
+      selectedRef.current = idx
       setSelected(idx)
       const correct = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)
       if (correct) {
@@ -196,6 +214,7 @@ export function QuestionCard({
       // Only block if revealed (which never happens in practice mode — it stays
       // false until the full session ends and the review screen loads).
       if (revealed) return
+      selectedRef.current = idx
       setSelected(idx)
       // Notify parent immediately so mock mode can track without waiting for Next
       const isCorrect = checkCorrect(shuffledOptions.map(o => o.text), idx, question.correct_answer)
@@ -391,4 +410,4 @@ export function QuestionCard({
       )}
     </div>
   )
-}
+})

@@ -2,12 +2,24 @@
 // GET /api/admin/questions/coverage-matrix?examType=WAEC
 //
 // Returns subject × year matrix with accurate question counts.
-// Filters questions by exam_type to match the selected exam — fixes
-// the bug where JAMB questions showed under WAEC subject rows.
 //
-// AUTH FIX: was using supabase.auth.getUser() which checks for a Supabase
-// session — but the admin panel uses its own admin_session cookie via
-// requireAdmin(). Swapped to match every other admin route.
+// BUGS FIXED:
+//
+// 1. MISSING SUPABASE ROW LIMIT
+//    Supabase defaults to 1000 rows per query with no error or warning.
+//    A large question bank (>1000 questions) silently truncated, producing
+//    a matrix that showed empty cells for years that genuinely had data.
+//    Fix: add .limit(50000) to the questions fetch — large enough to cover
+//    any realistic question bank. The query only fetches 3 lightweight
+//    fields (subject_id, year, exam_type) so memory cost is negligible.
+//
+// 2. 'BOTH' QUESTIONS EXCLUDED FROM EXAM-SPECIFIC FILTER
+//    When examType = 'WAEC', the query was doing .eq('exam_type', 'WAEC').
+//    Questions saved with exam_type = 'BOTH' (shared WAEC+JAMB questions)
+//    were excluded — they never appeared in the matrix even though they
+//    should count toward the WAEC total.
+//    Fix: when examType is not 'ALL', use .in('exam_type', [examType, 'BOTH'])
+//    matching the same pattern used correctly in the coverage route fallback.
 
 import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -33,13 +45,12 @@ export async function GET(request) {
   const db = svc()
 
   // 1. Get subjects — filter by exam type if not ALL
-  const subjectQuery = db
+  const { data: subjectRows, error: subErr } = await db
     .from('subjects')
     .select('id, name, exam_type')
     .eq('is_active', true)
     .order('name')
 
-  const { data: subjectRows, error: subErr } = await subjectQuery
   if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 })
 
   const subjects = (subjectRows ?? []).filter(s =>
@@ -52,18 +63,22 @@ export async function GET(request) {
 
   const subjectIds = subjects.map(s => s.id)
 
-  // 2. Fetch questions — critically: also filter by exam_type on the questions table
-  //    This prevents JAMB questions bleeding into WAEC subject rows and vice versa
+  // 2. Fetch questions — only the 3 fields needed for counting.
+  //    FIX: .limit(50000) prevents Supabase's silent 1000-row cap from
+  //    truncating the dataset and producing a wrong/incomplete matrix.
   let qQuery = db
     .from('questions')
     .select('subject_id, year, exam_type')
     .in('subject_id', subjectIds)
     .eq('is_active', true)
     .not('year', 'is', null)
+    .limit(50000)   // ← FIX 1: was missing; Supabase defaults to 1000
 
-  // Only filter questions by exam_type when not showing ALL
+  // FIX 2: include 'BOTH' questions when filtering by a specific exam type.
+  // .eq('exam_type', examType) was excluding 'BOTH' questions that should
+  // count toward both WAEC and JAMB totals.
   if (examType !== 'ALL') {
-    qQuery = qQuery.eq('exam_type', examType)
+    qQuery = qQuery.in('exam_type', [examType, 'BOTH'])  // ← FIX 2
   }
 
   const { data: qRows, error: qErr } = await qQuery

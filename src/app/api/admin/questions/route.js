@@ -55,9 +55,16 @@ export async function GET(request) {
   // ── yearCounts mode: return { year: count } map for this subject+exam ───────
   if (yearCounts && subjectId && examType) {
     let q = db.from('questions').select('year').eq('is_active', true)
-    q = q.eq('subject_id', subjectId).eq('exam_type', examType)
+    q = q.eq('subject_id', subjectId)
+    // FIX: include BOTH questions when filtering by specific exam type
+    // (was .eq('exam_type', examType) which excluded BOTH questions)
+    if (examType && examType !== 'ALL') {
+      q = examType === 'BOTH'
+        ? q.eq('exam_type', 'BOTH')
+        : q.in('exam_type', [examType, 'BOTH'])
+    }
     if (source) q = q.eq('source', source)
-    const { data, error } = await q.limit(5000)
+    const { data, error } = await q.limit(50000)  // FIX: was 5000, prevents cap
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const counts = {}
     for (const row of (data ?? [])) {

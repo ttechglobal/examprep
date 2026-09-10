@@ -6,7 +6,8 @@
 // both Supabase auth AND ep_guest localStorage).
 // No direct Supabase calls. No hard redirects for guests.
 // ─────────────────────────────────────────────────────────────────────────────
-// Modes: Topic Practice | Custom Practice | Quick 5 | Speed Round | Mock Exam
+// Modes: Topic Practice | Custom Practice | Quick 5 | Mock Exam
+// Speed Round is temporarily hidden (planned for theory questions relaunch)
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -14,7 +15,7 @@ import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
-import DailyChallenge from '@/components/student/DailyChallenge'
+// import DailyChallenge from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
 import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
 
@@ -149,15 +150,6 @@ const MODES = [
     xp: '+50 XP', color: GREEN,
   },
   {
-    key: 'timed',
-    iconBg: `linear-gradient(135deg,${ORANGE},#d94e00)`,
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="#fff" strokeWidth="2" /><path d="M12 9v4l3 2" stroke="#fff" strokeWidth="2" strokeLinecap="round" /><path d="M9 2h6M12 2v3" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>,
-    label: 'Speed Round',
-    desc: 'Race the clock',
-    body: 'Answer questions under time pressure. Trains your exam speed and focus.',
-    xp: '+60 XP', color: ORANGE,
-  },
-  {
     key: 'mock',
     iconBg: `linear-gradient(135deg,${PURPLE},#4c1d95)`,
     icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2" /><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>,
@@ -177,12 +169,11 @@ function PracticeModeCards({ onStart, dark }) {
         {MODES.map(m => (
           <div key={m.key} onClick={() => onStart(m.key)}
             onMouseEnter={() => setHov(m.key)} onMouseLeave={() => setHov(null)}
-            style={{ borderRadius: 20, border: `1px solid ${hov === m.key ? m.color + '55' : 'var(--border)'}`, background: 'var(--bg-card)', cursor: 'pointer', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 14, transition: 'all .18s', boxShadow: hov === m.key ? `0 8px 28px ${m.color}22` : '0 2px 12px rgba(6,42,120,.05)', transform: hov === m.key ? 'translateY(-2px)' : 'none' }}>
-            <div style={{ width: 48, height: 48, borderRadius: 16, background: m.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${m.color}45`, flexShrink: 0 }}>{m.icon}</div>
+            style={{ borderRadius: 20, border: `1px solid ${hov === m.key ? m.color + '55' : 'var(--border)'}`, background: 'var(--bg-card)', cursor: 'pointer', padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 12, transition: 'all .18s', boxShadow: hov === m.key ? `0 8px 28px ${m.color}22` : '0 2px 12px rgba(6,42,120,.05)', transform: hov === m.key ? 'translateY(-2px)' : 'none' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: m.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${m.color}45`, flexShrink: 0 }}>{m.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.02em', marginBottom: 3 }}>{m.label}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: m.color, marginBottom: 6 }}>{m.desc}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.5 }}>{m.body}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.02em', marginBottom: 3 }}>{m.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.desc}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <button style={{ fontSize: 13, fontWeight: 800, color: m.color, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Start ›</button>
@@ -769,7 +760,8 @@ export default function PracticePage() {
           ? <NoSubjectsPrompt isGuest={isGuest} />
           : <>
               <PracticeModeCards onStart={openSheet} dark={dark} />
-              <DailyChallenge profile={profile} />
+              {/* <DailyChallenge profile={profile} /> */}
+              {/* Daily Challenge hidden — returning as theory/harder format */}
               <SessionHistory />
             </>
         }

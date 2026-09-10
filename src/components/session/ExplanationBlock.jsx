@@ -96,11 +96,9 @@ export function HintBlock({ hint }) {
 }
 
 // ─── FORMATTED ANSWER NOTE ────────────────────────────────────────────────────
-// Shows the correct answer with option letter pill + answer text, both styled.
 function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
   if (!answerNote && !correctLetter) return null
 
-  // If we have both letter and text, show the styled pill + text combo
   if (correctLetter && correctText) {
     return (
       <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, marginBottom:14 }}>
@@ -112,27 +110,14 @@ function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
             <div style={{ fontSize:11, fontWeight:900, color:GREEN, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:6 }}>
               Correct Answer
             </div>
-            {/* Letter pill + answer text */}
             <div style={{ display:'flex', alignItems:'flex-start', gap:9, marginBottom: answerNote ? 8 : 0 }}>
-              <div style={{
-                flexShrink:0,
-                width:30, height:30, borderRadius:9,
-                background:GREEN,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                boxShadow:`0 2px 6px ${GREEN}40`,
-              }}>
+              <div style={{ flexShrink:0, width:30, height:30, borderRadius:9, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 2px 6px ${GREEN}40` }}>
                 <span style={{ fontSize:14, fontWeight:900, color:'#fff' }}>{correctLetter}</span>
               </div>
               <div style={{ flex:1, minWidth:0, paddingTop:5 }}>
-                <MathText
-                  text={correctText}
-                  as="span"
-                  className=""
-                  style={{ fontSize:15, fontWeight:800, color:'var(--text-prim)', lineHeight:1.5 }}
-                />
+                <MathText text={correctText} as="span" className="" style={{ fontSize:15, fontWeight:800, color:'var(--text-prim)', lineHeight:1.5 }}/>
               </div>
             </div>
-            {/* explanation / answer_note text below */}
             {answerNote && (
               <div style={{ paddingTop:4, borderTop:`1px solid ${GREEN}20`, marginTop:4 }}>
                 <RichText text={answerNote} style={{ fontSize:13, fontWeight:500, color:'var(--text-sec)', lineHeight:1.7 }}/>
@@ -144,7 +129,6 @@ function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
     )
   }
 
-  // Fallback: no letter/text pair — render plain answer_note
   if (answerNote) {
     return (
       <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:14 }}>
@@ -160,14 +144,15 @@ function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
 }
 
 // ─── WRONG OPTIONS BLOCK ──────────────────────────────────────────────────────
-function WrongOptionsBlock({ wrongOptions, selectedKey }) {
-  const [open, setOpen] = React.useState(false)
+// `startOpen` — true when shown inside the explanation modal (already in context,
+// no need to click to reveal). False when shown inline (desktop side column).
+function WrongOptionsBlock({ wrongOptions, selectedKey, startOpen = false }) {
+  const [open, setOpen] = React.useState(startOpen)
   if (!wrongOptions || Object.keys(wrongOptions).length === 0) return null
 
   const entries = Object.entries(wrongOptions)
   if (entries.length === 0) return null
 
-  // Sort: student's selected wrong answer first
   const sorted = [...entries].sort(([ka], [kb]) => {
     if (ka === selectedKey) return -1
     if (kb === selectedKey) return 1
@@ -216,7 +201,8 @@ function WrongOptionsBlock({ wrongOptions, selectedKey }) {
 }
 
 // ─── EXPLANATION CONTENT (shared between inline and modal) ─────────────────────
-function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter, correctText }) {
+// `wrongOptionsOpen` — passed through to WrongOptionsBlock to auto-expand in modal
+function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter, correctText, wrongOptionsOpen = false }) {
   const concept      = explanation.concept       ?? ''
   const formulaBox   = explanation.formula_box   ?? ''
   const variablesKey = explanation.variables_key ?? []
@@ -238,7 +224,6 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
 
       <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>
 
-      {/* SVG diagram */}
       {svgDiagram && svgDiagram.trim().toLowerCase().startsWith('<svg') && (
         <div style={{ borderRadius:12, overflow:'hidden', border:'1px solid var(--border)', background:'#fff', marginBottom:14 }}>
           <div style={{ padding:'6px 12px', background:'var(--bg-subtle)', borderBottom:'1px solid var(--border)' }}>
@@ -249,7 +234,6 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
         </div>
       )}
 
-      {/* Steps */}
       {hasSteps && (
         <div style={{ borderRadius:12, border:'1px solid var(--border)', overflow:'hidden', marginBottom:14 }}>
           {steps.map((step, si) => {
@@ -278,17 +262,10 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
         </div>
       )}
 
-      {/* Formatted answer note with letter + text */}
-      <FormattedAnswerNote
-        answerNote={answerNote}
-        correctLetter={correctLetter}
-        correctText={correctText}
-      />
+      <FormattedAnswerNote answerNote={answerNote} correctLetter={correctLetter} correctText={correctText}/>
 
-      {/* Why other options are wrong */}
-      <WrongOptionsBlock wrongOptions={wrongOptions} selectedKey={selectedKey}/>
+      <WrongOptionsBlock wrongOptions={wrongOptions} selectedKey={selectedKey} startOpen={wrongOptionsOpen}/>
 
-      {/* Study tip */}
       {studyTip && (
         <div style={{ padding:'11px 14px', borderRadius:11, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.25)', display:'flex', alignItems:'flex-start', gap:9, marginTop:14 }}>
           <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
@@ -302,30 +279,129 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
   )
 }
 
-// ─── EXPLANATION MODAL (mobile full-screen) ────────────────────────────────────
+// ─── EXPLANATION MODAL (mobile bottom sheet) ────────────────────────────────────
+// Redesigned: white card feel, result banner at top, fully open wrong-options.
 function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, correctText, onClose }) {
+  const hasWrong = Object.keys(explanation.wrong_options ?? {}).length > 0
+  const resultColor = isCorrect ? '#16a34a' : '#dc2626'
+  const resultBg    = isCorrect ? '#f0fdf4' : '#fef2f2'
+  const resultBorder= isCorrect ? '#bbf7d0' : '#fecaca'
+  const resultIcon  = isCorrect ? '✓' : '✗'
+  const resultLabel = isCorrect ? 'Correct!' : 'Incorrect'
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,.6)', backdropFilter:'blur(4px)', display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,.55)', backdropFilter:'blur(6px)', display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
+      {/* Tap backdrop to close */}
       <div style={{ flex:1 }} onClick={onClose}/>
-      <div style={{ background:'var(--bg-base)', borderRadius:'20px 20px 0 0', maxHeight:'82dvh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-        <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 4px' }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
+
+      <div style={{ background:'#fff', borderRadius:'24px 24px 0 0', maxHeight:'88dvh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 -8px 40px rgba(0,0,0,.18)' }}>
+
+        {/* Drag handle */}
+        <div style={{ display:'flex', justifyContent:'center', padding:'12px 0 6px', flexShrink:0 }}>
+          <div style={{ width:40, height:4, borderRadius:2, background:'#e2e8f0' }}/>
         </div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 18px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-          <span style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)' }}>Explanation</span>
-          <button onClick={onClose} style={{ width:28, height:28, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-subtle)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tert)', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
+
+        {/* Header row */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'2px 20px 14px', flexShrink:0, borderBottom:'1px solid #f1f5f9' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            {/* Result icon pill */}
+            <div style={{ width:32, height:32, borderRadius:10, background:resultBg, border:`1.5px solid ${resultBorder}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <span style={{ fontSize:16, fontWeight:900, color:resultColor }}>{resultIcon}</span>
+            </div>
+            <div>
+              <div style={{ fontSize:15, fontWeight:900, color:'#0f172a' }}>Explanation</div>
+              <div style={{ fontSize:11, fontWeight:700, color:resultColor, marginTop:1 }}>{resultLabel}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ width:30, height:30, borderRadius:9, border:'1.5px solid #e2e8f0', background:'#f8fafc', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
         </div>
-        <div style={{ overflowY:'auto', padding:'16px 18px 32px', flex:1 }}>
+
+        {/* Scrollable content */}
+        <div style={{ overflowY:'auto', padding:'20px 20px 40px', flex:1, background:'#fff' }}>
           <ExplanationContent
             explanation={explanation}
             isCorrect={isCorrect}
             selectedKey={selectedKey}
             correctLetter={correctLetter}
             correctText={correctText}
+            wrongOptionsOpen={true}
           />
+        </div>
+
+        {/* Done button */}
+        <div style={{ padding:'12px 20px 24px', flexShrink:0, background:'#fff', borderTop:'1px solid #f1f5f9' }}>
+          <button onClick={onClose}
+            style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0` }}>
+            Got it
+          </button>
         </div>
       </div>
     </div>
+  )
+}
+
+// ─── EXPLANATION TRIGGER CARD (mobile) ────────────────────────────────────────
+// The button shown inside the question card on mobile that opens the modal.
+// Replaces the plain "View Explanation" button with a rich preview card.
+function ExplanationTriggerCard({ explanation, isCorrect, hasWrong, onClick }) {
+  const concept    = explanation.concept ?? ''
+  const intro      = explanation.intro   ?? ''
+  const preview    = concept || (intro ? intro.slice(0, 80) + (intro.length > 80 ? '…' : '') : '')
+  const resultColor = isCorrect ? '#16a34a' : '#dc2626'
+  const resultBg    = isCorrect ? '#f0fdf4' : '#fef2f2'
+  const resultBorder= isCorrect ? '#bbf7d0' : '#fecaca'
+
+  return (
+    <button onClick={onClick} style={{ marginTop:16, width:'100%', textAlign:'left', cursor:'pointer', fontFamily:'inherit', background:'none', border:'none', padding:0 }}>
+      <div style={{
+        borderRadius:16,
+        border:`1.5px solid ${BLUE}25`,
+        background:'#fff',
+        boxShadow:'0 2px 12px rgba(6,42,120,.08), 0 0 0 1px rgba(6,42,120,.04)',
+        overflow:'hidden',
+      }}>
+        {/* Top accent strip */}
+        <div style={{ height:3, background:`linear-gradient(90deg,${BLUE},#6366f1)` }}/>
+
+        <div style={{ padding:'14px 16px 12px' }}>
+          {/* Label row */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <div style={{ width:24, height:24, borderRadius:7, background:`${BLUE}12`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+                  <circle cx="7.5" cy="7.5" r="6" stroke={BLUE} strokeWidth="1.5"/>
+                  <path d="M7.5 5v3.5M7.5 10v.5" stroke={BLUE} strokeWidth="1.6" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <span style={{ fontSize:12, fontWeight:900, color:BLUE, textTransform:'uppercase', letterSpacing:'.07em' }}>Explanation</span>
+            </div>
+            {/* Result badge */}
+            <div style={{ padding:'3px 9px', borderRadius:999, background:resultBg, border:`1px solid ${resultBorder}`, fontSize:11, fontWeight:800, color:resultColor }}>
+              {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+            </div>
+          </div>
+
+          {/* Preview text */}
+          {preview && (
+            <p style={{ fontSize:13, color:'#475569', lineHeight:1.55, margin:'0 0 10px', fontWeight:500 }}>
+              {preview}
+            </p>
+          )}
+
+          {/* Chips row */}
+          <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999, background:`${BLUE}10`, color:BLUE, border:`1px solid ${BLUE}20` }}>
+              Full explanation →
+            </span>
+            {hasWrong && (
+              <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999, background:'#fff7ed', color:'#ea580c', border:'1px solid #fed7aa' }}>
+                Why others wrong
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </button>
   )
 }
 
@@ -334,7 +410,7 @@ function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, 
 //   explanation   — explanation object from DB
 //   isCorrect     — boolean
 //   dark          — boolean
-//   mobileModal   — boolean: if true, renders as a button that opens a bottom sheet
+//   mobileModal   — boolean: if true, renders as a card trigger that opens a bottom sheet
 //   selectedKey   — the letter the student selected (e.g. 'B'), for wrong_options highlighting
 //   question      — full question object (to extract correct letter + text for formatting)
 export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = false, selectedKey, question }) {
@@ -347,14 +423,12 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
   if (question) {
     const correctAnswer = question.correct_answer ?? ''
     const opts          = question.options ?? {}
-    // correct_answer might be a letter ('A','B','C','D') or the option text itself
     if (LETTERS.includes(correctAnswer)) {
       correctLetter = correctAnswer
       correctText   = Array.isArray(opts)
         ? opts[LETTERS.indexOf(correctAnswer)]
         : (opts[correctAnswer] ?? '')
     } else {
-      // correct_answer is the text — find which letter maps to it
       if (Array.isArray(opts)) {
         const idx = opts.indexOf(correctAnswer)
         if (idx !== -1) { correctLetter = LETTERS[idx]; correctText = correctAnswer }
@@ -362,7 +436,6 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
         const entry = Object.entries(opts).find(([, v]) => v === correctAnswer)
         if (entry) { correctLetter = entry[0]; correctText = correctAnswer }
       }
-      // If we still don't have a letter, just show the text
       if (!correctLetter) correctText = correctAnswer || null
     }
   }
@@ -372,25 +445,12 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
   if (mobileModal) {
     return (
       <>
-        <button
+        <ExplanationTriggerCard
+          explanation={explanation}
+          isCorrect={isCorrect}
+          hasWrong={hasWrong}
           onClick={() => setModalOpen(true)}
-          style={{
-            marginTop:14, width:'100%',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-            padding:'13px 18px', borderRadius:13,
-            border:`1.5px solid ${BLUE}`,
-            background:`${BLUE}0D`,
-            color:BLUE, fontSize:13, fontWeight:800,
-            cursor:'pointer', fontFamily:'inherit',
-          }}
-        >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <circle cx="7.5" cy="7.5" r="6" stroke={BLUE} strokeWidth="1.5"/>
-            <path d="M7.5 5v3.5M7.5 10v.5" stroke={BLUE} strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
-          View Explanation
-          {hasWrong && <span style={{ fontSize:10, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${ORANGE}18`, color:ORANGE, border:`1px solid ${ORANGE}30` }}>+ why others wrong</span>}
-        </button>
+        />
         {modalOpen && (
           <ExplanationModal
             explanation={explanation}
@@ -405,7 +465,7 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
     )
   }
 
-  // Full inline rendering (desktop, review side column, etc.)
+  // Full inline rendering (desktop side column)
   const concept = explanation.concept ?? ''
   return (
     <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)' }}>
@@ -422,6 +482,7 @@ export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = f
           selectedKey={selectedKey}
           correctLetter={correctLetter}
           correctText={correctText}
+          wrongOptionsOpen={false}
         />
       </div>
     </div>

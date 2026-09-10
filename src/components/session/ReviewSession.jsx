@@ -1,8 +1,17 @@
 'use client'
 // src/components/session/ReviewSession.jsx
 // Question-by-question review after a session completes.
-// Desktop: question on left, explanation on right, both scroll independently.
-// Mobile: single column, question → View Explanation button → question nav → Prev/Next.
+//
+// MOBILE (< 1024px):
+//   - Full-screen fixed container, matches practice session page exactly
+//   - Scrollable centre: question number grid → white card wrapping QuestionCard
+//     → explanation trigger card (opens bottom-sheet modal)
+//   - Fixed bottom bar: Prev / Next
+//
+// DESKTOP (≥ 1024px):
+//   - Left column: question card (scrollable)
+//   - Right column: full inline explanation (scrollable)
+//   - Bottom bar: question nav grid + Prev/Next
 //
 // Props:
 //   questions — array of question objects
@@ -11,7 +20,7 @@
 //   dark      — boolean
 
 import { useState, useEffect, useRef } from 'react'
-import { BLUE, CYAN, LETTERS, pct } from './SessionUtils'
+import { BLUE, CYAN, GREEN, RED, LETTERS, pct } from './SessionUtils'
 import { QuestionNav } from './SessionPrimitives'
 import { ExplanationBlock } from './ExplanationBlock'
 import { QuestionCard } from './QuestionCard'
@@ -34,7 +43,6 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
     navMap[i] = { answered: true, correct: answers[i]?.isCorrect ?? false, skipped: !answers[i] }
   }
 
-  // Scroll both columns back to top whenever the question changes
   const qColRef   = useRef(null)
   const expColRef = useRef(null)
   useEffect(() => {
@@ -42,55 +50,69 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
     if (expColRef.current) expColRef.current.scrollTop = 0
   }, [rIndex])
 
-  // Derive the selected answer key (letter) for wrong_options lookup
+  // Derive selected answer letter for wrong_options highlighting
   const selectedKey = (() => {
     if (!q || a?.selectedIdx == null) return null
-    const opts = q.options
-    if (!opts) return null
-    // options may be array of strings or objects
-    const idx = a.selectedIdx
-    return LETTERS[idx] ?? null
+    return LETTERS[a.selectedIdx] ?? null
   })()
+
+  // Result colour tinting for the mobile card border
+  const isCorrect  = a?.isCorrect ?? false
+  const cardBorder = isCorrect ? `${GREEN}40` : `${RED}35`
+  const cardGlow   = isCorrect ? `0 0 0 3px ${GREEN}15` : `0 0 0 3px ${RED}10`
 
   return (
     <div style={{ position:'fixed', inset:0, background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`
         * { box-sizing: border-box }
+
         @media (min-width: 1024px) {
           .rev-body { flex-direction: row !important; }
           .rev-q-col {
             width: 560px !important; flex-shrink: 0 !important;
             overflow-y: auto !important; min-height: 0 !important;
-            padding: 24px 32px 100px 32px !important;
+            padding: 24px 32px 100px !important;
             border-right: 1px solid var(--border) !important;
           }
           .rev-exp-col {
             display: flex !important; flex: 1 !important;
             min-width: 0 !important; min-height: 0 !important;
             overflow-y: auto !important; flex-direction: column !important;
-            padding: 24px 28px 100px 28px !important;
+            padding: 24px 28px 100px !important;
           }
-          /* On desktop: hide the inline explanation inside the Q column */
+          /* Desktop: explanation lives in right col — hide the mobile trigger */
           .rev-q-col .inline-explanation { display: none !important; }
-          /* On desktop: hide the mobile question nav inside the Q column */
-          .rev-mobile-qnav { display: none !important; }
+          /* Hide mobile-only elements */
+          .rev-mobile-qnums  { display: none !important; }
+          .rev-card-mobile   { display: none !important; }
+          /* Show desktop card */
+          .rev-card-desktop  { display: block !important; }
+          /* Desktop bottom bar */
+          .rev-bottom-desktop { display: block !important; }
+          .rev-bottom-mobile  { display: none !important; }
         }
+
         @media (max-width: 1023px) {
-          /* On mobile: hide the right-column (desktop only) */
           .rev-exp-col { display: none !important; }
-          /* Make sure inline-explanation IS visible on mobile */
-          .rev-q-col .inline-explanation { display: block !important; }
           .rev-q-col {
             flex: 1 !important; min-height: 0 !important;
             overflow-y: auto !important;
-            padding: 20px 16px 24px !important;
+            padding: 14px 14px 100px !important;
           }
-          /* Hide bottom QuestionNav on mobile — it lives inline now */
-          .rev-bottom-qnav { display: none !important; }
+          /* Mobile: hide QuestionCard's own inline nav buttons — bottom bar handles */
+          .rev-q-col .qcard-nav { display: none !important; }
+          /* Show mobile elements */
+          .rev-mobile-qnums  { display: block !important; }
+          .rev-card-mobile   { display: block !important; }
+          /* Hide desktop card */
+          .rev-card-desktop  { display: none !important; }
+          /* Bottom bars */
+          .rev-bottom-desktop { display: none !important; }
+          .rev-bottom-mobile  { display: flex !important; }
         }
       `}</style>
 
-      {/* ── TOP BAR (fixed) ── */}
+      {/* ── TOP BAR ── */}
       <div style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', height:52 }}>
           <button onClick={onDone}
@@ -115,63 +137,88 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
         </div>
       </div>
 
-      {/* ── SCROLLABLE BODY ── */}
+      {/* ── BODY ── */}
       <div className="rev-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
 
         {/* Question column */}
-        <div className="rev-q-col" ref={qColRef} style={{ overflowY:'auto', padding:'20px 16px' }}>
-          {q && (
-            <QuestionCard
-              key={q.id + '-review-' + rIndex}
-              question={q}
-              qIndex={rIndex}
+        <div className="rev-q-col" ref={qColRef} style={{ overflowY:'auto' }}>
+
+          {/* MOBILE: question number grid above the card (same as session page) */}
+          <div className="rev-mobile-qnums" style={{ marginBottom:14 }}>
+            <QuestionNav
               total={questions.length}
-              onNext={handleNext}
-              onPrev={handlePrev}
+              current={rIndex}
+              answerMap={navMap}
+              onJump={setRIndex}
               sessionType="study"
-              dark={dark}
-              alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
-              reviewMode={true}
-              hideExplanation={true}
-              hideHint={true}
-              hideNav={true}
+              inline={true}
             />
+          </div>
+
+          {/* MOBILE: white card wrapping the question (mirrors session page light card) */}
+          {q && (
+            <div className="rev-card-mobile" style={{
+              borderRadius:18,
+              background:'#fff',
+              boxShadow:`0 2px 16px rgba(6,42,120,.08), ${cardGlow}`,
+              border:`1.5px solid ${cardBorder}`,
+              padding:'20px 16px',
+            }}>
+              <QuestionCard
+                key={q.id + '-review-m-' + rIndex}
+                question={q}
+                qIndex={rIndex}
+                total={questions.length}
+                onNext={handleNext}
+                onPrev={handlePrev}
+                sessionType="study"
+                dark={false}
+                alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
+                reviewMode={true}
+                hideExplanation={true}
+                hideHint={true}
+                hideNav={false}
+              />
+            </div>
           )}
-          {/* View Explanation button — mobile only, shows below options */}
+
+          {/* DESKTOP: plain card (no extra wrapper — column padding handles it) */}
+          {q && (
+            <div className="rev-card-desktop">
+              <QuestionCard
+                key={q.id + '-review-d-' + rIndex}
+                question={q}
+                qIndex={rIndex}
+                total={questions.length}
+                onNext={handleNext}
+                onPrev={handlePrev}
+                sessionType="study"
+                dark={dark}
+                alreadyAnswered={a ?? { selectedIdx: null, isCorrect: false }}
+                reviewMode={true}
+                hideExplanation={true}
+                hideHint={true}
+                hideNav={false}
+              />
+            </div>
+          )}
+
+          {/* Mobile explanation trigger (opens bottom-sheet modal) */}
           {q?.explanation && (
-            <div className="inline-explanation rev-inline-expl">
+            <div className="inline-explanation">
               <ExplanationBlock
                 explanation={q.explanation}
                 isCorrect={a?.isCorrect}
-                dark={dark}
+                dark={false}
                 mobileModal={true}
                 selectedKey={selectedKey}
                 question={q}
               />
             </div>
           )}
-
-          {/* Question nav — mobile only, inline below explanation */}
-          <div className="rev-mobile-qnav" style={{ marginTop:20, paddingBottom:8 }}>
-            <div style={{ fontSize:11, fontWeight:800, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10 }}>Jump to question</div>
-            <QuestionNav total={questions.length} current={rIndex} answerMap={navMap} onJump={setRIndex} sessionType="study"/>
-          </div>
-
-          {/* Prev / Next — mobile only, inline below nav */}
-          <div className="rev-mobile-qnav" style={{ marginTop:14, display:'flex', gap:12 }}>
-            <button onClick={handlePrev} disabled={rIndex === 0}
-              style={{ flex:1, padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:rIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'transparent', color:rIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:rIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Prev
-            </button>
-            <button onClick={handleNext}
-              style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {isLast ? 'Back to Results' : 'Next →'}
-            </button>
-          </div>
         </div>
 
-        {/* Explanation column — desktop only */}
+        {/* DESKTOP explanation column */}
         <div className="rev-exp-col" ref={expColRef} style={{ display:'none' }}>
           {q?.explanation ? (
             <ExplanationBlock
@@ -189,13 +236,36 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
         </div>
       </div>
 
-      {/* ── BOTTOM BAR — desktop only: Prev/Next + QuestionNav ── */}
-      <div className="rev-bottom-qnav" style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
-        {/* Numbered grid — desktop */}
+      {/* ── MOBILE BOTTOM BAR (fixed to viewport bottom) ── */}
+      {/* Exact same style as the session page bottom bar */}
+      <div className="rev-bottom-mobile" style={{
+        display:'none',
+        borderTop:'1px solid var(--border)',
+        background:'var(--bg-card)',
+        padding:'10px 14px 12px',
+        gap:10,
+        flexShrink:0,
+      }}>
+        <button
+          onClick={handlePrev}
+          disabled={rIndex === 0}
+          style={{ flex:1, padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:rIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:14, background:'transparent', color:rIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:rIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Prev
+        </button>
+        <button
+          onClick={handleNext}
+          style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+          {isLast ? 'Back to Results' : 'Next →'}
+          {!isLast && <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </button>
+      </div>
+
+      {/* ── DESKTOP BOTTOM BAR — question nav + Prev/Next ── */}
+      <div className="rev-bottom-desktop" style={{ display:'none', borderTop:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
         <div style={{ padding:'8px 16px 0' }}>
           <QuestionNav total={questions.length} current={rIndex} answerMap={navMap} onJump={setRIndex} sessionType="study"/>
         </div>
-        {/* Prev / Next buttons */}
         <div style={{ padding:'10px 20px 12px', display:'flex', gap:12 }}>
           <button onClick={handlePrev} disabled={rIndex === 0}
             style={{ flex:1, padding:'12px', borderRadius:13, border:'1px solid var(--border)', cursor:rIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:13, background:'transparent', color:rIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:rIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>

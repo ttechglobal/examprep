@@ -232,6 +232,7 @@ export default function MockPage() {
   const sessionIdRef = useRef(crypto.randomUUID())
   const fetchedRef   = useRef(new Set())
   const qColRef      = useRef(null)
+  const cardRef      = useRef(null)   // ref to QuestionCard — mobile bottom bar reads live selection
 
   useEffect(() => {
     if (qColRef.current) qColRef.current.scrollTop = 0
@@ -465,10 +466,11 @@ export default function MockPage() {
               <div style={{ fontSize:13, color:'var(--text-tert)', fontWeight:600 }}>Loading questions…</div>
             </div>
           ) : (
-            <div ref={qColRef} style={{ flex:1, overflowY:'auto', padding:'20px 20px 0', maxWidth:700, width:'100%', margin:'0 auto', userSelect:'none', WebkitUserSelect:'none' }}>
+            <div ref={qColRef} style={{ flex:1, overflowY:'auto', padding:'20px 20px 0', maxWidth:700, width:'100%', margin:'0 auto' }}>
               {q ? (
                 <>
                   <QuestionCard
+                    ref={cardRef}
                     key={`${activeTab}-${q.id}-${qIndex}`}
                     question={q} qIndex={qIndex} total={activeQs.length}
                     onNext={() => {}}
@@ -503,6 +505,14 @@ export default function MockPage() {
             <span style={{ fontSize:13, fontWeight:800, color:'var(--text-tert)', fontVariantNumeric:'tabular-nums' }}>{qIndex+1} / {activeQs.length}</span>
           </div>
           <button onClick={()=>{
+            // Flush the live selection from cardRef before advancing/submitting.
+            // On mobile, React's async batching can leave answerMap stale at
+            // the moment the student taps Next — reading the ref is synchronous
+            // and always reflects the last tap.
+            const live = cardRef.current?.getSelection()
+            if (live?.selectedIdx !== null && live?.selectedIdx !== undefined) {
+              handleAnswerChange(qIndex, { selectedIdx: live.selectedIdx, isCorrect: live.isCorrect })
+            }
             const isLast = qIndex >= activeQs.length-1
             if (isLast) {
               if (examType==='WAEC') { setShowEnd(true); return }

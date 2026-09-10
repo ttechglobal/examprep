@@ -40,6 +40,7 @@ export default function PracticeSessionPage() {
   const sessionIdRef    = useRef(crypto.randomUUID())
   const savedResultsRef = useRef(null)   // set by saveSession; read by results + review screens
   const qColRef         = useRef(null)   // scrollable question column — reset on each question
+  const cardRef         = useRef(null)   // ref to QuestionCard — lets mobile bottom bar read live selection
 
   // ── Scroll question column to top on every new question ───────────────────
   useEffect(() => {
@@ -253,7 +254,7 @@ export default function PracticeSessionPage() {
       <style>{`
         * { box-sizing: border-box }
         @keyframes spin { to { transform: rotate(360deg) } }
-        .session-q-col, .rev-q-col { user-select: none; -webkit-user-select: none; }
+        /* user-select removed: was suppressing tap events on iOS in some scroll contexts */
         @media (min-width: 1024px) {
           .session-body { flex-direction: row !important; }
           .session-nav-col {
@@ -351,6 +352,7 @@ export default function PracticeSessionPage() {
             {q && (
               <div className={`session-q-card-wrap${!dark ? ' session-q-card-wrap-light' : ''}`}>
                 <QuestionCard
+                  ref={cardRef}
                   key={q.id + '-' + qIndex}
                   question={q}
                   qIndex={qIndex}
@@ -399,12 +401,15 @@ export default function PracticeSessionPage() {
           </button>
           <button
             onClick={() => {
-              // Call handleNext with the current answer so it's properly recorded.
-              // answerMap[qIndex] may already exist if the student selected an option;
-              // handleNext reads it and builds the correct entry.
-              const current = answerMap[qIndex]
-              handleNext(current
-                ? { selectedIdx: current.selectedIdx, isCorrect: current.isCorrect }
+              // Read the live selection directly from QuestionCard's ref.
+              // This is the mobile-safe path: React's async state batching means
+              // answerMap[qIndex] may not yet reflect the tap that just happened
+              // when the student taps an option and immediately hits Next on mobile.
+              // cardRef.getSelection() reads a synchronous ref that is updated
+              // in the same event handler as setSelected(), so it's always current.
+              const live = cardRef.current?.getSelection()
+              handleNext(live?.selectedIdx !== undefined && live.selectedIdx !== null
+                ? { selectedIdx: live.selectedIdx, isCorrect: live.isCorrect }
                 : {}
               )
             }}
