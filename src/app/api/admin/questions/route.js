@@ -1,21 +1,17 @@
 import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX: this file had been corrupted/overwritten with the content of
-// src/app/api/admin/questions/coverage/route.js (wrong file, wrong params —
-// it expected `subjectId` while every caller sends `subject`, causing every
-// request to 400 immediately with "subjectId required"). This is the actual,
-// correct questions LIST endpoint, restored to match what
-// src/app/admin/questions/page.js and src/app/admin/past-questions/page.js
-// actually call:
+// GET  /api/admin/questions?subject=...&page=...&limit=...&exam=...
+//      &source=...&topic=...&difficulty=...&untagged=...&year=...&search=...
 //
-//   GET /api/admin/questions?subject=...&page=...&limit=...&exam=...
-//       &source=...&topic=...&difficulty=...&untagged=...&year=...&search=...
+// POST /api/admin/questions
+//      Saves a batch of questions and updates coverage_summary.
 //
-// Returns { questions: [...], total: N } — paginated, with subject/topic/
-// subtopic names attached for display, supporting both the Bank tab
-// (no source filter, all questions) and the Past Questions tab (source
-// passed explicitly by the caller).
+// COVERAGE SUMMARY UPDATE (added):
+//   After every successful save, we upsert into coverage_summary:
+//     (subject_id, exam_type, year) → count += N
+//   This keeps the coverage page fast — it reads coverage_summary instead of
+//   counting the full questions table, bypassing the 1,000-row Supabase cap.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -52,19 +48,17 @@ export async function GET(request) {
 
   const db = svc()
 
-  // ── yearCounts mode: return { year: count } map for this subject+exam ───────
+  // ── yearCounts mode ────────────────────────────────────────────────────────
   if (yearCounts && subjectId && examType) {
     let q = db.from('questions').select('year').eq('is_active', true)
     q = q.eq('subject_id', subjectId)
-    // FIX: include BOTH questions when filtering by specific exam type
-    // (was .eq('exam_type', examType) which excluded BOTH questions)
     if (examType && examType !== 'ALL') {
       q = examType === 'BOTH'
         ? q.eq('exam_type', 'BOTH')
         : q.in('exam_type', [examType, 'BOTH'])
     }
     if (source) q = q.eq('source', source)
-    const { data, error } = await q.limit(50000)  // FIX: was 5000, prevents cap
+    const { data, error } = await q.limit(50000)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const counts = {}
     for (const row of (data ?? [])) {
@@ -127,12 +121,7 @@ export async function GET(request) {
     subtopic_name: q.subtopics?.name ?? '',
   }))
 
-  return NextResponse.json({
-    questions,
-    total: count ?? 0,
-    page,
-    limit,
-  })
+  return NextResponse.json({ questions, total: count ?? 0, page, limit })
 }
 
 export async function POST(request) {
@@ -161,12 +150,12 @@ export async function POST(request) {
         explanation:        q.explanation ?? {},
         difficulty:         q.difficulty ?? 'medium',
 
-        passage_text:       q.passage_text     ?? null,
-        passage_image_url:  q.passage_image_url ?? null,
+        passage_text:       q.passage_text      ?? null,
+        passage_image_url:  q.passage_image_url  ?? null,
 
-        has_image:          q.has_image         ?? false,
-        image_url:          q.image_url         ?? null,
-        image_description:  q.image_description ?? null,
+        has_image:          q.has_image          ?? false,
+        image_url:          q.image_url          ?? null,
+        image_description:  q.image_description  ?? null,
 
         exam_type:    examType,
         subject_id:   subjectId,
@@ -188,10 +177,66 @@ export async function POST(request) {
       if (error) {
         errors.push(`Q "${q.question_text?.slice(0, 40)}…": ${error.message}`)
       } else {
-        saved.push(data.id)
+        saved.push({ id: data.id, year: row.year, examType: row.exam_type })
       }
     } catch (err) {
       errors.push(`Q "${q.question_text?.slice(0, 40)}…": ${err.message}`)
+    }
+  }
+
+  // ── Update coverage_summary ───────────────────────────────────────────────
+  // Group saved questions by (examType, year) and upsert counts.
+  // This is what keeps the coverage page accurate without scanning questions.
+  if (saved.length > 0) {
+    // Count how many were saved per (exam_type, year) bucket
+    const buckets = {}
+    for (const { year, examType: et } of saved) {
+      if (!year || !et) continue
+      const key = `${et}::${year}`
+      buckets[key] = (buckets[key] ?? 0) + 1
+    }
+
+    // Fetch current counts for these buckets, then upsert
+    const upsertRows = Object.entries(buckets).map(([key, n]) => {
+      const [et, yr] = key.split('::')
+      return {
+        subject_id: subjectId,
+        exam_type:  et,
+        year:       parseInt(yr),
+        count:      n,             // will be added to existing via SQL below
+        updated_at: new Date().toISOString(),
+      }
+    })
+
+    // Upsert: if row exists, add n to existing count. If new, insert n.
+    // Supabase doesn't support "increment on conflict" directly in the JS client,
+    // so we do it in two steps: read current → write updated.
+    for (const row of upsertRows) {
+      try {
+        // Read existing count
+        const { data: existing } = await db
+          .from('coverage_summary')
+          .select('count')
+          .eq('subject_id', row.subject_id)
+          .eq('exam_type',  row.exam_type)
+          .eq('year',       row.year)
+          .maybeSingle()
+
+        const newCount = (existing?.count ?? 0) + row.count
+
+        await db
+          .from('coverage_summary')
+          .upsert({
+            subject_id: row.subject_id,
+            exam_type:  row.exam_type,
+            year:       row.year,
+            count:      newCount,
+            updated_at: row.updated_at,
+          }, { onConflict: 'subject_id,exam_type,year' })
+      } catch (e) {
+        // Non-fatal — questions are saved, coverage summary just needs a refresh
+        console.warn('[coverage_summary] upsert failed:', e.message)
+      }
     }
   }
 
@@ -204,7 +249,7 @@ export async function POST(request) {
 
   return NextResponse.json({
     saved:  saved.length,
-    ids:    saved,
+    ids:    saved.map(s => s.id),
     errors,
   })
 }

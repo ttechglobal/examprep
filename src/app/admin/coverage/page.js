@@ -42,11 +42,13 @@ export default function CoveragePage() {
   const [error,    setError]    = useState(null)
   const [showAll,  setShowAll]  = useState(false)
   const [search,   setSearch]   = useState('')
+  const [tick,     setTick]     = useState(0)   // increment to force a fresh fetch
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetch(`/api/admin/questions/coverage-matrix?examType=${examType}`)
+    // _t param busts any browser or CDN cache — guarantees live DB data
+    fetch(`/api/admin/questions/coverage-matrix?examType=${examType}&_t=${Date.now()}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) throw new Error(d.error)
@@ -54,7 +56,7 @@ export default function CoveragePage() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [examType])
+  }, [examType, tick])
 
   // Filter subjects by search
   const allSubjects = data?.subjects ?? []
@@ -85,12 +87,25 @@ export default function CoveragePage() {
             See exactly which years you've imported for each subject. Click any missing cell to import.
           </p>
         </div>
-        <Link
-          href="/admin/questions/import"
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
-        >
-          ⬆ Import questions
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setTick(t => t + 1)}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={loading ? 'animate-spin' : ''}>
+              <path d="M14 8A6 6 0 1 1 8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M14 2v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Refresh
+          </button>
+          <Link
+            href="/admin/questions/import"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
+          >
+            ⬆ Import questions
+          </Link>
+        </div>
       </div>
 
       {/* ── Exam type switcher ───────────────────────────────────────── */}
@@ -146,6 +161,20 @@ export default function CoveragePage() {
             <StatCard label="Year slots filled" value={`${pct}%`} color={pct > 50 ? 'text-green-700' : 'text-amber-700'} />
             <StatCard label="Years tracked" value={years.length} />
           </div>
+          {/* Source indicator — shows whether coverage_summary is active */}
+          {data?._source && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold w-fit ${
+              data._source === 'coverage_summary'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-amber-50 border border-amber-200 text-amber-700'
+            }`}>
+              {data._source === 'coverage_summary' ? (
+                <>✓ Reading from coverage index ({data._rows} rows) — counts are exact</>
+              ) : (
+                <>⚠ Fallback mode — run coverage_summary.sql in Supabase to fix the 1,000 row cap</>
+              )}
+            </div>
+          )}
 
           {/* ── Legend ───────────────────────────────────────────────── */}
           <div className="flex items-center gap-3 text-[11px] text-gray-500 flex-wrap">

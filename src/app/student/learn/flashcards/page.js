@@ -7,14 +7,13 @@
 //   View 3 — Topic selected: full flip-card study session with progress tracking
 //
 // PROGRESS TRACKING (localStorage, key: ep_fc_progress)
-//   Shape: { [topicId]: { total, done, lastStudied, completed } }
+//   Shape: { [topicId]: { total, done, lastStudied, completed, cardIndex,
+//                         topicName, subjectName, topicObj, subjectObj } }
 //   "done" increments per "Got it" click — resets when student restarts the deck.
 //   "completed" = true when done >= total in a single session.
 //
-// The API endpoint (/api/student/flashcards) handles three call modes:
-//   1. GET /api/student/flashcards              → { subjects: [...] }
-//   2. GET ?subjectName=Physics                 → { topics: [...] }
-//   3. GET ?topicId=<uuid>                      → { cards: [...] }
+// Desktop layout: two-column — subjects/hero on left, sidebar on right.
+// Mobile layout: single column, sidebar stacks below subjects.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
@@ -78,15 +77,19 @@ function readProgress() {
 function writeProgress(data) {
   try { localStorage.setItem(FC_PROGRESS_KEY, JSON.stringify(data)) } catch {}
 }
-function markTopicProgress(topicId, done, total, completed, cardIndex) {
+function markTopicProgress(topicId, done, total, completed, cardIndex, meta) {
   const all = readProgress()
-  all[topicId] = { done, total, completed, lastStudied: Date.now(), cardIndex: cardIndex ?? 0 }
+  all[topicId] = {
+    done, total, completed,
+    lastStudied: Date.now(),
+    cardIndex: cardIndex ?? 0,
+    ...(meta ?? {}),
+  }
   writeProgress(all)
 }
 
 // ─── BG ──────────────────────────────────────────────────────────────────────
 function AppBg({ dark }) {
-  // Kept lightweight — no blur filters (they cause expensive GPU repaints on load)
   return (
     <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
       <div style={{ position:'absolute', inset:0,
@@ -120,23 +123,168 @@ function BackBtn({ onClick }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SIDEBAR — CONTINUE LEARNING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ContinueLearningCard({ progress, onResume }) {
+  // Find the most recently studied in-progress topic
+  let best = null
+  Object.entries(progress).forEach(([topicId, p]) => {
+    if (!p?.lastStudied) return
+    const inProgress = !p?.completed && (p?.cardIndex ?? 0) > 0
+    const anyStudied = p?.lastStudied
+    if (!anyStudied) return
+    if (!best || p.lastStudied > best.p.lastStudied) {
+      best = { topicId, p, inProgress }
+    }
+  })
+
+  if (!best) return null
+
+  const { topicId, p, inProgress } = best
+  const pct        = p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0
+  const cardIndex  = p.cardIndex ?? 0
+  const completed  = p.completed ?? false
+  const topicName  = p.topicName   ?? 'Topic'
+  const subjectName = p.subjectName ?? ''
+  const c          = subCol(subjectName)
+
+  const relativeTime = (() => {
+    const mins = Math.floor((Date.now() - p.lastStudied) / 60000)
+    if (mins < 2)  return 'Just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24)  return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  })()
+
+  function handleClick() {
+    if (p.topicObj && p.subjectObj) {
+      onResume(p.subjectObj, p.topicObj, completed ? 0 : cardIndex)
+    }
+  }
+
+  return (
+    <div style={{ borderRadius:18, border:`1.5px solid ${c}30`, background:'var(--bg-card)', overflow:'hidden', boxShadow:`0 4px 20px ${c}10` }}>
+      <div style={{ height:4, background:`linear-gradient(90deg,${c},${c}60)` }}/>
+      <div style={{ padding:'16px 18px 14px' }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:`${c}12`, borderRadius:999, padding:'3px 10px', marginBottom:10 }}>
+          <div style={{ width:6, height:6, borderRadius:'50%', background:c }}/>
+          <span style={{ fontSize:10, fontWeight:800, color:c }}>
+            {completed ? 'Review again' : 'Continue learning'}
+          </span>
+        </div>
+        {subjectName && (
+          <div style={{ fontSize:10, fontWeight:800, color:c, letterSpacing:'.06em', marginBottom:2 }}>
+            {subjectName.toUpperCase()}
+          </div>
+        )}
+        <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', marginBottom:10 }}>
+          {topicName}
+        </div>
+        {!completed ? (
+          <>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{pct}% done</span>
+              {p.total > 0 && <span style={{ fontSize:11, color:'var(--text-tert)' }}>Card {Math.min(cardIndex + 1, p.total)} of {p.total}</span>}
+            </div>
+            <div style={{ height:6, background:'var(--border)', borderRadius:999, overflow:'hidden', marginBottom:4 }}>
+              <div style={{ height:'100%', width:`${pct}%`, borderRadius:999, background:`linear-gradient(90deg,${c},${c}90)`, transition:'width .4s' }}/>
+            </div>
+            <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:4 }}>Last studied {relativeTime}</div>
+          </>
+        ) : (
+          <div style={{ fontSize:12, color:'var(--text-tert)' }}>Completed · {relativeTime}</div>
+        )}
+      </div>
+      <button
+        onClick={handleClick}
+        disabled={!p.topicObj}
+        style={{
+          width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+          background:c, color:'#fff',
+          fontSize:13, fontWeight:900, fontFamily:'inherit',
+          padding:'13px 18px', border:'none',
+          cursor: p.topicObj ? 'pointer' : 'default',
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="#fff" strokeWidth="1.3"/>
+          <path d="M5.5 7h4M8 5l2.5 2L8 9" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        {completed ? 'Study again' : `Resume — card ${Math.min(cardIndex + 1, p.total || 1)}`}
+      </button>
+    </div>
+  )
+}
+
+function RecentlyStudied({ progress, onResume }) {
+  const recent = Object.entries(progress)
+    .filter(([, p]) => p?.lastStudied && p?.topicObj && p?.subjectObj)
+    .sort(([, a], [, b]) => b.lastStudied - a.lastStudied)
+    .slice(0, 3)
+
+  if (recent.length === 0) return null
+
+  return (
+    <div>
+      <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', marginBottom:10 }}>
+        Recently studied
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+        {recent.map(([topicId, p]) => {
+          const c   = subCol(p.subjectName ?? '')
+          const em  = subIcon(p.subjectName ?? '')
+          const pct = p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0
+          const mins = Math.floor((Date.now() - p.lastStudied) / 60000)
+          const ago  = mins < 60 ? `${Math.max(1,mins)}m ago` : mins < 1440 ? `${Math.floor(mins/60)}h ago` : `${Math.floor(mins/1440)}d ago`
+          const confColor = pct >= 70 ? GREEN : pct >= 40 ? GOLD : '#f87171'
+
+          return (
+            <button
+              key={topicId}
+              onClick={() => onResume(p.subjectObj, p.topicObj, 0)}
+              style={{ display:'flex', alignItems:'center', gap:11, background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:13, padding:'10px 12px', cursor:'pointer', textAlign:'left', fontFamily:'inherit', transition:'border-color .12s' }}
+            >
+              <div style={{ width:34, height:34, borderRadius:10, background:`${c}12`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>
+                {em}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {p.topicName ?? 'Topic'}
+                </div>
+                <div style={{ fontSize:10, color:'var(--text-tert)', marginTop:1 }}>
+                  {p.subjectName} · {ago}
+                </div>
+              </div>
+              <span style={{ fontSize:12, fontWeight:900, color:confColor, flexShrink:0 }}>{pct}%</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VIEW 1 — SUBJECT CARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SubjectHero() {
+
   return (
     <div style={{
       borderRadius: 22, overflow: 'hidden', position: 'relative',
       background: `linear-gradient(135deg, ${NAVY} 0%, #1a1060 50%, #2a1280 100%)`,
-      padding: '28px 28px 28px 28px', minHeight: 140,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '28px 28px 0', minHeight: 160,
     }}>
       {/* Glow blobs */}
       <div style={{ position:'absolute', top:-30, right:100, width:220, height:220, borderRadius:'50%', background:'radial-gradient(circle,rgba(124,58,237,.3) 0%,transparent 70%)', pointerEvents:'none' }}/>
       <div style={{ position:'absolute', bottom:-40, left:60, width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(18,100,229,.2) 0%,transparent 70%)', pointerEvents:'none' }}/>
 
-      {/* Floating card stack illustration */}
-      <div style={{ position:'absolute', right:24, top:'50%', transform:'translateY(-50%)', opacity:.9 }}>
+      {/* Floating card stack */}
+      <div style={{ position:'absolute', right:28, top:'50%', transform:'translateY(-55%)', opacity:.9 }}>
         {[
           { rotate:-8, y:6, bg:'rgba(124,58,237,.5)', z:0 },
           { rotate:3,  y:2, bg:'rgba(18,100,229,.6)', z:1 },
@@ -160,30 +308,27 @@ function SubjectHero() {
       </div>
 
       {/* Text */}
-      <div style={{ zIndex:1, maxWidth:260 }}>
+      <div style={{ zIndex:1, maxWidth:280 }}>
         <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.14em', color:'rgba(255,255,255,.45)', marginBottom:8 }}>
           Active Recall · Smart Practice
         </div>
-        <h1 style={{ fontSize:26, fontWeight:900, color:'#fff', margin:0, letterSpacing:'-.04em', lineHeight:1.2, marginBottom:8 }}>
+        <h1 style={{ fontSize:26, fontWeight:900, color:'#fff', margin:0, letterSpacing:'-.04em', lineHeight:1.2, marginBottom:6 }}>
           Flashcards
         </h1>
         <p style={{ fontSize:13, color:'rgba(255,255,255,.55)', margin:0, lineHeight:1.6 }}>
-          Small cards. Big progress.
-          <br/>Pick a subject to start.
+          Study the way your brain actually learns.
         </p>
       </div>
+
+      <div style={{ height:20 }}/>
     </div>
   )
 }
 
-function SubjectCard({ subject, progress, onClick }) {
+function SubjectCard({ subject, onClick }) {
   const [pressed, setPressed] = useState(false)
-  const c   = subCol(subject.name)
-  const em  = subIcon(subject.name)
-  const prog = progress ?? {}
-
-  // How many of this subject's topics are completed?
-  const completed = Object.keys(prog).length  // computed from topic IDs — rough signal
+  const c  = subCol(subject.name)
+  const em = subIcon(subject.name)
 
   return (
     <button
@@ -203,32 +348,15 @@ function SubjectCard({ subject, progress, onClick }) {
         transition: 'all .13s ease',
       }}
     >
-      {/* Subject colour stripe at top */}
       <div style={{ width:'100%', height:4, background:`linear-gradient(90deg,${c},${c}60)`, flexShrink:0 }}/>
-
       <div style={{ padding:'16px 16px 14px', width:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column', gap:0 }}>
-        {/* Icon */}
-        <div style={{
-          width:48, height:48, borderRadius:14,
-          background:`${c}14`, border:`1.5px solid ${c}20`,
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontSize:24, marginBottom:12, flexShrink:0,
-        }}>
+        <div style={{ width:48, height:48, borderRadius:14, background:`${c}14`, border:`1.5px solid ${c}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, marginBottom:12, flexShrink:0 }}>
           {em}
         </div>
-
-        {/* Name */}
         <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)', lineHeight:1.25, letterSpacing:'-.02em', marginBottom:6 }}>
           {subject.name}
         </div>
-
-        {/* Card count pill */}
-        <div style={{
-          display:'inline-flex', alignItems:'center', gap:4,
-          padding:'3px 9px', borderRadius:999,
-          background:`${c}10`, border:`1px solid ${c}22`,
-          width:'fit-content', marginBottom:14,
-        }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', borderRadius:999, background:`${c}10`, border:`1px solid ${c}22`, width:'fit-content', marginBottom:14 }}>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
             <rect x="1" y="1.5" width="7" height="5.5" rx="1.2" stroke={c} strokeWidth="1.1"/>
             <path d="M2.5 3.5h4M2.5 5h2.5" stroke={c} strokeWidth="1" strokeLinecap="round"/>
@@ -237,8 +365,6 @@ function SubjectCard({ subject, progress, onClick }) {
             {subject.card_count} card{subject.card_count !== 1 ? 's' : ''}
           </span>
         </div>
-
-        {/* Arrow */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span style={{ fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>
             {subject.topic_count ? `${subject.topic_count} topic${subject.topic_count !== 1 ? 's' : ''}` : 'Start studying →'}
@@ -254,49 +380,50 @@ function SubjectCard({ subject, progress, onClick }) {
   )
 }
 
-function SubjectsView({ subjects, loading, onSelect }) {
-  const allProgress = readProgress()
-
-  // Find subjects with in-progress topics (for continue banner)
-  const inProgressSubjects = subjects.filter(sub => {
-    const subTopicKeys = Object.keys(allProgress)
-    return subTopicKeys.some(k => {
-      const p = allProgress[k]
-      return p?.lastStudied && !p?.completed && (p?.cardIndex ?? 0) > 0
-    })
-  })
+function SubjectsView({ subjects, loading, progress, onSelect, onResume }) {
+  const hasSidebarContent = Object.values(progress).some(p => p?.lastStudied)
 
   return (
-    <div>
-      <div className="fc-page-inner" style={{ display:'flex', flexDirection:'column', gap:22 }}>
+    <div className="fc-subjects-layout">
+      {/* ── Left column ── */}
+      <div className="fc-subjects-left">
         <SubjectHero/>
 
         <div>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-          <div>
-            <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>Choose a Subject</div>
-            <div style={{ fontSize:12, color:'var(--text-tert)', marginTop:2 }}>Tap any subject to pick a topic</div>
+            <div>
+              <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>Choose a subject</div>
+              <div style={{ fontSize:12, color:'var(--text-tert)', marginTop:2 }}>Tap any subject to pick a topic</div>
+            </div>
+            <div style={{ padding:'4px 10px', borderRadius:999, background:`${PURPLE}10`, border:`1px solid ${PURPLE}20` }}>
+              <span style={{ fontSize:11, fontWeight:800, color:PURPLE }}>{subjects.length} subjects</span>
+            </div>
           </div>
-          <div style={{ padding:'4px 10px', borderRadius:999, background:`${PURPLE}10`, border:`1px solid ${PURPLE}20` }}>
-            <span style={{ fontSize:11, fontWeight:800, color:PURPLE }}>{subjects.length} subjects</span>
-          </div>
-        </div>
 
-        {loading ? <Spinner/> : subjects.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'60px 24px', background:'var(--bg-card)', borderRadius:20, border:'1.5px solid var(--border)' }}>
-            <div style={{ fontSize:44, marginBottom:14 }}>🃏</div>
-            <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:8 }}>No flashcards yet</div>
-            <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>Flashcards are being added for all subjects. Check back soon.</div>
-          </div>
-        ) : (
-          <div className="fc-subject-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-            {subjects.map(sub => (
-              <SubjectCard key={sub.id} subject={sub} progress={allProgress} onClick={onSelect}/>
-            ))}
-          </div>
-        )}
+          {loading ? <Spinner/> : subjects.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'60px 24px', background:'var(--bg-card)', borderRadius:20, border:'1.5px solid var(--border)' }}>
+              <div style={{ fontSize:44, marginBottom:14 }}>🃏</div>
+              <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:8 }}>No flashcards yet</div>
+              <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>Flashcards are being added for all subjects. Check back soon.</div>
+            </div>
+          ) : (
+            <div className="fc-subject-grid">
+              {subjects.map(sub => (
+                <SubjectCard key={sub.id} subject={sub} onClick={onSelect}/>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── Right sidebar (desktop only) ── */}
+      {hasSidebarContent && (
+        <div className="fc-subjects-sidebar">
+          <ContinueLearningCard progress={progress} onResume={onResume}/>
+          <RecentlyStudied progress={progress} onResume={onResume}/>
+
+        </div>
+      )}
     </div>
   )
 }
@@ -335,26 +462,13 @@ function TopicCard({ topic, color, topicProgress, onClick, onContinue }) {
       boxShadow: inProgress ? `0 2px 12px ${color}10` : '0 1px 4px rgba(6,42,120,.05)',
       transition:'all .13s',
     }}>
-      {/* Main row — tapping anywhere starts from beginning */}
       <button
         onClick={() => onClick(topic)}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        style={{
-          width:'100%', display:'flex', alignItems:'center', gap:14,
-          padding:'14px 16px',
-          background: hover ? `${color}04` : 'transparent',
-          cursor:'pointer', textAlign:'left', fontFamily:'inherit',
-          border:'none', transition:'background .12s',
-        }}
+        style={{ width:'100%', display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background: hover ? `${color}04` : 'transparent', cursor:'pointer', textAlign:'left', fontFamily:'inherit', border:'none', transition:'background .12s' }}
       >
-        {/* Left icon */}
-        <div style={{
-          width:42, height:42, borderRadius:13, flexShrink:0,
-          background: completed ? `${color}18` : inProgress ? `${color}14` : `${color}10`,
-          border: `1.5px solid ${color}20`,
-          display:'flex', alignItems:'center', justifyContent:'center',
-        }}>
+        <div style={{ width:42, height:42, borderRadius:13, flexShrink:0, background: completed ? `${color}18` : inProgress ? `${color}14` : `${color}10`, border: `1.5px solid ${color}20`, display:'flex', alignItems:'center', justifyContent:'center' }}>
           {completed ? (
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <circle cx="9" cy="9" r="7" fill={color} opacity=".15"/>
@@ -373,26 +487,14 @@ function TopicCard({ topic, color, topicProgress, onClick, onContinue }) {
             </svg>
           )}
         </div>
-
-        {/* Content */}
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
             <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {topic.name}
             </div>
-            {completed && (
-              <span style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${color}15`, color, border:`1px solid ${color}30`, flexShrink:0 }}>
-                Done ✓
-              </span>
-            )}
-            {inProgress && (
-              <span style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${color}12`, color, border:`1px solid ${color}25`, flexShrink:0 }}>
-                In progress
-              </span>
-            )}
+            {completed && <span style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${color}15`, color, border:`1px solid ${color}30`, flexShrink:0 }}>Done ✓</span>}
+            {inProgress && <span style={{ fontSize:9, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${color}12`, color, border:`1px solid ${color}25`, flexShrink:0 }}>In progress</span>}
           </div>
-
-          {/* Progress bar */}
           {lastStudied && (
             <div style={{ marginBottom:5 }}>
               <div style={{ height:4, borderRadius:999, background:'var(--border)', overflow:'hidden' }}>
@@ -400,11 +502,8 @@ function TopicCard({ topic, color, topicProgress, onClick, onContinue }) {
               </div>
             </div>
           )}
-
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>
-              {topic.card_count} card{topic.card_count !== 1 ? 's' : ''}
-            </span>
+            <span style={{ fontSize:11, color:'var(--text-tert)', fontWeight:600 }}>{topic.card_count} card{topic.card_count !== 1 ? 's' : ''}</span>
             {lastStudied && (
               <>
                 <span style={{ fontSize:10, color:'var(--border-strong)' }}>·</span>
@@ -415,34 +514,22 @@ function TopicCard({ topic, color, topicProgress, onClick, onContinue }) {
             )}
           </div>
         </div>
-
-        {/* Chevron */}
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink:0, opacity:.3 }}>
           <path d="M5 3l4 4-4 4" stroke="var(--text-prim)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </button>
 
-      {/* Continue strip — only shows when in progress */}
       {inProgress && (
         <button
           onClick={e => { e.stopPropagation(); onContinue(topic, cardIndex) }}
-          style={{
-            width:'100%', padding:'10px 16px',
-            borderTop:`1px solid ${color}20`,
-            background:`${color}08`,
-            border:'none', borderTop:`1px solid ${color}20`,
-            cursor:'pointer', fontFamily:'inherit',
-            display:'flex', alignItems:'center', justifyContent:'space-between',
-          }}
+          style={{ width:'100%', padding:'10px 16px', background:`${color}08`, border:'none', borderTop:`1px solid ${color}20`, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'space-between' }}
         >
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
               <circle cx="6.5" cy="6.5" r="5.5" stroke={color} strokeWidth="1.3"/>
               <path d="M5 6.5h4M7 4.5l2 2-2 2" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <span style={{ fontSize:12, fontWeight:800, color }}>
-              Continue — card {cardIndex + 1} of {total}
-            </span>
+            <span style={{ fontSize:12, fontWeight:800, color }}>Continue — card {cardIndex + 1} of {total}</span>
           </div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M4 2l4 4-4 4" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -466,25 +553,17 @@ function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, 
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
-      {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
         <BackBtn onClick={onBack}/>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:40, height:40, borderRadius:13, background:`${c}14`, border:`1.5px solid ${c}22`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>
-            {em}
-          </div>
+          <div style={{ width:40, height:40, borderRadius:13, background:`${c}14`, border:`1.5px solid ${c}22`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>{em}</div>
           <div>
-            <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:c, marginBottom:1 }}>
-              {subject.name}
-            </div>
-            <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>
-              Select a Topic
-            </div>
+            <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:c, marginBottom:1 }}>{subject.name}</div>
+            <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>Select a Topic</div>
           </div>
         </div>
       </div>
 
-      {/* Stats strip */}
       {topics.length > 0 && (
         <div style={{ display:'flex', gap:10, marginBottom:18 }}>
           {[
@@ -500,38 +579,23 @@ function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, 
         </div>
       )}
 
-      {/* Search */}
       {topics.length > 4 && (
         <div style={{ position:'relative', marginBottom:14 }}>
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none"
-            style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
             <circle cx="6.5" cy="6.5" r="5" stroke="var(--text-tert)" strokeWidth="1.5"/>
             <path d="M10 10l3 3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <input
-            type="text"
-            placeholder="Search topics…"
-            value={topicSearch}
-            onChange={e => setTopicSearch(e.target.value)}
-            style={{
-              width:'100%', padding:'11px 14px 11px 36px',
-              borderRadius:12, border:'1.5px solid var(--border)',
-              background:'var(--bg-card)', color:'var(--text-prim)',
-              fontSize:14, fontFamily:'inherit', outline:'none',
-              boxSizing:'border-box',
-            }}
+          <input type="text" placeholder="Search topics…" value={topicSearch} onChange={e => setTopicSearch(e.target.value)}
+            style={{ width:'100%', padding:'11px 14px 11px 36px', borderRadius:12, border:'1.5px solid var(--border)', background:'var(--bg-card)', color:'var(--text-prim)', fontSize:14, fontFamily:'inherit', outline:'none', boxSizing:'border-box' }}
           />
         </div>
       )}
 
-      {/* Topic list */}
       {loading ? <Spinner color={c}/> : topics.length === 0 ? (
         <div style={{ textAlign:'center', padding:'50px 24px', background:'var(--bg-card)', borderRadius:20, border:'1.5px solid var(--border)' }}>
           <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
           <div style={{ fontSize:15, fontWeight:800, color:'var(--text-prim)', marginBottom:6 }}>No flashcards yet</div>
-          <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>
-            Flashcards for {subject.name} are coming soon.
-          </div>
+          <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>Flashcards for {subject.name} are coming soon.</div>
         </div>
       ) : filteredTopics.length === 0 ? (
         <div style={{ textAlign:'center', padding:'40px 20px', background:'var(--bg-card)', borderRadius:16, border:'1px solid var(--border)' }}>
@@ -542,14 +606,7 @@ function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, 
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
           {filteredTopics.map(t => (
-            <TopicCard
-              key={t.id}
-              topic={t}
-              color={c}
-              topicProgress={progress[t.id]}
-              onClick={onSelect}
-              onContinue={onContinue}
-            />
+            <TopicCard key={t.id} topic={t} color={c} topicProgress={progress[t.id]} onClick={onSelect} onContinue={onContinue}/>
           ))}
         </div>
       )}
@@ -588,40 +645,24 @@ function FlipCard({ card, flipped, onFlip }) {
         .fc-card-back { transform: rotateY(180deg); }
       `}</style>
 
-      {/* Difficulty pill */}
       <div style={{ display:'flex', justifyContent:'center' }}>
         <span style={{ fontSize:10, fontWeight:800, padding:'3px 12px', borderRadius:999, color:dc, background:db, border:`1px solid ${dc}40`, textTransform:'capitalize', letterSpacing:'.04em' }}>
           {card.difficulty ?? 'medium'}
         </span>
       </div>
 
-      {/* 3D flip card scene */}
-      <div
-        className="fc-card-scene"
-        onClick={onFlip}
-        style={{ cursor: flipped ? 'default' : 'pointer', userSelect:'none', WebkitUserSelect:'none', minHeight: 260 }}
-      >
+      <div className="fc-card-scene" onClick={onFlip} style={{ cursor: flipped ? 'default' : 'pointer', userSelect:'none', WebkitUserSelect:'none', minHeight: 260 }}>
         <div className={`fc-card-inner${flipped ? ' fc-flipped' : ''}`} style={{ minHeight:260 }}>
-
-          {/* FRONT */}
-          <div className="fc-card-face" style={{
-            background:'var(--bg-card)', border:'1.5px solid var(--border)',
-            position:'absolute', inset:0,
-          }}>
-            {/* Corner dots */}
+          <div className="fc-card-face" style={{ background:'var(--bg-card)', border:'1.5px solid var(--border)', position:'absolute', inset:0 }}>
             <div style={{ position:'absolute', top:14, right:14, width:8, height:8, borderRadius:'50%', background:`${PURPLE}30` }}/>
             <div style={{ position:'absolute', top:22, right:22, width:5, height:5, borderRadius:'50%', background:`${PURPLE}18` }}/>
-
-            {/* SVG illustration */}
             {card.svg_code && (
               <div style={{ marginBottom:16, borderRadius:14, overflow:'hidden', background:'#fff', border:'1px solid var(--border)', maxHeight:160, width:'100%', display:'flex', justifyContent:'center', alignItems:'center' }}
                 dangerouslySetInnerHTML={{ __html: card.svg_code.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/\son\w+="[^"]*"/gi,'') }}/>
             )}
-
             <div style={{ fontSize:18, fontWeight:800, color:'var(--text-prim)', lineHeight:1.55, textAlign:'center', letterSpacing:'-.01em', width:'100%' }}>
               {card.front_text}
             </div>
-
             {!flipped && (
               <div style={{ position:'absolute', bottom:14, display:'flex', alignItems:'center', gap:5, opacity:.45 }}>
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -633,15 +674,8 @@ function FlipCard({ card, flipped, onFlip }) {
             )}
           </div>
 
-          {/* BACK */}
-          <div className="fc-card-face fc-card-back" style={{
-            background:'var(--bg-card)',
-            border:`1.5px solid ${GREEN}35`,
-            position:'absolute', inset:0,
-          }}>
-            <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.12em', color:GREEN, marginBottom:16 }}>
-              Answer
-            </div>
+          <div className="fc-card-face fc-card-back" style={{ background:'var(--bg-card)', border:`1.5px solid ${GREEN}35`, position:'absolute', inset:0 }}>
+            <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.12em', color:GREEN, marginBottom:16 }}>Answer</div>
             <div style={{ fontSize:17, color:'var(--text-prim)', lineHeight:1.7, fontWeight:700, textAlign:'center', width:'100%' }}>
               {card.back_text}
             </div>
@@ -651,7 +685,6 @@ function FlipCard({ card, flipped, onFlip }) {
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>
@@ -661,52 +694,35 @@ function FlipCard({ card, flipped, onFlip }) {
 function StudyResults({ cards, known, learning, topicName, subjectColor, onRestart, onBack }) {
   const total    = cards.length
   const knownN   = known.size
-  const learnN   = learning.size
-  const skippedN = total - knownN - learnN
   const pct      = total > 0 ? Math.round((knownN / total) * 100) : 0
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-      {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
         <BackBtn onClick={onBack}/>
         <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em' }}>Session complete</div>
       </div>
-
-      {/* Result card */}
       <div style={{ borderRadius:22, background:'var(--bg-card)', border:'1.5px solid var(--border)', padding:'28px 24px', textAlign:'center', boxShadow:'0 4px 20px rgba(6,42,120,.08)' }}>
-        {/* Emoji + score */}
-        <div style={{ fontSize:52, marginBottom:12 }}>
-          {pct >= 80 ? '🎉' : pct >= 50 ? '💪' : '📖'}
-        </div>
+        <div style={{ fontSize:52, marginBottom:12 }}>{pct >= 80 ? '🎉' : pct >= 50 ? '💪' : '📖'}</div>
         <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:4 }}>{topicName}</div>
         <div style={{ fontSize:42, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.04em', lineHeight:1 }}>
           {pct}<span style={{ fontSize:22, color:'var(--text-tert)', fontWeight:700 }}>%</span>
         </div>
         <div style={{ fontSize:13, color:'var(--text-tert)', marginTop:4, marginBottom:24 }}>confidence score</div>
-
-        {/* Stat boxes */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:24 }}>
           {[
-            { label:'Got it', count:knownN, color:GREEN, emoji:'✓' },
-            { label:'Still learning', count:total - knownN, color:GOLD, emoji:'↺' },
+            { label:'Got it', count:knownN, color:GREEN },
+            { label:'Still learning', count:total - knownN, color:GOLD },
           ].map(r => (
-            <div key={r.label} style={{ borderRadius:14, background:`${r.color === 'var(--text-tert)' ? 'rgba(0,0,0,.03)' : r.color + '0E'}`, border:`1px solid ${r.color === 'var(--text-tert)' ? 'var(--border)' : r.color + '25'}`, padding:'14px 6px' }}>
+            <div key={r.label} style={{ borderRadius:14, background:`${r.color}0E`, border:`1px solid ${r.color}25`, padding:'14px 6px' }}>
               <div style={{ fontSize:20, fontWeight:900, color:r.color, marginBottom:2 }}>{r.count}</div>
-              <div style={{ fontSize:9, fontWeight:700, color:r.color, lineHeight:1.3, opacity:r.color === 'var(--text-tert)' ? .6 : 1 }}>{r.label}</div>
+              <div style={{ fontSize:9, fontWeight:700, color:r.color, lineHeight:1.3 }}>{r.label}</div>
             </div>
           ))}
         </div>
-
-        {/* Motivational message */}
         <div style={{ padding:'12px 14px', borderRadius:14, background:`${subjectColor}06`, border:`1px solid ${subjectColor}18`, marginBottom:20, fontSize:13, color:'var(--text-tert)', lineHeight:1.5 }}>
-          {pct >= 80
-            ? '🌟 Excellent work! You\'re mastering this topic.'
-            : pct >= 50
-            ? '💪 Good progress! A second pass will lock these in.'
-            : '📖 Keep going — each review makes it sticker.'}
+          {pct >= 80 ? '🌟 Excellent work! You\'re mastering this topic.' : pct >= 50 ? '💪 Good progress! A second pass will lock these in.' : '📖 Keep going — each review makes it sticker.'}
         </div>
-
         <button onClick={onRestart} style={{ width:'100%', padding:'15px', borderRadius:15, border:'none', background:subjectColor, color:'#fff', fontSize:14, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 ${subjectColor}88, 0 8px 20px ${subjectColor}30`, marginBottom:10 }}>
           Study again →
         </button>
@@ -718,7 +734,7 @@ function StudyResults({ cards, known, learning, topicName, subjectColor, onResta
   )
 }
 
-function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
+function StudyView({ cards, topic, subject, onBack, startIndex = 0, onProgressSave }) {
   const [index,    setIndex]    = useState(startIndex)
   const [flipped,  setFlipped]  = useState(false)
   const [done,     setDone]     = useState(false)
@@ -736,12 +752,21 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
     setKnown(newKnown)
     setLearning(newLearning)
 
-    // Save progress incrementally
     const doneCount = newKnown.size
-    const completed = index + 1 >= cards.length && doneCount >= cards.length
-    markTopicProgress(topic.id, doneCount, cards.length, completed, index + 1 >= cards.length ? 0 : index + 1)
+    const nextIndex = index + 1 >= cards.length ? 0 : index + 1
+    const completed = index + 1 >= cards.length
 
-    if (index + 1 >= cards.length) {
+    // Save with rich meta so sidebar can display subject/topic names
+    markTopicProgress(topic.id, doneCount, cards.length, completed, completed ? 0 : nextIndex, {
+      topicName:   topic.name,
+      subjectName: subject.name,
+      topicObj:    topic,
+      subjectObj:  subject,
+    })
+
+    if (onProgressSave) onProgressSave()
+
+    if (completed) {
       setDone(true)
     } else {
       setIndex(i => i + 1)
@@ -752,19 +777,21 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
   function restart() {
     setIndex(0); setFlipped(false); setDone(false)
     setKnown(new Set()); setLearning(new Set())
-    markTopicProgress(topic.id, 0, cards.length, false, 0)
+    markTopicProgress(topic.id, 0, cards.length, false, 0, {
+      topicName:   topic.name,
+      subjectName: subject.name,
+      topicObj:    topic,
+      subjectObj:  subject,
+    })
+    if (onProgressSave) onProgressSave()
   }
 
   if (done) {
     return (
       <StudyResults
-        cards={cards}
-        known={known}
-        learning={learning}
-        topicName={topic.name}
-        subjectColor={subjectColor}
-        onRestart={restart}
-        onBack={onBack}
+        cards={cards} known={known} learning={learning}
+        topicName={topic.name} subjectColor={subjectColor}
+        onRestart={restart} onBack={onBack}
       />
     )
   }
@@ -773,71 +800,46 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
     <div className="fc-page-inner-study" style={{ display:'flex', flexDirection:'column', gap:0 }}>
       <style>{`@keyframes fc-fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      {/* Top bar */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
         <BackBtn onClick={onBack}/>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:subjectColor, marginBottom:1 }}>
-            {subject.name}
-          </div>
-          <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-            {topic.name}
-          </div>
+          <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:subjectColor, marginBottom:1 }}>{subject.name}</div>
+          <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{topic.name}</div>
         </div>
+        <div style={{ fontSize:12, color:'var(--text-tert)', fontWeight:700 }}>{index + 1} / {cards.length}</div>
       </div>
 
-      {/* Flip card */}
       <FlipCard card={card} flipped={flipped} onFlip={() => setFlipped(true)}/>
 
-      {/* Action buttons */}
       <div style={{ display:'flex', gap:10, marginTop:16 }}>
-        {/* Prev */}
         <button
           onClick={() => { if (index > 0) { setIndex(i => i - 1); setFlipped(false) } }}
           disabled={index === 0}
           style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'transparent', color: index === 0 ? 'var(--text-tert)' : 'var(--text-prim)', fontSize:13, fontWeight:800, cursor: index === 0 ? 'not-allowed' : 'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6, opacity: index === 0 ? 0.35 : 1, transition:'opacity .15s' }}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
           Prev
         </button>
 
-        {/* Before flip: "Flip to reveal" as the only right button */}
         {!flipped && (
-          <button
-            onClick={() => setFlipped(true)}
-            style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:subjectColor, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 ${subjectColor}88`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
-          >
+          <button onClick={() => setFlipped(true)} style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:subjectColor, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 ${subjectColor}88`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
             Flip to reveal
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M5 2l5 5-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         )}
 
-        {/* After flip: Got it (primary) + Still learning (secondary) */}
         {flipped && (
           <>
-            <button
-              onClick={() => advance('learning')}
-              style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5, animation:'fc-fadeup .18s ease' }}
-            >
+            <button onClick={() => advance('learning')} style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5, animation:'fc-fadeup .18s ease' }}>
               ↺ Again
             </button>
-            <button
-              onClick={() => advance('known')}
-              style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:GREEN, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 #15803d,0 6px 16px ${GREEN}30`, display:'flex', alignItems:'center', justifyContent:'center', gap:6, animation:'fc-fadeup .18s ease' }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M2.5 7l3 3 6-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+            <button onClick={() => advance('known')} style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:GREEN, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 #15803d,0 6px 16px ${GREEN}30`, display:'flex', alignItems:'center', justifyContent:'center', gap:6, animation:'fc-fadeup .18s ease' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               Got it!
             </button>
           </>
         )}
       </div>
-
     </div>
   )
 }
@@ -849,28 +851,26 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
 export default function FlashcardsPage() {
   const { dark } = useTheme()
 
-  // Navigation state
-  const [view,          setView]          = useState('subjects')   // 'subjects' | 'topics' | 'study'
+  const [view,          setView]          = useState('subjects')
   const [subjects,      setSubjects]      = useState([])
   const [activeSubject, setActiveSubject] = useState(null)
   const [topics,        setTopics]        = useState([])
   const [activeTopic,   setActiveTopic]   = useState(null)
   const [cards,         setCards]         = useState([])
-  const [startIndex,    setStartIndex]    = useState(0)   // card to resume from
+  const [startIndex,    setStartIndex]    = useState(0)
 
-  // Loading states
-  const [loadingSubs,    setLoadingSubs]    = useState(true)
-  const [loadingTopics,  setLoadingTopics]  = useState(false)
-  const [loadingCards,   setLoadingCards]   = useState(false)
+  const [loadingSubs,   setLoadingSubs]   = useState(true)
+  const [loadingTopics, setLoadingTopics] = useState(false)
+  const [loadingCards,  setLoadingCards]  = useState(false)
 
-  // Progress (read once on mount, re-read on topic view)
   const [progress, setProgress] = useState({})
 
+  const refreshProgress = useCallback(() => setProgress(readProgress()), [])
+
   useEffect(() => {
-    setProgress(readProgress())
+    refreshProgress()
   }, [])
 
-  // Load subjects on mount
   useEffect(() => {
     fetch('/api/student/flashcards')
       .then(r => r.json())
@@ -884,7 +884,7 @@ export default function FlashcardsPage() {
     setView('topics')
     setTopics([])
     setLoadingTopics(true)
-    setProgress(readProgress())   // refresh progress
+    refreshProgress()
     try {
       const r = await fetch(`/api/student/flashcards?subjectName=${encodeURIComponent(subject.name)}`)
       const d = await r.json()
@@ -893,8 +893,10 @@ export default function FlashcardsPage() {
     setLoadingTopics(false)
   }
 
-  async function selectTopic(topic) {
+  async function selectTopic(topic, subject) {
+    const sub = subject ?? activeSubject
     setActiveTopic(topic)
+    setActiveSubject(sub)
     setCards([])
     setLoadingCards(true)
     setView('study')
@@ -906,7 +908,22 @@ export default function FlashcardsPage() {
     setLoadingCards(false)
   }
 
-  // Resume from a specific card index (triggered by Continue button)
+  // Resume from sidebar — need to load the subject's topics first if not already loaded
+  async function resumeFromSidebar(subject, topic, cardIndex) {
+    setStartIndex(cardIndex)
+    setActiveSubject(subject)
+    // Load topics for the subject in the background (so back button works)
+    setTopics([])
+    setLoadingTopics(true)
+    try {
+      const r = await fetch(`/api/student/flashcards?subjectName=${encodeURIComponent(subject.name)}`)
+      const d = await r.json()
+      setTopics(d.topics ?? [])
+    } catch { setTopics([]) }
+    setLoadingTopics(false)
+    await selectTopic(topic, subject)
+  }
+
   async function selectTopicFrom(topic, cardIndex) {
     setStartIndex(cardIndex)
     await selectTopic(topic)
@@ -916,6 +933,7 @@ export default function FlashcardsPage() {
     setView('subjects')
     setActiveSubject(null)
     setTopics([])
+    refreshProgress()
   }
 
   function backToTopics() {
@@ -923,31 +941,50 @@ export default function FlashcardsPage() {
     setActiveTopic(null)
     setCards([])
     setStartIndex(0)
-    setProgress(readProgress())   // re-read so progress updates are reflected
+    refreshProgress()
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
         @keyframes fc-spin{to{transform:rotate(360deg)}}
         @keyframes fc-fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         *{box-sizing:border-box}
-        /* Desktop layout */
-        @media(min-width:900px){
-          .fc-subject-grid{ grid-template-columns:1fr 1fr 1fr !important; }
-          .fc-page-inner{ display:grid; grid-template-columns:1fr 520px; gap:48px; align-items:start; }
-          .fc-page-inner-study{ max-width:640px; margin:0 auto; }
+
+        /* ── Subjects view: two-column on desktop ── */
+        .fc-subjects-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
         }
-        @media(min-width:1200px){
-          .fc-subject-grid{ grid-template-columns:1fr 1fr 1fr 1fr !important; }
+        .fc-subjects-left  { display: flex; flex-direction: column; gap: 22px; }
+        .fc-subjects-sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+        /* Subject grid: 2-up on mobile */
+        .fc-subject-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Study mode: constrained width */
+        .fc-page-inner-study { max-width: 640px; margin: 0 auto; }
+
+        @media(min-width: 900px) {
+          .fc-subjects-layout {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 36px;
+            align-items: start;
+          }
+          .fc-subject-grid { grid-template-columns: 1fr 1fr 1fr !important; }
+        }
+        @media(min-width: 1200px) {
+          .fc-subjects-layout { grid-template-columns: 1fr 360px; gap: 48px; }
+          .fc-subject-grid { grid-template-columns: 1fr 1fr 1fr !important; }
         }
       `}</style>
       <AppBg dark={dark}/>
 
       <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 100px', position:'relative', zIndex:1 }}>
 
-        {/* Breadcrumb — hidden in study mode (it has its own header) */}
+        {/* Breadcrumb */}
         {view !== 'study' && (
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:20, flexWrap:'wrap' }}>
             <Link href="/student/learn" style={{ textDecoration:'none' }}>
@@ -971,7 +1008,9 @@ export default function FlashcardsPage() {
           <SubjectsView
             subjects={subjects}
             loading={loadingSubs}
+            progress={progress}
             onSelect={selectSubject}
+            onResume={resumeFromSidebar}
           />
         )}
 
@@ -1011,6 +1050,7 @@ export default function FlashcardsPage() {
               subject={activeSubject}
               onBack={backToTopics}
               startIndex={startIndex}
+              onProgressSave={refreshProgress}
             />
           )
         )}

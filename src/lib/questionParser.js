@@ -843,35 +843,54 @@ export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topi
   // ── Get the subject-specific module ─────────────────────────────────────────
   const mod = getSubjectModule(subjectName)
 
-  // ── Format questions inline ──────────────────────────────────────────────────
+  // ── Format questions inline — NO answer shown, Claude solves independently ──
   const questionLines = rawQuestions.map((q, i) => {
     const opts = Object.entries(q.option ?? {})
       .map(([k, v]) => `   ${k.toUpperCase()}. ${v}`)
       .join('\n')
-    const answer = (q.answer ?? '').toUpperCase()
-    const hint   = q.solution ? `\n   Solution hint: ${q.solution.trim().slice(0, 200)}` : ''
-    return `Q${i + 1}. ${(q.question ?? '').trim()}\n${opts}\n   ✓ Answer: ${answer}${hint}`
+    // We deliberately do NOT include the source answer here.
+    // Claude must determine the correct answer independently.
+    // The source answer is stored separately and compared after.
+    return `Q${i + 1}. ${(q.question ?? '').trim()}\n${opts}`
   }).join('\n\n')
 
-  return `You are writing student-friendly solutions for ${ctx} — ${subjectName}.
+  // Build a map of source answers for reference (used in merge, not in prompt)
+  // This is NOT sent to Claude — it's used post-merge to flag disagreements.
 
-Below are ${rawQuestions.length} questions. For EACH one write a clear explanation.
+  return `You are an expert ${ctx} teacher. For each question below, solve it yourself and write a student-friendly explanation.
+
+${rawQuestions.length} questions follow. Process ALL of them.
 
 ═══════════════════════════════════════
 ⚠️ CRITICAL — READ BEFORE STARTING
 ═══════════════════════════════════════
 
-You MUST process questions in EXACTLY the order shown (Q1, Q2, Q3 ...).
-Do NOT skip, reorder, or group questions.
-Each output object MUST include "question_snippet" — the first 8 words of that question
-copied EXACTLY. This is used to verify each explanation matches its question.
-If question_snippet does not match the question, the explanation will be rejected.
+YOU MUST DETERMINE THE CORRECT ANSWER YOURSELF.
+No answer key is provided. Solve each question from first principles.
 
-Before writing any explanation, verify:
-  1. Which question number is this? (Q1? Q2?)
-  2. What is the correct answer letter shown after "✓ Answer:"?
-  3. What is the actual text of that answer option?
-Your explanation MUST match the correct answer shown — not what you think is correct.
+MATCHING RULE — each output object MUST include "question_snippet":
+  Copy the first 15 words of that question EXACTLY as written.
+  This is the primary key used to match your output back to the question.
+  If question_snippet does not match, the explanation will be rejected.
+  Do NOT paraphrase. Do NOT shorten below 15 words if the question is that long.
+
+ANSWER FORMAT — "verified_answer" field:
+  Set this to the letter (A / B / C / D / E) you have determined is correct.
+  Set "confidence" to one of: "certain" | "likely" | "unsure"
+  If you are unsure, still give your best answer — do not leave it blank.
+
+ANSWER_NOTE FORMATTING — CRITICAL:
+  The answer_note field MUST start: "The correct answer is **X — [option text]**."
+  The letter AND the option text together must be wrapped in **double asterisks**.
+  This makes it bold when rendered, so the student's eye goes straight to the answer.
+
+  CORRECT: "The correct answer is **C — Photosynthesis**. Plants use sunlight..."
+  CORRECT: "The correct answer is **A — 3.20 × 10⁻⁵**. Substituting into..."
+  CORRECT: "The correct answer is **B — The Federal Executive Council**. This body..."
+  WRONG:   "The correct answer is C — Photosynthesis."  ← no bold markers
+  WRONG:   "The correct answer is **C** — Photosynthesis."  ← only letter bolded, not the text
+
+  After the bold opener, write 1–2 plain sentences explaining WHY.
 
 ⚠️ STEPS DECISION — make this call for EVERY question before writing:
 
@@ -986,14 +1005,17 @@ OUTPUT — JSON ARRAY ONLY
 ═══════════════════════════════════════
 
 Return ONLY a valid JSON array. No markdown fences, no text before or after.
-One object per question, SAME ORDER as above. EXACTLY ${rawQuestions.length} objects.
+One object per question. Order does not matter — matching is done by question_snippet.
+EXACTLY ${rawQuestions.length} objects — one for every question above.
 
 USE THE CORRECT SHAPE FOR EACH QUESTION:
 
 ── SHAPE A: RECALL question (identification / definition / naming — no arithmetic) ──
 {
   "index": 1,
-  "question_snippet": "COPY the first 8 words of Q1 here",
+  "question_snippet": "COPY the first 15 words of Q1 here exactly",
+  "verified_answer": "D",
+  "confidence": "certain",
   "topic_title": "exact topic name from the list",
   "subtopic_title": "specific subtopic or empty string",
   "explanation": {
@@ -1002,24 +1024,26 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
     "variables_key": [],
     "intro": "The sea of electrons model describes a specific type of bonding — let's match it correctly.",
     "steps": [],
-    "answer_note": "The correct answer is D — metallic bonds. In metallic bonding, metal cations sit in a shared sea of delocalized electrons that holds the structure together.",
+    "answer_note": "The correct answer is **D — Metallic bonding**. In this type of bonding, metal cations sit in a shared sea of delocalised electrons that holds the structure together.",
     "hint": "Which type of bonding involves a lattice of positive ions surrounded by freely moving electrons?",
     "study_tip": "The sea of electrons explains three key metal properties: electrical conductivity, thermal conductivity, and malleability.",
     "illustration_title": "",
     "illustration_prompt": "",
     "wrong_options": {
-      "A": "A — **covalent bonding** involves shared electron pairs between specific atoms, not a delocalized sea of electrons freely moving through a lattice.",
+      "A": "A — **covalent bonding** involves shared electron pairs between specific atoms, not a delocalised sea of electrons freely moving through a lattice.",
       "B": "B — **ionic bonding** produces discrete positive and negative ions held by electrostatic attraction. There is no sea of electrons.",
       "C": "C — a **dative bond** is a specialised type of covalent bond where one atom donates both electrons. It is not a collective electron sea."
     },
-    "correct": "The correct answer is D — metallic bonds. Metal cations sit in a sea of delocalized electrons."
+    "correct": "The correct answer is **D — Metallic bonding**. Metal cations sit in a sea of delocalised electrons."
   }
 }
 
 ── SHAPE B: CALCULATION question (has numbers; requires formula and arithmetic) ──
 {
   "index": 2,
-  "question_snippet": "COPY the first 8 words of Q2 here",
+  "question_snippet": "COPY the first 15 words of Q2 here exactly",
+  "verified_answer": "C",
+  "confidence": "certain",
   "topic_title": "exact topic name from the list",
   "subtopic_title": "specific subtopic or empty string",
   "explanation": {
@@ -1038,7 +1062,7 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
       { "title": "Substitute the values",   "lines": ["$CSA = 2 \\\\times \\\\frac{22}{7} \\\\times 4 \\\\times 14$"] },
       { "title": "Simplify",                "lines": ["$CSA = 2 \\\\times 176$", "$CSA = 352$ cm²"] }
     ],
-    "answer_note": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm and h = 14cm gives 352cm².",
+    "answer_note": "The correct answer is **C — 352 cm²**. Using CSA = 2πrh with r = 4 cm and h = 14 cm gives 352 cm².",
     "hint": "Start by identifying the formula for curved surface area of a cylinder.",
     "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
     "illustration_title": "Cylinder — Radius 4 cm, Height 14 cm",
@@ -1047,80 +1071,100 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
       "B": "B — this uses the **total surface area** formula instead of the curved surface area. TSA = 2πrh + 2πr² includes the two circular ends, which should not be counted here.",
       "D": "D — the **diameter** (8 cm) was substituted directly instead of the radius (4 cm). Always halve the diameter before substituting into the formula."
     },
-    "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm and h = 14cm gives 352cm²."
+    "correct": "The correct answer is **C — 352 cm²**. Using CSA = 2πrh with r = 4 cm and h = 14 cm gives 352 cm²."
   }
 }
 
 FINAL CHECK before submitting:
-  • index matches Q number
-  • question_snippet matches the first 8 words of that question
-  • answer_note starts with the correct answer letter from ✓ Answer
-  • steps: [] for every recall/definition question — never put steps on a recall question
+  • question_snippet = first 15 words of that question, copied exactly
+  • verified_answer = the letter YOU determined is correct (A/B/C/D/E)
+  • answer_note opens with "The correct answer is **X — [option text]**." — BOTH letter and text bold
+  • steps: [] for every recall/definition question
   • illustration_title and illustration_prompt are BOTH "" when no diagram is needed
-  • illustration_title is ALWAYS filled when illustration_prompt is filled — never leave the title empty if there is a diagram`
+  • illustration_title is ALWAYS filled when illustration_prompt is filled`
 }
 
 //
 // Merges the AI's enrichment delta onto the original SdashAPI question data.
 // Called in the import page after parseEnrichment() validates the paste-back.
 // The merged result goes straight into the Tag Review UI (same as upload flow).
+//
+// KEY CHANGES (answer-verification rebuild):
+//   • MATCHING: snippet-first, index as fallback. Snippet is now 15 words.
+//   • ANSWER SOURCE: correct_answer comes from e.verified_answer (Claude's answer),
+//     NOT from q.answer (Sdash's answer). Sdash's answer is stored in sdash_answer.
+//   • DISAGREEMENT FLAG: _answerDisagreement = true when Claude and Sdash differ.
+//     Admin sees a clear flag in the review UI and decides which is right.
+//   • _mismatch: now only means "this enrichment object may belong to a different
+//     question" — it no longer conflates question-matching with answer-checking.
 // ─────────────────────────────────────────────────────────────────────────────
 export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, subjectName) {
-  // Build index → enrichment map (AI returns 1-based index)
+  const allEnrichments = enrichments ?? []
+
+  // ── Snippet matcher ─────────────────────────────────────────────────────────
+  // Normalises both strings to alphanumeric lowercase and checks prefix overlap.
+  // 15-word snippets → 60–80 chars after normalisation → very low false-match rate.
+  function snippetMatch(qText, snippet) {
+    if (!snippet || !qText) return false
+    const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const a = norm(qText).slice(0, 60)
+    const b = norm(snippet).slice(0, 60)
+    // Accept if b is a prefix of a, or vice versa (handles snippet slightly longer than question start)
+    return a.length > 12 && b.length > 12 && (a.startsWith(b.slice(0, 50)) || b.startsWith(a.slice(0, 50)))
+  }
+
+  // Build index map as fallback
   const byIndex = {}
-  for (const e of (enrichments ?? [])) {
+  for (const e of allEnrichments) {
     if (e.index != null) byIndex[Number(e.index)] = e
   }
 
-  // Secondary match by question_snippet — if the AI included one and the index is off,
-  // we can still find the right question by text prefix match.
-  function snippetMatch(qText, snippet) {
-    if (!snippet || !qText) return false
-    const a = qText.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
-    const b = snippet.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
-    return a.length > 8 && b.length > 8 && a.startsWith(b.slice(0, 20))
-  }
-
   return fetchedQuestions.map((q, i) => {
-    let e = byIndex[i + 1] ?? {}
+    const qText = (q.question ?? '').trim()
 
-    // Verify the match — if the AI returned a question_snippet, check it matches
-    const snippet = e.question_snippet ?? ''
-    const qText   = (q.question ?? '').trim()
+    // ── PRIMARY MATCH: find enrichment by question_snippet ──────────────────
+    let e = allEnrichments.find(en =>
+      en.question_snippet && snippetMatch(qText, en.question_snippet)
+    )
+
+    // ── FALLBACK: index-based match ─────────────────────────────────────────
+    if (!e) e = byIndex[i + 1]
+
+    // Still nothing — empty object, question will save without enrichment
+    if (!e) e = {}
+
+    // ── QUESTION MATCHING INTEGRITY CHECK ───────────────────────────────────
+    // If we matched by index and the enrichment has a snippet that doesn't match,
+    // the AI returned things out of order — flag it.
     let _mismatch = false
-
-    if (snippet && !snippetMatch(qText, snippet)) {
-      // Index-based match failed the snippet check — try to find the right enrichment by snippet
-      const allEnrichments = Object.values(byIndex)
-      const betterMatch = allEnrichments.find(en =>
-        en.question_snippet && snippetMatch(qText, en.question_snippet)
-      )
-      if (betterMatch) {
-        e = betterMatch
-      } else {
-        _mismatch = true  // Flag this for the admin preview
-      }
+    if (e.question_snippet && !snippetMatch(qText, e.question_snippet)) {
+      _mismatch = true
     }
 
-    // Secondary mismatch check: does the explanation's answer_note start with the correct answer letter?
-    // e.g. if correct_answer is "C" but answer_note says "The correct answer is A", flag it.
-    if (!_mismatch && e.explanation) {
-      const answerNote = (e.explanation.answer_note ?? e.explanation.correct ?? '').toLowerCase()
-      const correctLetter = (q.answer ?? '').toLowerCase().trim()
-      if (correctLetter && answerNote) {
-        // Look for "the correct answer is X" pattern
-        const letterMatch = answerNote.match(/correct answer is\s+([a-e])/i)
-        if (letterMatch && letterMatch[1].toLowerCase() !== correctLetter) {
-          _mismatch = true  // AI explained the wrong answer
-        }
-      }
-    }
+    // ── ANSWER VERIFICATION ─────────────────────────────────────────────────
+    // verified_answer = Claude's independently-determined answer (source of truth)
+    // sdash_answer    = Sdash's provided answer (stored for reference)
+    // _answerDisagreement = true when they differ → admin reviews before saving
+    const verifiedAnswer = (e.verified_answer ?? '').toUpperCase().trim()
+    const sdashAnswer    = (q.answer ?? '').toUpperCase().trim()
+    const confidence     = e.confidence ?? 'unknown'
+
+    // Use Claude's answer as correct_answer.
+    // If Claude returned nothing (no match at all), fall back to Sdash's answer
+    // with a disagreement flag so the admin knows.
+    const correctAnswer       = verifiedAnswer || sdashAnswer
+    const _answerDisagreement = !!(
+      verifiedAnswer &&
+      sdashAnswer &&
+      verifiedAnswer !== sdashAnswer
+    )
+
     return {
       exam:          examType,
       subject:       subjectName,
       year:          q.examyear ?? '',
       passage_text:  q.section  ?? null,
-      question_text: (q.question ?? '').trim(),
+      question_text: qText,
       has_image:     !!(q.image),
       image_description: '',
       options: {
@@ -1130,11 +1174,12 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
         D: q.option?.d ?? q.option?.D ?? '',
         ...(q.option?.e || q.option?.E ? { E: q.option.e ?? q.option.E } : {}),
       },
-      correct_answer: (q.answer ?? '').toUpperCase(),
-      hint:           e.explanation?.hint ?? '',
+      correct_answer:  correctAnswer,   // Claude's verified answer (primary)
+      sdash_answer:    sdashAnswer,      // Sdash's answer (reference only)
+      ai_confidence:   confidence,       // 'certain' | 'likely' | 'unsure'
+      hint:            e.explanation?.hint ?? '',
       explanation: e.explanation
         ? {
-            // New schema fields
             concept:              e.explanation.concept              ?? '',
             formula_box:          e.explanation.formula_box          ?? '',
             variables_key:        e.explanation.variables_key        ?? [],
@@ -1147,21 +1192,21 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
             illustration_title:   e.explanation.illustration_title   ?? '',
             illustration_prompt:  e.explanation.illustration_prompt  ?? '',
             // Legacy compat
-            correct:          e.explanation.correct          ?? e.explanation.answer_note ?? '',
-            workings:         e.explanation.workings         ?? [],
-            wrong_options:    e.explanation.wrong_options    ?? {},
+            correct:       e.explanation.correct      ?? e.explanation.answer_note ?? '',
+            workings:      e.explanation.workings     ?? [],
+            wrong_options: e.explanation.wrong_options ?? {},
           }
         : {
             concept: '', formula_box: '', variables_key: [],
             intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
             hint: '', study_tip: '', wrong_option_note: '',
-            illustration_title: '',
-            illustration_prompt: '',
+            illustration_title: '', illustration_prompt: '',
             correct: q.solution?.trim() ?? '', wrong_options: {},
           },
-      topic_title:    e.topic_title    ?? '',
-      subtopic_title: e.subtopic_title ?? '',
-      _mismatch,   // true if explanation may not match this question
+      topic_title:           e.topic_title    ?? '',
+      subtopic_title:        e.subtopic_title ?? '',
+      _mismatch,             // true = enrichment object may belong to wrong question
+      _answerDisagreement,   // true = Claude's answer ≠ Sdash's answer → admin must decide
     }
   })
 }
@@ -1243,10 +1288,11 @@ export function parseEnrichment(rawText) {
   const errors = []
   parsed.forEach((e, i) => {
     const n = e.index ?? i + 1
-    // Accept either the new answer_note field OR the legacy correct field
     const hasExplanation = e.explanation?.answer_note?.trim() || e.explanation?.correct?.trim()
-    if (!hasExplanation) errors.push(`Question ${n}: explanation.answer_note (or correct) is empty`)
-    if (!e.topic_title?.trim())          errors.push(`Question ${n}: topic_title is missing`)
+    if (!hasExplanation)              errors.push(`Question ${n}: explanation.answer_note (or correct) is empty`)
+    if (!e.topic_title?.trim())       errors.push(`Question ${n}: topic_title is missing`)
+    if (!e.verified_answer?.trim())   errors.push(`Question ${n}: verified_answer is missing — Claude must determine the answer independently`)
+    if (!e.question_snippet?.trim())  errors.push(`Question ${n}: question_snippet is missing — required for safe matching`)
   })
 
   return { valid: errors.length === 0, errors, enrichments: parsed }}

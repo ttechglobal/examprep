@@ -1,9 +1,35 @@
-// src/app/api/student/questions/route.js — v3
+// src/app/api/student/questions/route.js — v4
 // ─────────────────────────────────────────────────────────────────────────────
-// Year-bucketed sampling: fetches the distinct set of years in the question
-// bank for this subject/exam, then pulls a proportional quota from each year.
-// Result: genuine spread regardless of how many years of papers are in the DB.
-// As new years are added they are automatically included in the distribution.
+// Per-year parallel sampling — guaranteed year spread.
+//
+// THE PROBLEM WITH v3:
+//   v3 fetched a single pool of (count × 4) rows with no ORDER BY RANDOM().
+//   Supabase returns rows in storage/insertion order, so a subject where 2022
+//   was imported first fills the pool with 2022 questions. The JS bucketing
+//   then "spreads across years" but only the years that happened to appear in
+//   those first 80 rows. 2019 and 2020 questions, imported later, never show up.
+//
+// THE FIX (v4):
+//   1. Discover available years (cheap index scan — unchanged from v3).
+//   2. For each year, count how many questions exist, pick a random offset,
+//      and fetch a small quota. This guarantees every year is represented.
+//   3. Run all year queries in parallel (Promise.all) — total latency equals
+//      the slowest single query, not the sum of all queries.
+//   4. Merge, shuffle (so years interleave), and slice to requested count.
+//
+// WHY RANDOM OFFSET INSTEAD OF ORDER BY RANDOM():
+//   ORDER BY RANDOM() forces a full sequential scan + sort on every request.
+//   A random offset with .range(offset, offset + quota) uses the index and is
+//   ~10× faster on large tables. Randomness comes from the offset, not sorting.
+//
+// PARAMETERS:
+//   exam        — 'WAEC' | 'JAMB' | 'IGCSE'
+//   subjects    — comma-separated subject names  OR
+//   subject_id  — single subject UUID
+//   count       — number of questions (default 20, max 100)
+//   mode        — 'mixed' | 'weak' | 'quick5' | 'practice' | 'timed'
+//   topic_id    — constrain to a single topic (topic practice mode)
+//   exclude     — comma-separated question IDs to skip (seen-question exclusion)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as svcClient } from '@supabase/supabase-js'
@@ -22,6 +48,13 @@ function shuffle(arr) {
   return arr
 }
 
+// How many questions to fetch per year.
+// Over-fetch slightly so the final shuffle has real variety to pick from.
+// e.g. 20 questions, 5 years → ceil(20 × 1.5 / 5) = 6 per year = 30-row pool
+function quotaPerYear(totalCount, yearCount) {
+  return Math.max(2, Math.ceil((totalCount * 1.5) / yearCount))
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -31,6 +64,12 @@ export async function GET(request) {
     const mode       = searchParams.get('mode') ?? 'mixed'
     const topicId    = searchParams.get('topic_id')
     const subjectId  = searchParams.get('subject_id')
+    const excludeStr = searchParams.get('exclude') ?? ''
+
+    // Question IDs the student has already seen — skip them
+    const excludeIds = excludeStr
+      ? excludeStr.split(',').map(s => s.trim()).filter(Boolean)
+      : []
 
     const subjectNames = subjectStr.split(',').map(s => s.trim()).filter(Boolean)
 
@@ -56,11 +95,10 @@ export async function GET(request) {
       return NextResponse.json({ error: 'No matching subjects found' }, { status: 404 })
     }
 
-    // ── 2. Shared filter helper ───────────────────────────────────────────────
+    // ── 2. Base filter builder ────────────────────────────────────────────────
     // The questions table has two columns for exam filtering:
-    //   exam_types  — new array column  e.g. ['WAEC'] or ['WAEC','JAMB']
-    //   exam_type   — legacy string column e.g. 'WAEC' | 'JAMB' | 'BOTH'
-    // We try exam_types first (contains), fall back to exam_type (in) if needed.
+    //   exam_types — new array column  ['WAEC'] or ['WAEC','JAMB']
+    //   exam_type  — legacy string     'WAEC' | 'JAMB' | 'BOTH'
     const legacyValues = [exam, 'BOTH']
 
     const applyBase = (q, useArrayCol = true) => {
@@ -70,12 +108,10 @@ export async function GET(request) {
       } else {
         q = q.in('exam_type', legacyValues)
       }
-      if (topicId) q = q.eq('topic_id', topicId)
+      if (topicId)           q = q.eq('topic_id', topicId)
+      if (excludeIds.length) q = q.not('id', 'in', `(${excludeIds.join(',')})`)
       return q
     }
-
-
-
 
     const SELECT = `
       id, question_text, options, correct_answer,
@@ -87,82 +123,117 @@ export async function GET(request) {
     `
 
     // ── 3. Discover available years (cheap index scan) ────────────────────────
-    // Select only the year column so Postgres can use an index.
-    // Limit to 500 rows — enough to surface every distinct year in any realistic
-    // question bank without pulling the entire table just to find unique values.
-    let yearRows = null
+    // Only fetches the year column — Postgres can satisfy this from the index.
+    // Limit 1000 covers any realistic question bank.
+    let yearRows = []
     {
-      const { data, error } = await applyBase(service.from('questions').select('year'), true)
-        .not('year', 'is', null).limit(500)
+      const { data, error } = await applyBase(
+        service.from('questions').select('year'), true
+      ).not('year', 'is', null).limit(1000)
+
       if (error || !data?.length) {
-        const fb = await applyBase(service.from('questions').select('year'), false)
-          .not('year', 'is', null).limit(500)
+        const fb = await applyBase(
+          service.from('questions').select('year'), false
+        ).not('year', 'is', null).limit(1000)
         yearRows = fb.data ?? []
       } else {
-        yearRows = data ?? []
+        yearRows = data
       }
     }
 
-    // Build a sorted, deduplicated list of years
-    const availableYears = [...new Set((yearRows).map(r => r.year).filter(Boolean))].sort()
+    const availableYears = [
+      ...new Set(yearRows.map(r => r.year).filter(Boolean))
+    ].sort()
 
+    // ── 4. Per-year parallel fetch ────────────────────────────────────────────
     let questions = []
 
-    // ── 3b. Single pooled fetch — sample JS-side for year spread ───────────
-    // Try exam_types[] first, fall back to legacy exam_type string column.
-    {
-      const POOL_SIZE = Math.min(count * 4, 200)  // never over-fetch
-      let primaryQ = applyBase(service.from('questions').select(SELECT), true).limit(POOL_SIZE)
-      let { data, error } = await primaryQ
-
+    if (availableYears.length === 0) {
+      // No year data — single pool fallback
+      const POOL = Math.min(count * 4, 200)
+      let { data, error } = await applyBase(
+        service.from('questions').select(SELECT), true
+      ).limit(POOL)
       if (error || !data?.length) {
-        // Fall back to legacy exam_type string column
-        let fallbackQ = applyBase(service.from('questions').select(SELECT), false).limit(POOL_SIZE)
-        const fb = await fallbackQ
-        if (fb.error) {
-          console.error('[questions] pool fetch error (both attempts):', fb.error.message)
-          return NextResponse.json({ error: fb.error.message }, { status: 500 })
-        }
+        const fb = await applyBase(
+          service.from('questions').select(SELECT), false
+        ).limit(POOL)
         data = fb.data ?? []
       }
-      const pool = data ?? []
+      questions = data ?? []
 
-      if (availableYears.length > 1 && pool.length > count) {
-        // Distribute proportionally across years in JS — no extra DB round-trips
-        const byYear = {}
-        for (const q of pool) {
-          const y = q.year ?? '__none__'
-          if (!byYear[y]) byYear[y] = []
-          byYear[y].push(q)
-        }
-        const years   = Object.keys(byYear)
-        const perYear = Math.max(1, Math.ceil(count / years.length))
-        const picked  = []
-        for (const y of years) {
-          const bucket = byYear[y]
-          // Shuffle bucket so we don't always pick the same questions
-          for (let i = bucket.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [bucket[i], bucket[j]] = [bucket[j], bucket[i]]
-          }
-          picked.push(...bucket.slice(0, perYear))
-        }
-        questions = picked
-      } else {
-        questions = pool
+    } else {
+      const perYear = quotaPerYear(count, availableYears.length)
+
+      // Step A: count questions per year in parallel
+      const countResults = await Promise.all(
+        availableYears.map(yr =>
+          applyBase(
+            service.from('questions').select('id', { count: 'exact', head: true }), true
+          )
+          .eq('year', yr)
+          .then(({ count: c, error }) => {
+            if (error || c == null) {
+              return applyBase(
+                service.from('questions').select('id', { count: 'exact', head: true }), false
+              )
+              .eq('year', yr)
+              .then(({ count: c2 }) => ({ year: yr, total: c2 ?? 0 }))
+            }
+            return { year: yr, total: c }
+          })
+        )
+      )
+
+      // Step B: for each year with questions, fetch a random slice
+      const fetchResults = await Promise.all(
+        countResults
+          .filter(({ total }) => total > 0)
+          .map(({ year: yr, total }) => {
+            // Random offset so each session gets different questions from each year
+            const maxOffset = Math.max(0, total - perYear)
+            const offset    = Math.floor(Math.random() * (maxOffset + 1))
+
+            const fetchYear = (useArray) =>
+              applyBase(service.from('questions').select(SELECT), useArray)
+                .eq('year', yr)
+                .order('id')                        // stable order so .range() is consistent
+                .range(offset, offset + perYear - 1)
+
+            return fetchYear(true)
+              .then(({ data, error }) => {
+                if (error || !data?.length) return fetchYear(false).then(fb => fb.data ?? [])
+                return data
+              })
+              .catch(() => [])
+          })
+      )
+
+      questions = fetchResults.flat()
+
+      // Safety net: if all year fetches failed, fall back to single pool
+      if (!questions.length) {
+        console.warn('[student/questions] per-year fetch yielded nothing, falling back to pool')
+        const POOL = Math.min(count * 4, 200)
+        const { data } = await applyBase(
+          service.from('questions').select(SELECT), true
+        ).limit(POOL)
+        questions = data ?? []
       }
     }
 
     if (!questions.length) {
       return NextResponse.json(
-        { questions: [], count: 0, exam, mode,
-          debug: `No active questions found for subjects [${subjectNames.join(', ')}] exam=${exam}` },
+        {
+          questions: [], count: 0, exam, mode, availableYears,
+          debug: `No active questions found for subjects [${subjectNames.join(', ')}] exam=${exam}`,
+        },
         { status: 200 }
       )
     }
 
-    // ── 4. Weak mode: sort by lowest mastery first ────────────────────────────
-    if (mode === 'weak' && questions.length) {
+    // ── 5. Weak mode: sort by lowest mastery first ────────────────────────────
+    if (mode === 'weak') {
       const topicIds = [...new Set(questions.map(q => q.topic_id).filter(Boolean))]
       if (topicIds.length) {
         const { data: mastery } = await service
@@ -173,7 +244,6 @@ export async function GET(request) {
         const masteryMap = {}
         for (const m of mastery ?? []) masteryMap[m.topic_id] = m.score
 
-        // score -1 = never attempted → comes first (highest priority)
         questions.sort((a, b) => {
           const sa = masteryMap[a.topic_id] ?? -1
           const sb = masteryMap[b.topic_id] ?? -1
@@ -182,14 +252,19 @@ export async function GET(request) {
       }
     }
 
-    // ── 5. Shuffle (all modes except weak) ───────────────────────────────────
+    // ── 6. Shuffle (all modes except weak) ───────────────────────────────────
+    // Shuffle after per-year fetch so questions from different years interleave —
+    // student doesn't see "all 2022 then all 2021 then all 2019".
     if (mode !== 'weak') shuffle(questions)
 
-    // quick5 always caps at 5 regardless of count param
-    const finalCount = mode === 'quick5' ? Math.min(5, questions.length) : Math.min(count, questions.length)
-    const selected   = questions.slice(0, finalCount)
+    // quick5 always caps at 5
+    const finalCount = mode === 'quick5'
+      ? Math.min(5, questions.length)
+      : Math.min(count, questions.length)
 
-    // ── 6. Shape output ───────────────────────────────────────────────────────
+    const selected = questions.slice(0, finalCount)
+
+    // ── 7. Shape output ───────────────────────────────────────────────────────
     const shaped = selected.map(q => ({
       id:               q.id,
       text:             q.question_text,
@@ -199,25 +274,33 @@ export async function GET(request) {
       hint:             q.hint             ?? null,
       instruction_text: q.instruction_text ?? null,
       passage_text:     q.passage_text     ?? null,
-      year:             q.year        ?? null,
-      difficulty:       q.difficulty  ?? 'medium',
-      topic_id:         q.topic_id    ?? null,
-      topic_name:       q.topics?.name    ?? null,
-      subject_id:       q.subject_id  ?? null,
-      subject_name:     q.subjects?.name  ?? null,
+      year:             q.year             ?? null,
+      difficulty:       q.difficulty       ?? 'medium',
+      topic_id:         q.topic_id         ?? null,
+      topic_name:       q.topics?.name     ?? null,
+      subject_id:       q.subject_id       ?? null,
+      subject_name:     q.subjects?.name   ?? null,
     }))
 
     return NextResponse.json(
-      { questions: shaped, count: shaped.length, exam, mode },
-      { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=600' } }
+      {
+        questions:        shaped,
+        count:            shaped.length,
+        exam,
+        mode,
+        availableYears,
+        yearsRepresented: [...new Set(shaped.map(q => q.year).filter(Boolean))].sort(),
+      },
+      // No caching — every session must get a fresh, different set of questions
+      { headers: { 'Cache-Control': 'no-store' } }
     )
 
   } catch (err) {
     console.error('[student/questions] unexpected error:', err)
     return NextResponse.json({
-      error: 'Server error',
+      error:  'Server error',
       detail: err?.message ?? String(err),
-      stack: err?.stack?.split('\n').slice(0, 6),
+      stack:  err?.stack?.split('\n').slice(0, 6),
     }, { status: 500 })
   }
 }

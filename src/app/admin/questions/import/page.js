@@ -1561,6 +1561,25 @@ export default function SdashImportPage() {
             <div className="space-y-5">
               {/* Header */}
               {/* Mismatch summary */}
+              {/* Answer disagreement summary — Claude's answer ≠ Sdash's answer */}
+              {parsedQuestions.some(q => q._answerDisagreement) && (() => {
+                const count = parsedQuestions.filter(q => q._answerDisagreement).length
+                return (
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-300 rounded-xl">
+                    <span className="text-xl flex-shrink-0">🔍</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-amber-800">
+                        {count} answer disagreement{count !== 1 ? 's' : ''} — Claude and Sdash differ
+                      </p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        Claude solved these independently and reached a different answer than Sdash's key.
+                        These are highlighted in amber below. Check each one and decide which answer is correct before saving.
+                        Claude's answer is used by default.
+                      </p>
+                    </div>
+                  </div>
+                )
+              })()}
               {parsedQuestions.some(q => q._mismatch) && (() => {
                 const mismatchCount = parsedQuestions.filter(q => q._mismatch).length
                 const allMismatch   = mismatchCount === parsedQuestions.length
@@ -1630,7 +1649,7 @@ export default function SdashImportPage() {
 
                   return (
                     <div key={i} className={`rounded-2xl shadow-sm overflow-hidden border-2 transition-opacity ${
-                      isHidden ? 'opacity-40 border-gray-200' : q._mismatch ? 'border-red-400' : 'border-gray-200'
+                      isHidden ? 'opacity-40 border-gray-200' : q._mismatch ? 'border-red-400' : q._answerDisagreement ? 'border-amber-400' : 'border-gray-200'
                     } bg-white`}>
                       {/* Mismatch warning */}
                       {q._mismatch && !isHidden && (
@@ -1639,6 +1658,46 @@ export default function SdashImportPage() {
                           <div>
                             <span className="text-xs font-black text-red-700">Explanation mismatch detected</span>
                             <p className="text-xs text-red-600 mt-0.5">The explanation below may belong to a different question. Review carefully or hide this question.</p>
+                          </div>
+                        </div>
+                      )}
+                      {q._answerDisagreement && !isHidden && (
+                        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200">
+                          <span className="text-base flex-shrink-0">🔍</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-black text-amber-800">Answer disagreement</span>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                                Claude → {q.correct_answer}
+                                {q.ai_confidence && q.ai_confidence !== 'certain' && (
+                                  <span className="ml-1 text-indigo-400">({q.ai_confidence})</span>
+                                )}
+                              </span>
+                              <span className="text-xs text-amber-600">vs</span>
+                              <span className="text-xs font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+                                Sdash → {q.sdash_answer}
+                              </span>
+                            </div>
+                            <p className="text-xs text-amber-700 mt-1">Claude's answer is saved by default. Override it in the topic editor if Sdash is correct.</p>
+                          </div>
+                          {/* Quick override buttons */}
+                          <div className="flex flex-col gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => setParsedQuestions(prev => prev.map((pq, pi) =>
+                                pi === i ? { ...pq, correct_answer: q.sdash_answer, _answerDisagreement: false } : pq
+                              ))}
+                              className="text-[10px] font-bold px-2 py-1 bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 whitespace-nowrap"
+                            >
+                              Use Sdash ({q.sdash_answer})
+                            </button>
+                            <button
+                              onClick={() => setParsedQuestions(prev => prev.map((pq, pi) =>
+                                pi === i ? { ...pq, _answerDisagreement: false } : pq
+                              ))}
+                              className="text-[10px] font-bold px-2 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 whitespace-nowrap"
+                            >
+                              Keep Claude ({q.correct_answer}) ✓
+                            </button>
                           </div>
                         </div>
                       )}
@@ -1884,10 +1943,20 @@ export default function SdashImportPage() {
                     q.explanation?.illustration_prompt &&
                     !(svgDrafts[q._importIdx ?? 0] ?? '').trim().toLowerCase().startsWith('<svg')
                   )
-                  const mismatchedVisible = visibleQs.filter(q => q._mismatch)
-                  if (!pendingIllustrations.length && !mismatchedVisible.length) return null
+                  const mismatchedVisible    = visibleQs.filter(q => q._mismatch)
+                  const disagreementsVisible = visibleQs.filter(q => q._answerDisagreement)
+                  if (!pendingIllustrations.length && !mismatchedVisible.length && !disagreementsVisible.length) return null
                   return (
                     <div className="space-y-1.5">
+                      {disagreementsVisible.length > 0 && (
+                        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs">
+                          <span className="text-base flex-shrink-0">🔍</span>
+                          <div>
+                            <p className="font-black text-amber-800">{disagreementsVisible.length} unresolved answer disagreement{disagreementsVisible.length !== 1 ? 's' : ''}</p>
+                            <p className="text-amber-700 mt-0.5">Scroll up to review each one. Claude's answer is saved by default — override where Sdash is correct.</p>
+                          </div>
+                        </div>
+                      )}
                       {mismatchedVisible.length > 0 && (
                         <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 border border-red-300 rounded-xl text-xs">
                           <span className="text-base flex-shrink-0">&#9888;&#65039;</span>

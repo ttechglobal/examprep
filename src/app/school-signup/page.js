@@ -14,6 +14,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const NAVY   = '#062A78'
@@ -102,15 +103,17 @@ function OptionGrid({ options, selected, multi, onToggle }) {
 
 // ── Screen 1: Credentials ─────────────────────────────────────────────────────
 function CredentialsScreen({ onSuccess }) {
-  const [fullName, setFullName] = useState('')
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState(null)
+  const [schoolName, setSchoolName] = useState('')
+  const [fullName,   setFullName]   = useState('')
+  const [email,      setEmail]      = useState('')
+  const [password,   setPassword]   = useState('')
+  const [showPass,   setShowPass]   = useState(false)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!schoolName.trim())  { setError('Enter your school name'); return }
     if (!fullName.trim())    { setError('Enter your full name'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     setLoading(true); setError(null)
@@ -133,7 +136,7 @@ function CredentialsScreen({ onSuccess }) {
     const setupRes = await fetch('/api/school/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schoolName: 'My School' }), // placeholder — school name set inside dashboard
+      body: JSON.stringify({ schoolName: schoolName.trim() }),
     })
     if (!setupRes.ok) {
       const { error: setupErr } = await setupRes.json().catch(() => ({}))
@@ -163,8 +166,11 @@ function CredentialsScreen({ onSuccess }) {
       )}
 
       <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <Field label="School name">
+          <Input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="e.g. Kings College Lagos" autoComplete="organization" autoFocus/>
+        </Field>
         <Field label="Your full name">
-          <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Mrs Adaeze Okafor" autoComplete="name" autoFocus/>
+          <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Mrs Adaeze Okafor" autoComplete="name"/>
         </Field>
         <Field label="Email address">
           <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@school.edu.ng" autoComplete="email"/>
@@ -181,7 +187,7 @@ function CredentialsScreen({ onSuccess }) {
             </button>
           </div>
         </Field>
-        <Btn type="submit" loading={loading} disabled={!fullName||!email||!password}>
+        <Btn type="submit" loading={loading} disabled={!schoolName||!fullName||!email||!password}>
           {loading ? 'Setting up your account…' : 'Create account →'}
         </Btn>
       </form>
@@ -260,6 +266,7 @@ function SurveyScreen({ userId, firstName, onDone }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SchoolSignupPage() {
+  const router = useRouter()
   const [screen,   setScreen]   = useState('credentials')
   const [userId,   setUserId]   = useState(null)
   const [fullName, setFullName] = useState('')
@@ -283,7 +290,7 @@ export default function SchoolSignupPage() {
         <SurveyScreen
           userId={userId}
           firstName={fullName.split(' ')[0]}
-          onDone={() => { window.location.href = '/school/dashboard' }}
+          onDone={() => router.push('/school/dashboard')}
         />
       )}
 

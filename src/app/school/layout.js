@@ -22,7 +22,7 @@ export default async function SchoolLayout({ children }) {
   const school = profile?.schools
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#f4f7ff' }}>
+    <div style={{ minHeight: '100dvh', background: '#eef0f8' }}>
       <SchoolNav
         schoolName={school?.name ?? 'My School'}
         schoolCity={school?.city  ?? ''}

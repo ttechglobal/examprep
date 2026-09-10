@@ -1,30 +1,39 @@
 // src/app/api/admin/questions/coverage-years/route.js
 // GET /api/admin/questions/coverage-years?subjectId=...&examType=...
-// Returns a summary of which years have questions in the DB for a subject+exam.
-// Used by per-subject year breakdowns in the admin Past Questions page.
 //
-// BUG FIXED:
-//   SDASH_YEARS was used on line 49 but never defined anywhere in this file.
-//   This caused a ReferenceError at runtime, crashing the route and returning
-//   a 500 with no useful data. The caller received null/empty and showed nothing.
-//   Fix: define the year range locally, matching ALL_YEARS in coverage-matrix.
+// Returns a year-by-year breakdown for a single subject.
+// Used by the per-subject drill-down in the admin coverage page.
+//
+// BUGS FIXED:
+//
+// 1. SDASH_YEARS undefined variable
+//    Was causing a ReferenceError crash on every request.
+//    Fixed: replaced with YEAR_LIST defined locally.
+//
+// 2. DUAL-COLUMN INCONSISTENCY
+//    Only queried exam_type (string). Now tries exam_types (array) first,
+//    falls back to exam_type (string) — matching the student questions route
+//    so counts here agree with what students actually see.
+//
+// 3. BROWSER CACHING
+//    Added Cache-Control: no-store — admin always sees live data.
 
-import { requireAdmin } from '@/lib/adminAuth'
+import { requireAdmin }                       from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { NextResponse }                        from 'next/server'
 
 const svc = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// FIX: define the year list that was previously referenced as SDASH_YEARS
-// (an undefined variable causing a ReferenceError crash on every request).
-// Covers 2001–current year descending — matches the range in coverage-matrix.
+// Full year list — 2001 to current year, newest first
 const YEAR_LIST = Array.from(
   { length: new Date().getFullYear() - 2001 + 1 },
   (_, i) => String(new Date().getFullYear() - i)
 )
+
+const NO_CACHE = { headers: { 'Cache-Control': 'no-store' } }
 
 export async function GET(request) {
   const authError = await requireAdmin(request)
@@ -34,41 +43,71 @@ export async function GET(request) {
   const subjectId = searchParams.get('subjectId')
   const examType  = searchParams.get('examType')
 
-  if (!subjectId) return NextResponse.json({ error: 'subjectId required' }, { status: 400 })
-
-  const db = svc()
-  let query = db
-    .from('questions')
-    .select('year, exam_type')
-    .eq('subject_id', subjectId)
-    .eq('is_active', true)
-    .not('year', 'is', null)
-    .limit(50000)  // prevent silent 1000-row Supabase cap
-
-  // Include 'BOTH' questions when filtering by a specific exam type
-  if (examType && examType !== 'ALL') {
-    query = query.in('exam_type', [examType, 'BOTH'])
+  if (!subjectId) {
+    return NextResponse.json({ error: 'subjectId required' }, { status: 400 })
   }
 
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const db = svc()
 
-  // Count questions per year
+  // ── Build query helper — tries array column, falls back to string column ──
+  const legacyValues = examType && examType !== 'ALL'
+    ? [examType, 'BOTH']
+    : null
+
+  const buildQuery = (useArrayCol) => {
+    let q = db
+      .from('questions')
+      .select('year, exam_type')
+      .eq('subject_id', subjectId)
+      .eq('is_active', true)
+      .not('year', 'is', null)
+      .limit(50000)   // prevent silent 1000-row Supabase cap
+
+    if (legacyValues) {
+      if (useArrayCol) {
+        q = q.contains('exam_types', [examType])
+      } else {
+        q = q.in('exam_type', legacyValues)
+      }
+    }
+    return q
+  }
+
+  // ── Fetch with fallback ───────────────────────────────────────────────────
+  let rows = []
+  {
+    const { data, error } = await buildQuery(true)
+    if (!error && data?.length) {
+      rows = data
+    } else {
+      // exam_types array column returned nothing — fall back to legacy string column
+      const fb = await buildQuery(false)
+      if (fb.error) {
+        return NextResponse.json({ error: fb.error.message }, { status: 500 }, NO_CACHE)
+      }
+      rows = fb.data ?? []
+    }
+  }
+
+  // ── Count questions per year ──────────────────────────────────────────────
   const yearMap = {}
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const y = String(row.year)
     yearMap[y] = (yearMap[y] ?? 0) + 1
   }
 
-  // Build full year list with counts — newest first
+  // ── Build full year list with counts ─────────────────────────────────────
   const years = YEAR_LIST.map(y => ({
-    year: y,
+    year:  y,
     count: yearMap[y] ?? 0,
-    has: !!(yearMap[y]),
+    has:   !!(yearMap[y]),
   }))
 
   const totalYears     = years.filter(y => y.has).length
   const totalQuestions = Object.values(yearMap).reduce((a, b) => a + b, 0)
 
-  return NextResponse.json({ years, totalYears, totalQuestions })
+  return NextResponse.json(
+    { years, totalYears, totalQuestions },
+    NO_CACHE
+  )
 }
