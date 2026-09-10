@@ -1,177 +1,426 @@
 'use client'
 // src/app/admin/past-questions/page.js
+// Rebuilt: question browser + illustration workflow + SVG editor
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 
-function Spinner({ size = 'md' }) {
-  const sz = size === 'sm' ? 'w-4 h-4 border-2' : 'w-7 h-7 border-[3px]'
-  return <div className={`${sz} border-indigo-500 border-t-transparent rounded-full animate-spin`} />
-}
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const INDIGO  = '#4F46E5'
+const GREEN   = '#16A34A'
+const AMBER   = '#D97706'
+const RED     = '#DC2626'
+const SLATE   = '#64748B'
 
-function Badge({ children, color = 'gray' }) {
-  const c = {
-    gray:   'bg-gray-100 text-gray-600',
-    green:  'bg-green-50 text-green-700',
-    amber:  'bg-amber-50 text-amber-700',
-    red:    'bg-red-50 text-red-600',
-    indigo: 'bg-indigo-50 text-indigo-700',
-    blue:   'bg-blue-50 text-blue-700',
-    purple: 'bg-purple-50 text-purple-700',
+// ─── TINY HELPERS ─────────────────────────────────────────────────────────────
+function Badge({ children, color = 'slate' }) {
+  const styles = {
+    slate:  { background: '#F1F5F9', color: '#475569' },
+    indigo: { background: '#EEF2FF', color: INDIGO },
+    green:  { background: '#F0FDF4', color: GREEN },
+    amber:  { background: '#FFFBEB', color: AMBER },
+    red:    { background: '#FEF2F2', color: RED },
+    blue:   { background: '#EFF6FF', color: '#2563EB' },
+    purple: { background: '#F5F3FF', color: '#7C3AED' },
   }
+  const s = styles[color] ?? styles.slate
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${c[color] ?? c.gray}`}>
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      padding: '2px 8px', borderRadius: 999,
+      fontSize: 11, fontWeight: 800,
+      background: s.background, color: s.color,
+    }}>
       {children}
     </span>
   )
 }
 
-// ── Question detail modal ─────────────────────────────────────────────────────
+function Spinner({ size = 24 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      border: `${size > 20 ? 3 : 2}px solid #E2E8F0`,
+      borderTopColor: INDIGO,
+      animation: 'pq-spin .65s linear infinite',
+    }}/>
+  )
+}
 
-function QuestionModal({ question, onClose, onMarkCore }) {
-  useEffect(() => { injectMathStyles() }, [])
-  if (!question) return null
-  const opts   = question.options ?? {}
-  const expl   = question.explanation ?? {}
-  const isCore = question._topicIsCore
+// ─── ILLUSTRATION STATUS INDICATOR ────────────────────────────────────────────
+// Returns one of: 'has_svg' | 'has_prompt' | 'no_prompt' | 'none'
+function illustrationStatus(q) {
+  const expl = q.explanation ?? {}
+  if (expl.svg_diagram?.trim().toLowerCase().startsWith('<svg')) return 'has_svg'
+  if (expl.illustration_prompt?.trim()) return 'has_prompt'
+  return 'none'
+}
+
+function IllustBadge({ status }) {
+  if (status === 'has_svg')    return <Badge color="green">✓ SVG</Badge>
+  if (status === 'has_prompt') return <Badge color="amber">📋 Prompt</Badge>
+  return null
+}
+
+// ─── SVG EDITOR PANEL ─────────────────────────────────────────────────────────
+// Opens below a question card. Shows prompt + SVG textarea + live preview + save.
+function SvgEditor({ question, onSave, onClose }) {
+  const expl    = question.explanation ?? {}
+  const prompt  = expl.illustration_prompt ?? ''
+  const initSvg = expl.svg_diagram ?? ''
+
+  const [svgCode, setSvgCode]   = useState(initSvg)
+  const [saving,  setSaving]    = useState(false)
+  const [copied,  setCopied]    = useState(false)
+  const [tab,     setTab]       = useState(initSvg ? 'preview' : 'prompt') // 'prompt' | 'editor' | 'preview'
+  const textRef = useRef(null)
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textRef.current) {
+      textRef.current.style.height = 'auto'
+      textRef.current.style.height = textRef.current.scrollHeight + 'px'
+    }
+  }, [svgCode, tab])
+
+  const isValidSvg = svgCode.trim().toLowerCase().startsWith('<svg')
+  const hasChanged = svgCode !== initSvg
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const newExpl = {
+        ...expl,
+        svg_diagram: svgCode.trim() || null,
+      }
+      const res = await fetch(`/api/admin/questions/${question.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ explanation: newExpl }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        onSave(updated)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(prompt)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const TAB_STYLE = (active) => ({
+    padding: '6px 14px', fontSize: 12, fontWeight: 700,
+    borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+    background: active ? '#fff' : 'transparent',
+    color: active ? INDIGO : SLATE,
+    boxShadow: active ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+    transition: 'all .12s',
+  })
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
-      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge color={question.exam_type === 'WAEC' ? 'indigo' : 'blue'}>{question.exam_type ?? '—'}</Badge>
-            {question.year && <Badge color="gray">{question.year}</Badge>}
-            {question.topics?.name && <span className="text-xs text-gray-500">{question.topics.name}</span>}
-            {question.subtopics?.name && <><span className="text-xs text-gray-300">→</span><span className="text-xs text-gray-400">{question.subtopics.name}</span></>}
-          </div>
-          <div className="flex items-center gap-2">
-            {question.topic_id && !isCore && (
-              <button
-                onClick={() => onMarkCore(question)}
-                className="text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
-              >
-                ⭐ Mark topic as Core
-              </button>
-            )}
-            {isCore && <Badge color="indigo">⭐ Core topic</Badge>}
-            <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors">
-              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+    <div style={{
+      margin: '0 0 2px', background: '#F8FAFC',
+      border: `1.5px solid ${isValidSvg ? '#86EFAC' : '#CBD5E1'}`,
+      borderRadius: 16, overflow: 'hidden',
+    }}>
+      {/* Editor header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px',
+        background: '#fff', borderBottom: '1px solid #F1F5F9',
+      }}>
+        <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 3, borderRadius: 10 }}>
+          {[
+            { id: 'prompt',  label: prompt ? '📋 Prompt' : 'No prompt' },
+            { id: 'editor',  label: '✏️ SVG code' },
+            { id: 'preview', label: '👁 Preview' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={TAB_STYLE(tab === t.id)}>
+              {t.label}
             </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {hasChanged && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '6px 14px', borderRadius: 10, border: 'none',
+                background: isValidSvg ? GREEN : AMBER,
+                color: '#fff', fontSize: 12, fontWeight: 800,
+                cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: saving ? .7 : 1, display: 'flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              {saving ? <Spinner size={12}/> : null}
+              {saving ? 'Saving…' : isValidSvg ? '💾 Save SVG' : '💾 Save (clear)'}
+            </button>
+          )}
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: SLATE, fontFamily: 'inherit' }}>×</button>
+        </div>
+      </div>
+
+      {/* Prompt tab */}
+      {tab === 'prompt' && (
+        <div style={{ padding: 14 }}>
+          {prompt ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: SLATE, textTransform: 'uppercase', letterSpacing: '.06em' }}>Illustration prompt</span>
+                <button
+                  onClick={copyPrompt}
+                  style={{
+                    padding: '4px 12px', borderRadius: 8, border: `1px solid ${INDIGO}`,
+                    background: copied ? INDIGO : 'transparent',
+                    color: copied ? '#fff' : INDIGO, fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all .12s',
+                  }}
+                >
+                  {copied ? '✓ Copied!' : 'Copy prompt'}
+                </button>
+              </div>
+              <div style={{
+                background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0',
+                padding: 12, fontSize: 12, color: '#374151', lineHeight: 1.7,
+                whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, monospace',
+                maxHeight: 280, overflowY: 'auto',
+              }}>
+                {prompt}
+              </div>
+              <p style={{ fontSize: 11, color: SLATE, marginTop: 8, lineHeight: 1.5 }}>
+                Copy this prompt → paste into Claude or another AI → get SVG code → paste into the <strong>SVG code</strong> tab → Save.
+              </p>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
+              <p style={{ fontSize: 13, color: SLATE }}>No illustration prompt for this question.</p>
+              <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Re-generate the explanation to add one, or paste SVG code directly in the editor tab.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SVG editor tab */}
+      {tab === 'editor' && (
+        <div style={{ padding: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: SLATE, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+            SVG code {isValidSvg ? <span style={{ color: GREEN }}>· valid</span> : svgCode.trim() ? <span style={{ color: RED }}>· must start with &lt;svg</span> : ''}
+          </div>
+          <textarea
+            ref={textRef}
+            value={svgCode}
+            onChange={e => setSvgCode(e.target.value)}
+            placeholder={'<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">\n  <!-- Paste SVG code here -->\n</svg>'}
+            spellCheck={false}
+            style={{
+              width: '100%', minHeight: 160, padding: '10px 12px',
+              borderRadius: 10, border: `1.5px solid ${isValidSvg ? '#86EFAC' : '#E2E8F0'}`,
+              background: '#fff', color: '#1E293B',
+              fontSize: 12, fontFamily: 'ui-monospace, monospace',
+              lineHeight: 1.6, resize: 'vertical', outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          {svgCode && (
+            <button
+              onClick={() => setSvgCode('')}
+              style={{ marginTop: 6, fontSize: 11, color: RED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}
+            >
+              Clear SVG ×
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Preview tab */}
+      {tab === 'preview' && (
+        <div style={{ padding: 14 }}>
+          {isValidSvg ? (
+            <div style={{
+              borderRadius: 10, overflow: 'hidden', border: '1px solid #E2E8F0',
+              background: '#fff', padding: 12,
+              display: 'flex', justifyContent: 'center',
+            }}
+              dangerouslySetInnerHTML={{ __html: svgCode.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+="[^"]*"/gi, '') }}
+            />
+          ) : (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: SLATE, fontSize: 13 }}>
+              {svgCode.trim() ? 'SVG must start with <svg …>' : 'No SVG code yet. Paste it in the editor tab.'}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── QUESTION CARD ─────────────────────────────────────────────────────────────
+function QuestionCard({ question, isExpanded, onToggle, onQuestionUpdated }) {
+  useEffect(() => { injectMathStyles() }, [])
+
+  const [editOpen, setEditOpen] = useState(false)
+  const opts   = question.options ?? {}
+  const expl   = question.explanation ?? {}
+  const status = illustrationStatus(question)
+
+  function handleSaved(updatedQ) {
+    onQuestionUpdated(updatedQ)
+    setEditOpen(false)
+  }
+
+  return (
+    <div style={{
+      borderBottom: '1px solid #F1F5F9',
+      background: isExpanded ? '#FAFBFF' : '#fff',
+      transition: 'background .12s',
+    }}>
+      {/* Collapsed row — always visible */}
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '13px 16px', cursor: 'pointer',
+        }}
+      >
+        {/* Left meta column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, width: 64 }}>
+          <Badge color={question.exam_type === 'WAEC' ? 'indigo' : question.exam_type === 'JAMB' ? 'blue' : 'purple'}>
+            {question.exam_type ?? '?'}
+          </Badge>
+          {question.year && <Badge color="slate">{question.year}</Badge>}
+        </div>
+
+        {/* Question text + meta */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: '#1E293B', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            <MathText text={question.question_text ?? ''} as="span" className=""/>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 5 }}>
+            {question.topics?.name && <span style={{ fontSize: 11, color: '#94A3B8' }}>{question.topics.name}</span>}
+            {question.subtopics?.name && (
+              <><span style={{ fontSize: 11, color: '#CBD5E1' }}>→</span>
+              <span style={{ fontSize: 11, color: '#94A3B8' }}>{question.subtopics.name}</span></>
+            )}
+            {!question.topic_id && <Badge color="red">Untagged</Badge>}
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
-          <div className="text-base font-medium text-gray-900 leading-relaxed">
-            <MathText text={question.question_text ?? ''} as="span" className=""/>
-          </div>
+        {/* Right: illustration status + expand chevron */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          <IllustBadge status={status}/>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
+            style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s', opacity: .4 }}>
+            <path d="M3 5l4 4 4-4" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
 
-          {question.has_image && question.image_url && (
-            <div className="rounded-2xl overflow-hidden border border-gray-200">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Question diagram</p>
-              </div>
-              <img src={question.image_url} alt={question.image_description ?? 'Question diagram'} className="w-full object-contain max-h-80 bg-white p-3" />
-              {question.image_description && <p className="text-xs text-gray-400 px-3 pb-2">{question.image_description}</p>}
-            </div>
-          )}
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div style={{ padding: '0 16px 16px' }}>
 
-          <div className="space-y-2">
+          {/* Options */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
             {Object.entries(opts).map(([key, text]) => {
               const isCorrect = key === question.correct_answer
               return (
-                <div key={key} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 ${isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{key}</span>
-                  <div className={`text-sm leading-relaxed flex-1 ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`}>
-                    <MathText text={String(text ?? '')} as="span" className=""/>
+                <div key={key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '8px 12px', borderRadius: 10,
+                  background: isCorrect ? '#F0FDF4' : '#F8FAFC',
+                  border: `1px solid ${isCorrect ? '#86EFAC' : '#F1F5F9'}`,
+                }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: 7, flexShrink: 0,
+                    background: isCorrect ? GREEN : '#E2E8F0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 900, color: isCorrect ? '#fff' : '#64748B',
+                  }}>
+                    {isCorrect ? '✓' : key}
                   </div>
-                  {isCorrect && <span className="text-green-600 text-sm">✓</span>}
+                  <span style={{ fontSize: 13, color: isCorrect ? '#166534' : '#374151', fontWeight: isCorrect ? 600 : 400, lineHeight: 1.5 }}>
+                    <MathText text={String(text ?? '')} as="span" className=""/>
+                  </span>
                 </div>
               )
             })}
           </div>
 
-          {(expl.correct || (expl.workings?.length ?? 0) > 0) && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
-              <p className="text-xs font-black text-indigo-700 uppercase tracking-wide">Explanation</p>
-              {expl.correct && <div className="text-sm text-gray-800 leading-relaxed"><MathText text={expl.correct} as="span" className=""/></div>}
-              {expl.workings?.length > 0 && (
-                <div className="bg-white rounded-xl p-3 space-y-1.5">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">Workings</p>
-                  {expl.workings.map((w, i) => (
-                    <p key={i} className="text-xs text-gray-700 font-mono">{i + 1}. {typeof w === 'string' ? w : w.instruction}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {question.explanation_has_image && question.explanation_image_url && (
-            <div className="rounded-2xl overflow-hidden border border-gray-200">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Solution diagram</p>
+          {/* Explanation summary */}
+          {(expl.answer_note || expl.correct || expl.concept) && (
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 900, color: INDIGO, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Explanation</div>
+              {expl.concept && <div style={{ fontSize: 12, fontWeight: 800, color: INDIGO, marginBottom: 3 }}>{expl.concept}</div>}
+              <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
+                <MathText text={expl.answer_note ?? expl.correct ?? ''} as="span" className=""/>
               </div>
-              <img src={question.explanation_image_url} alt="Solution diagram" className="w-full object-contain max-h-64 bg-white p-3" />
             </div>
           )}
+
+          {/* Illustration section */}
+          <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: SLATE, textTransform: 'uppercase', letterSpacing: '.06em' }}>Illustration</span>
+                <IllustBadge status={status}/>
+              </div>
+              <button
+                onClick={() => setEditOpen(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '5px 12px', borderRadius: 9,
+                  border: `1.5px solid ${editOpen ? INDIGO : '#E2E8F0'}`,
+                  background: editOpen ? '#EEF2FF' : '#fff',
+                  color: editOpen ? INDIGO : SLATE,
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all .12s',
+                }}
+              >
+                {status === 'has_svg' ? '✏️ Edit SVG' : status === 'has_prompt' ? '🖼 Add SVG' : '➕ Add illustration'}
+              </button>
+            </div>
+
+            {/* Existing SVG preview (when not editing) */}
+            {status === 'has_svg' && !editOpen && (
+              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #E2E8F0', background: '#fff', padding: 8 }}>
+                <div
+                  style={{ display: 'flex', justifyContent: 'center' }}
+                  dangerouslySetInnerHTML={{ __html: expl.svg_diagram.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+="[^"]*"/gi, '') }}
+                />
+              </div>
+            )}
+
+            {/* Prompt hint when no SVG */}
+            {status === 'has_prompt' && !editOpen && (
+              <div style={{ padding: '8px 12px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 11, color: '#92400E', lineHeight: 1.5 }}>
+                💡 Prompt ready — click <strong>Add SVG</strong> to copy it and paste the generated SVG
+              </div>
+            )}
+
+            {/* SVG Editor */}
+            {editOpen && (
+              <SvgEditor
+                question={question}
+                onSave={handleSaved}
+                onClose={() => setEditOpen(false)}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
 
-// ── Question list row ─────────────────────────────────────────────────────────
-
-function QuestionRow({ question, onOpen }) {
-  const opts    = question.options ?? {}
-  const optKeys = Object.keys(opts)
-  return (
-    <div
-      onClick={() => onOpen(question)}
-      className="flex items-start gap-3 px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors group last:border-0"
-    >
-      <div className="flex flex-col gap-1 flex-shrink-0 w-[60px] pt-0.5">
-        <Badge color={question.exam_type === 'WAEC' ? 'indigo' : question.exam_type === 'JAMB' ? 'blue' : 'purple'}>
-          {question.exam_type ?? '?'}
-        </Badge>
-        {question.year && <Badge color="gray">{question.year}</Badge>}
-      </div>
-
-      <div className="flex-1 min-w-0 space-y-1">
-        <div className="text-sm text-gray-900 leading-snug line-clamp-2">
-          <MathText text={question.question_text ?? ''} as="span" className=""/>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {question.topics?.name && <span className="text-[11px] text-gray-400">{question.topics.name}</span>}
-          {question.subtopics?.name && <><span className="text-[11px] text-gray-300">→</span><span className="text-[11px] text-gray-400">{question.subtopics.name}</span></>}
-          {!question.topic_id && <Badge color="red">Untagged</Badge>}
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-          {optKeys.slice(0, 4).map(k => (
-            <span key={k} className={`text-[11px] px-2 py-0.5 rounded-full ${k === question.correct_answer ? 'bg-green-100 text-green-700 font-bold' : 'bg-gray-100 text-gray-500'}`}>
-              {k}: <MathText text={String(opts[k] ?? '').slice(0, 30)} as="span" className=""/>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-        {question.has_image && <span className="text-xs text-blue-500">🖼</span>}
-        <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-    </div>
-  )
-}
-
-// ── Coverage chart ─────────────────────────────────────────────────────────────
-
+// ─── COVERAGE CHART ────────────────────────────────────────────────────────────
 function CoverageChart({ subjectId, examType, onMarkCore, coreTopicIds, onCoreUpdated }) {
   const [coverage, setCoverage] = useState([])
   const [loading,  setLoading]  = useState(false)
@@ -202,55 +451,43 @@ function CoverageChart({ subjectId, examType, onMarkCore, coreTopicIds, onCoreUp
     onCoreUpdated?.()
   }
 
-  if (loading) return <div className="flex justify-center py-12"><Spinner /></div>
-  if (!coverage.length) return (
-    <p className="text-center text-gray-400 text-sm py-10">
-      No topics found.{' '}<Link href="/admin/curriculum" className="text-indigo-600 hover:underline">Upload a curriculum first →</Link>
-    </p>
-  )
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}><Spinner /></div>
+  if (!coverage.length) return <p style={{ textAlign: 'center', color: SLATE, fontSize: 13, padding: '32px 0' }}>No topics found.</p>
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-        <span><strong className="text-gray-900">{totalQs}</strong> total questions</span>
-        <span className="text-gray-300">·</span>
-        <span><strong className="text-green-600">{sorted.filter(t => t.count >= 10).length}</strong> topics with 10+</span>
-        <span className="text-gray-300">·</span>
-        <span><strong className="text-red-500">{sorted.filter(t => t.count === 0).length}</strong> empty</span>
-        <span className="ml-auto text-[11px] text-gray-400">Click ⭐ to mark topic as Core</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: SLATE, flexWrap: 'wrap', marginBottom: 4 }}>
+        <span><strong style={{ color: '#1E293B' }}>{totalQs}</strong> questions</span>
+        <span><strong style={{ color: GREEN }}>{sorted.filter(t => t.count >= 10).length}</strong> topics with 10+</span>
+        <span><strong style={{ color: RED }}>{sorted.filter(t => t.count === 0).length}</strong> empty</span>
       </div>
-      <div className="flex items-center gap-4 text-[11px] text-gray-400">
-        {[['bg-green-500','20+'],['bg-green-300','10–19'],['bg-indigo-400','5–9'],['bg-amber-400','1–4'],['bg-gray-200','0']].map(([bg, label]) => (
-          <span key={label} className="flex items-center gap-1">
-            <span className={`w-2 h-2 rounded-full ${bg} inline-block`} />{label}
-          </span>
-        ))}
-      </div>
-      <div className="space-y-1 max-h-[480px] overflow-y-auto pr-1">
+      <div style={{ maxHeight: 440, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {sorted.map(topic => {
           const isCore    = coreTopicIds.has(topic.topic_id)
           const isMarking = marking === topic.topic_id
           const pct       = maxCount > 0 ? (topic.count / maxCount) * 100 : 0
-          const barColor  = topic.count >= 20 ? 'bg-green-500' : topic.count >= 10 ? 'bg-green-300' : topic.count >= 5 ? 'bg-indigo-400' : topic.count >= 1 ? 'bg-amber-400' : 'bg-gray-200'
-          const countColor = topic.count >= 10 ? 'text-green-700' : topic.count >= 5 ? 'text-indigo-700' : topic.count >= 1 ? 'text-amber-700' : 'text-gray-400'
+          const barColor  = topic.count >= 20 ? '#22C55E' : topic.count >= 10 ? '#86EFAC' : topic.count >= 5 ? '#818CF8' : topic.count >= 1 ? '#FCD34D' : '#E2E8F0'
           return (
-            <div key={topic.topic_id} className="flex items-center gap-3 py-1 px-2 rounded-xl group hover:bg-gray-50 transition-colors">
+            <div key={topic.topic_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 10, transition: 'background .1s' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
               <button
                 onClick={() => !isCore && handleMark(topic)}
                 disabled={isCore || !!isMarking}
-                className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-sm transition-all ${isCore ? 'text-indigo-500 cursor-default' : 'text-gray-300 hover:text-amber-500 hover:bg-amber-50'} ${isMarking ? 'opacity-50' : ''}`}
-                title={isCore ? 'Already a core topic' : 'Mark as core topic'}
+                style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, background: 'none', border: 'none', cursor: isCore ? 'default' : 'pointer', color: isCore ? INDIGO : '#CBD5E1', opacity: isMarking ? .5 : 1 }}
+                title={isCore ? 'Core topic' : 'Mark as core'}
               >
-                {isMarking ? <Spinner size="sm" /> : '⭐'}
+                {isMarking ? <Spinner size={12}/> : '⭐'}
               </button>
-              <div className="w-44 flex-shrink-0 flex items-center gap-1.5 min-w-0">
-                <p className="text-xs text-gray-700 truncate">{topic.topic_name}</p>
-                {isCore && <span className="text-[9px] text-indigo-500 font-black flex-shrink-0">CORE</span>}
+              <div style={{ width: 160, flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: '#374151', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic.topic_name}</span>
+                {isCore && <span style={{ fontSize: 9, fontWeight: 900, color: INDIGO }}>CORE</span>}
               </div>
-              <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${Math.max(pct, topic.count > 0 ? 2 : 0)}%` }} />
+              <div style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.max(pct, topic.count > 0 ? 3 : 0)}%`, background: barColor, borderRadius: 999, transition: 'width .4s' }}/>
               </div>
-              <span className={`w-10 text-right text-xs font-black flex-shrink-0 tabular-nums ${countColor}`}>{topic.count}</span>
+              <span style={{ width: 36, textAlign: 'right', fontSize: 12, fontWeight: 800, color: topic.count > 0 ? '#374151' : '#CBD5E1', flexShrink: 0 }}>{topic.count}</span>
             </div>
           )
         })}
@@ -259,182 +496,86 @@ function CoverageChart({ subjectId, examType, onMarkCore, coreTopicIds, onCoreUp
   )
 }
 
-// ── Batch history ──────────────────────────────────────────────────────────────
-
-function BatchHistory({ subjectId, examType }) {
-  const [batches, setBatches] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    const p = new URLSearchParams()
-    if (subjectId) p.set('subjectId', subjectId)
-    if (examType)  p.set('examType', examType)
-    fetch(`/api/admin/questions/batches?${p}`)
-      .then(r => r.json())
-      .then(d => setBatches(d.batches ?? []))
-      .catch(() => setBatches([]))
-      .finally(() => setLoading(false))
-  }, [subjectId, examType])
-
-  if (loading) return <div className="flex justify-center py-8"><Spinner /></div>
-  if (!batches.length) return (
-    <div className="text-center py-10 text-gray-400 text-sm">
-      No upload batches yet.{' '}<Link href="/admin/questions/upload" className="text-indigo-600 hover:underline">Upload your first batch →</Link>
-    </div>
-  )
-  return (
-    <div className="space-y-2">
-      {batches.map(b => (
-        <div key={b.id} className="flex items-center justify-between px-4 py-3.5 bg-white border border-gray-100 rounded-xl">
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-bold text-gray-900">{b.subject_name ?? '—'}</p>
-              <Badge color={b.exam_type === 'WAEC' ? 'indigo' : 'blue'}>{b.exam_type}</Badge>
-            </div>
-            <p className="text-xs text-gray-400">{new Date(b.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-          </div>
-          <div className="text-right ml-4 flex-shrink-0">
-            <p className="text-sm font-black text-green-600">{b.saved ?? 0} saved</p>
-            {(b.errors ?? 0) > 0 && <p className="text-xs text-red-500">{b.errors} errors</p>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-// ── Year coverage register ────────────────────────────────────────────────────
+// ─── YEAR COVERAGE MATRIX ─────────────────────────────────────────────────────
 function YearCoverage({ examType }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
-  const [showAll, setShowAll] = useState(false)   // expand to show all subjects
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    setData(null)
-    const p = new URLSearchParams({ examType: examType === 'ALL' ? 'ALL' : examType })
-    fetch(`/api/admin/questions/coverage-matrix?${p}`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+    setLoading(true); setData(null)
+    fetch(`/api/admin/questions/coverage-matrix?examType=${examType === 'ALL' ? 'ALL' : examType}`)
+      .then(r => r.json()).then(setData).catch(() => setData(null)).finally(() => setLoading(false))
   }, [examType])
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-16">
-      <div className="flex flex-col items-center gap-3">
-        <Spinner />
-        <p className="text-sm text-gray-400">Loading coverage data…</p>
-      </div>
-    </div>
-  )
-  if (!data || !data.subjects?.length) return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center space-y-3">
-      <p className="text-gray-400 text-sm">No subjects found for {examType}.</p>
-      <Link href="/admin/subjects-manager" className="text-indigo-600 text-sm font-bold hover:underline">
-        Add subjects →
-      </Link>
-    </div>
-  )
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner/></div>
+  if (!data?.subjects?.length) return <p style={{ textAlign: 'center', color: SLATE, fontSize: 13, padding: 32 }}>No data.</p>
 
   const { subjects, years, matrix } = data
-  const displaySubjects = showAll ? subjects : subjects.slice(0, 12)
-
-  // Summary stats
-  const totalQ    = subjects.reduce((a, s) => a + s.totalQuestions, 0)
-  const doneSubj  = subjects.filter(s => s.yearsCovered > 0).length
-  const missingQ  = subjects.filter(s => s.totalQuestions === 0).length
+  const display = showAll ? subjects : subjects.slice(0, 12)
+  const totalQ  = subjects.reduce((a, s) => a + s.totalQuestions, 0)
 
   return (
-    <div className="space-y-4">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
         {[
-          { label: 'Total questions', value: totalQ.toLocaleString(), color: 'text-indigo-700' },
-          { label: 'Subjects with data', value: `${doneSubj} / ${subjects.length}`, color: 'text-green-700' },
-          { label: 'Subjects missing', value: missingQ, color: 'text-red-500' },
-          { label: 'Years tracked', value: years.length, color: 'text-gray-700' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white border border-gray-200 rounded-2xl p-4">
-            <p className={`text-xl font-black tabular-nums ${color}`}>{value}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{label}</p>
+          { label: 'Total questions', value: totalQ.toLocaleString(), color: INDIGO },
+          { label: 'Subjects with data', value: `${subjects.filter(s => s.totalQuestions > 0).length} / ${subjects.length}`, color: GREEN },
+          { label: 'Empty subjects', value: subjects.filter(s => s.totalQuestions === 0).length, color: RED },
+          { label: 'Years tracked', value: years.length, color: SLATE },
+        ].map(s => (
+          <div key={s.label} style={{ background: '#fff', border: '1px solid #F1F5F9', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: s.color, letterSpacing: '-.02em' }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: SLATE, marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
       </div>
-
-      {/* Import CTA */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400">
-          Green = uploaded · Amber = partial · Grey = missing · Click any cell to import that year
-        </p>
-        <Link
-          href="/admin/questions/import"
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-500 transition-colors"
-        >
-          ⬆ Import questions →
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Link href="/admin/questions/import" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: INDIGO, color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
+          ⬆ Import questions
         </Link>
       </div>
-
-      {/* The table */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
+      <div style={{ background: '#fff', border: '1px solid #F1F5F9', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                {/* Subject column */}
-                <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 font-black text-gray-600 whitespace-nowrap border-r border-gray-100 min-w-[160px]">
-                  Subject
-                </th>
-                {/* Total column */}
-                <th className="px-3 py-3 font-black text-gray-600 whitespace-nowrap text-center border-r border-gray-100 bg-gray-50">
-                  Total
-                </th>
-                {/* Year columns */}
-                {years.map(y => (
-                  <th key={y} className="px-2 py-3 font-bold text-gray-500 whitespace-nowrap text-center min-w-[44px]">
-                    {y}
-                  </th>
-                ))}
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                <th style={{ position: 'sticky', left: 0, zIndex: 10, background: '#F8FAFC', textAlign: 'left', padding: '10px 14px', fontWeight: 800, color: '#64748B', whiteSpace: 'nowrap', borderRight: '1px solid #F1F5F9', minWidth: 160 }}>Subject</th>
+                <th style={{ padding: '10px 10px', fontWeight: 800, color: '#64748B', textAlign: 'center', borderRight: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>Total</th>
+                {years.map(y => <th key={y} style={{ padding: '10px 4px', fontWeight: 700, color: '#94A3B8', textAlign: 'center', minWidth: 42 }}>{y}</th>)}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {displaySubjects.map((s, i) => {
+            <tbody>
+              {display.map((s, i) => {
                 const counts = matrix[s.id] ?? {}
-                const rowTotal = s.totalQuestions
                 return (
-                  <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
-                    {/* Subject name */}
-                    <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-bold text-gray-800 whitespace-nowrap border-r border-gray-100" style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                      {s.name}
-                      <span className="ml-1.5 text-[10px] font-medium text-gray-400">{s.exam_type}</span>
+                  <tr key={s.id} style={{ background: i % 2 === 0 ? '#fff' : '#FAFAFA', transition: 'background .1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F5F7FF'}
+                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#FAFAFA'}
+                  >
+                    <td style={{ position: 'sticky', left: 0, zIndex: 5, background: 'inherit', padding: '9px 14px', fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', borderRight: '1px solid #F1F5F9' }}>
+                      {s.name} <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 500 }}>{s.exam_type}</span>
                     </td>
-                    {/* Total */}
-                    <td className="px-3 py-2.5 text-center font-black border-r border-gray-100 whitespace-nowrap">
-                      <span className={rowTotal > 0 ? 'text-indigo-700' : 'text-gray-300'}>
-                        {rowTotal > 0 ? rowTotal.toLocaleString() : '—'}
-                      </span>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 800, borderRight: '1px solid #F1F5F9', color: s.totalQuestions > 0 ? INDIGO : '#CBD5E1' }}>
+                      {s.totalQuestions > 0 ? s.totalQuestions.toLocaleString() : '—'}
                     </td>
-                    {/* Year cells */}
                     {years.map(y => {
                       const count = counts[y] ?? 0
-                      const bg = count >= 40 ? 'bg-green-500 text-white'
-                               : count >= 20 ? 'bg-green-400 text-white'
-                               : count >= 10 ? 'bg-green-200 text-green-800'
-                               : count >= 1  ? 'bg-amber-100 text-amber-800'
-                               : ''
+                      const bg = count >= 40 ? '#16A34A' : count >= 20 ? '#22C55E' : count >= 10 ? '#86EFAC' : count >= 1 ? '#FDE68A' : ''
+                      const fg = count >= 20 ? '#fff' : count >= 10 ? '#166534' : count >= 1 ? '#92400E' : '#CBD5E1'
                       return (
-                        <td key={y} className="px-1 py-1.5 text-center">
+                        <td key={y} style={{ padding: '4px 3px', textAlign: 'center' }}>
                           <Link
                             href={`/admin/questions/import?subject=${encodeURIComponent(s.name)}&examType=${s.exam_type}&year=${y}`}
-                            title={count > 0 ? `${count} questions` : `Import ${s.name} ${s.exam_type} ${y}`}
-                            className={`flex items-center justify-center w-9 h-7 rounded-lg mx-auto text-[11px] font-bold transition-colors ${
-                              count > 0
-                                ? `${bg} hover:opacity-80`
-                                : 'text-gray-200 hover:bg-indigo-50 hover:text-indigo-500 border border-dashed border-gray-100 hover:border-indigo-300'
-                            }`}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: 36, height: 26, borderRadius: 8, margin: '0 auto',
+                              fontSize: 11, fontWeight: 700, textDecoration: 'none',
+                              background: bg || 'transparent',
+                              color: fg,
+                              border: count === 0 ? '1.5px dashed #E2E8F0' : 'none',
+                              transition: 'all .12s',
+                            }}
                           >
                             {count > 0 ? count : '+'}
                           </Link>
@@ -447,18 +588,11 @@ function YearCoverage({ examType }) {
             </tbody>
           </table>
         </div>
-
-        {/* Show more */}
         {subjects.length > 12 && (
-          <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between">
-            <p className="text-xs text-gray-400">
-              Showing {displaySubjects.length} of {subjects.length} subjects
-            </p>
-            <button
-              onClick={() => setShowAll(v => !v)}
-              className="text-xs font-bold text-indigo-600 hover:underline"
-            >
-              {showAll ? 'Show fewer ↑' : `Show all ${subjects.length} subjects ↓`}
+          <div style={{ borderTop: '1px solid #F1F5F9', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: SLATE }}>Showing {display.length} of {subjects.length}</span>
+            <button onClick={() => setShowAll(v => !v)} style={{ fontSize: 12, fontWeight: 700, color: INDIGO, background: 'none', border: 'none', cursor: 'pointer' }}>
+              {showAll ? 'Show fewer ↑' : `Show all ${subjects.length} ↓`}
             </button>
           </div>
         )}
@@ -467,10 +601,54 @@ function YearCoverage({ examType }) {
   )
 }
 
+// ─── BATCH HISTORY ─────────────────────────────────────────────────────────────
+function BatchHistory({ subjectId, examType }) {
+  const [batches, setBatches] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    const p = new URLSearchParams()
+    if (subjectId) p.set('subjectId', subjectId)
+    if (examType)  p.set('examType', examType)
+    fetch(`/api/admin/questions/batches?${p}`)
+      .then(r => r.json()).then(d => setBatches(d.batches ?? [])).catch(() => setBatches([])).finally(() => setLoading(false))
+  }, [subjectId, examType])
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner/></div>
+  if (!batches.length) return (
+    <div style={{ textAlign: 'center', padding: '40px 24px', color: SLATE, fontSize: 13 }}>
+      No upload batches yet. <Link href="/admin/questions/upload" style={{ color: INDIGO, fontWeight: 700 }}>Upload your first batch →</Link>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {batches.map(b => (
+        <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#fff', border: '1px solid #F1F5F9', borderRadius: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#1E293B' }}>{b.subject_name ?? '—'}</span>
+              <Badge color={b.exam_type === 'WAEC' ? 'indigo' : 'blue'}>{b.exam_type}</Badge>
+            </div>
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>
+              {new Date(b.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: GREEN }}>{b.saved ?? 0} saved</div>
+            {(b.errors ?? 0) > 0 && <div style={{ fontSize: 12, color: RED }}>{b.errors} errors</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function PastQuestionsPage() {
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
-  const [subjectName,    setSubjectName]    = useState('')   // display name only
+  const [subjectName,    setSubjectName]    = useState('')
   const [examType,       setExamType]       = useState('WAEC')
   const [activeTab,      setActiveTab]      = useState('questions')
   const [questions,      setQuestions]      = useState([])
@@ -482,11 +660,11 @@ export default function PastQuestionsPage() {
   const [filterDiff,     setFilterDiff]     = useState('')
   const [filterImage,    setFilterImage]    = useState(false)
   const [filterUntagged, setFilterUntagged] = useState(false)
+  const [filterIllust,   setFilterIllust]   = useState('') // '' | 'has_svg' | 'has_prompt' | 'none'
   const [topics,         setTopics]         = useState([])
-  const [selected,       setSelected]       = useState(null)
+  const [expandedId,     setExpandedId]     = useState(null)
   const [coreTopicIds,   setCoreTopicIds]   = useState(new Set())
 
-  // ── Group subjects by name so UI shows "Mathematics" not "Mathematics WAEC" + "Mathematics JAMB"
   const groupedSubjects = useMemo(() => {
     const map = {}
     for (const s of subjects) {
@@ -496,7 +674,6 @@ export default function PastQuestionsPage() {
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
   }, [subjects])
 
-  // Resolve subjectId whenever name or examType changes
   useEffect(() => {
     const group = groupedSubjects.find(g => g.name === subjectName)
     if (!group) return
@@ -504,28 +681,20 @@ export default function PastQuestionsPage() {
     if (row?.id) setSubjectId(row.id)
   }, [subjectName, examType, groupedSubjects])
 
-  // Load subjects
   useEffect(() => {
     fetch('/api/admin/subjects?active=true')
       .then(r => r.json())
       .then(d => {
         const list = (Array.isArray(d) ? d : (d.subjects ?? [])).filter(s => s.is_active !== false)
         setSubjects(list)
-        if (list[0]) {
-          setSubjectName(list[0].name)
-          setSubjectId(list[0].id)
-        }
-      })
-      .catch(() => {})
+        if (list[0]) { setSubjectName(list[0].name); setSubjectId(list[0].id) }
+      }).catch(() => {})
   }, [])
 
-  // Load topics for filter
   useEffect(() => {
     if (!subjectId) return
     fetch(`/api/admin/curriculum?subjectId=${subjectId}`)
-      .then(r => r.json())
-      .then(d => setTopics(Array.isArray(d) ? d : []))
-      .catch(() => setTopics([]))
+      .then(r => r.json()).then(d => setTopics(Array.isArray(d) ? d : [])).catch(() => setTopics([]))
   }, [subjectId])
 
   const loadCoreTopicIds = useCallback(() => {
@@ -539,19 +708,16 @@ export default function PastQuestionsPage() {
 
   useEffect(() => { loadCoreTopicIds() }, [loadCoreTopicIds])
 
-  // Load questions — note: no source filter so ALL questions show (past_paper + ai_generated)
-  // The admin can see everything; if they want to filter to past_paper only use filterSource
   const loadQuestions = useCallback(() => {
     if (!subjectId) return
     setLoadingQ(true)
-    const p = new URLSearchParams({ subject: subjectId, page: String(page), limit: '25' })
+    const p = new URLSearchParams({ subject: subjectId, page: String(page), limit: '30' })
     if (examType !== 'ALL') p.set('exam', examType)
     if (search)         p.set('search', search)
     if (filterTopic)    p.set('topic', filterTopic)
     if (filterDiff)     p.set('difficulty', filterDiff)
     if (filterImage)    p.set('has_image', 'true')
     if (filterUntagged) p.set('untagged', 'true')
-
     fetch(`/api/admin/questions?${p}`)
       .then(r => r.json())
       .then(d => { setQuestions(d.questions ?? []); setTotal(d.total ?? 0) })
@@ -562,206 +728,242 @@ export default function PastQuestionsPage() {
   useEffect(() => { loadQuestions() }, [loadQuestions])
   useEffect(() => { setPage(1) }, [subjectId, examType, search, filterTopic, filterDiff, filterImage, filterUntagged])
 
+  // Client-side illustration filter
+  const displayQuestions = useMemo(() => {
+    if (!filterIllust) return questions
+    return questions.filter(q => illustrationStatus(q) === filterIllust)
+  }, [questions, filterIllust])
+
+  // Illustration stats for the current page
+  const illustStats = useMemo(() => {
+    const hasSvg    = questions.filter(q => illustrationStatus(q) === 'has_svg').length
+    const hasPrompt = questions.filter(q => illustrationStatus(q) === 'has_prompt').length
+    const noPrompt  = questions.filter(q => illustrationStatus(q) === 'none').length
+    return { hasSvg, hasPrompt, noPrompt }
+  }, [questions])
+
   async function markCore(topic) {
     const et = examType === 'ALL' ? 'WAEC' : examType
     await fetch('/api/admin/core-topics', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ subjectId, topicId: topic.topic_id, examType: et }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subjectId, topicId: topic.topic_id, examType: et }),
     })
     loadCoreTopicIds()
   }
 
-  async function markCoreFromQuestion(q) {
-    if (!q.topic_id) return
-    const et = (q.exam_type === 'BOTH' || !q.exam_type) ? 'WAEC' : q.exam_type
-    await fetch('/api/admin/core-topics', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ subjectId, topicId: q.topic_id, examType: et }),
-    })
-    loadCoreTopicIds()
+  function handleQuestionUpdated(updatedQ) {
+    setQuestions(prev => prev.map(q => q.id === updatedQ.id ? { ...q, explanation: updatedQ.explanation } : q))
   }
 
-  // Enrich selected question with core status
-  function openQuestion(q) {
-    setSelected({ ...q, _topicIsCore: coreTopicIds.has(q.topic_id) })
-  }
-
-  const totalPages   = Math.ceil(total / 25)
+  const totalPages   = Math.ceil(total / 30)
   const selectedSubj = subjects.find(s => s.id === subjectId)
+  const hasFilters   = !!(search || filterTopic || filterDiff || filterImage || filterUntagged || filterIllust)
+
+  // PILL BUTTON style
+  const Pill = ({ active, onClick, children, activeColor = INDIGO }) => (
+    <button onClick={onClick} style={{
+      padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+      border: `1.5px solid ${active ? activeColor : '#E2E8F0'}`,
+      background: active ? activeColor + '12' : '#fff',
+      color: active ? activeColor : SLATE,
+      cursor: 'pointer', fontFamily: 'inherit', transition: 'all .12s', whiteSpace: 'nowrap',
+    }}>
+      {children}
+    </button>
+  )
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900">Past Questions</h1>
-          <p className="text-sm text-gray-500 mt-1">Browse questions, check coverage, and tag core topics.</p>
-        </div>
-        <Link href="/admin/questions/upload" className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm whitespace-nowrap">
-          ⬆ Upload past questions
-        </Link>
-      </div>
+    <>
+      <style>{`
+        @keyframes pq-spin { to { transform: rotate(360deg) } }
+        * { box-sizing: border-box }
+      `}</style>
 
-      {/* Subject + exam */}
-      <div className="flex items-end gap-4 flex-wrap">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-bold text-gray-500 mb-1.5">Subject</label>
-          <select value={subjectName} onChange={e => { setSubjectName(e.target.value); setPage(1) }}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            {groupedSubjects.map(g => (
-              <option key={g.name} value={g.name}>
-                {g.name}{Object.keys(g.exams).length === 1 ? ` (${Object.keys(g.exams)[0]} only)` : ''}
-              </option>
-            ))}
-          </select>
+      <div style={{ maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* ── PAGE HEADER ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: '#0F172A', margin: 0, letterSpacing: '-.02em' }}>Past Questions</h1>
+            <p style={{ fontSize: 13, color: SLATE, marginTop: 3 }}>Browse, review, and add SVG illustrations to questions.</p>
+          </div>
+          <Link href="/admin/questions/upload" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: INDIGO, color: '#fff', borderRadius: 12, fontSize: 13, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>
+            ⬆ Upload
+          </Link>
         </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-500 mb-1.5">Exam</label>
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-            {['WAEC', 'JAMB', 'ALL'].map(et => (
-              <button key={et} onClick={() => { setExamType(et); setPage(1) }}
-                className={`px-3 py-1.5 text-xs font-black rounded-lg transition-all ${examType === et ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {et}
-              </button>
-            ))}
+
+        {/* ── SUBJECT + EXAM SELECTOR ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: SLATE, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Subject</label>
+            <select
+              value={subjectName}
+              onChange={e => { setSubjectName(e.target.value); setPage(1) }}
+              style={{ width: '100%', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '9px 12px', fontSize: 14, fontWeight: 600, background: '#fff', color: '#0F172A', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {groupedSubjects.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: SLATE, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Exam</label>
+            <div style={{ display: 'flex', gap: 2, background: '#F1F5F9', padding: 3, borderRadius: 12 }}>
+              {['WAEC', 'JAMB', 'ALL'].map(et => (
+                <button key={et} onClick={() => { setExamType(et); setPage(1) }} style={{
+                  padding: '6px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: 12, fontWeight: 800,
+                  background: examType === et ? '#fff' : 'transparent',
+                  color: examType === et ? INDIGO : SLATE,
+                  boxShadow: examType === et ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                  transition: 'all .12s',
+                }}>
+                  {et}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', letterSpacing: '-.02em' }}>{total.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: SLATE }}>questions</div>
           </div>
         </div>
-        <div className="ml-auto text-right">
-          <p className="text-sm font-black text-gray-900">{total.toLocaleString()} questions</p>
-          {coreTopicIds.size > 0 && <p className="text-xs text-indigo-600 font-medium">⭐ {coreTopicIds.size} core topics</p>}
+
+        {/* ── TABS ── */}
+        <div style={{ display: 'flex', gap: 2, background: '#F1F5F9', padding: 4, borderRadius: 14, width: 'fit-content' }}>
+          {[
+            { id: 'questions', label: `📝 Questions` },
+            { id: 'coverage',  label: '📊 Topic coverage' },
+            { id: 'years',     label: '📅 Year matrix' },
+            { id: 'history',   label: '📋 Upload history' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+              padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap',
+              background: activeTab === t.id ? '#fff' : 'transparent',
+              color: activeTab === t.id ? INDIGO : SLATE,
+              boxShadow: activeTab === t.id ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+              transition: 'all .12s',
+            }}>
+              {t.label}
+            </button>
+          ))}
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {[
-          { id: 'questions', label: `📝 Questions (${total.toLocaleString()})` },
-          { id: 'coverage',  label: '📊 Topic coverage' },
-          { id: 'years',     label: '📅 Year coverage' },
-          { id: 'history',   label: '📋 Upload history' },
-        ].map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+        {/* ── QUESTIONS TAB ── */}
+        {activeTab === 'questions' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-      {/* ── QUESTIONS TAB ─────────────────────────────────────────────── */}
-      {activeTab === 'questions' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search question text…"
-              className="flex-1 min-w-[200px] px-4 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-              <option value="">All topics</option>
-              {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <select value={filterDiff} onChange={e => setFilterDiff(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-              <option value="">All difficulties</option>
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-            <button onClick={() => setFilterImage(f => !f)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${filterImage ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-              🖼 Has image
-            </button>
-            <button onClick={() => setFilterUntagged(f => !f)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${filterUntagged ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-              ⚠ Untagged
-            </button>
-            {(search || filterTopic || filterDiff || filterImage || filterUntagged) && (
-              <button onClick={() => { setSearch(''); setFilterTopic(''); setFilterDiff(''); setFilterImage(false); setFilterUntagged(false) }}
-                className="px-3 py-2 rounded-xl text-xs font-medium text-gray-400 hover:text-gray-600 border border-gray-200">
-                Clear ✕
-              </button>
+            {/* Illustration summary bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#F8FAFC', borderRadius: 12, border: '1px solid #F1F5F9', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: SLATE, marginRight: 4 }}>Illustration status (this page):</span>
+              <Pill active={filterIllust === 'has_svg'} activeColor={GREEN} onClick={() => setFilterIllust(f => f === 'has_svg' ? '' : 'has_svg')}>
+                ✓ SVG ready · {illustStats.hasSvg}
+              </Pill>
+              <Pill active={filterIllust === 'has_prompt'} activeColor={AMBER} onClick={() => setFilterIllust(f => f === 'has_prompt' ? '' : 'has_prompt')}>
+                📋 Prompt only · {illustStats.hasPrompt}
+              </Pill>
+              <Pill active={filterIllust === 'none'} activeColor={SLATE} onClick={() => setFilterIllust(f => f === 'none' ? '' : 'none')}>
+                No illustration · {illustStats.noPrompt}
+              </Pill>
+              {filterIllust && <button onClick={() => setFilterIllust('')} style={{ fontSize: 11, color: SLATE, background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4 }}>Clear ×</button>}
+            </div>
+
+            {/* Search + filters */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <input
+                type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search question text…"
+                style={{ flex: 1, minWidth: 200, padding: '8px 14px', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 13, background: '#fff', color: '#0F172A', outline: 'none', fontFamily: 'inherit' }}
+              />
+              <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
+                style={{ padding: '8px 12px', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 12, background: '#fff', color: '#374151', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <option value="">All topics</option>
+                {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <select value={filterDiff} onChange={e => setFilterDiff(e.target.value)}
+                style={{ padding: '8px 12px', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 12, background: '#fff', color: '#374151', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <option value="">All difficulties</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+              <Pill active={filterImage} activeColor={INDIGO} onClick={() => setFilterImage(f => !f)}>🖼 Has image</Pill>
+              <Pill active={filterUntagged} activeColor={RED} onClick={() => setFilterUntagged(f => !f)}>⚠ Untagged</Pill>
+              {hasFilters && (
+                <button onClick={() => { setSearch(''); setFilterTopic(''); setFilterDiff(''); setFilterImage(false); setFilterUntagged(false); setFilterIllust('') }}
+                  style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, color: SLATE, background: '#F1F5F9', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Clear all ✕
+                </button>
+              )}
+            </div>
+
+            {/* Question list */}
+            <div style={{ background: '#fff', border: '1px solid #F1F5F9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,.04)' }}>
+              {loadingQ ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner size={32}/></div>
+              ) : displayQuestions.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📝</div>
+                  <p style={{ color: SLATE, fontSize: 13, marginBottom: 8 }}>
+                    {hasFilters ? 'No questions match these filters.' : `No questions for ${selectedSubj?.name ?? 'this subject'}.`}
+                  </p>
+                  {!hasFilters && <Link href="/admin/questions/upload" style={{ color: INDIGO, fontSize: 13, fontWeight: 700 }}>Upload past questions →</Link>}
+                </div>
+              ) : (
+                displayQuestions.map(q => (
+                  <QuestionCard
+                    key={q.id}
+                    question={q}
+                    isExpanded={expandedId === q.id}
+                    onToggle={() => setExpandedId(id => id === q.id ? null : q.id)}
+                    onQuestionUpdated={handleQuestionUpdated}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, color: SLATE }}>
+                  {((page - 1) * 30) + 1}–{Math.min(page * 30, total)} of {total.toLocaleString()}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                    style={{ padding: '6px 14px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 12, fontWeight: 700, color: page === 1 ? '#CBD5E1' : '#374151', cursor: page === 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                    ← Prev
+                  </button>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: SLATE, minWidth: 60, textAlign: 'center' }}>{page} / {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    style={{ padding: '6px 14px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 12, fontWeight: 700, color: page === totalPages ? '#CBD5E1' : '#374151', cursor: page === totalPages ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                    Next →
+                  </button>
+                </div>
+              </div>
             )}
           </div>
+        )}
 
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-            {loadingQ ? (
-              <div className="flex items-center justify-center py-16"><Spinner /></div>
-            ) : questions.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-3xl mb-2">📝</p>
-                <p className="text-gray-500 text-sm mb-3">
-                  {(search || filterTopic || filterDiff || filterImage || filterUntagged)
-                    ? 'No questions match these filters.'
-                    : `No questions found for ${selectedSubj?.name ?? 'this subject'}.`}
-                </p>
-                {!search && !filterTopic && (
-                  <Link href="/admin/questions/upload" className="text-sm font-bold text-indigo-600 hover:underline">Upload past questions →</Link>
-                )}
-              </div>
-            ) : questions.map(q => (
-              <QuestionRow key={q.id} question={q} onOpen={openQuestion} />
-            ))}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-400">
-                {((page - 1) * 25) + 1}–{Math.min(page * 25, total)} of {total.toLocaleString()}
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg disabled:opacity-30 hover:bg-gray-50 font-medium">← Prev</button>
-                <span className="text-xs text-gray-500 font-medium">{page} / {totalPages}</span>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg disabled:opacity-30 hover:bg-gray-50 font-medium">Next →</button>
-              </div>
+        {/* ── COVERAGE TAB ── */}
+        {activeTab === 'coverage' && (
+          <div style={{ background: '#fff', border: '1px solid #F1F5F9', borderRadius: 16, padding: 20, boxShadow: '0 1px 8px rgba(0,0,0,.04)' }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: '#0F172A' }}>{selectedSubj?.name ?? '—'} · {examType === 'ALL' ? 'All exams' : examType}</div>
+              <div style={{ fontSize: 12, color: SLATE, marginTop: 2 }}>Click ⭐ to mark a topic as Core — prioritised in student practice and diagnostics.</div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ── COVERAGE TAB ──────────────────────────────────────────────── */}
-      {activeTab === 'coverage' && (
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
-          <div>
-            <p className="text-sm font-black text-gray-900">{selectedSubj?.name ?? '—'} · {examType === 'ALL' ? 'All exams' : examType}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Click ⭐ to mark a topic as Core — it will be prioritised in student practice, diagnostics, and study plans.</p>
+            <CoverageChart subjectId={subjectId} examType={examType} onMarkCore={markCore} coreTopicIds={coreTopicIds} onCoreUpdated={loadCoreTopicIds}/>
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, marginTop: 12 }}>
+              <Link href="/admin/core-topics" style={{ fontSize: 12, fontWeight: 700, color: INDIGO }}>Manage core topics in detail →</Link>
+            </div>
           </div>
-          <CoverageChart
-            subjectId={subjectId}
-            examType={examType}
-            onMarkCore={markCore}
-            coreTopicIds={coreTopicIds}
-            onCoreUpdated={loadCoreTopicIds}
-          />
-          <div className="pt-2 border-t border-gray-100">
-            <Link href="/admin/core-topics" className="text-xs font-bold text-indigo-600 hover:underline">
-              Manage core topics in detail (reorder, set priorities) →
-            </Link>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* ── HISTORY TAB ───────────────────────────────────────────────── */}
-      {activeTab === 'history' && (
-        <BatchHistory subjectId={subjectId} examType={examType !== 'ALL' ? examType : ''} />
-      )}
+        {/* ── YEAR MATRIX TAB ── */}
+        {activeTab === 'years' && <YearCoverage examType={examType}/>}
 
-      {activeTab === 'years' && (
-        <YearCoverage examType={examType} />
-      )}
+        {/* ── HISTORY TAB ── */}
+        {activeTab === 'history' && <BatchHistory subjectId={subjectId} examType={examType !== 'ALL' ? examType : ''}/>}
 
-      {selected && (
-        <QuestionModal
-          question={selected}
-          onClose={() => setSelected(null)}
-          onMarkCore={async (q) => {
-            await markCoreFromQuestion(q)
-            setSelected(prev => prev ? { ...prev, _topicIsCore: true } : null)
-          }}
-        />
-      )}
-    </div>
+      </div>
+    </>
   )
 }

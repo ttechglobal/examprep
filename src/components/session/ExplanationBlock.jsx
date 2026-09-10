@@ -4,18 +4,17 @@
 
 import React from 'react'
 import { MathText } from '@/lib/mathRenderer'
+import { BLUE, GREEN, GOLD, ORANGE, RED } from './SessionUtils'
+
+const LETTERS = ['A','B','C','D','E']
 
 // ─── RICH TEXT RENDERER ──────────────────────────────────────────────────────
-// Handles **bold**, *italic*, and \n line breaks inside explanation text.
-// Safe — does not use dangerouslySetInnerHTML.
 function RichText({ text, style }) {
   if (!text) return null
-  // Split on line breaks first, then render inline bold/italic per segment
   const paragraphs = String(text).split(/\n+/).filter(Boolean)
   return (
     <span style={style}>
       {paragraphs.map((para, pi) => {
-        // Parse **bold** and *italic* tokens
         const parts = []
         let remaining = para
         let key = 0
@@ -39,7 +38,6 @@ function RichText({ text, style }) {
     </span>
   )
 }
-import { BLUE, GREEN, GOLD, ORANGE } from './SessionUtils'
 
 // ─── FORMULA BOX ─────────────────────────────────────────────────────────────
 export function FormulaBox({ formulaBox, variablesKey }) {
@@ -69,7 +67,6 @@ export function FormulaBox({ formulaBox, variablesKey }) {
 }
 
 // ─── HINT BLOCK ───────────────────────────────────────────────────────────────
-// Small pill — non-intrusive. Tap to reveal, tap to close.
 export function HintBlock({ hint }) {
   const [open, setOpen] = React.useState(false)
   if (!hint || !hint.trim()) return null
@@ -98,8 +95,128 @@ export function HintBlock({ hint }) {
   )
 }
 
+// ─── FORMATTED ANSWER NOTE ────────────────────────────────────────────────────
+// Shows the correct answer with option letter pill + answer text, both styled.
+function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
+  if (!answerNote && !correctLetter) return null
+
+  // If we have both letter and text, show the styled pill + text combo
+  if (correctLetter && correctText) {
+    return (
+      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, marginBottom:14 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+            <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:11, fontWeight:900, color:GREEN, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:6 }}>
+              Correct Answer
+            </div>
+            {/* Letter pill + answer text */}
+            <div style={{ display:'flex', alignItems:'flex-start', gap:9, marginBottom: answerNote ? 8 : 0 }}>
+              <div style={{
+                flexShrink:0,
+                width:30, height:30, borderRadius:9,
+                background:GREEN,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                boxShadow:`0 2px 6px ${GREEN}40`,
+              }}>
+                <span style={{ fontSize:14, fontWeight:900, color:'#fff' }}>{correctLetter}</span>
+              </div>
+              <div style={{ flex:1, minWidth:0, paddingTop:5 }}>
+                <MathText
+                  text={correctText}
+                  as="span"
+                  className=""
+                  style={{ fontSize:15, fontWeight:800, color:'var(--text-prim)', lineHeight:1.5 }}
+                />
+              </div>
+            </div>
+            {/* explanation / answer_note text below */}
+            {answerNote && (
+              <div style={{ paddingTop:4, borderTop:`1px solid ${GREEN}20`, marginTop:4 }}>
+                <RichText text={answerNote} style={{ fontSize:13, fontWeight:500, color:'var(--text-sec)', lineHeight:1.7 }}/>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback: no letter/text pair — render plain answer_note
+  if (answerNote) {
+    return (
+      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:14 }}>
+        <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+          <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
+        </div>
+        <RichText text={answerNote} style={{ fontSize:14, fontWeight:500, color:'var(--text-prim)', lineHeight:1.7 }}/>
+      </div>
+    )
+  }
+
+  return null
+}
+
+// ─── WRONG OPTIONS BLOCK ──────────────────────────────────────────────────────
+function WrongOptionsBlock({ wrongOptions, selectedKey }) {
+  const [open, setOpen] = React.useState(false)
+  if (!wrongOptions || Object.keys(wrongOptions).length === 0) return null
+
+  const entries = Object.entries(wrongOptions)
+  if (entries.length === 0) return null
+
+  // Sort: student's selected wrong answer first
+  const sorted = [...entries].sort(([ka], [kb]) => {
+    if (ka === selectedKey) return -1
+    if (kb === selectedKey) return 1
+    return 0
+  })
+
+  return (
+    <div style={{ marginTop:14 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:12, border:`1px solid ${ORANGE}35`, background:`${ORANGE}07`, cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}
+      >
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:14 }}>❓</span>
+          <span style={{ fontSize:12, fontWeight:800, color:ORANGE }}>Why the other options are wrong</span>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}>
+          <path d="M3 5l4 4 4-4" stroke={ORANGE} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ marginTop:6, borderRadius:12, border:`1px solid ${ORANGE}25`, background:`${ORANGE}04`, overflow:'hidden' }}>
+          {sorted.map(([key, reason], i) => {
+            const isStudentWrong = key === selectedKey
+            return (
+              <div key={key} style={{ padding:'11px 14px', borderBottom: i < sorted.length - 1 ? `1px solid ${ORANGE}15` : 'none', background: isStudentWrong ? `${RED}05` : 'transparent' }}>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
+                  <div style={{ width:26, height:26, borderRadius:8, background: isStudentWrong ? `${RED}20` : `${ORANGE}15`, border:`1.5px solid ${isStudentWrong ? RED : ORANGE}35`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                    <span style={{ fontSize:12, fontWeight:900, color: isStudentWrong ? RED : ORANGE }}>{key}</span>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    {isStudentWrong && (
+                      <div style={{ fontSize:9, fontWeight:900, color:RED, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Your answer</div>
+                    )}
+                    <RichText text={reason} style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.6 }}/>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── EXPLANATION CONTENT (shared between inline and modal) ─────────────────────
-function ExplanationContent({ explanation, isCorrect }) {
+function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter, correctText }) {
   const concept      = explanation.concept       ?? ''
   const formulaBox   = explanation.formula_box   ?? ''
   const variablesKey = explanation.variables_key ?? []
@@ -107,6 +224,7 @@ function ExplanationContent({ explanation, isCorrect }) {
   const answerNote   = explanation.answer_note   ?? explanation.correct ?? ''
   const studyTip     = explanation.study_tip     ?? ''
   const svgDiagram   = explanation.svg_diagram   ?? ''
+  const wrongOptions = explanation.wrong_options ?? {}
 
   const steps = Array.isArray(explanation.steps)
     ? explanation.steps.filter(s => s && (s.title || (Array.isArray(s.lines) && s.lines.length)))
@@ -160,19 +278,19 @@ function ExplanationContent({ explanation, isCorrect }) {
         </div>
       )}
 
-      {/* Answer note */}
-      {answerNote && (
-        <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:studyTip?14:0 }}>
-          <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
-            <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
-          </div>
-          <RichText text={answerNote} style={{ fontSize:14, fontWeight:500, color:'var(--text-prim)', lineHeight:1.7 }}/>
-        </div>
-      )}
+      {/* Formatted answer note with letter + text */}
+      <FormattedAnswerNote
+        answerNote={answerNote}
+        correctLetter={correctLetter}
+        correctText={correctText}
+      />
+
+      {/* Why other options are wrong */}
+      <WrongOptionsBlock wrongOptions={wrongOptions} selectedKey={selectedKey}/>
 
       {/* Study tip */}
       {studyTip && (
-        <div style={{ padding:'11px 14px', borderRadius:11, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.25)', display:'flex', alignItems:'flex-start', gap:9 }}>
+        <div style={{ padding:'11px 14px', borderRadius:11, background:'rgba(255,184,0,.07)', border:'1px solid rgba(255,184,0,.25)', display:'flex', alignItems:'flex-start', gap:9, marginTop:14 }}>
           <span style={{ fontSize:14, flexShrink:0 }}>📌</span>
           <div>
             <div style={{ fontSize:10, fontWeight:900, color:GOLD, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:3 }}>Study Tip</div>
@@ -185,24 +303,26 @@ function ExplanationContent({ explanation, isCorrect }) {
 }
 
 // ─── EXPLANATION MODAL (mobile full-screen) ────────────────────────────────────
-function ExplanationModal({ explanation, isCorrect, onClose }) {
+function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, correctText, onClose }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,.6)', backdropFilter:'blur(4px)', display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
-      {/* Tap backdrop to close */}
       <div style={{ flex:1 }} onClick={onClose}/>
       <div style={{ background:'var(--bg-base)', borderRadius:'20px 20px 0 0', maxHeight:'82dvh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-        {/* Handle bar */}
         <div style={{ display:'flex', justifyContent:'center', padding:'10px 0 4px' }}>
           <div style={{ width:36, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
         </div>
-        {/* Header */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 18px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
           <span style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)' }}>Explanation</span>
           <button onClick={onClose} style={{ width:28, height:28, borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-subtle)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tert)', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
         </div>
-        {/* Scrollable content */}
         <div style={{ overflowY:'auto', padding:'16px 18px 32px', flex:1 }}>
-          <ExplanationContent explanation={explanation} isCorrect={isCorrect}/>
+          <ExplanationContent
+            explanation={explanation}
+            isCorrect={isCorrect}
+            selectedKey={selectedKey}
+            correctLetter={correctLetter}
+            correctText={correctText}
+          />
         </div>
       </div>
     </div>
@@ -210,59 +330,99 @@ function ExplanationModal({ explanation, isCorrect, onClose }) {
 }
 
 // ─── EXPLANATION BLOCK ────────────────────────────────────────────────────────
-// On mobile: shows a compact "View Explanation" button that opens a bottom-sheet modal.
-// On desktop: renders the full explanation inline (the side-column handles this on study mode,
-//             but inline is used for ReviewSession and other contexts).
-// Schema: { concept, formula_box, variables_key, intro, steps, answer_note, svg_diagram, illustration_prompt, study_tip }
-export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = false }) {
+// Props:
+//   explanation   — explanation object from DB
+//   isCorrect     — boolean
+//   dark          — boolean
+//   mobileModal   — boolean: if true, renders as a button that opens a bottom sheet
+//   selectedKey   — the letter the student selected (e.g. 'B'), for wrong_options highlighting
+//   question      — full question object (to extract correct letter + text for formatting)
+export function ExplanationBlock({ explanation, isCorrect, dark, mobileModal = false, selectedKey, question }) {
   const [modalOpen, setModalOpen] = React.useState(false)
   if (!explanation) return null
 
-  // Quick answer note for the compact mobile preview (before opening modal)
-  const answerNote = explanation.answer_note ?? explanation.correct ?? ''
-  const concept    = explanation.concept ?? ''
+  // Derive correct letter + text for the formatted answer note
+  let correctLetter = null
+  let correctText   = null
+  if (question) {
+    const correctAnswer = question.correct_answer ?? ''
+    const opts          = question.options ?? {}
+    // correct_answer might be a letter ('A','B','C','D') or the option text itself
+    if (LETTERS.includes(correctAnswer)) {
+      correctLetter = correctAnswer
+      correctText   = Array.isArray(opts)
+        ? opts[LETTERS.indexOf(correctAnswer)]
+        : (opts[correctAnswer] ?? '')
+    } else {
+      // correct_answer is the text — find which letter maps to it
+      if (Array.isArray(opts)) {
+        const idx = opts.indexOf(correctAnswer)
+        if (idx !== -1) { correctLetter = LETTERS[idx]; correctText = correctAnswer }
+      } else {
+        const entry = Object.entries(opts).find(([, v]) => v === correctAnswer)
+        if (entry) { correctLetter = entry[0]; correctText = correctAnswer }
+      }
+      // If we still don't have a letter, just show the text
+      if (!correctLetter) correctText = correctAnswer || null
+    }
+  }
+
+  const hasWrong = Object.keys(explanation.wrong_options ?? {}).length > 0
 
   if (mobileModal) {
     return (
       <>
-        {/* Compact preview strip */}
-        <div style={{ marginTop:14, borderRadius:14, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', overflow:'hidden' }}>
-          <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:concept?4:0 }}>Explanation</div>
-              {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{concept}</div>}
-            </div>
-            <button onClick={() => setModalOpen(true)}
-              style={{ flexShrink:0, padding:'8px 14px', borderRadius:10, border:`1.5px solid ${BLUE}`, background:`${BLUE}12`, color:BLUE, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-              View →
-            </button>
-          </div>
-          {answerNote && (
-            <div style={{ padding:'10px 16px', display:'flex', alignItems:'flex-start', gap:8 }}>
-              <div style={{ width:18, height:18, borderRadius:5, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-                <span style={{ fontSize:10, color:'#fff', fontWeight:900 }}>✓</span>
-              </div>
-              <span style={{ fontSize:13, color:'var(--text-prim)', lineHeight:1.6 }}>{answerNote}</span>
-            </div>
-          )}
-        </div>
+        <button
+          onClick={() => setModalOpen(true)}
+          style={{
+            marginTop:14, width:'100%',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+            padding:'13px 18px', borderRadius:13,
+            border:`1.5px solid ${BLUE}`,
+            background:`${BLUE}0D`,
+            color:BLUE, fontSize:13, fontWeight:800,
+            cursor:'pointer', fontFamily:'inherit',
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="6" stroke={BLUE} strokeWidth="1.5"/>
+            <path d="M7.5 5v3.5M7.5 10v.5" stroke={BLUE} strokeWidth="1.6" strokeLinecap="round"/>
+          </svg>
+          View Explanation
+          {hasWrong && <span style={{ fontSize:10, fontWeight:800, padding:'2px 7px', borderRadius:999, background:`${ORANGE}18`, color:ORANGE, border:`1px solid ${ORANGE}30` }}>+ why others wrong</span>}
+        </button>
         {modalOpen && (
-          <ExplanationModal explanation={explanation} isCorrect={isCorrect} onClose={() => setModalOpen(false)}/>
+          <ExplanationModal
+            explanation={explanation}
+            isCorrect={isCorrect}
+            selectedKey={selectedKey}
+            correctLetter={correctLetter}
+            correctText={correctText}
+            onClose={() => setModalOpen(false)}
+          />
         )}
       </>
     )
   }
 
   // Full inline rendering (desktop, review side column, etc.)
+  const concept = explanation.concept ?? ''
   return (
     <div style={{ marginTop:14, borderRadius:16, border:'1px solid var(--border)', background:dark?'rgba(255,255,255,.04)':'#fff', boxShadow:dark?'none':'0 2px 12px rgba(6,42,120,.06)' }}>
       <div style={{ padding:'16px 18px 14px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:concept?6:0 }}>
           Explanation
         </div>
+        {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE }}>{concept}</div>}
       </div>
-      <div style={{ padding:'16px 18px', display:'flex', flexDirection:'column', gap:14 }}>
-        <ExplanationContent explanation={explanation} isCorrect={isCorrect}/>
+      <div style={{ padding:'16px 18px', display:'flex', flexDirection:'column', gap:0 }}>
+        <ExplanationContent
+          explanation={explanation}
+          isCorrect={isCorrect}
+          selectedKey={selectedKey}
+          correctLetter={correctLetter}
+          correctText={correctText}
+        />
       </div>
     </div>
   )

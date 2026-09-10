@@ -39,6 +39,12 @@ export default function PracticeSessionPage() {
   const startTimeRef    = useRef(Date.now())
   const sessionIdRef    = useRef(crypto.randomUUID())
   const savedResultsRef = useRef(null)   // set by saveSession; read by results + review screens
+  const qColRef         = useRef(null)   // scrollable question column — reset on each question
+
+  // ── Scroll question column to top on every new question ───────────────────
+  useEffect(() => {
+    if (qColRef.current) qColRef.current.scrollTop = 0
+  }, [qIndex])
 
   // ── Load questions ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -209,13 +215,13 @@ export default function PracticeSessionPage() {
     : questions.map((_, i) => answerMap[i] ?? null)
   const subjectLabel    = config?.subjects?.[0] ?? ''
 
-  // Called immediately on selection in study mode — makes the desktop explanation
-  // panel appear without waiting for the Next button click.
-  // Defined here (after sessionType) so the closure captures the correct value.
+  // Called immediately on selection — updates answerMap so the mobile bottom bar
+  // can read the current selection when the student taps Next.
+  // In study mode: also triggers the desktop explanation panel to update.
+  // In practice mode: records the selection so mobile Next doesn't submit a blank answer.
   const handleAnswerChange = useCallback(({ selectedIdx, isCorrect }) => {
-    if (sessionType !== 'study') return
     recordAnswer(qIndex, { isCorrect, selectedIdx, timeTakenMs: 0 })
-  }, [qIndex, sessionType, recordAnswer])
+  }, [qIndex, recordAnswer])
 
   const modeLabel       = { study:'Study', practice:'Practice', timed:'Speed Round', quick5:'Quick 5', mock:'Mock Exam' }[config?.mode] ?? 'Practice'
   const q               = questions[qIndex]
@@ -257,6 +263,7 @@ export default function PracticeSessionPage() {
             padding: 16px 12px !important;
           }
           .session-q-col { flex: 1 !important; min-width: 0 !important; max-width: 680px !important; min-height: 0 !important; overflow-y: auto !important; padding: 32px 40px !important; }
+          .session-q-col-light { background: #EBF0FF !important; }
           .session-exp-col { flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; min-height: 0 !important; overflow-y: auto !important; padding: 32px 28px 32px 0 !important; border-left: 1px solid var(--border) !important; }
           .session-nav-bottom { display: none !important; }
         }
@@ -323,31 +330,49 @@ export default function PracticeSessionPage() {
           </div>
 
           {/* CENTRE: question card */}
-          <div className="session-q-col" style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
-            {/* Mobile: numbered question grid inside the scroll area, above the card */}
-            <div className="session-q-nav-mobile" style={{ marginBottom:16 }}>
+          <div className={`session-q-col${!dark ? ' session-q-col-light' : ''}`} ref={qColRef} style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
+            <style>{`
+              .session-q-nav-mobile { display: none; }
+              @media (max-width: 1023px) {
+                .session-q-nav-mobile { display: block; margin-top: 16px; }
+              }
+              .session-q-card-wrap {
+                border-radius: 18px;
+                padding: 20px 16px;
+              }
+              .session-q-card-wrap-light {
+                background: #fff;
+                box-shadow: 0 2px 16px rgba(6,42,120,.08);
+              }
+              @media (max-width: 1023px) {
+                .session-q-card-wrap-dark-mobile { background: transparent !important; box-shadow: none !important; }
+              }
+            `}</style>
+            {q && (
+              <div className={`session-q-card-wrap${!dark ? ' session-q-card-wrap-light' : ''}`}>
+                <QuestionCard
+                  key={q.id + '-' + qIndex}
+                  question={q}
+                  qIndex={qIndex}
+                  total={questions.length}
+                  onNext={handleNext}
+                  onAnswerChange={handleAnswerChange}
+                  onPrev={() => setQIndex(i => Math.max(0, i-1))}
+                  sessionType={sessionType}
+                  speedSecs={speedSecs}
+                  onSpeedTimeUp={handleSpeedTimeUp}
+                  dark={dark}
+                  alreadyAnswered={answerMap[qIndex] ?? null}
+                  reviewMode={false}
+                  hideExplanation={sessionType !== 'study'}
+                  hideNav={false}
+                />
+              </div>
+            )}
+            {/* Mobile: numbered question grid — BELOW the card */}
+            <div className="session-q-nav-mobile">
               <QuestionNav total={questions.length} current={qIndex} answerMap={navAnswerMap} onJump={setQIndex} sessionType={sessionType} inline={true}/>
             </div>
-            <style>{`.session-q-nav-mobile{display:none}@media(max-width:1023px){.session-q-nav-mobile{display:block}}`}</style>
-            {q && (
-              <QuestionCard
-                key={q.id + '-' + qIndex}
-                question={q}
-                qIndex={qIndex}
-                total={questions.length}
-                onNext={handleNext}
-                onAnswerChange={handleAnswerChange}
-                onPrev={() => setQIndex(i => Math.max(0, i-1))}
-                sessionType={sessionType}
-                speedSecs={speedSecs}
-                onSpeedTimeUp={handleSpeedTimeUp}
-                dark={dark}
-                alreadyAnswered={answerMap[qIndex] ?? null}
-                reviewMode={false}
-                hideExplanation={sessionType !== 'study'}
-                hideNav={false}
-              />
-            )}
           </div>
 
           {/* RIGHT: explanation panel (desktop, study mode only) */}
@@ -374,9 +399,14 @@ export default function PracticeSessionPage() {
           </button>
           <button
             onClick={() => {
-              const isLast = qIndex >= questions.length - 1
-              if (isLast) { setDialogMode('submit'); setPendingMap(answerMap); setShowEnd(true) }
-              else setQIndex(i => i + 1)
+              // Call handleNext with the current answer so it's properly recorded.
+              // answerMap[qIndex] may already exist if the student selected an option;
+              // handleNext reads it and builds the correct entry.
+              const current = answerMap[qIndex]
+              handleNext(current
+                ? { selectedIdx: current.selectedIdx, isCorrect: current.isCorrect }
+                : {}
+              )
             }}
             style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
             {qIndex >= questions.length - 1 ? 'Submit' : 'Next'}

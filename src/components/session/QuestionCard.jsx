@@ -348,6 +348,8 @@ export function QuestionCard({
               isCorrect={reviewMode ? alreadyAnswered?.isCorrect : isCorrectSelected}
               dark={dark}
               mobileModal={true}
+              selectedKey={selected !== null ? (shuffledOptions[selected] ? String.fromCharCode(65 + selected) : null) : null}
+              question={question}
             />
           </span>
           <span className="expl-desktop-inline">
@@ -356,6 +358,8 @@ export function QuestionCard({
               isCorrect={reviewMode ? alreadyAnswered?.isCorrect : isCorrectSelected}
               dark={dark}
               mobileModal={false}
+              selectedKey={selected !== null ? (shuffledOptions[selected] ? String.fromCharCode(65 + selected) : null) : null}
+              question={question}
             />
           </span>
           <style>{`

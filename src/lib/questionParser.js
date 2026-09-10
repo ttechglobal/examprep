@@ -238,14 +238,16 @@ PART 2 — WRITE THE EXPLANATION
   If your explanation naturally has 2–3 distinct ideas, separate them with \n (newline) — the UI renders each on a new line.
   Example: "**Osmosis** is the net movement of water molecules\nIt moves from a region of *high water potential* to *low water potential*\nThis continues until equilibrium is reached."
   Never use bullet points or numbered lists — prose only, formatted with **bold**, *italic*, and \n breaks.
-  Minimum 3 sentences for recall questions — name the concept, explain the mechanism, give context.
+  Aim for 2 clear sentences for recall questions — name the concept and explain the mechanism. Only add a third sentence if it genuinely adds context (not padding).
 
 "wrong_options": for EACH wrong option (B, C, D — and E if present), explain the specific mistake.
 Always include ALL wrong options — the UI shows only the one the student picked, but we store all of them.
-Each entry: (1) what the student was probably thinking, (2) the specific error, (3) the correct principle briefly.
+Each entry: start with the option letter, then explain — (1) what the error is, (2) why it is wrong, (3) the correct principle briefly.
+Write directly about the concept — do NOT use "A student choosing X..." framing. Address the option itself.
 Use **bold** for the key term that distinguishes the wrong option from the right one.
 BAD: "This option is incorrect."
-GOOD: "A student choosing B has confused **osmotic pressure** with **turgor pressure** — osmosis depends on water potential difference, not pressure alone."
+BAD: "A student choosing B has confused osmotic pressure with turgor pressure."
+GOOD: "B — **osmotic pressure** and **turgor pressure** are not the same thing. Osmosis is driven by water potential difference, not by pressure alone."
 
 ═══════════════════════════════════════════════
 PART 3 — TEXT & MATHEMATICAL FORMATTING (CRITICAL)
@@ -943,10 +945,11 @@ ${mod.illustration}
 
 "wrong_options" — For EACH wrong option (B, C, D): specific misconception.
                   Include ALL wrong options.
-                  Each: (1) what the student probably thought, (2) why wrong, (3) correct principle.
+                  Start each entry with the option letter, then explain the error directly.
+                  Do NOT use "A student choosing X..." — address the concept, not a fictional student.
                   BAD: "This option is incorrect."
-                  GOOD: "A student choosing B confused osmotic pressure with turgor pressure —
-                         osmosis depends on water potential difference, not pressure alone."
+                  BAD: "A student choosing B confused osmotic pressure with turgor pressure."
+                  GOOD: "B — **osmotic pressure** and **turgor pressure** are different concepts. Osmosis is driven by water potential difference, not by pressure alone."
 
 "correct"       — Repeat answer_note here exactly (legacy field).
 ${mod.extraRules ? `\n═══════════════════════════════════════\nSUBJECT-SPECIFIC RULES\n═══════════════════════════════════════\n${mod.extraRules}` : ''}
@@ -1005,9 +1008,9 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
     "illustration_title": "",
     "illustration_prompt": "",
     "wrong_options": {
-      "A": "A student choosing A picked covalent bonds — covalent bonding involves shared pairs between specific atoms, not a delocalized sea.",
-      "B": "A student choosing B picked ionic bonds — ionic bonding has discrete positive and negative ions with no sea of electrons.",
-      "C": "A student choosing C picked dative bonds — a dative bond is a type of covalent bond between specific atoms, not a collective electron sea."
+      "A": "A — **covalent bonding** involves shared electron pairs between specific atoms, not a delocalized sea of electrons freely moving through a lattice.",
+      "B": "B — **ionic bonding** produces discrete positive and negative ions held by electrostatic attraction. There is no sea of electrons.",
+      "C": "C — a **dative bond** is a specialised type of covalent bond where one atom donates both electrons. It is not a collective electron sea."
     },
     "correct": "The correct answer is D — metallic bonds. Metal cations sit in a sea of delocalized electrons."
   }
@@ -1041,8 +1044,8 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
     "illustration_title": "Cylinder — Radius 4 cm, Height 14 cm",
     "illustration_prompt": "SVG code brief: viewBox 0 0 400 300. White background rect. Cylinder centred: top ellipse cx=200 cy=95 rx=85 ry=26; bottom ellipse cx=200 cy=225 rx=85 ry=26. Vertical lines (115,95)→(115,225) and (285,95)→(285,225) stroke #1f2937 w2. Dashed radius (200,95)→(285,95) stroke #4f46e5 dasharray 6 3. Label 'r = 4 cm' at (290,90) fill #4f46e5 font-size 14. Arrow (300,95)→(300,225) stroke #1f2937. Label 'h = 14 cm' at (312,162) font-size 14. Title 'Cylinder' at (200,285) text-anchor middle fill #6b7280 font-size 13. Generate SVG code.",
     "wrong_options": {
-      "B": "A student choosing B may have used total surface area instead of curved surface area — TSA includes the two circular ends.",
-      "D": "A student choosing D likely forgot to halve the diameter to get the radius before substituting."
+      "B": "B — this uses the **total surface area** formula instead of the curved surface area. TSA = 2πrh + 2πr² includes the two circular ends, which should not be counted here.",
+      "D": "D — the **diameter** (8 cm) was substituted directly instead of the radius (4 cm). Always halve the diameter before substituting into the formula."
     },
     "correct": "The correct answer is C — 352cm². Using CSA = 2πrh with r = 4cm and h = 14cm gives 352cm²."
   }

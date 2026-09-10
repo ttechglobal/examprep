@@ -725,11 +725,11 @@ export default function AdminFlashcardsPage() {
       const endpoint = tab==='flashcards' ? '/api/admin/flashcards' : '/api/admin/formulas'
       const key      = tab==='flashcards' ? 'cards' : 'formulas'
       const rows = topicGroup.topicIds.flatMap(tid =>
-        previewItems.map(item => tab==='flashcards' ? {
+        previewItems.map((item, idx) => tab==='flashcards' ? {
           front_text: item.front_text, back_text: item.back_text,
           hint: item.hint??null, mnemonic: item.mnemonic??null,
           difficulty: item.difficulty, topic_id: tid, subject_id: subject.id, is_active: true,
-          // svg_code omitted — column not yet in DB schema; add migration first
+          svg_code: svgMap[idx] || item.svg_code || null,
         } : {
           label: item.label, formula_plain: item.formula_plain,
           formula_latex: item.formula_latex??null, description: item.description??null,

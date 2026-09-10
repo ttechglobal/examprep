@@ -86,15 +86,14 @@ function markTopicProgress(topicId, done, total, completed, cardIndex) {
 
 // ─── BG ──────────────────────────────────────────────────────────────────────
 function AppBg({ dark }) {
+  // Kept lightweight — no blur filters (they cause expensive GPU repaints on load)
   return (
     <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden' }}>
       <div style={{ position:'absolute', inset:0,
         backgroundImage: dark
           ? 'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)'
-          : 'radial-gradient(circle,rgba(6,42,120,.05) 1px,transparent 1px)',
+          : 'radial-gradient(circle,rgba(6,42,120,.04) 1px,transparent 1px)',
         backgroundSize:'28px 28px' }}/>
-      <div style={{ position:'absolute', width:380, height:380, borderRadius:'50%', background:'rgba(124,58,237,.07)', filter:'blur(80px)', top:-100, right:-60, pointerEvents:'none' }}/>
-      <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'rgba(18,100,229,.05)', filter:'blur(60px)', bottom:-60, left:-60, pointerEvents:'none' }}/>
     </div>
   )
 }
@@ -258,12 +257,22 @@ function SubjectCard({ subject, progress, onClick }) {
 function SubjectsView({ subjects, loading, onSelect }) {
   const allProgress = readProgress()
 
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:22 }}>
-      <SubjectHero/>
+  // Find subjects with in-progress topics (for continue banner)
+  const inProgressSubjects = subjects.filter(sub => {
+    const subTopicKeys = Object.keys(allProgress)
+    return subTopicKeys.some(k => {
+      const p = allProgress[k]
+      return p?.lastStudied && !p?.completed && (p?.cardIndex ?? 0) > 0
+    })
+  })
 
-      <div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+  return (
+    <div>
+      <div className="fc-page-inner" style={{ display:'flex', flexDirection:'column', gap:22 }}>
+        <SubjectHero/>
+
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
           <div>
             <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.025em' }}>Choose a Subject</div>
             <div style={{ fontSize:12, color:'var(--text-tert)', marginTop:2 }}>Tap any subject to pick a topic</div>
@@ -280,12 +289,13 @@ function SubjectsView({ subjects, loading, onSelect }) {
             <div style={{ fontSize:13, color:'var(--text-tert)', lineHeight:1.6 }}>Flashcards are being added for all subjects. Check back soon.</div>
           </div>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <div className="fc-subject-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             {subjects.map(sub => (
               <SubjectCard key={sub.id} subject={sub} progress={allProgress} onClick={onSelect}/>
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   )
@@ -446,9 +456,13 @@ function TopicCard({ topic, color, topicProgress, onClick, onContinue }) {
 function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, onBack }) {
   const c  = subCol(subject.name)
   const em = subIcon(subject.name)
+  const [topicSearch, setTopicSearch] = useState('')
 
   const completed = topics.filter(t => progress[t.id]?.completed).length
   const started   = topics.filter(t => progress[t.id]?.lastStudied && !progress[t.id]?.completed).length
+  const filteredTopics = topicSearch.trim()
+    ? topics.filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()))
+    : topics
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
@@ -486,6 +500,30 @@ function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, 
         </div>
       )}
 
+      {/* Search */}
+      {topics.length > 4 && (
+        <div style={{ position:'relative', marginBottom:14 }}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none"
+            style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}>
+            <circle cx="6.5" cy="6.5" r="5" stroke="var(--text-tert)" strokeWidth="1.5"/>
+            <path d="M10 10l3 3" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search topics…"
+            value={topicSearch}
+            onChange={e => setTopicSearch(e.target.value)}
+            style={{
+              width:'100%', padding:'11px 14px 11px 36px',
+              borderRadius:12, border:'1.5px solid var(--border)',
+              background:'var(--bg-card)', color:'var(--text-prim)',
+              fontSize:14, fontFamily:'inherit', outline:'none',
+              boxSizing:'border-box',
+            }}
+          />
+        </div>
+      )}
+
       {/* Topic list */}
       {loading ? <Spinner color={c}/> : topics.length === 0 ? (
         <div style={{ textAlign:'center', padding:'50px 24px', background:'var(--bg-card)', borderRadius:20, border:'1.5px solid var(--border)' }}>
@@ -495,9 +533,15 @@ function TopicsView({ subject, topics, loading, progress, onSelect, onContinue, 
             Flashcards for {subject.name} are coming soon.
           </div>
         </div>
+      ) : filteredTopics.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'40px 20px', background:'var(--bg-card)', borderRadius:16, border:'1px solid var(--border)' }}>
+          <div style={{ fontSize:28, marginBottom:10 }}>🔍</div>
+          <div style={{ fontSize:14, fontWeight:800, color:'var(--text-prim)', marginBottom:4 }}>No topics found</div>
+          <div style={{ fontSize:12, color:'var(--text-tert)' }}>Try a different search term</div>
+        </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-          {topics.map(t => (
+          {filteredTopics.map(t => (
             <TopicCard
               key={t.id}
               topic={t}
@@ -523,6 +567,27 @@ function FlipCard({ card, flipped, onFlip }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <style>{`
+        .fc-card-scene { perspective: 1000px; }
+        .fc-card-inner {
+          position: relative;
+          width: 100%; height: 100%;
+          transition: transform 0.55s cubic-bezier(.4,0,.2,1);
+          transform-style: preserve-3d;
+        }
+        .fc-card-inner.fc-flipped { transform: rotateY(180deg); }
+        .fc-card-face {
+          position: absolute; inset: 0;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          border-radius: 22px;
+          display: flex; flex-direction: column; justify-content: center; align-items: center;
+          padding: 30px 24px;
+          box-shadow: 0 6px 24px rgba(6,42,120,.09);
+        }
+        .fc-card-back { transform: rotateY(180deg); }
+      `}</style>
+
       {/* Difficulty pill */}
       <div style={{ display:'flex', justifyContent:'center' }}>
         <span style={{ fontSize:10, fontWeight:800, padding:'3px 12px', borderRadius:999, color:dc, background:db, border:`1px solid ${dc}40`, textTransform:'capitalize', letterSpacing:'.04em' }}>
@@ -530,66 +595,65 @@ function FlipCard({ card, flipped, onFlip }) {
         </span>
       </div>
 
-      {/* Card front (question) */}
-      <div style={{
-        borderRadius:22, background:'var(--bg-card)',
-        border:'1.5px solid var(--border)',
-        padding:'30px 24px', minHeight:180,
-        display:'flex', flexDirection:'column', justifyContent:'center',
-        boxShadow:'0 6px 24px rgba(6,42,120,.09)',
-        position:'relative', overflow:'hidden',
-      }}>
-        {/* Decorative corner dot */}
-        <div style={{ position:'absolute', top:14, right:14, width:8, height:8, borderRadius:'50%', background:`${PURPLE}30` }}/>
-        <div style={{ position:'absolute', top:22, right:22, width:5, height:5, borderRadius:'50%', background:`${PURPLE}18` }}/>
+      {/* 3D flip card scene */}
+      <div
+        className="fc-card-scene"
+        onClick={onFlip}
+        style={{ cursor: flipped ? 'default' : 'pointer', userSelect:'none', WebkitUserSelect:'none', minHeight: 260 }}
+      >
+        <div className={`fc-card-inner${flipped ? ' fc-flipped' : ''}`} style={{ minHeight:260 }}>
 
-        {/* SVG illustration */}
-        {card.svg_code && (
-          <div style={{ marginBottom:16, borderRadius:14, overflow:'hidden', background:'#fff', border:'1px solid var(--border)', maxHeight:180, display:'flex', justifyContent:'center', alignItems:'center' }}
-            dangerouslySetInnerHTML={{ __html: card.svg_code.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/\son\w+="[^"]*"/gi,'') }}/>
-        )}
+          {/* FRONT */}
+          <div className="fc-card-face" style={{
+            background:'var(--bg-card)', border:'1.5px solid var(--border)',
+            position:'absolute', inset:0,
+          }}>
+            {/* Corner dots */}
+            <div style={{ position:'absolute', top:14, right:14, width:8, height:8, borderRadius:'50%', background:`${PURPLE}30` }}/>
+            <div style={{ position:'absolute', top:22, right:22, width:5, height:5, borderRadius:'50%', background:`${PURPLE}18` }}/>
 
-        <div style={{ fontSize:18, fontWeight:800, color:'var(--text-prim)', lineHeight:1.55, textAlign:'center', letterSpacing:'-.01em' }}>
-          {card.front_text}
+            {/* SVG illustration */}
+            {card.svg_code && (
+              <div style={{ marginBottom:16, borderRadius:14, overflow:'hidden', background:'#fff', border:'1px solid var(--border)', maxHeight:160, width:'100%', display:'flex', justifyContent:'center', alignItems:'center' }}
+                dangerouslySetInnerHTML={{ __html: card.svg_code.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/\son\w+="[^"]*"/gi,'') }}/>
+            )}
+
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--text-prim)', lineHeight:1.55, textAlign:'center', letterSpacing:'-.01em', width:'100%' }}>
+              {card.front_text}
+            </div>
+
+            {!flipped && (
+              <div style={{ position:'absolute', bottom:14, display:'flex', alignItems:'center', gap:5, opacity:.45 }}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M2 6.5C2 4 4 2 6.5 2S11 4 11 6.5 9 11 6.5 11 2 9 2 6.5" stroke="var(--text-tert)" strokeWidth="1.3"/>
+                  <path d="M4.5 6.5h4M8.5 4.5l2 2-2 2" stroke="var(--text-tert)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>Tap to flip</span>
+              </div>
+            )}
+          </div>
+
+          {/* BACK */}
+          <div className="fc-card-face fc-card-back" style={{
+            background:'var(--bg-card)',
+            border:`1.5px solid ${GREEN}35`,
+            position:'absolute', inset:0,
+          }}>
+            <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.12em', color:GREEN, marginBottom:16 }}>
+              Answer
+            </div>
+            <div style={{ fontSize:17, color:'var(--text-prim)', lineHeight:1.7, fontWeight:700, textAlign:'center', width:'100%' }}>
+              {card.back_text}
+            </div>
+            {card.hint && (
+              <div style={{ marginTop:16, padding:'8px 14px', borderRadius:10, background:'rgba(255,184,0,.08)', border:'1px solid rgba(255,184,0,.2)', fontSize:12, color:'var(--text-tert)', textAlign:'center', width:'100%' }}>
+                💡 {card.hint}
+              </div>
+            )}
+          </div>
+
         </div>
-
-
       </div>
-
-      {/* Answer section */}
-      {flipped ? (
-        <div style={{
-          borderRadius:20, border:`1.5px solid ${GREEN}35`,
-          background:`${GREEN}06`, padding:'22px 24px',
-          animation:'fc-fadeup .22s ease',
-        }}>
-          <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.12em', color:GREEN, marginBottom:10 }}>
-            Answer
-          </div>
-          <div style={{ fontSize:15, color:'var(--text-prim)', lineHeight:1.7, fontWeight:600, textAlign:'center' }}>
-            {card.back_text}
-          </div>
-
-        </div>
-      ) : (
-        <button
-          onClick={onFlip}
-          style={{
-            width:'100%', padding:'16px', borderRadius:18,
-            border:'1.5px dashed var(--border-strong)',
-            background:'transparent',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-            cursor:'pointer', fontFamily:'inherit',
-            transition:'all .13s',
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M3 9a6 6 0 1012 0 6 6 0 00-12 0" stroke="var(--text-tert)" strokeWidth="1.5"/>
-            <path d="M9 6v3l2 1.5" stroke="var(--text-tert)" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          <span style={{ fontSize:14, fontWeight:700, color:'var(--text-tert)' }}>Flip to see answer</span>
-        </button>
-      )}
     </div>
   )
 }
@@ -622,11 +686,10 @@ function StudyResults({ cards, known, learning, topicName, subjectColor, onResta
         <div style={{ fontSize:13, color:'var(--text-tert)', marginTop:4, marginBottom:24 }}>confidence score</div>
 
         {/* Stat boxes */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:24 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:24 }}>
           {[
             { label:'Got it', count:knownN, color:GREEN, emoji:'✓' },
-            { label:'Still learning', count:learnN, color:GOLD, emoji:'↺' },
-            { label:'Skipped', count:skippedN, color:'var(--text-tert)', emoji:'→' },
+            { label:'Still learning', count:total - knownN, color:GOLD, emoji:'↺' },
           ].map(r => (
             <div key={r.label} style={{ borderRadius:14, background:`${r.color === 'var(--text-tert)' ? 'rgba(0,0,0,.03)' : r.color + '0E'}`, border:`1px solid ${r.color === 'var(--text-tert)' ? 'var(--border)' : r.color + '25'}`, padding:'14px 6px' }}>
               <div style={{ fontSize:20, fontWeight:900, color:r.color, marginBottom:2 }}>{r.count}</div>
@@ -707,7 +770,7 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
   }
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+    <div className="fc-page-inner-study" style={{ display:'flex', flexDirection:'column', gap:0 }}>
       <style>{`@keyframes fc-fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       {/* Top bar */}
@@ -726,37 +789,54 @@ function StudyView({ cards, topic, subject, onBack, startIndex = 0 }) {
       {/* Flip card */}
       <FlipCard card={card} flipped={flipped} onFlip={() => setFlipped(true)}/>
 
-      {/* Action buttons — shown after flip */}
-      {flipped ? (
-        <div style={{ display:'flex', gap:10, marginTop:16, animation:'fc-fadeup .2s ease' }}>
-          <button
-            onClick={() => { if (index > 0) { setIndex(i => i - 1); setFlipped(false) } }}
-            disabled={index === 0}
-            style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'transparent', color: index === 0 ? 'var(--text-tert)' : 'var(--text-prim)', fontSize:13, fontWeight:800, cursor: index === 0 ? 'not-allowed' : 'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6, opacity: index === 0 ? 0.4 : 1 }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Previous
-          </button>
-          <button
-            onClick={() => advance('known')}
-            style={{ flex:1, padding:'14px 0', borderRadius:16, border:'none', background:GREEN, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 #15803d,0 6px 16px ${GREEN}30`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2.5 7l3 3 6-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Got it!
-          </button>
-        </div>
-      ) : (
+      {/* Action buttons */}
+      <div style={{ display:'flex', gap:10, marginTop:16 }}>
+        {/* Prev */}
         <button
-          onClick={() => advance('skipped')}
-          style={{ marginTop:10, width:'100%', padding:'11px', borderRadius:14, border:'1.5px solid var(--border)', background:'transparent', color:'var(--text-tert)', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}
+          onClick={() => { if (index > 0) { setIndex(i => i - 1); setFlipped(false) } }}
+          disabled={index === 0}
+          style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'transparent', color: index === 0 ? 'var(--text-tert)' : 'var(--text-prim)', fontSize:13, fontWeight:800, cursor: index === 0 ? 'not-allowed' : 'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6, opacity: index === 0 ? 0.35 : 1, transition:'opacity .15s' }}
         >
-          Skip this card
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Prev
         </button>
-      )}
+
+        {/* Before flip: "Flip to reveal" as the only right button */}
+        {!flipped && (
+          <button
+            onClick={() => setFlipped(true)}
+            style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:subjectColor, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 ${subjectColor}88`, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
+          >
+            Flip to reveal
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M5 2l5 5-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
+
+        {/* After flip: Got it (primary) + Still learning (secondary) */}
+        {flipped && (
+          <>
+            <button
+              onClick={() => advance('learning')}
+              style={{ flex:1, padding:'14px 0', borderRadius:16, border:'1.5px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:5, animation:'fc-fadeup .18s ease' }}
+            >
+              ↺ Again
+            </button>
+            <button
+              onClick={() => advance('known')}
+              style={{ flex:2, padding:'14px 0', borderRadius:16, border:'none', background:GREEN, color:'#fff', fontSize:13, fontWeight:900, cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 0 #15803d,0 6px 16px ${GREEN}30`, display:'flex', alignItems:'center', justifyContent:'center', gap:6, animation:'fc-fadeup .18s ease' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2.5 7l3 3 6-6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Got it!
+            </button>
+          </>
+        )}
+      </div>
 
     </div>
   )
@@ -849,10 +929,23 @@ export default function FlashcardsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      <style>{`@keyframes fc-spin{to{transform:rotate(360deg)}} @keyframes fc-fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box}`}</style>
+      <style>{`
+        @keyframes fc-spin{to{transform:rotate(360deg)}}
+        @keyframes fc-fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        *{box-sizing:border-box}
+        /* Desktop layout */
+        @media(min-width:900px){
+          .fc-subject-grid{ grid-template-columns:1fr 1fr 1fr !important; }
+          .fc-page-inner{ display:grid; grid-template-columns:1fr 520px; gap:48px; align-items:start; }
+          .fc-page-inner-study{ max-width:640px; margin:0 auto; }
+        }
+        @media(min-width:1200px){
+          .fc-subject-grid{ grid-template-columns:1fr 1fr 1fr 1fr !important; }
+        }
+      `}</style>
       <AppBg dark={dark}/>
 
-      <div style={{ maxWidth:640, margin:'0 auto', padding:'0 0 100px', position:'relative', zIndex:1 }}>
+      <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 100px', position:'relative', zIndex:1 }}>
 
         {/* Breadcrumb — hidden in study mode (it has its own header) */}
         {view !== 'study' && (
