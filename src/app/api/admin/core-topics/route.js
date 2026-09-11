@@ -44,9 +44,7 @@ function topicLessonStatus(subtopics) {
 }
 
 export async function GET(request) {
-  try { await getUser() } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 401 })
-  }
+  const authErr = await requireAdmin(request); if (authErr) return authErr;// auth
 
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')
@@ -159,9 +157,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  try { await getUser() } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 401 })
-  }
+  const authErr = await requireAdmin(request); if (authErr) return authErr;// auth
 
   let body
   try { body = await request.json() } catch {
@@ -217,9 +213,7 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
-  try { await getUser() } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 401 })
-  }
+  const authErr = await requireAdmin(request); if (authErr) return authErr;// auth
 
   let body
   try { body = await request.json() } catch {
@@ -245,9 +239,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  try { await getUser() } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 401 })
-  }
+  const authErr = await requireAdmin(request); if (authErr) return authErr;// auth
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')

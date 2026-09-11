@@ -32,12 +32,36 @@ export function questionHasImage(q) {
   return IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
 }
 
-// ── LaTeX sanitiser ───────────────────────────────────────────────────────────
+// ── HTML entity decoder ───────────────────────────────────────────────────────
+// Decodes HTML entities that appear in PDF-extracted text, particularly from
+// Literature in English and English Language papers where smart quotes and
+// special punctuation are common.
+export function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string') return text
+  return text
+    .replace(/&lsquo;/gi,  '\u2018')  // '  left single quote
+    .replace(/&rsquo;/gi,  '\u2019')  // '  right single quote / apostrophe
+    .replace(/&ldquo;/gi,  '\u201C')  // "  left double quote
+    .replace(/&rdquo;/gi,  '\u201D')  // "  right double quote
+    .replace(/&mdash;/gi,  '\u2014')  // —  em dash
+    .replace(/&ndash;/gi,  '\u2013')  // –  en dash
+    .replace(/&hellip;/gi, '\u2026')  // …  ellipsis
+    .replace(/&amp;/gi,    '&')
+    .replace(/&lt;/gi,     '<')
+    .replace(/&gt;/gi,     '>')
+    .replace(/&nbsp;/gi,   ' ')
+    .replace(/&apos;/gi,   "'")
+    .replace(/&quot;/gi,   '"')
+    // Numeric decimal entities e.g. &#8216;
+    .replace(/&#(\d+);/g,         (_, n) => String.fromCharCode(Number(n)))
+    // Numeric hex entities e.g. &#x2018;
+    .replace(/&#x([\da-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+}
 // Fixes malformed LaTeX produced by PDF extraction or AI mis-formatting.
 // Called on every string field before the question is saved or validated.
 export function cleanLatex(text) {
   if (!text || typeof text !== 'string') return text
-  let s = text
+  let s = decodeHtmlEntities(text)  // decode &lsquo; &rsquo; etc. before any other cleaning
 
   // 1. Currency: \500 or \12,000 → \$500 / \$12,000
   //    (backslash immediately followed by digits)
@@ -879,6 +903,22 @@ ANSWER FORMAT — "verified_answer" field:
   Set "confidence" to one of: "certain" | "likely" | "unsure"
   If you are unsure, still give your best answer — do not leave it blank.
 
+⚠️ MANDATORY SELF-CHECK — run this AFTER solving every question, BEFORE writing the output:
+  1. Re-read the question and your chosen answer.
+  2. Check: does your answer_note actually explain WHY the chosen option is correct?
+  3. Check: do your steps (if any) arrive at the same letter as verified_answer?
+  4. Check: could any other option also be correct? If yes → lower confidence to "likely" or "unsure".
+  5. For calculation questions: run the arithmetic once more. One-line mental check is enough.
+
+  If after the self-check you change your answer → update verified_answer AND answer_note to match.
+  The self-check does NOT need to appear in the output — it is a silent internal step.
+  Output only the final answer you are confident in.
+
+  confidence guide:
+    "certain"  → you solved it and the answer is unambiguous. No plausible alternative.
+    "likely"   → you are fairly confident but see a possible alternative or recall a nuance.
+    "unsure"   → genuinely unsure between two options; give your best guess and note why.
+
 ANSWER_NOTE FORMATTING — CRITICAL:
   The answer_note field MUST start: "The correct answer is **X — [option text]**."
   The letter AND the option text together must be wrapped in **double asterisks**.
@@ -960,6 +1000,27 @@ ${mod.hintGuide}
 "study_tip"     — One short exam technique tip. Otherwise "".
 
 "illustration_prompt" —
+
+⚠️ ILLUSTRATION DECISION GATE — run this check FIRST, before writing anything:
+
+  QUESTION 1: "Would a student who has read the full explanation still be confused
+               without seeing a diagram?"
+    NO  → illustration_prompt: ""   Stop here. Do not write a prompt.
+    YES → continue to Question 2.
+
+  QUESTION 2: "Am I 100% certain of every element I would draw —
+               every label, measurement, direction, shape, and scientific name?"
+    NO  → illustration_prompt: ""   Stop here. A wrong diagram is worse than none.
+    YES → continue to Question 3.
+
+  QUESTION 3: "Does this question type appear in the WHEN TO GENERATE list below?"
+    NO  → illustration_prompt: ""   Stop here.
+    YES → write the illustration prompt using the AHA/CONTAINMENT/FLOW format below.
+
+  DEFAULT IS EMPTY. Only generate when all three gates pass.
+  Lazy illustrations — generic shapes with no labelled values from your steps — are BANNED.
+  Every measurement in the diagram MUST come from your computed steps, not the raw question.
+
 ${mod.illustration}
 
 "wrong_options" — For EACH wrong option (B, C, D): specific misconception.
@@ -1077,11 +1138,12 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
 
 FINAL CHECK before submitting:
   • question_snippet = first 15 words of that question, copied exactly
-  • verified_answer = the letter YOU determined is correct (A/B/C/D/E)
+  • verified_answer = the letter YOU determined is correct — after running the silent self-check
   • answer_note opens with "The correct answer is **X — [option text]**." — BOTH letter and text bold
-  • steps: [] for every recall/definition question
-  • illustration_title and illustration_prompt are BOTH "" when no diagram is needed
-  • illustration_title is ALWAYS filled when illustration_prompt is filled`
+  • steps: [] for every recall/definition question; steps must arrive at the same letter as verified_answer
+  • illustration_prompt: "" unless ALL THREE illustration gates passed
+  • illustration_title filled if and only if illustration_prompt is filled — never one without the other
+  • Every number in the illustration brief comes from your computed steps, never raw question values`
 }
 
 //
@@ -1257,6 +1319,9 @@ export function parseEnrichment(rawText) {
     .replace(/\u2013/g, '-')
     .replace(/\u2026/g, '...')
     .replace(/\u00A0/g, ' ')
+
+  // Decode any HTML entities that survived into the enrichment text
+  cleaned = decodeHtmlEntities(cleaned)
 
   // Strip illegal control characters
   cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
