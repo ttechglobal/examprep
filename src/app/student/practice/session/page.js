@@ -23,8 +23,9 @@ export default function PracticeSessionPage() {
   const { dark } = useTheme()
   const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
 
-  const [phase,      setPhase]     = useState('loading')
-  const [questions,  setQuestions] = useState([])
+  const [phase,        setPhase]       = useState('loading')
+  const [questions,    setQuestions]   = useState([])
+  const [loadingMore,  setLoadingMore] = useState(false)   // background batch in flight
   const [qIndex,     setQIndex]    = useState(0)
   const [answerMap,  setAnswerMap] = useState({})
   const [skipped,    setSkipped]   = useState(new Set())
@@ -47,7 +48,12 @@ export default function PracticeSessionPage() {
     if (qColRef.current) qColRef.current.scrollTop = 0
   }, [qIndex])
 
-  // ── Load questions ─────────────────────────────────────────────────────────
+  // ── Load questions — progressive ──────────────────────────────────────────
+  // Phase 1: fetch FIRST_BATCH questions immediately → start session fast.
+  // Phase 2: fetch remaining questions in the background while student answers.
+  // This means the student sees Q1 in ~500ms instead of waiting for all 20.
+  const FIRST_BATCH = 3
+
   useEffect(() => {
     let cfg
     try { cfg = JSON.parse(sessionStorage.getItem('practice_config') || '{}') }
@@ -57,16 +63,19 @@ export default function PracticeSessionPage() {
       setPhase('error'); return
     }
     setConfig(cfg)
-    const p = new URLSearchParams({
-      exam:     cfg.examType  || 'WAEC',
-      subjects: (cfg.subjects || []).join(','),
-      count:    String(cfg.count || 20),
-      mode:     cfg.mode      || 'practice',
-    })
-    if (cfg.subject_id) p.set('subject_id', cfg.subject_id)
-    if (cfg.topic_id)   p.set('topic_id',   cfg.topic_id)
 
-    fetch(`/api/student/questions?${p}`)
+    const totalCount = cfg.count || 20
+    const baseParams = {
+      exam:     cfg.examType || 'WAEC',
+      subjects: (cfg.subjects || []).join(','),
+      mode:     cfg.mode     || 'practice',
+    }
+    if (cfg.subject_id) baseParams.subject_id = cfg.subject_id
+    if (cfg.topic_id)   baseParams.topic_id   = cfg.topic_id
+
+    // ── Phase 1: first batch ───────────────────────────────────────────────
+    const p1 = new URLSearchParams({ ...baseParams, count: String(FIRST_BATCH) })
+    fetch(`/api/student/questions?${p1}`)
       .then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.detail ?? d.error ?? `Server error ${r.status}`) })
         return r.json()
@@ -76,10 +85,33 @@ export default function PracticeSessionPage() {
           setErrMsg(`No questions found for ${cfg.subjects?.join(', ')}.`)
           setPhase('error'); return
         }
-        setQuestions(data.questions)
+
+        const firstBatch = data.questions
+        setQuestions(firstBatch)
         startTimeRef.current = Date.now()
         try { localStorage.setItem('ep_pending_session', JSON.stringify({ session_id: sessionIdRef.current, config: cfg, savedAt: Date.now() })) } catch {}
         setPhase('session')
+
+        // ── Phase 2: fetch remaining in background ─────────────────────────
+        const remaining = totalCount - firstBatch.length
+        if (remaining <= 0) return
+
+        const seenIds = firstBatch.map(q => q.id).join(',')
+        const p2 = new URLSearchParams({
+          ...baseParams,
+          count:   String(remaining),
+          exclude: seenIds,
+        })
+        setLoadingMore(true)
+        fetch(`/api/student/questions?${p2}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data2 => {
+            if (data2?.questions?.length) {
+              setQuestions(prev => [...prev, ...data2.questions])
+            }
+          })
+          .catch(() => {}) // non-fatal — student already has first batch
+          .finally(() => setLoadingMore(false))
       })
       .catch(err => {
         setErrMsg(err?.message || 'Failed to load questions. Check your connection and try again.')

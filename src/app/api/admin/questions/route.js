@@ -185,10 +185,11 @@ export async function POST(request) {
   }
 
   // ── Update coverage_summary ───────────────────────────────────────────────
-  // Group saved questions by (examType, year) and upsert counts.
-  // This is what keeps the coverage page accurate without scanning questions.
+  // Group saved questions by (exam_type, year) and call the atomic
+  // increment_coverage() Postgres function once per bucket.
+  // This is a single DB round-trip per unique (year, examType) pair —
+  // no race condition, no manual SQL needed after importing.
   if (saved.length > 0) {
-    // Count how many were saved per (exam_type, year) bucket
     const buckets = {}
     for (const { year, examType: et } of saved) {
       if (!year || !et) continue
@@ -196,48 +197,19 @@ export async function POST(request) {
       buckets[key] = (buckets[key] ?? 0) + 1
     }
 
-    // Fetch current counts for these buckets, then upsert
-    const upsertRows = Object.entries(buckets).map(([key, n]) => {
-      const [et, yr] = key.split('::')
-      return {
-        subject_id: subjectId,
-        exam_type:  et,
-        year:       parseInt(yr),
-        count:      n,             // will be added to existing via SQL below
-        updated_at: new Date().toISOString(),
-      }
-    })
-
-    // Upsert: if row exists, add n to existing count. If new, insert n.
-    // Supabase doesn't support "increment on conflict" directly in the JS client,
-    // so we do it in two steps: read current → write updated.
-    for (const row of upsertRows) {
-      try {
-        // Read existing count
-        const { data: existing } = await db
-          .from('coverage_summary')
-          .select('count')
-          .eq('subject_id', row.subject_id)
-          .eq('exam_type',  row.exam_type)
-          .eq('year',       row.year)
-          .maybeSingle()
-
-        const newCount = (existing?.count ?? 0) + row.count
-
-        await db
-          .from('coverage_summary')
-          .upsert({
-            subject_id: row.subject_id,
-            exam_type:  row.exam_type,
-            year:       row.year,
-            count:      newCount,
-            updated_at: row.updated_at,
-          }, { onConflict: 'subject_id,exam_type,year' })
-      } catch (e) {
-        // Non-fatal — questions are saved, coverage summary just needs a refresh
-        console.warn('[coverage_summary] upsert failed:', e.message)
-      }
-    }
+    await Promise.all(
+      Object.entries(buckets).map(([key, delta]) => {
+        const [et, yr] = key.split('::')
+        return db.rpc('increment_coverage', {
+          p_subject_id: subjectId,
+          p_exam_type:  et,
+          p_year:       parseInt(yr),
+          p_delta:      delta,
+        }).then(({ error }) => {
+          if (error) console.warn('[coverage_summary] increment failed:', error.message)
+        })
+      })
+    )
   }
 
   if (batchId) {

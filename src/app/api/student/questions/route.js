@@ -173,7 +173,7 @@ export async function GET(request) {
           )
           .eq('year', yr)
           .then(({ count: c, error }) => {
-            if (error || c == null) {
+            if (error || c == null || c === 0) {
               return applyBase(
                 service.from('questions').select('id', { count: 'exact', head: true }), false
               )
@@ -257,12 +257,50 @@ export async function GET(request) {
     // student doesn't see "all 2022 then all 2021 then all 2019".
     if (mode !== 'weak') shuffle(questions)
 
+    // ── Difficulty distribution ──────────────────────────────────────────────
+    // Target: ~30% easy, 50% medium, 20% hard — mirrors real exam distributions.
+    // Only applies when we have enough questions across multiple difficulty levels.
+    // Falls back to plain slice if difficulty data is missing or pool is small.
+    function applyDifficultyDistribution(pool, targetCount) {
+      const easy   = pool.filter(q => q.difficulty === 'easy')
+      const medium = pool.filter(q => q.difficulty === 'medium')
+      const hard   = pool.filter(q => q.difficulty === 'hard')
+
+      // If everything is the same difficulty (e.g. all medium from default tagging),
+      // or pool is too small to meaningfully distribute — just slice
+      const hasVariety = easy.length > 0 && hard.length > 0
+      if (!hasVariety || pool.length <= targetCount) {
+        return pool.slice(0, targetCount)
+      }
+
+      const wantEasy   = Math.round(targetCount * 0.30)
+      const wantHard   = Math.round(targetCount * 0.20)
+      const wantMedium = targetCount - wantEasy - wantHard
+
+      // Take what we can — if a bucket is short, steal from medium
+      const gotEasy   = easy.slice(0, wantEasy)
+      const gotHard   = hard.slice(0, wantHard)
+      const shortfall = (wantEasy - gotEasy.length) + (wantHard - gotHard.length)
+      const gotMedium = medium.slice(0, wantMedium + shortfall)
+
+      const distributed = shuffle([...gotEasy, ...gotMedium, ...gotHard])
+      // If we still don't have enough, top up from remaining pool
+      if (distributed.length < targetCount) {
+        const used = new Set(distributed.map(q => q.id))
+        const extras = pool.filter(q => !used.has(q.id))
+        return [...distributed, ...extras].slice(0, targetCount)
+      }
+      return distributed.slice(0, targetCount)
+    }
+
     // quick5 always caps at 5
     const finalCount = mode === 'quick5'
       ? Math.min(5, questions.length)
       : Math.min(count, questions.length)
 
-    const selected = questions.slice(0, finalCount)
+    const selected = mode === 'weak'
+      ? questions.slice(0, finalCount)                          // weak mode: already sorted by mastery
+      : applyDifficultyDistribution(questions, finalCount)      // all other modes: distribute by difficulty
 
     // ── 7. Shape output ───────────────────────────────────────────────────────
     const shaped = selected.map(q => ({
