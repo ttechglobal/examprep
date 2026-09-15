@@ -28,11 +28,15 @@ export async function POST(request) {
     try { body = await request.json() }
     catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-    const { results } = body ?? {}
+    const { results, exam } = body ?? {}
 
     if (!Array.isArray(results) || results.length === 0) {
       return NextResponse.json({ error: 'results array required' }, { status: 400 })
     }
+
+    // exam comes at payload level (e.g. 'WAEC' | 'JAMB') — not per result.
+    // We propagate it to every row so the school dashboard can filter by exam later.
+    const examType = exam ?? null
 
     // ── Auth check ───────────────────────────────────────────────────────────
     const supabase = await createClient()
@@ -51,6 +55,7 @@ export async function POST(request) {
     //   - context      NOT NULL  → always 'practice' for this route
     //   - context      CHECK IN ('diagnostic','lesson','practice','exam')
     try {
+      const sessionId = body.session_id ?? null
       const rows = results
         .filter(r => !!r.question_id)   // question_id is NOT NULL — drop rows without one
         .map(r => ({
@@ -58,12 +63,12 @@ export async function POST(request) {
           question_id: r.question_id,
           is_correct:  r.is_correct ?? false,
           context:     'practice',       // required NOT NULL; this route is always practice
-          ...(r.topic_id    ? { topic_id:    r.topic_id    } : {}),
-          ...(r.subject_id  ? { subject_id:  r.subject_id  } : {}),
-          ...(r.subject_name ? { subject_name: r.subject_name } : {}),
-          ...(r.exam_type   ? { exam_type:   r.exam_type   } : {}),
-          ...(r.session_id  ? { session_id:  r.session_id  } : {}),
-          ...(r.time_spent_ms != null ? { time_spent_ms: r.time_spent_ms } : {}),
+          ...(r.topic_id             ? { topic_id:      r.topic_id             } : {}),
+          ...(r.subject_id           ? { subject_id:    r.subject_id           } : {}),
+          ...(r.subject_name         ? { subject_name:  r.subject_name         } : {}),
+          ...(examType               ? { exam_type:     examType               } : {}),
+          ...(sessionId              ? { session_id:    sessionId              } : {}),
+          ...(r.time_spent_ms != null ? { time_spent_ms: r.time_spent_ms       } : {}),
         }))
 
       if (rows.length > 0) {

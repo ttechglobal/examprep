@@ -1,92 +1,107 @@
 'use client'
-// src/components/school/SchoolNav.jsx — redesigned
-// Sidebar (desktop) + mobile header + mobile bottom nav.
+// src/components/school/SchoolNav.jsx
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense }                    from 'react'
 
-const NAVY    = '#062A78'
-const BLUE    = '#1264E5'
-const EMERALD = '#059669'
-const TEXT    = '#071B49'
-const SEC     = '#3a4870'
-const DIM     = '#7a8aaa'
-const FAINT   = '#b0bada'
-const BORDER  = '#e4eaf5'
-const BG      = '#f4f7ff'
-const CARD    = '#ffffff'
-const GOLD    = '#FFB800'
+const NAVY   = '#062A78'
+const BLUE   = '#1264E5'
+const TEXT   = '#071B49'
+const SEC    = '#3a4870'
+const DIM    = '#7a8aaa'
+const FAINT  = '#b0bada'
+const BORDER = '#e4eaf5'
+const GOLD   = '#FFB800'
+const SIDEBAR_W = 264
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
-function IcoOverview({ size=17, color }) {
+function IcoOverview({ size = 20, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <rect x="1" y="1" width="7" height="7" rx="1.5" fill={color}/>
-      <rect x="10" y="1" width="7" height="7" rx="1.5" fill={color} opacity=".4"/>
-      <rect x="1" y="10" width="7" height="7" rx="1.5" fill={color} opacity=".4"/>
-      <rect x="10" y="10" width="7" height="7" rx="1.5" fill={color} opacity=".7"/>
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <rect x="2"  y="2"  width="7" height="7" rx="2"   fill={color}/>
+      <rect x="11" y="2"  width="7" height="7" rx="2"   fill={color} opacity=".35"/>
+      <rect x="2"  y="11" width="7" height="7" rx="2"   fill={color} opacity=".35"/>
+      <rect x="11" y="11" width="7" height="7" rx="2"   fill={color} opacity=".65"/>
     </svg>
   )
 }
-function IcoStudents({ size=17, color }) {
+function IcoStudents({ size = 20, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <circle cx="6.5" cy="5.5" r="3" stroke={color} strokeWidth="1.6"/>
-      <path d="M1 15c0-3 2.5-5 5.5-5" stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
-      <circle cx="13" cy="6.5" r="2.5" stroke={color} strokeWidth="1.5"/>
-      <path d="M10 15c0-2.5 1.3-4 3-4s3 1.5 3 4" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <circle cx="7"  cy="6"  r="3.5" stroke={color} strokeWidth="1.7"/>
+      <path d="M1 17c0-3.5 2.8-5.5 6-5.5" stroke={color} strokeWidth="1.7" strokeLinecap="round"/>
+      <circle cx="14.5" cy="7" r="2.8" stroke={color} strokeWidth="1.5"/>
+      <path d="M11 17c0-3 1.5-4.5 3.5-4.5S18 14 18 17" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
 }
-function IcoPerformance({ size=17, color }) {
+function IcoPerformance({ size = 20, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <path d="M2 14l4-5 3 3 4-6 3 3" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="14" cy="9" r="1.5" fill={color} opacity=".5"/>
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <path d="M2 15l4.5-5.5 3.5 3.5 4.5-6.5 3.5 3.5" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="15.5" cy="10" r="1.5" fill={color} opacity=".45"/>
     </svg>
   )
 }
-function IcoCohort({ size=17, color }) {
+function IcoCohort({ size = 20, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <path d="M9 1.5L16 5.5V9.5C16 13.2 12.9 16.5 9 17C5.1 16.5 2 13.2 2 9.5V5.5L9 1.5Z"
-        stroke={color} strokeWidth="1.6" strokeLinejoin="round"/>
-      <path d="M6.5 9.5L8.5 11.5L12 7.5" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <path d="M10 2L18 6.5V11C18 14.8 14.5 18 10 18.5C5.5 18 2 14.8 2 11V6.5L10 2Z"
+        stroke={color} strokeWidth="1.7" strokeLinejoin="round"/>
+      <path d="M7 10.5L9.5 13L13.5 8.5" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
-function IcoSettings({ size=17, color }) {
+function IcoSettings({ size = 20, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <circle cx="9" cy="9" r="2.5" stroke={color} strokeWidth="1.5"/>
-      <path d="M9 2v1.5M9 14.5V16M2 9h1.5M14.5 9H16M3.93 3.93l1.06 1.06M13.01 13.01l1.06 1.06M14.07 3.93l-1.06 1.06M4.99 13.01l-1.06 1.06"
-        stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <circle cx="10" cy="10" r="2.8" stroke={color} strokeWidth="1.6"/>
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.4 4.4l1.4 1.4M14.2 14.2l1.4 1.4M15.6 4.4l-1.4 1.4M5.8 14.2l-1.4 1.4"
+        stroke={color} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
   )
 }
 
 const NAV_ITEMS = [
-  { id:'overview',    label:'Overview',    Icon:IcoOverview    },
-  { id:'students',    label:'Students',    Icon:IcoStudents    },
-  { id:'performance', label:'Performance', Icon:IcoPerformance },
-  { id:'cohort',      label:'Cohort',      Icon:IcoCohort      },
-  { id:'settings',    label:'Settings',    Icon:IcoSettings    },
+  { id: 'overview',    label: 'Overview',    Icon: IcoOverview    },
+  { id: 'students',    label: 'Students',    Icon: IcoStudents    },
+  { id: 'performance', label: 'Performance', Icon: IcoPerformance },
+  { id: 'cohort',      label: 'Cohort',      Icon: IcoCohort      },
+  { id: 'settings',    label: 'Settings',    Icon: IcoSettings    },
 ]
 
 function NavItem({ item, active, onClick }) {
   return (
-    <button onClick={() => onClick(item.id)} style={{
-      width:'100%', display:'flex', alignItems:'center', gap:10,
-      padding:'9px 12px 9px 16px', borderRadius:10, border:'none',
-      background: active ? `${BLUE}0d` : 'transparent',
-      cursor:'pointer', textAlign:'left', position:'relative',
-      transition:'background .13s',
-    }}>
+    <button
+      onClick={() => onClick(item.id)}
+      className="school-nav-btn"
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '10px 12px 10px 14px',
+        borderRadius: 12, border: 'none',
+        background: active ? `${BLUE}12` : 'transparent',
+        cursor: 'pointer', textAlign: 'left', position: 'relative',
+        transition: 'background .15s', fontFamily: 'inherit',
+      }}
+    >
       {active && (
-        <div style={{ position:'absolute', left:4, top:'18%', bottom:'18%', width:3, borderRadius:2, background:BLUE }}/>
+        <div style={{
+          position: 'absolute', left: 0, top: '20%', bottom: '20%',
+          width: 3.5, borderRadius: 99, background: BLUE,
+        }}/>
       )}
-      <item.Icon size={17} color={active ? BLUE : DIM}/>
-      <span style={{ fontSize:13, fontWeight:active?700:500, color:active?BLUE:SEC, letterSpacing:active?'-.01em':0 }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: active ? `${BLUE}18` : 'transparent',
+        transition: 'background .15s',
+      }}>
+        <item.Icon size={20} color={active ? BLUE : DIM}/>
+      </div>
+      <span style={{
+        fontSize: 13.5, fontWeight: active ? 700 : 500,
+        color: active ? TEXT : SEC,
+        letterSpacing: active ? '-.01em' : 0, lineHeight: 1,
+      }}>
         {item.label}
       </span>
     </button>
@@ -110,161 +125,215 @@ function SchoolNavInner({ schoolName, schoolCity, adminName }) {
     router.push('/school-login')
   }
 
-  const schoolInitials = (schoolName ?? '').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || 'EP'
-  const adminInitials  = (adminName  ?? 'A').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()
+  const schoolInitials = (schoolName ?? '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'EP'
+  const adminInitials  = (adminName  ?? 'A').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
   return (
     <>
       <style>{`
-        /* ── Desktop: sidebar visible, mobile nav hidden ── */
-        .school-sidebar { display: flex !important; }
+        .school-sidebar       { display: flex !important; }
         .school-mobile-header { display: none !important; }
         .school-mobile-bottom { display: none !important; }
-        .school-content { padding-left: 240px; }
+        /* Single source of truth for the sidebar offset — padding-left only, no margin-left */
+        .school-content       { padding-left: ${SIDEBAR_W}px; }
 
-        /* ── Mobile: sidebar hidden, mobile chrome visible ── */
         @media (max-width: 768px) {
-          .school-sidebar        { display: none !important; }
-          .school-mobile-header  { display: flex !important; }
-          .school-mobile-bottom  { display: flex !important; }
-          .school-content        { padding-left: 0 !important; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+          .school-sidebar       { display: none !important; }
+          .school-mobile-header { display: flex !important; }
+          .school-mobile-bottom { display: flex !important; }
+          .school-content       { padding-left: 0 !important; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
         }
 
-        /* ── Content padding ── */
-        .school-content main { padding: 20px 16px; }
-        @media (min-width: 480px)  { .school-content main { padding: 22px 20px; } }
-        @media (min-width: 769px)  { .school-content main { padding: 28px 32px; } }
-        @media (min-width: 1280px) { .school-content main { padding: 32px 40px; } }
+        /* main fills the content area — no margin:0 auto which fights the offset */
+        .school-content main { padding: 20px 20px 80px; box-sizing: border-box; }
+        @media (min-width: 769px)  { .school-content main { padding: 28px 28px 80px; } }
+        @media (min-width: 1280px) { .school-content main { padding: 32px 36px 60px; } }
 
-        /* ── Mobile header ── */
+        .school-sidebar nav::-webkit-scrollbar       { width: 3px; }
+        .school-sidebar nav::-webkit-scrollbar-thumb { background: rgba(6,42,120,.08); border-radius: 99px; }
+
+        .school-nav-btn:hover { background: rgba(6,42,120,.05) !important; }
+        .school-school-card:hover { border-color: #1264E5 !important; background: #f0f4ff !important; }
+        .school-signout-btn:hover { border-color: #1264E5 !important; color: #1264E5 !important; }
+
         .school-mobile-header { align-items: center; gap: 10px; padding: 10px 16px; z-index: 40; }
-
-        /* ── Mobile bottom nav ── */
-        .school-mobile-bottom {
-          padding: 0;
-          padding-bottom: env(safe-area-inset-bottom);
-          height: auto;
-        }
-        .school-mobile-bottom button {
-          padding: 10px 0 8px;
-          min-height: 56px;
-        }
-
-        /* ── Sidebar scrollable nav ── */
-        .school-sidebar nav { overflow-y: auto; }
-        .school-sidebar nav::-webkit-scrollbar { width: 3px; }
-        .school-sidebar nav::-webkit-scrollbar-thumb { background: rgba(6,42,120,.1); border-radius: 99px; }
-
-        /* ── Touch targets ── */
-        @media (hover: none) {
-          .school-mobile-bottom button { min-height: 56px; }
-        }
+        .school-mobile-bottom { padding: 0; padding-bottom: env(safe-area-inset-bottom); }
+        .school-mobile-bottom button { min-height: 56px; padding: 10px 0 8px; }
+        @media (hover: none) { .school-mobile-bottom button { min-height: 60px; } }
       `}</style>
 
-      {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
+      {/* ── Desktop sidebar ── */}
       <aside className="school-sidebar" style={{
-        position:'fixed', left:0, top:0, bottom:0, width:240,
-        background:CARD, borderRight:`1px solid ${BORDER}`,
-        flexDirection:'column', zIndex:40,
-        boxShadow:'1px 0 0 rgba(6,42,120,.04)',
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: SIDEBAR_W,
+        background: '#fff', borderRight: `1px solid ${BORDER}`,
+        flexDirection: 'column', zIndex: 40,
+        boxShadow: '2px 0 20px rgba(6,42,120,.06)',
       }}>
-        {/* Brand + school identity */}
-        <div style={{ padding:'18px 16px 14px', borderBottom:`1px solid ${BORDER}` }}>
-          {/* ExamPrep wordmark */}
-          <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:16 }}>
-            <div style={{ width:32, height:32, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <span style={{ fontSize:11, fontWeight:900, color:GOLD, letterSpacing:'-.02em' }}>EX</span>
+
+        {/* Brand header */}
+        <div style={{ padding: '22px 18px 18px', borderBottom: `1px solid ${BORDER}` }}>
+          {/* Wordmark */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 18 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 11,
+              background: `linear-gradient(145deg, ${NAVY} 0%, #1a3a8f 100%)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              boxShadow: '0 3px 10px rgba(6,42,120,.3)',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 900, color: GOLD, letterSpacing: '-.01em' }}>EP</span>
             </div>
             <div>
-              <p style={{ fontSize:13, fontWeight:900, color:TEXT, lineHeight:1, letterSpacing:'-.02em' }}>ExamPrep</p>
-              <p style={{ fontSize:9, color:DIM, marginTop:1 }}>School Dashboard</p>
+              <p style={{ margin: 0, fontSize: 14.5, fontWeight: 900, color: TEXT, lineHeight: 1, letterSpacing: '-.03em' }}>ExamPrep</p>
+              <p style={{ margin: '3px 0 0', fontSize: 10, color: FAINT, letterSpacing: '.01em' }}>School Dashboard</p>
             </div>
           </div>
 
-          {/* School identity card */}
-          <button onClick={() => goTab('settings')} style={{
-            width:'100%', display:'flex', alignItems:'center', gap:9,
-            padding:'10px 12px', borderRadius:11, border:`1px solid ${BORDER}`,
-            background:BG, cursor:'pointer', textAlign:'left', transition:'border-color .15s',
-          }}>
-            <div style={{ width:32, height:32, borderRadius:9, background:`linear-gradient(135deg,${NAVY},#1a3a8f)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, color:'#fff', flexShrink:0 }}>
+          {/* School card */}
+          <button
+            onClick={() => goTab('settings')}
+            className="school-school-card"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+              padding: '11px 13px', borderRadius: 13,
+              border: `1.5px solid ${BORDER}`, background: '#f8f9ff',
+              cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+              transition: 'border-color .15s, background .15s',
+            }}
+          >
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              background: `linear-gradient(145deg, ${NAVY} 0%, #2952c4 100%)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 900, color: '#fff', letterSpacing: '-.01em',
+            }}>
               {schoolInitials}
             </div>
-            <div style={{ minWidth:0, flex:1 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:TEXT, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', lineHeight:1.3 }}>{schoolName||'My School'}</p>
-              {schoolCity && <p style={{ fontSize:10, color:DIM }}>{schoolCity}</p>}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                {schoolName || 'My School'}
+              </p>
+              {schoolCity && (
+                <p style={{ margin: '2px 0 0', fontSize: 10.5, color: DIM }}>📍 {schoolCity}</p>
+              )}
             </div>
-            <span style={{ fontSize:12, color:FAINT, flexShrink:0 }}>›</span>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, opacity: .35 }}>
+              <path d="M5 3l4 4-4 4" stroke={TEXT} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
 
-        {/* Nav */}
-        <nav style={{ flex:1, padding:'12px 10px', display:'flex', flexDirection:'column', gap:1, overflowY:'auto' }}>
+        {/* Navigation */}
+        <nav style={{ flex: 1, padding: '14px 10px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+          <p style={{ margin: '0 0 8px', padding: '0 6px', fontSize: 9.5, fontWeight: 800, color: FAINT, letterSpacing: '.1em', textTransform: 'uppercase' }}>
+            Menu
+          </p>
           {NAV_ITEMS.map(item => (
-            <NavItem key={item.id} item={item} active={activeTab===item.id} onClick={goTab}/>
+            <NavItem key={item.id} item={item} active={activeTab === item.id} onClick={goTab}/>
           ))}
+
+          <div style={{ flex: 1, minHeight: 20 }}/>
+          <div style={{ height: 1, background: BORDER, margin: '8px 4px 12px' }}/>
+
+          {/* Support links */}
+          <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f4f7ff', border: `1px solid ${BORDER}` }}>
+            <p style={{ margin: '0 0 8px', fontSize: 9.5, fontWeight: 800, color: FAINT, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+              Support
+            </p>
+            <a href="mailto:schools@examprep.ng" style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
+              fontSize: 12, color: SEC, fontWeight: 600, textDecoration: 'none',
+            }}>
+              <span>✉</span> Email us
+            </a>
+            <a href="https://wa.me/2348000000000" target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
+              fontSize: 12, color: '#059669', fontWeight: 600, textDecoration: 'none',
+            }}>
+              <span>💬</span> WhatsApp
+            </a>
+          </div>
         </nav>
 
-        {/* User footer */}
-        <div style={{ padding:'10px 12px', borderTop:`1px solid ${BORDER}` }}>
-          <button onClick={handleSignOut} style={{
-            width:'100%', display:'flex', alignItems:'center', gap:10,
-            padding:'9px 10px', borderRadius:10, border:'none',
-            background:'transparent', cursor:'pointer', textAlign:'left',
-            transition:'background .13s',
-          }}>
-            <div style={{ width:32, height:32, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#fff', flexShrink:0 }}>
+        {/* Admin footer */}
+        <div style={{ padding: '14px 12px 16px', borderTop: `1px solid ${BORDER}`, background: '#fafbff' }}>
+          {/* Admin info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 12px 10px' }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+              background: `linear-gradient(135deg, ${NAVY} 0%, ${BLUE} 100%)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 800, color: '#fff',
+            }}>
               {adminInitials}
             </div>
-            <div style={{ minWidth:0, flex:1 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:TEXT, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{adminName||'School Admin'}</p>
-              <p style={{ fontSize:10, color:DIM }}>Sign out →</p>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                {adminName || 'School Admin'}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 10.5, color: DIM }}>Administrator</p>
             </div>
+          </div>
+
+          {/* Sign out button */}
+          <button
+            onClick={handleSignOut}
+            className="school-signout-btn"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              padding: '9px 14px', borderRadius: 10,
+              border: `1.5px solid ${BORDER}`, background: '#fff',
+              cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: SEC,
+              fontFamily: 'inherit', transition: 'border-color .15s, color .15s',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M5 2H3a1 1 0 00-1 1v8a1 1 0 001 1h2M9.5 9.5L12 7m0 0L9.5 4.5M12 7H5.5"
+                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Sign out
           </button>
         </div>
       </aside>
 
-      {/* ── Mobile top bar ───────────────────────────────────────────────── */}
+      {/* ── Mobile header ── */}
       <header className="school-mobile-header" style={{
-        position:'sticky', top:0, zIndex:40,
-        background:'rgba(255,255,255,.97)', backdropFilter:'blur(14px)',
-        borderBottom:`1px solid ${BORDER}`,
-        boxShadow:'0 1px 8px rgba(6,42,120,.05)',
+        position: 'sticky', top: 0, zIndex: 40,
+        background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(14px)',
+        borderBottom: `1px solid ${BORDER}`, boxShadow: '0 1px 8px rgba(6,42,120,.05)',
       }}>
-        <div style={{ width:30, height:30, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-          <span style={{ fontSize:10, fontWeight:900, color:GOLD, letterSpacing:'-.02em' }}>EX</span>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg, ${NAVY}, #1a3a8f)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 900, color: GOLD }}>EP</span>
         </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontSize:13, fontWeight:800, color:TEXT, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', lineHeight:1.2 }}>{schoolName||'School Dashboard'}</p>
-          {adminName && <p style={{ fontSize:10, color:DIM, marginTop:1 }}>{adminName}</p>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+            {schoolName || 'School Dashboard'}
+          </p>
+          {adminName && <p style={{ margin: '1px 0 0', fontSize: 10, color: DIM }}>{adminName}</p>}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-          <div style={{ width:32, height:32, borderRadius:'50%', background:`linear-gradient(135deg,${NAVY},${BLUE})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#fff' }}>
-            {adminInitials}
-          </div>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${NAVY}, ${BLUE})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+          {adminInitials}
         </div>
       </header>
 
-      {/* ── Mobile bottom nav ────────────────────────────────────────────── */}
+      {/* ── Mobile bottom nav ── */}
       <nav className="school-mobile-bottom" style={{
-        position:'fixed', bottom:0, left:0, right:0, zIndex:50,
-        background:'rgba(255,255,255,.97)', backdropFilter:'blur(16px)',
-        borderTop:`1px solid ${BORDER}`,
-        boxShadow:'0 -2px 16px rgba(6,42,120,.06)',
-        display:'flex',
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+        background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(16px)',
+        borderTop: `1px solid ${BORDER}`, boxShadow: '0 -2px 16px rgba(6,42,120,.06)',
+        display: 'flex',
       }}>
         {NAV_ITEMS.map(item => {
           const active = activeTab === item.id
           return (
             <button key={item.id} onClick={() => goTab(item.id)} style={{
-              flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3,
-              padding:'10px 4px 8px', background:'none', border:'none', cursor:'pointer',
-              borderTop:`2.5px solid ${active?BLUE:'transparent'}`,
-              transition:'border-color .15s', fontFamily:'inherit',
-              WebkitTapHighlightColor:'transparent',
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '10px 4px 8px', background: 'none', border: 'none', cursor: 'pointer',
+              borderTop: `2.5px solid ${active ? BLUE : 'transparent'}`,
+              transition: 'border-color .15s', fontFamily: 'inherit',
+              WebkitTapHighlightColor: 'transparent',
             }}>
-              <item.Icon size={20} color={active ? BLUE : DIM}/>
-              <span style={{ fontSize:9, fontWeight:active?800:600, color:active?BLUE:DIM, textTransform:'uppercase', letterSpacing:'.04em', lineHeight:1 }}>
+              <item.Icon size={21} color={active ? BLUE : DIM}/>
+              <span style={{ fontSize: 9, fontWeight: active ? 800 : 600, color: active ? BLUE : DIM, textTransform: 'uppercase', letterSpacing: '.05em', lineHeight: 1 }}>
                 {item.label}
               </span>
             </button>

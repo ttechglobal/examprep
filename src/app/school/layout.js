@@ -29,7 +29,7 @@ export default async function SchoolLayout({ children }) {
         adminName={profile?.full_name ?? 'School Admin'}
       />
       <div className="school-content">
-        <main style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <main>
           {children}
         </main>
       </div>

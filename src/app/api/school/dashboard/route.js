@@ -1,37 +1,16 @@
 // src/app/api/school/dashboard/route.js
-// REBUILT — now returns cohort-aware data with topic-level breakdown.
 //
-// UPDATED: at-risk segmentation. Previously a flat boolean filter
-// (!isActiveThisWeek || accuracy < 40). Now three tiers, giving teachers
-// a specific, actionable read instead of one generic "at risk" bucket:
-//
-//   dropped     — was active in the prior week, inactive THIS week
-//                 (a specific, recent drop-off — most actionable)
-//   inactive    — hasn't been active at all recently (longer-term disengagement)
-//   struggling  — active this week but accuracy < 40% (trying but failing)
-//
-// `atRisk` (flat array of IDs) is KEPT for backward compatibility with the
-// existing PDF report generator (school/report/route.js) and any other
-// caller expecting the old shape. `atRiskSegmented` is the new array with
-// tier info, additive — nothing that reads `atRisk` needs to change.
-//
-// Returns:
-//   school:           { id, name, city, state }
-//   cohort:           active cohort or null
-//   allCohorts:       all cohorts for this school (history)
-//   summary:          { totalStudents, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek }
-//   students:         enriched student list with per-student accuracy + streak
-//   subjectTopics:    per-subject → per-topic cohort accuracy (the diagnostic lens)
-//   weeklyEngagement: last 4 weeks active student counts
-//   atRisk:           student ids with 0 activity in 7+ days OR <40% accuracy (legacy, unchanged shape)
-//   atRiskSegmented:  [{ id, tier }] — tier is 'dropped' | 'inactive' | 'struggling'
+// Single source of truth: question_attempts.
+// lesson_progress and student_streaks are not written by any student action,
+// so they are not queried here. All activity, accuracy, and topic data comes
+// from question_attempts only.
 
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { createClient }            from '@/lib/supabase/server'
+import { createClient as svcClient } from '@supabase/supabase-js'
+import { NextResponse }            from 'next/server'
 
 function svc() {
-  return createServiceClient(
+  return svcClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
@@ -39,28 +18,28 @@ function svc() {
 
 export async function GET() {
   const supabase = await createClient()
-  const db = svc()
+  const db       = svc()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Run profile + school info + cohorts in parallel — saves one sequential round-trip.
-  // Previously: getUser → profile → [school, cohorts] = 3 sequential waterfalls.
-  // Now: getUser → [profile, school lookup via join, cohorts] = 2.
-  const { data: adminProfile } = await db
+  const { data: adminProfile, error: profileError } = await db
     .from('profiles')
-    .select('school_id, role, schools(id, name, city, state)')
+    .select('school_id, role, full_name, schools(id, name, city, state)')
     .eq('id', user.id)
     .single()
 
-  if (!adminProfile?.school_id) {
-    return NextResponse.json({ error: 'No school assigned' }, { status: 403 })
+  if (profileError) {
+    console.error('[school/dashboard] profile fetch error:', profileError.message)
   }
+
+  if (!adminProfile?.school_id)
+    return NextResponse.json({ error: 'No school assigned' }, { status: 403 })
 
   const schoolId = adminProfile.school_id
   const school   = adminProfile.schools ?? null
 
-  // Now just cohorts — school info came from the profile join above
+  // ── Cohorts ──────────────────────────────────────────────────────────────────
   const { data: allCohorts } = await db
     .from('cohorts')
     .select('id, name, session, invite_code, invite_active, is_active, created_at')
@@ -69,8 +48,8 @@ export async function GET() {
 
   const activeCohort = (allCohorts ?? []).find(c => c.is_active) ?? null
 
-  // Get students — from active cohort if exists, else all school students
-  let studentIds = []
+  // ── Resolve student IDs ──────────────────────────────────────────────────────
+  let studentIds    = []
   let cohortMembers = []
 
   if (activeCohort) {
@@ -78,111 +57,89 @@ export async function GET() {
       .from('cohort_members')
       .select('student_id, joined_at')
       .eq('cohort_id', activeCohort.id)
-
     cohortMembers = members ?? []
-    studentIds = cohortMembers.map(m => m.student_id)
+    studentIds    = cohortMembers.map(m => m.student_id)
   } else {
     const { data: schoolStudents } = await db
       .from('profiles')
       .select('id')
       .eq('school_id', schoolId)
       .eq('role', 'student')
-
     studentIds = (schoolStudents ?? []).map(s => s.id)
   }
 
   if (!studentIds.length) {
     return NextResponse.json({
       school,
-      cohort: activeCohort,
-      allCohorts: allCohorts ?? [],
-      summary: { totalStudents: 0, activeThisWeek: 0, avgAccuracy: null, lessonsThisWeek: 0, totalQuestionsThisWeek: 0 },
-      students: [],
-      subjectTopics: [],
+      cohort:           activeCohort,
+      allCohorts:       allCohorts ?? [],
+      adminName:        adminProfile.full_name ?? '',
+      summary:          { totalStudents: 0, activeThisWeek: 0, avgAccuracy: null, totalQuestionsThisWeek: 0 },
+      students:         [],
+      subjectTopics:    [],
       weeklyEngagement: [],
-      atRisk: [],
-      atRiskSegmented: [],
+      atRiskSegmented:  [],
     })
   }
 
-  // Parallel data fetch
-  const weekAgo       = new Date(Date.now() - 7 * 86400000).toISOString()
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+  // ── Parallel fetch — question_attempts only ──────────────────────────────────
+  const now       = Date.now()
+  const weekAgo   = new Date(now - 7  * 86400000).toISOString()
+  const thirtyAgo = new Date(now - 30 * 86400000).toISOString()
 
   const [
     { data: profiles },
-    { data: allAttempts },
-    { data: allProgress },
-    { data: allStreaks },
-    { data: allMastery },
+    { data: recentAttempts },  // last 30 days — accuracy, topic breakdown, last_active
+    { data: weekAttempts },    // last 7 days — weekly question count (lean)
   ] = await Promise.all([
     db.from('profiles')
       .select('id, full_name, exam_type, subjects, created_at')
       .in('id', studentIds),
 
-    // Lean select — subtopic_id not used in dashboard aggregation, dropped to cut payload
     db.from('question_attempts')
       .select('student_id, is_correct, created_at, subject_id, topic_id, subjects(name), topics(name)')
       .in('student_id', studentIds)
-      .gte('created_at', thirtyDaysAgo),
+      .gte('created_at', thirtyAgo),
 
-    db.from('lesson_progress')
-      .select('student_id, completed, started_at')
-      .in('student_id', studentIds),
-
-    db.from('student_streaks')
-      .select('student_id, current_streak, last_active_date')
-      .in('student_id', studentIds),
-
-    // Direct mastery scores — more accurate than computing from raw attempts
-    db.from('student_topic_mastery')
-      .select('student_id, topic_id, subject_id, score, attempt_count, last_updated')
-      .in('student_id', studentIds),
+    db.from('question_attempts')
+      .select('student_id, created_at')
+      .in('student_id', studentIds)
+      .gte('created_at', weekAgo),
   ])
 
-  const profileMap  = {}
+  const profileMap = {}
   ;(profiles ?? []).forEach(p => { profileMap[p.id] = p })
 
-  const streakMap = {}
-  ;(allStreaks ?? []).forEach(s => { streakMap[s.student_id] = s })
+  const weekAgoDate     = new Date(now - 7  * 86400000)
+  const twoWeeksAgoDate = new Date(now - 14 * 86400000)
 
-  // Mastery map: studentId → topicId → { score, attempt_count }
-  const masteryByStudent = {}
-  ;(allMastery ?? []).forEach(m => {
-    if (!masteryByStudent[m.student_id]) masteryByStudent[m.student_id] = {}
-    masteryByStudent[m.student_id][m.topic_id] = { score: m.score, attempt_count: m.attempt_count, subject_id: m.subject_id }
-  })
-
-  // Subject-level mastery: subjectId → [scores] across all students (for cohort view)
-  const cohortSubjectMastery = {}
-  ;(allMastery ?? []).forEach(m => {
-    if (!m.subject_id) return
-    if (!cohortSubjectMastery[m.subject_id]) cohortSubjectMastery[m.subject_id] = []
-    cohortSubjectMastery[m.subject_id].push(m.score)
-  })
-
-  const weekAgoDate   = new Date(Date.now() - 7 * 86400000)
-  const twoWeeksAgo    = new Date(Date.now() - 14 * 86400000)
-
-  // ── Per-student enrichment ─────────────────────────────────────────────────
+  // ── Per-student enrichment ───────────────────────────────────────────────────
   const enrichedStudents = studentIds.map(id => {
-    const profile   = profileMap[id] ?? { id, full_name: 'Unknown' }
-    const attempts  = (allAttempts ?? []).filter(a => a.student_id === id)
-    const progress  = (allProgress ?? []).filter(p => p.student_id === id)
-    const streak    = streakMap[id]
+    const profile  = profileMap[id] ?? { id, full_name: 'Unknown' }
+    const attempts = (recentAttempts ?? []).filter(a => a.student_id === id)
 
-    const correct     = attempts.filter(a => a.is_correct).length
-    const total       = attempts.length
-    const accuracy    = total > 0 ? Math.round((correct / total) * 100) : null
+    const correct = attempts.filter(a => a.is_correct).length
+    const total   = attempts.length
 
-    const lessonsThisWeek = progress.filter(
-      p => p.completed && p.started_at && new Date(p.started_at) >= weekAgoDate
-    ).length
+    // accuracy: null if no attempts yet
+    const accuracy = total > 0 ? Math.round((correct / total) * 100) : null
 
-    const lastActive       = streak?.last_active_date ?? null
-    const isActiveThisWeek = lastActive && new Date(lastActive) >= weekAgoDate
+    // last_active: most recent created_at across all 30d attempts
+    // question_attempts.created_at is set by the DB (now()) on insert — reliable.
+    let lastActive = null
+    for (const a of attempts) {
+      if (!lastActive || a.created_at > lastActive) lastActive = a.created_at
+    }
 
-    // Per-subject accuracy for this student
+    // daysSinceLastPractice: derived from question_attempts, not student_streaks
+    let daysSinceLastPractice = null
+    if (lastActive) {
+      daysSinceLastPractice = Math.floor((now - new Date(lastActive).getTime()) / 86400000)
+    }
+
+    const isActiveThisWeek = daysSinceLastPractice !== null && daysSinceLastPractice <= 7
+
+    // Per-subject accuracy (for student card detail)
     const subjectAcc = {}
     attempts.forEach(a => {
       const sName = a.subjects?.name
@@ -192,75 +149,54 @@ export async function GET() {
       if (a.is_correct) subjectAcc[sName].correct++
     })
 
-    // Compute per-subject mastery from student_topic_mastery (more reliable than raw attempts)
-    const studentMastery  = masteryByStudent[id] ?? {}
-    const subjectMasteryMap = {}
-    Object.values(studentMastery).forEach(({ score, subject_id }) => {
-      if (!subject_id) return
-      if (!subjectMasteryMap[subject_id]) subjectMasteryMap[subject_id] = []
-      subjectMasteryMap[subject_id].push(score)
-    })
-    const subjectMastery = {}
-    Object.entries(subjectMasteryMap).forEach(([sid, scores]) => {
-      subjectMastery[sid] = Math.round(scores.reduce((a,b)=>a+b,0) / scores.length)
-    })
-
-    // avgTimeSecs removed — time_spent_secs dropped from SELECT to reduce payload
-    const avgTimeSecs = null
-
     return {
       id,
-      full_name:       profile.full_name,
-      exam_type:       profile.exam_type,
-      subjects:        profile.subjects ?? [],
+      full_name:            profile.full_name,
+      exam_type:            profile.exam_type,
+      subjects:             profile.subjects ?? [],
       accuracy,
       correct,
-      total,
-      currentStreak:   streak?.current_streak ?? 0,
-      lastActive,
+      total,                          // questions answered in last 30 days
+      lastActive,                     // ISO string of most recent attempt
+      daysSinceLastPractice,          // derived from question_attempts — reliable
       isActiveThisWeek,
-      lessonsThisWeek,
       subjectAcc,
-      subjectMastery,        // NEW: EMA-based mastery per subject (from student_topic_mastery)
-      topicMastery:    studentMastery,  // NEW: per-topic mastery scores
-      avgTimeSecs,           // NEW: avg seconds per question
-      joinedCohortAt:  cohortMembers.find(m => m.student_id === id)?.joined_at ?? null,
+      joinedCohortAt:       cohortMembers.find(m => m.student_id === id)?.joined_at ?? null,
     }
   })
 
-  // ── Summary stats ──────────────────────────────────────────────────────────
-  const activeThisWeek  = enrichedStudents.filter(s => s.isActiveThisWeek).length
-  const accuracies      = enrichedStudents.map(s => s.accuracy).filter(a => a !== null)
-  const avgAccuracy     = accuracies.length
-    ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length) : null
-  const lessonsThisWeek = enrichedStudents.reduce((a, s) => a + s.lessonsThisWeek, 0)
+  // ── Summary ──────────────────────────────────────────────────────────────────
+  const activeThisWeek     = enrichedStudents.filter(s => s.isActiveThisWeek).length
+  const totalCorrectAll    = enrichedStudents.reduce((a, s) => a + s.correct, 0)
+  const totalAttemptsAll   = enrichedStudents.reduce((a, s) => a + s.total,   0)
+  const avgAccuracy        = totalAttemptsAll > 0
+    ? Math.round((totalCorrectAll / totalAttemptsAll) * 100)
+    : null
+  const totalQuestionsThisWeek = (weekAttempts ?? []).length
 
-  const totalQuestionsThisWeek = (allAttempts ?? []).filter(a => {
-    return a.created_at && new Date(a.created_at) >= weekAgoDate
-  }).length
-
-  // ── At-risk students — segmented into three tiers ─────────────────────────
-  // Legacy flat array kept for backward compat with existing PDF reports
-  // and any other caller still expecting the old shape.
-  const atRisk = enrichedStudents
-    .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
-    .map(s => s.id)
-
+  // ── At-risk segmentation ─────────────────────────────────────────────────────
   const atRiskSegmented = enrichedStudents
     .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
     .map(s => {
-      const wasActiveLastWeek = s.lastActive && new Date(s.lastActive) >= twoWeeksAgo
+      const wasActiveRecently = s.lastActive && new Date(s.lastActive) >= twoWeeksAgoDate
       const tier =
-        !s.isActiveThisWeek && wasActiveLastWeek ? 'dropped' :
-        !s.isActiveThisWeek                      ? 'inactive' :
+        !s.isActiveThisWeek && wasActiveRecently ? 'dropped'    :
+        !s.isActiveThisWeek                      ? 'inactive'   :
                                                     'struggling'
-      return { id: s.id, tier }
+      return {
+        id:                   s.id,
+        name:                 s.full_name,
+        tier,
+        accuracy:             s.accuracy,
+        daysSinceLastPractice: s.daysSinceLastPractice,
+      }
     })
 
-  // ── Topic-level diagnostic lens ────────────────────────────────────────────
-  // Build: subjectName → topicName → { correct, total }
+  // ── Topic-level diagnostic from question_attempts ───────────────────────────
+  // Built from the 30d attempts — subject_id/topic_id FK-joined to get names.
+  // Rows without topic_id are skipped (untagged questions don't contribute to breakdown).
   const topicAccMap = {}
-  ;(allAttempts ?? []).forEach(a => {
+  ;(recentAttempts ?? []).forEach(a => {
     const sName = a.subjects?.name
     const tName = a.topics?.name
     if (!sName || !tName || !a.topic_id) return
@@ -272,72 +208,58 @@ export async function GET() {
     if (a.is_correct) topicAccMap[sName][a.topic_id].correct++
   })
 
-  // Resolve subject names for cohort mastery
-  const subjectIdToName = {}
-  ;(profiles ?? []).forEach(p => {}) // profiles doesn't have subject names, use attempt data
-  ;(allAttempts ?? []).forEach(a => { if (a.subject_id && a.subjects?.name) subjectIdToName[a.subject_id] = a.subjects.name })
-
   const subjectTopics = Object.entries(topicAccMap).map(([subjectName, topicsById]) => {
-    const topics = Object.entries(topicsById).map(([topicId, data]) => ({
+    const topics = Object.entries(topicsById).map(([topicId, d]) => ({
       topicId,
-      topicName: data.topicName,
-      correct:   data.correct,
-      total:     data.total,
-      accuracy:  Math.round((data.correct / data.total) * 100),
-    })).sort((a, b) => a.accuracy - b.accuracy) // weakest first
+      topicName: d.topicName,
+      correct:   d.correct,
+      total:     d.total,
+      accuracy:  Math.round((d.correct / d.total) * 100),
+    })).sort((a, b) => a.accuracy - b.accuracy)
 
-    const subjectTotal   = topics.reduce((a, t) => a + t.total, 0)
+    const subjectTotal   = topics.reduce((a, t) => a + t.total,   0)
     const subjectCorrect = topics.reduce((a, t) => a + t.correct, 0)
-
-    // Find subject_id for this subject name
-    const subjectId = Object.entries(subjectIdToName).find(([,n]) => n === subjectName)?.[0]
-    const masteryScores = subjectId ? (cohortSubjectMastery[subjectId] ?? []) : []
-    const avgMastery = masteryScores.length > 0
-      ? Math.round(masteryScores.reduce((a,b) => a+b, 0) / masteryScores.length)
-      : null
 
     return {
       subjectName,
-      accuracy:    subjectTotal > 0 ? Math.round((subjectCorrect / subjectTotal) * 100) : null,
-      avgMastery,  // EMA-based cohort mastery for this subject
+      accuracy: subjectTotal > 0 ? Math.round((subjectCorrect / subjectTotal) * 100) : null,
       topics,
     }
-  }).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100)) // weakest subject first
+  }).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100))
 
-  // ── Weekly engagement (last 4 weeks) ─────────────────────────────────────
+  // ── Weekly engagement — distinct active students per 7-day window ─────────────
+  // Counts any student who answered at least one question in that week.
+  // Uses recentAttempts (30d) which covers the last 4 weeks.
   const weeklyEngagement = []
   for (let i = 3; i >= 0; i--) {
-    const wStart = new Date(Date.now() - (i + 1) * 7 * 86400000)
-    const wEnd   = new Date(Date.now() - i * 7 * 86400000)
+    const wStart = new Date(now - (i + 1) * 7 * 86400000)
+    const wEnd   = new Date(now - i       * 7 * 86400000)
     const label  = wStart.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
-    const active = new Set(
-      (allProgress ?? [])
-        .filter(p => p.started_at &&
-          new Date(p.started_at) >= wStart &&
-          new Date(p.started_at) < wEnd)
-        .map(p => p.student_id)
-    ).size
-    weeklyEngagement.push({ label, active })
+    const activeSet = new Set()
+    ;(recentAttempts ?? []).forEach(a => {
+      if (a.created_at && new Date(a.created_at) >= wStart && new Date(a.created_at) < wEnd)
+        activeSet.add(a.student_id)
+    })
+    weeklyEngagement.push({ label, active: activeSet.size })
   }
 
   return NextResponse.json(
     {
       school,
+      adminName:        adminProfile.full_name ?? '',
       cohort:           activeCohort,
       allCohorts:       allCohorts ?? [],
-      summary:          { totalStudents: studentIds.length, activeThisWeek, avgAccuracy, lessonsThisWeek, totalQuestionsThisWeek },
+      summary: {
+        totalStudents:         studentIds.length,
+        activeThisWeek,
+        avgAccuracy,
+        totalQuestionsThisWeek,
+      },
       students:         enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
       subjectTopics,
       weeklyEngagement,
-      atRisk,
       atRiskSegmented,
     },
-    {
-      headers: {
-        // 2 min fresh cache; serve stale for up to 5 min while revalidating in background.
-        // School data changes only when students practice — this avoids refetching on every tab switch.
-        'Cache-Control': 'private, max-age=120, stale-while-revalidate=300',
-      },
-    }
+    { headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300' } }
   )
 }
