@@ -31,7 +31,8 @@ const SECTIONS = {
     items: [
       { href: '/admin/dashboard',          label: 'Hub',              icon: '◼' },
       { href: '/admin/questions/upload',   label: 'Upload Questions', icon: '📤' },
-      { href: '/admin/questions/import',   label: 'Import via Sdash', icon: '⬆' },
+      { href: '/admin/questions/import',         label: 'Import via Sdash',    icon: '⬆' },
+      { href: '/admin/questions/myquest-import', label: 'Import via MyQuest',  icon: '⬆' },
       { href: '/admin/questions',          label: 'Question Bank',    icon: '🔍' },
       { href: '/admin/past-questions',     label: 'Past Questions',   icon: '🗃' },
       { href: '/admin/coverage',           label: 'Year Coverage',    icon: '📅' },
