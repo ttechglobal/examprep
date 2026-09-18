@@ -60,13 +60,26 @@ function IcoSettings({ size = 20, color }) {
     </svg>
   )
 }
+function IcoSubscriptions({ size = 20, color }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <rect x="2" y="5" width="16" height="11" rx="2.5" stroke={color} strokeWidth="1.6"/>
+      <path d="M2 8.5h16" stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
+      <circle cx="6" cy="12.5" r="1.2" fill={color} opacity=".5"/>
+      <path d="M10 12.5h4" stroke={color} strokeWidth="1.4" strokeLinecap="round" opacity=".5"/>
+      <path d="M6 4.5V3.5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M14 4.5V3.5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
 
 const NAV_ITEMS = [
-  { id: 'overview',    label: 'Overview',    Icon: IcoOverview    },
-  { id: 'students',    label: 'Students',    Icon: IcoStudents    },
-  { id: 'performance', label: 'Performance', Icon: IcoPerformance },
-  { id: 'cohort',      label: 'Cohort',      Icon: IcoCohort      },
-  { id: 'settings',    label: 'Settings',    Icon: IcoSettings    },
+  { id: 'overview',       label: 'Overview',       Icon: IcoOverview       },
+  { id: 'students',       label: 'Students',       Icon: IcoStudents       },
+  { id: 'performance',    label: 'Performance',    Icon: IcoPerformance    },
+  { id: 'cohort',         label: 'Cohort',         Icon: IcoCohort         },
+  { id: 'subscriptions',  label: 'Subscriptions',  Icon: IcoSubscriptions  },
+  { id: 'settings',       label: 'Settings',       Icon: IcoSettings       },
 ]
 
 function NavItem({ item, active, onClick }) {
@@ -134,7 +147,6 @@ function SchoolNavInner({ schoolName, schoolCity, adminName }) {
         .school-sidebar       { display: flex !important; }
         .school-mobile-header { display: none !important; }
         .school-mobile-bottom { display: none !important; }
-        /* Single source of truth for the sidebar offset — padding-left only, no margin-left */
         .school-content       { padding-left: ${SIDEBAR_W}px; }
 
         @media (max-width: 768px) {
@@ -144,10 +156,9 @@ function SchoolNavInner({ schoolName, schoolCity, adminName }) {
           .school-content       { padding-left: 0 !important; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
         }
 
-        /* main fills the content area — no margin:0 auto which fights the offset */
-        .school-content main { padding: 20px 20px 80px; box-sizing: border-box; }
-        @media (min-width: 769px)  { .school-content main { padding: 28px 28px 80px; } }
-        @media (min-width: 1280px) { .school-content main { padding: 32px 36px 60px; } }
+        .school-content main { padding: 24px 20px; max-width: 1180px; margin: 0 auto; }
+        @media (min-width: 769px)  { .school-content main { padding: 32px 36px; } }
+        @media (min-width: 1280px) { .school-content main { padding: 36px 48px; } }
 
         .school-sidebar nav::-webkit-scrollbar       { width: 3px; }
         .school-sidebar nav::-webkit-scrollbar-thumb { background: rgba(6,42,120,.08); border-radius: 99px; }

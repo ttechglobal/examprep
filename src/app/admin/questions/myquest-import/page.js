@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
-import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic } from '@/lib/questionParser'
+import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
 import { MathText } from '@/lib/mathRenderer'
 
 // ── MyQuest subject slug map ──────────────────────────────────────────────────
@@ -110,8 +110,28 @@ function normalizeMyQuestQuestion(q, year) {
   }
 }
 
+// ── Detect image references in raw MyQuest question text ─────────────────────
+// MyQuest sets q.image when the question has an attached image file.
+// But some questions also have text like "refer to the diagram" with no image
+// field — we catch those too so they are auto-hidden at import time.
+const MQ_IMAGE_TEXT_PATTERNS = [
+  /\bdiagram\b/i,
+  /\bfigure\b/i,
+  /\billustration\b/i,
+  /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
+  /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
+  /\busing the (information|data) (in|from) the (table|graph|chart)\b/i,
+  /\bfrom the graph\b/i,
+  /\bas shown (in|above|below)\b/i,
+]
+
+function mqQuestionReferencesImage(q) {
+  if (q.image) return true
+  const text = (q.question ?? q.question_text ?? '').toLowerCase()
+  return MQ_IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
+}
+
 function slugForSubject(name) {
-  if (!name) return null
   const key = name.toLowerCase().trim()
   return MYQUEST_SLUG_MAP[key] ?? null
 }
@@ -556,9 +576,9 @@ export default function MyQuestImportPage() {
         return
       }
 
-      // Separate diagram questions
-      const diagramQs = qs.filter(q => q.image)
-      const cleanQs   = qs.filter(q => !q.image)
+      // Separate diagram questions — anything with q.image OR text references to a diagram
+      const diagramQs = qs.filter(q => mqQuestionReferencesImage(q))
+      const cleanQs   = qs.filter(q => !mqQuestionReferencesImage(q))
 
       if (diagramQs.length) {
         try {
@@ -606,10 +626,35 @@ export default function MyQuestImportPage() {
       selectedSubject?.name ?? 'Unknown Subject'
     )
     const withMatches = merged.map((q, idx) => {
+      const rawQ  = fetchedQuestions[idx] ?? {}
       const match = matchTopicSubtopic(q, topics)
-      return { ...q, _topicMatch: match, _importIdx: idx }
+
+      // ── Option count mismatch check ──────────────────────────────────────
+      // MyQuest sometimes returns 3 or 5 options; the enriched options object
+      // should have the same count as what the raw question had.
+      const rawOptKeys = Object.keys(rawQ.option ?? {})
+      const enrichOptKeys = Object.keys(q.options ?? {}).filter(k => (q.options[k] ?? '').trim())
+      const _optionCountMismatch =
+        rawOptKeys.length > 0 &&
+        enrichOptKeys.length > 0 &&
+        rawOptKeys.length !== enrichOptKeys.length
+
+      return { ...q, _topicMatch: match, _importIdx: idx, _optionCountMismatch }
     })
+
+    // ── Auto-hide questions that reference images/diagrams ──────────────────
+    // We use questionHasImage (post-enrichment) PLUS check the raw question text.
+    // These are auto-added to hiddenIndexes with reason shown in the UI.
+    const autoHidden = new Set()
+    withMatches.forEach((q, idx) => {
+      const rawQ = fetchedQuestions[idx] ?? {}
+      if (questionHasImage(q) || mqQuestionReferencesImage(rawQ)) {
+        autoHidden.add(idx)
+      }
+    })
+
     setParsedQuestions(withMatches)
+    setHiddenIndexes(autoHidden)
     setSvgDrafts({})
     setEnrichStep(4)
   }
@@ -1286,9 +1331,14 @@ export default function MyQuestImportPage() {
 
           {/* ── STEP 4 (review): QUESTION REVIEW PANEL ──────────────────── */}
           {enrichStep === 4 && parsedQuestions.length > 0 && (() => {
-            const visibleQs = parsedQuestions.filter((_, i) => !hiddenIndexes.has(i))
+            const visibleQs       = parsedQuestions.filter((_, i) => !hiddenIndexes.has(i))
+            const autoHiddenCount = parsedQuestions.filter((q, i) => hiddenIndexes.has(i) && (questionHasImage(q) || mqQuestionReferencesImage(fetchedQuestions[i] ?? {}))).length
+            const mismatchCount   = parsedQuestions.filter(q => q._mismatch).length
+            const allMismatch     = mismatchCount > 0 && mismatchCount === parsedQuestions.length
+
             return (
               <div className="space-y-4">
+                {/* Summary header */}
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
@@ -1310,16 +1360,71 @@ export default function MyQuestImportPage() {
                   </div>
                 </div>
 
+                {/* Auto-hidden notice */}
+                {autoHiddenCount > 0 && (
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <span className="text-xl flex-shrink-0">🖼️</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-amber-800">
+                        {autoHiddenCount} question{autoHiddenCount !== 1 ? 's' : ''} auto-hidden — image reference detected
+                      </p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        These questions reference a diagram, figure, or image that we don't have yet.
+                        They've been hidden automatically. You can unhide and review them individually,
+                        or leave them hidden — they won't be saved in this batch.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Global mismatch warning */}
+                {mismatchCount > 0 && (
+                  <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <span className="text-xl flex-shrink-0">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-red-700">
+                        {mismatchCount} possible explanation mismatch{mismatchCount !== 1 ? 'es' : ''} detected
+                      </p>
+                      <p className="text-xs text-red-600 mt-1">
+                        {allMismatch
+                          ? 'All explanations appear mismatched — the AI likely returned them in the wrong order. Go back and re-send the prompt to Claude.'
+                          : 'Questions highlighted in red may have the wrong explanation. The AI may have returned answers out of order. Review each carefully before saving.'}
+                      </p>
+                      {allMismatch && (
+                        <button
+                          onClick={() => { setParsedQuestions([]); setEnrichStep(2) }}
+                          className="mt-2 px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-500 transition-colors"
+                        >
+                          ← Go back and re-send prompt
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-question cards */}
                 {parsedQuestions.map((q, index) => {
-                  const isHidden   = hiddenIndexes.has(index)
-                  const match      = q._topicMatch
-                  const hasTopic   = !!(q.topic_title || match?.topic?.name)
-                  const isEditing  = editingTopicIdx === index
-                  const svgCode    = svgDrafts[q._importIdx ?? index] ?? ''
-                  const needsSvg   = q.explanation?.illustration_prompt
+                  const isHidden  = hiddenIndexes.has(index)
+                  const match     = q._topicMatch
+                  const hasTopic  = !!(q.topic_title || match?.topic?.name)
+                  const isEditing = editingTopicIdx === index
+                  const svgCode   = svgDrafts[q._importIdx ?? index] ?? ''
+                  const needsSvg  = q.explanation?.illustration_prompt
+                  const rawQ      = fetchedQuestions[index] ?? {}
+                  const isAutoHid = isHidden && (questionHasImage(q) || mqQuestionReferencesImage(rawQ))
 
                   return (
-                    <div key={index} className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-opacity ${isHidden ? 'opacity-40' : ''}`}>
+                    <div key={index} className={`bg-white rounded-2xl shadow-sm overflow-hidden transition-opacity border-2 ${
+                      isHidden
+                        ? 'opacity-40 border-gray-200'
+                        : q._mismatch
+                        ? 'border-red-400'
+                        : q._answerDisagreement
+                        ? 'border-amber-400'
+                        : q._optionCountMismatch
+                        ? 'border-orange-400'
+                        : 'border-gray-200'
+                    }`}>
                       {/* Card header */}
                       <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1331,16 +1436,47 @@ export default function MyQuestImportPage() {
                             <Badge color="gray">{q.subtopic_title || match?.subtopic?.name}</Badge>
                           )}
                           <Badge color="indigo">{q.difficulty ?? 'medium'}</Badge>
-                          {needsSvg && <Badge color="violet">🎨 Needs diagram</Badge>}
+                          {needsSvg && (
+                            <Badge color="violet">🎨 {svgCode.trim().toLowerCase().startsWith('<svg') ? 'SVG ready' : 'Needs diagram'}</Badge>
+                          )}
+                          {q._mismatch && !isHidden && <Badge color="red">⚠ Mismatch</Badge>}
+                          {q._answerDisagreement && !isHidden && <Badge color="amber">🔍 Answer conflict</Badge>}
+                          {q._optionCountMismatch && !isHidden && <Badge color="amber">⚠ Option count</Badge>}
+                          {isAutoHid && <Badge color="amber">🖼️ Auto-hidden</Badge>}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setPreviewQuestion(q)} className="text-xs text-gray-400 hover:text-gray-600 border border-gray-100 rounded-lg px-2 py-1">👁 Preview</button>
                           {isHidden
-                            ? <button onClick={() => unhideQuestion(index)} className="text-xs text-green-600 hover:text-green-700 border border-green-100 rounded-lg px-2 py-1">↩ Show</button>
+                            ? <button onClick={() => unhideQuestion(index)} className="text-xs text-green-600 hover:text-green-700 border border-green-100 rounded-lg px-2 py-1">↩ Unhide</button>
                             : <button onClick={() => hideQuestion(q, index)} className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">🚫 Hide</button>
                           }
                         </div>
                       </div>
+
+                      {/* Per-question mismatch banner */}
+                      {q._mismatch && !isHidden && (
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border-b border-red-200">
+                          <span className="text-base">⚠️</span>
+                          <div>
+                            <span className="text-xs font-black text-red-700">Explanation mismatch detected</span>
+                            <p className="text-xs text-red-600 mt-0.5">The explanation below may belong to a different question. Review carefully or hide this question.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Option count mismatch banner */}
+                      {q._optionCountMismatch && !isHidden && (
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 border-b border-orange-200">
+                          <span className="text-base">🔢</span>
+                          <div>
+                            <span className="text-xs font-black text-orange-700">Option count mismatch</span>
+                            <p className="text-xs text-orange-600 mt-0.5">
+                              MyQuest returned {Object.keys(rawQ.option ?? {}).length} options but the enrichment has {Object.keys(q.options ?? {}).filter(k => (q.options[k] ?? '').trim()).length}.
+                              Verify the options are correct before saving.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {!isHidden && (
                         <div className="p-5 space-y-4">
@@ -1360,11 +1496,44 @@ export default function MyQuestImportPage() {
                             })}
                           </div>
 
+                          {/* Answer disagreement panel */}
+                          {q._answerDisagreement && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                              <p className="text-xs font-black text-amber-800 mb-2">🔍 Answer disagreement — Claude vs MyQuest</p>
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                <div className="bg-white border border-amber-200 rounded-lg p-2">
+                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">Claude says</p>
+                                  <p className="text-sm font-black text-amber-900">{q.correct_answer}</p>
+                                </div>
+                                <div className="bg-white border border-amber-200 rounded-lg p-2">
+                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">MyQuest says</p>
+                                  <p className="text-sm font-black text-amber-900">{q.sdash_answer}</p>
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-amber-700">Claude's answer is saved by default. Override below if MyQuest is correct.</p>
+                              <div className="flex gap-1.5 mt-2 flex-wrap">
+                                {Object.keys(q.options ?? {}).map(k => (
+                                  <button
+                                    key={k}
+                                    onClick={() => setParsedQuestions(prev => prev.map((pq, pi) => pi === index ? { ...pq, correct_answer: k.toUpperCase() } : pq))}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                                      k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
+                                        ? 'bg-green-600 text-white border-green-600'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
+                                    }`}
+                                  >
+                                    {k.toUpperCase()}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Explanation preview */}
                           {(q.explanation?.correct || q.explanation?.intro) && (
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3">
-                              <p className="text-[11px] font-black text-indigo-600 uppercase tracking-wide mb-1">Explanation</p>
-                              <p className="text-xs text-gray-700 leading-relaxed line-clamp-3">
+                            <div className={`rounded-xl p-3 border ${q._mismatch ? 'bg-red-50 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>
+                              <p className="text-[11px] font-black uppercase tracking-wide mb-1">{q._mismatch ? '⚠️ Explanation (possibly mismatched)' : '💡 Explanation'}</p>
+                              <p className="text-xs leading-relaxed line-clamp-3">
                                 {q.explanation?.intro ?? q.explanation?.correct}
                               </p>
                             </div>
@@ -1440,9 +1609,63 @@ export default function MyQuestImportPage() {
                   )
                 })}
 
-                {/* Bottom save button */}
+                {/* Sticky pre-save bar */}
                 {visibleQs.length > 0 && (
-                  <div className="sticky bottom-4">
+                  <div className="sticky bottom-4 z-10 space-y-2">
+                    {/* Pre-save flags */}
+                    {(() => {
+                      const pendingIllustrations = visibleQs.filter(q =>
+                        q.explanation?.illustration_prompt &&
+                        !(svgDrafts[q._importIdx ?? 0] ?? '').trim().toLowerCase().startsWith('<svg')
+                      )
+                      const mismatchedVisible    = visibleQs.filter(q => q._mismatch)
+                      const disagreementsVisible = visibleQs.filter(q => q._answerDisagreement)
+                      const optMismatchVisible   = visibleQs.filter(q => q._optionCountMismatch)
+                      if (!pendingIllustrations.length && !mismatchedVisible.length && !disagreementsVisible.length && !optMismatchVisible.length) return null
+                      return (
+                        <div className="space-y-1.5">
+                          {disagreementsVisible.length > 0 && (
+                            <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs">
+                              <span className="text-base flex-shrink-0">🔍</span>
+                              <div>
+                                <p className="font-black text-amber-800">{disagreementsVisible.length} unresolved answer disagreement{disagreementsVisible.length !== 1 ? 's' : ''}</p>
+                                <p className="text-amber-700 mt-0.5">Scroll up to review each one. Claude's answer is saved by default — override where MyQuest is correct.</p>
+                              </div>
+                            </div>
+                          )}
+                          {mismatchedVisible.length > 0 && (
+                            <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 border border-red-300 rounded-xl text-xs">
+                              <span className="text-base flex-shrink-0">⚠️</span>
+                              <div>
+                                <p className="font-black text-red-700">{mismatchedVisible.length} question{mismatchedVisible.length !== 1 ? 's' : ''} have explanation mismatches</p>
+                                <p className="text-red-600 mt-0.5">These are highlighted red above. Review them before saving or hide the ones you're not sure about.</p>
+                              </div>
+                            </div>
+                          )}
+                          {optMismatchVisible.length > 0 && (
+                            <div className="flex items-start gap-2 px-4 py-2.5 bg-orange-50 border border-orange-300 rounded-xl text-xs">
+                              <span className="text-base flex-shrink-0">🔢</span>
+                              <div>
+                                <p className="font-black text-orange-800">{optMismatchVisible.length} question{optMismatchVisible.length !== 1 ? 's' : ''} have option count mismatches</p>
+                                <p className="text-orange-700 mt-0.5">MyQuest and the enrichment returned different numbers of options. Check these are correct before saving.</p>
+                              </div>
+                            </div>
+                          )}
+                          {pendingIllustrations.length > 0 && (
+                            <div className="flex items-start gap-2 px-4 py-2.5 bg-violet-50 border border-violet-300 rounded-xl text-xs">
+                              <span className="text-base flex-shrink-0">🎨</span>
+                              <div>
+                                <p className="font-black text-violet-700">{pendingIllustrations.length} illustration{pendingIllustrations.length !== 1 ? 's' : ''} have no SVG yet</p>
+                                <p className="text-violet-600 mt-0.5">
+                                  These questions will save with their illustration prompts intact — you can add the SVG later in Past Questions.
+                                  Scroll up to add them now if you prefer.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                     <button
                       onClick={() => handleSave(visibleQs)}
                       disabled={saving}

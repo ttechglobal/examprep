@@ -68,7 +68,9 @@ export async function POST(request) {
     .insert({
       name:  schoolName.trim(),
       city:  city?.trim()  ?? '',
-      state: state         ?? '',
+      state:            state         ?? '',
+      slots_purchased:  2,
+      slots_used:       0,
     })
     .select()
     .single()

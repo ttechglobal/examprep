@@ -61,6 +61,11 @@ export default async function AdminLayout({ children }) {
           color: #111827 !important;
         }
 
+        /* Bottom padding on mobile for the fixed bottom nav bar */
+        @media (max-width: 1023px) {
+          .admin-main-content { padding-bottom: 90px !important; }
+        }
+
         /* Crisp scrollbars */
         .admin-content ::-webkit-scrollbar { width: 6px; height: 6px; }
         .admin-content ::-webkit-scrollbar-track { background: #f4f6fb; }
@@ -71,9 +76,9 @@ export default async function AdminLayout({ children }) {
       <div className="admin-shell" style={{ minHeight: '100vh', display: 'flex' }}>
         <AdminSidebar />
 
-        {/* Main content — offset by sidebar width on desktop only */}
+        {/* Main content — offset by sidebar width on desktop; pad bottom for mobile nav bar */}
         <div className="flex-1 min-w-0 lg:ml-[220px] admin-content">
-          <main style={{ padding: '28px 24px', maxWidth: 1280 }}>
+          <main style={{ padding: '28px 24px', maxWidth: 1280 }} className="admin-main-content">
             {children}
           </main>
         </div>

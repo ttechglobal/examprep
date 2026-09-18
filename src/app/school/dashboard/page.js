@@ -7,12 +7,13 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams }                  from 'next/navigation'
 import { createClient }                                from '@/lib/supabase/client'
 
-import { DASH_CSS }     from './tabs/shared'
-import OverviewTab      from './tabs/OverviewTab'
-import StudentsTab      from './tabs/StudentsTab'
-import PerformanceTab   from './tabs/PerformanceTab'
-import CohortTab        from './tabs/CohortTab'
-import SettingsTab      from './tabs/SettingsTab'
+import { DASH_CSS }        from './tabs/shared'
+import OverviewTab         from './tabs/OverviewTab'
+import StudentsTab         from './tabs/StudentsTab'
+import PerformanceTab      from './tabs/PerformanceTab'
+import CohortTab           from './tabs/CohortTab'
+import SubscriptionsTab    from './tabs/SubscriptionsTab'
+import SettingsTab         from './tabs/SettingsTab'
 
 // ── Session cache — keyed by user id to avoid cross-school bleed ──────────────
 const CACHE_TTL = 2 * 60 * 1000
@@ -129,17 +130,21 @@ function DashboardInner() {
   return (
     <>
       <style>{DASH_CSS}</style>
-      {tab === 'overview'    && <OverviewTab    {...sharedProps} />}
-      {tab === 'students'    && <StudentsTab    students={students} cohortName={cohort?.name || ''} atRiskSegmented={atRiskSegmented} />}
-      {tab === 'performance' && <PerformanceTab subjectTopics={subjectTopics} />}
-      {tab === 'cohort'      && (
+      {tab === 'overview'       && <OverviewTab    {...sharedProps} />}
+      {tab === 'students'       && <StudentsTab    students={students} cohortName={cohort?.name || ''} atRiskSegmented={atRiskSegmented} />}
+      {tab === 'performance'    && <PerformanceTab subjectTopics={subjectTopics} />}
+      {tab === 'cohort'         && (
         <CohortTab
           cohort={cohort}
           allCohorts={allCohorts}
           totalStudents={summary.totalStudents ?? 0}
-          slotsTotal={school?.slots_total ?? null}
-          slotsUsed={summary.totalStudents ?? 0}
           onCohortCreated={handleCohortCreated}
+        />
+      )}
+      {tab === 'subscriptions'  && (
+        <SubscriptionsTab
+          school={school}
+          adminEmail={adminName}
         />
       )}
       {tab === 'settings' && (

@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 
-export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, slotsTotal, slotsUsed = 0, onCohortCreated }) {
+export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, onCohortCreated }) {
   const [selected,     setSelected]     = useState(cohort?.id ?? null)
   const [showCreate,   setShowCreate]   = useState(!cohort)
   const [cohortName,   setCohortName]   = useState('')
@@ -14,11 +14,9 @@ export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, 
   const [linkCopied,   setLinkCopied]   = useState(false)
   const [msgCopied,    setMsgCopied]    = useState(false)
 
-  const sel         = allCohorts.find(c => c.id === selected) ?? cohort
-  const slotsLeft   = slotsTotal != null ? Math.max(0, slotsTotal - slotsUsed) : null
-  const slotsP      = slotsTotal > 0 ? Math.round((slotsUsed / slotsTotal) * 100) : 0
-  const inviteLink  = sel ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${sel.invite_code}` : ''
-  const yr          = new Date().getFullYear()
+  const sel        = allCohorts.find(c => c.id === selected) ?? cohort
+  const inviteLink = sel ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${sel.invite_code}` : ''
+  const yr         = new Date().getFullYear()
 
   function copyCode() { navigator.clipboard?.writeText(sel?.invite_code || ''); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000) }
   function copyLink() { navigator.clipboard?.writeText(inviteLink); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000) }
@@ -58,7 +56,10 @@ export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, 
         </button>
       </div>
 
-      <div className="sd-cohort-cols">
+      {/* Responsive two-column layout: list left, detail right — stacks on mobile */}
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,180px) minmax(0,1fr)', gap:14, alignItems:'start' }}
+           className="cohort-layout">
+
         {/* ── Cohort list ── */}
         <div>
           <div style={{ fontSize:9, fontWeight:700, color:'#b0bada', letterSpacing:'.08em', textTransform:'uppercase', marginBottom:10 }}>Your cohorts</div>
@@ -148,7 +149,7 @@ export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, 
               {/* Invite code display */}
               <div style={{ padding:24, background:'linear-gradient(135deg,#ECFDF5,#F0FDF4)', textAlign:'center', borderBottom:'1px solid #e4eaf5' }}>
                 <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.14em', color:'#059669', textTransform:'uppercase', marginBottom:12 }}>Student invite code</div>
-                <div style={{ display:'inline-flex', alignItems:'center', gap:14, padding:'14px 24px', borderRadius:14, background:'#fff', border:'2px solid rgba(5,150,105,.2)' }}>
+                <div style={{ display:'inline-flex', alignItems:'center', gap:14, padding:'14px 24px', borderRadius:14, background:'#fff', border:'2px solid rgba(5,150,105,.2)', flexWrap:'wrap', justifyContent:'center' }}>
                   <div className="cohort-code">{sel.invite_code}</div>
                   <button className="copy-btn" onClick={copyCode} style={codeCopied ? { background:'#059669', color:'#fff' } : {}}>
                     {codeCopied ? 'Copied! ✓' : 'Copy code'}
@@ -177,63 +178,15 @@ export default function CohortTab({ cohort, allCohorts = [], totalStudents = 0, 
             </div>
           )}
         </div>
-
-        {/* ── Slots panel ── */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div className="panel">
-            <div className="panel-head" style={{ padding:'12px 16px' }}>
-              <div className="panel-title">Student slots</div>
-              <span className="badge" style={{ background:'#ECFDF5', color:'#059669' }}>● Active</span>
-            </div>
-            <div style={{ padding:16 }}>
-              {slotsTotal != null ? (
-                <>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:6 }}>
-                    <div>
-                      <div style={{ fontSize:10, color:'#7a8aaa' }}>Used</div>
-                      <div style={{ fontSize:22, fontWeight:700, color:'#071B49' }}>{slotsUsed} <span style={{ fontSize:13, fontWeight:500, color:'#7a8aaa' }}>/ {slotsTotal}</span></div>
-                    </div>
-                    <div style={{ textAlign:'right' }}>
-                      <div style={{ fontSize:10, color:'#7a8aaa' }}>Free</div>
-                      <div style={{ fontSize:22, fontWeight:700, color: slotsLeft <= 5 ? '#dc2626' : '#059669' }}>{slotsLeft}</div>
-                    </div>
-                  </div>
-                  <div className="slots-bar-wrap">
-                    <div className="slots-bar" style={{ width:`${slotsP}%`, background: slotsLeft <= 5 ? '#dc2626' : '#1264E5' }}/>
-                  </div>
-                  {slotsLeft <= 5 && <div style={{ fontSize:11, color:'#dc2626', fontWeight:700, marginBottom:6 }}>⚠ Running low on slots.</div>}
-                </>
-              ) : (
-                <div style={{ fontSize:12, color:'#7a8aaa', marginBottom:10 }}>
-                  {slotsUsed} student{slotsUsed !== 1 ? 's' : ''} enrolled
-                </div>
-              )}
-              <div style={{ fontSize:11, color:'#7a8aaa', lineHeight:1.6, marginTop:6 }}>Each slot = one student with full premium access.</div>
-              <div style={{ marginTop:12, padding:12, background:'#f4f7ff', borderRadius:10, border:'1px solid #e4eaf5' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'#071B49', marginBottom:6 }}>Need more slots?</div>
-                <div style={{ display:'flex', gap:6 }}>
-                  <a href="mailto:schools@examprep.ng" style={{ flex:1, padding:'7px 0', borderRadius:8, background:'#062A78', color:'#fff', textDecoration:'none', fontSize:10, fontWeight:700, textAlign:'center' }}>✉ Email us</a>
-                  <a href="https://wa.me/2348000000000" target="_blank" rel="noopener noreferrer" style={{ flex:1, padding:'7px 0', borderRadius:8, background:'#25D366', color:'#fff', textDecoration:'none', fontSize:10, fontWeight:700, textAlign:'center' }}>WhatsApp</a>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel" style={{ padding:'14px 16px' }}>
-            <div style={{ fontSize:12, fontWeight:700, color:'#071B49', marginBottom:10 }}>How slots work</div>
-            {[
-              ['🎟', 'Each slot covers one student.'],
-              ['📲', 'Students join via the invite code.'],
-              ['⭐', 'Joined students get full access.'],
-              ['➕', 'Contact us to add more slots.'],
-            ].map(([ico, txt], i) => (
-              <div key={i} style={{ display:'flex', gap:8, fontSize:11, color:'#7a8aaa', marginBottom: i < 3 ? 8 : 0 }}>
-                <span>{ico}</span>{txt}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
+
+      <style>{`
+        @media (max-width: 600px) {
+          .cohort-layout {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

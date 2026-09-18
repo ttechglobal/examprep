@@ -25,7 +25,7 @@ export async function GET() {
 
   const { data: adminProfile, error: profileError } = await db
     .from('profiles')
-    .select('school_id, role, full_name, schools(id, name, city, state)')
+    .select('school_id, role, full_name, schools(id, name, city, state, slots_purchased, slots_used)')
     .eq('id', user.id)
     .single()
 

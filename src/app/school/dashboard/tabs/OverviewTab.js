@@ -2,7 +2,7 @@
 // src/app/school/dashboard/tabs/OverviewTab.js
 
 import { useState }                                           from 'react'
-import { pct, initials, getGreeting, lastLabel, statusOf, needsAttention, perfCol, perfBg, perfLabel, sIcon, sBg, avColor, TIER_META } from './shared'
+import { pct, initials, getGreeting, lastLabel, statusOf, perfCol, perfBg, perfLabel, sIcon, sBg, avColor } from './shared'
 
 // ── Mini icons ──────────────────────────────────────────────────────────────────
 function IconStudents({ c })  { return <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="10" cy="8" r="4" stroke={c} strokeWidth="1.8"/><path d="M3 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><circle cx="19" cy="9" r="3" stroke={c} strokeWidth="1.6"/><path d="M16 21c0-3 1.5-4.5 3-4.5s3 1.5 3 4.5" stroke={c} strokeWidth="1.6" strokeLinecap="round"/></svg> }
@@ -38,9 +38,6 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
   const activeStudents = students.filter(s => s.isActiveThisWeek)
   const engRate = summary.totalStudents > 0
     ? Math.round((activeStudents.length / summary.totalStudents) * 100) : 0
-
-  // Needs attention — uses the now-fixed daysSinceLastPractice field
-  const attn = students.filter(needsAttention).slice(0, 5)
 
   // Top students by questions answered (30d), only those with any activity
   const topStudents = [...students]
@@ -279,33 +276,7 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
             )}
           </div>
 
-          {/* Needs attention */}
-          {attn.length > 0 && (
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <div className="panel-title">Needs attention</div>
-                  <div className="panel-sub">{attn.length} student{attn.length !== 1 ? 's' : ''} flagged</div>
-                </div>
-                <button className="view-btn" onClick={() => goTab('students')}>View all</button>
-              </div>
-              {attn.map((s, i) => {
-                const d      = s.daysSinceLastPractice ?? 999
-                const reason = d >= 14 ? `${d}d inactive` : `${pct(s.accuracy)} accuracy`
-                const rc     = statusOf(s)
-                return (
-                  <div key={s.id} className="attn-row" style={{ borderTop: i === 0 ? 'none' : '1px solid #f4f7ff' }}>
-                    <div className="attn-av" style={{ background: avColor(s.full_name) }}>{initials(s.full_name)}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#071B49', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.full_name}</div>
-                      <div style={{ fontSize:10, color:'#b0bada', marginTop:1 }}>{reason}</div>
-                    </div>
-                    <span className="badge" style={{ background:rc.bg, color:rc.c, border:`1px solid ${rc.border}` }}>{rc.l}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+
         </div>
       </div>
 
