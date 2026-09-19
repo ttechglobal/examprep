@@ -1,52 +1,48 @@
 'use client'
-// src/app/student/home/page.js — v4
-// ─────────────────────────────────────────────────────────────────────────────
-// Mascot-led hero (no level badge), daily challenge (no icon), real exam
-// targets, activity synced with progress page, streak from readLocalStreak,
-// leaderboard snippet synced with leaderboard page cache.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/app/student/home/page.js — v5
+// Clean, game-like home. Battle section added. Mascot free-floating. No mascot in cards.
 
 import { useState, useEffect } from 'react'
 import Link                    from 'next/link'
 import { usePoints }           from '@/contexts/PointsContext'
 import { useTheme }            from '@/contexts/ThemeContext'
 import { useStudentUser }      from '@/app/student/layout'
-// import DailyChallenge          from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
 import { readWeeklyActivity, readLocalStreak } from '@/lib/localSessionSync'
+import BattleEntryCard from '@/components/battle/BattleEntryCard'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
 const GOLD   = '#FFB800'
 const ORANGE = '#FF6A00'
 const GREEN  = '#22c55e'
+const RED    = '#EF4444'
 const PURPLE = '#7C3AED'
 
-const BOARD_KEY  = 'ep_lb_national_week'   // matches leaderboard page cache key
-const BOARD_TTL  = 2 * 60 * 1000           // 2 minutes — same as leaderboard page
+const BOARD_KEY = 'ep_lb_national_week'
+const BOARD_TTL = 2 * 60 * 1000
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
 
 const GREETINGS = [
-  { pre: 'Ready to',   em: 'practise?',    sub: 'Your goals are waiting.' },
-  { pre: 'Let\'s go,', em: 'crush it.',     sub: 'Every question takes you closer.' },
-  { pre: 'Back at it,',em: 'keep going.',   sub: 'Consistent effort is what separates you.' },
-  { pre: 'Time to',    em: 'level up.',     sub: 'Sharpen your skills and crush your goals.' },
+  { pre: 'Ready to',    em: 'practise?',   sub: 'Your goals are waiting.' },
+  { pre: "Let's go,",   em: 'crush it.',   sub: 'Every question takes you closer.' },
+  { pre: 'Back at it,', em: 'keep going.', sub: 'Consistent effort is what separates you.' },
+  { pre: 'Time to',     em: 'level up.',   sub: 'Sharpen your skills, crush your goals.' },
 ]
-
 
 // ─── LAYOUT GRID ─────────────────────────────────────────────────────────────
 function PageGrid({ left, right }) {
   return (
     <>
       <style>{`
-        .hg { display: flex; flex-direction: column; gap: 20px }
+        .hg { display: flex; flex-direction: column; gap: 18px }
         @media (min-width: 1024px) {
           .hg { display: grid; grid-template-columns: 1fr 272px; gap: 22px; align-items: start }
         }
       `}</style>
       <div className="hg">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>{left}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>{right}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>{left}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{right}</div>
       </div>
     </>
   )
@@ -54,66 +50,90 @@ function PageGrid({ left, right }) {
 
 
 // ─── HERO ─────────────────────────────────────────────────────────────────────
-// Name lives in the headline — lighter weight so it doesn't compete.
-// Greeting rotates daily across 4 variants.
+// Mascot floats freely — not inside the card. Card is clean text + CTA only.
 function Hero({ name }) {
   const g = GREETINGS[Math.floor(Date.now() / 86400000) % GREETINGS.length]
 
   return (
-    <Link href="/student/practice" style={{ textDecoration: 'none', display: 'block' }}>
+    <div style={{ position: 'relative' }}>
+      {/* Free-floating mascot — sits outside the card, overlaps top-right edge */}
       <div style={{
-        borderRadius: 24,
-        background: `linear-gradient(135deg, ${NAVY} 0%, #0d2464 60%, #0e1e50 100%)`,
-        overflow: 'hidden', position: 'relative',
-        display: 'flex', alignItems: 'flex-end',
-        minHeight: 224, cursor: 'pointer',
+        position: 'absolute', right: 0, bottom: 0, width: 150, zIndex: 3,
+        pointerEvents: 'none',
+        transform: 'translateY(-8px)',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 80% at 20% 50%, rgba(18,100,229,.18) 0%, transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 40% 60% at 80% 100%, rgba(255,184,0,.07) 0%, transparent 70%)', pointerEvents: 'none' }} />
-
-        <div style={{ flex: 1, padding: '36px 0 36px 32px', zIndex: 2 }}>
-          {/* Name — light weight, sits above the main line */}
-          <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,.45)', letterSpacing: '.01em', marginBottom: 4 }}>
-            {name},
-          </div>
-          {/* Headline — two lines, em in brand blue */}
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', lineHeight: 1.15, letterSpacing: '-.03em', marginBottom: 8 }}>
-            {g.pre}<br />
-            <span style={{ color: '#4A9EF8' }}>{g.em}</span>
-          </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.38)', fontWeight: 500, lineHeight: 1.55, marginBottom: 28 }}>
-            {g.sub}
-          </div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            background: BLUE, borderRadius: 14, padding: '13px 22px',
-            boxShadow: '0 4px 16px rgba(18,100,229,.45)',
-          }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#fff', letterSpacing: '-.01em' }}>Practice Now</span>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".7"/>
-            </svg>
-          </div>
-        </div>
-
-        <div style={{ width: 200, flexShrink: 0, alignSelf: 'flex-end', zIndex: 2 }}>
-          <img
-            src="/images/zara_studybuddy.png"
-            alt="Zara your study buddy"
-            style={{ width: '100%', display: 'block', objectFit: 'contain', objectPosition: 'bottom', filter: 'drop-shadow(0 12px 28px rgba(0,0,0,.55))' }}
-            onError={e => { e.currentTarget.style.display = 'none' }}
-          />
-        </div>
+        <img
+          src="/images/zara_studybuddy.png"
+          alt=""
+          style={{
+            width: '100%', display: 'block', objectFit: 'contain',
+            objectPosition: 'bottom',
+            filter: 'drop-shadow(0 16px 32px rgba(0,0,0,.45))',
+          }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+        />
       </div>
+
+      <Link href="/student/practice" style={{ textDecoration: 'none', display: 'block' }}>
+        <div style={{
+          borderRadius: 24,
+          background: `linear-gradient(140deg, ${NAVY} 0%, #0d2464 55%, #0e1e50 100%)`,
+          overflow: 'hidden', position: 'relative',
+          padding: '32px 180px 32px 32px', // right padding clears floating mascot
+          minHeight: 200,
+        }}>
+          {/* Subtle radial lights */}
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 55% 90% at 15% 50%, rgba(18,100,229,.2) 0%, transparent 70%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 35% 50% at 90% 100%, rgba(255,184,0,.06) 0%, transparent 60%)', pointerEvents: 'none' }} />
+
+          {/* Decorative dots */}
+          {[[14,'8%','78%',GOLD],[10,'22%','88%',BLUE],[8,'72%','15%','#4A9EF8']].map(([fs,top,left,c],i) => (
+            <div key={i} style={{ position:'absolute', top, left, fontSize:fs, color:c, opacity:.25, pointerEvents:'none' }}>✦</div>
+          ))}
+
+          <div style={{ position: 'relative', zIndex: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.4)', marginBottom: 4 }}>
+              {name},
+            </div>
+            <div style={{ fontSize: 27, fontWeight: 900, color: '#fff', lineHeight: 1.15, letterSpacing: '-.03em', marginBottom: 6 }}>
+              {g.pre}<br />
+              <span style={{ color: '#4A9EF8' }}>{g.em}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', fontWeight: 500, lineHeight: 1.55, marginBottom: 24 }}>
+              {g.sub}
+            </div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 9,
+              background: BLUE, borderRadius: 13, padding: '12px 20px',
+              boxShadow: '0 4px 18px rgba(18,100,229,.5)',
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Practice Now</span>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".7"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </div>
+  )
+}
+
+
+// ─── BATTLE SECTION ───────────────────────────────────────────────────────────
+// Mirrors the battle page aesthetic — VS scoreboard, sky bg, game feel
+function BattleCard() {
+  return (
+    <Link href="/student/battle" style={{ textDecoration: 'none', display: 'block' }}>
+      <BattleEntryCard />
     </Link>
   )
 }
 
 
+
 // ─── EXAM TARGETS ─────────────────────────────────────────────────────────────
-// Real goals: university, course, JAMB score, WAEC subject grades.
-// Reads ep_goals from localStorage, falls back to profile columns.
-function ExamTargets({ profile, exams }) {
+function ExamTargets({ profile }) {
   const goals = (() => {
     try { return JSON.parse(localStorage.getItem('ep_goals') || '{}') } catch { return {} }
   })()
@@ -122,11 +142,9 @@ function ExamTargets({ profile, exams }) {
   const course     = goals.course      || profile?.target_course     || null
   const targetJamb = goals.target_jamb || profile?.target_jamb       || null
 
-  // target_waec shape: { SubjectName: 'A1', Biology: 'B2', ... }
   const rawWaec    = goals.target_waec || profile?.target_waec || null
   const waecGrades = rawWaec && typeof rawWaec === 'object' && !Array.isArray(rawWaec)
-    ? Object.entries(rawWaec).filter(([, v]) => v)
-    : []
+    ? Object.entries(rawWaec).filter(([, v]) => v) : []
 
   const allEmpty = !university && !course && !targetJamb && !waecGrades.length
 
@@ -135,24 +153,24 @@ function ExamTargets({ profile, exams }) {
     if (l.startsWith('A')) return GREEN
     if (l.startsWith('B')) return BLUE
     if (l.startsWith('C')) return ORANGE
-    return '#ef4444'
+    return RED
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', color: 'var(--text-tert)' }}>
-          Exam targets
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>
+          Exam Targets
         </span>
         <Link href="/student/profile" style={{ fontSize: 11, fontWeight: 700, color: BLUE, textDecoration: 'none' }}>Edit →</Link>
       </div>
 
       {allEmpty ? (
-        <div style={{ borderRadius: 18, border: `1px dashed ${ORANGE}40`, background: `${ORANGE}06`, padding: '22px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, marginBottom: 8 }}>🎯</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 4 }}>Set your exam targets</div>
+        <div style={{ borderRadius: 18, border: `1.5px dashed ${ORANGE}35`, background: `${ORANGE}05`, padding: '20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 20, marginBottom: 6 }}>🎯</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-prim)', marginBottom: 4 }}>Set your targets</div>
           <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.6, marginBottom: 14 }}>
-            Add your dream university, course, and grade targets so we can focus your prep.
+            Add your dream university, course, and grade targets.
           </div>
           <Link href="/student/profile" style={{ textDecoration: 'none' }}>
             <div style={{ display: 'inline-block', padding: '9px 18px', borderRadius: 11, background: BLUE, color: '#fff', fontSize: 12, fontWeight: 800 }}>
@@ -161,58 +179,42 @@ function ExamTargets({ profile, exams }) {
           </Link>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {(university || course) && (
-            <div style={{ display: 'grid', gridTemplateColumns: university && course ? '1fr 1fr' : '1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: university && course ? '1fr 1fr' : '1fr', gap: 9 }}>
               {university && (
-                <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}18`, borderRadius: 16, padding: '16px 18px' }}>
-                  <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: BLUE, marginBottom: 6 }}>University</div>
+                <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px 16px' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 5 }}>University</div>
                   <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', lineHeight: 1.3 }}>{university}</div>
                 </div>
               )}
               {course && (
-                <div style={{ background: `${PURPLE}08`, border: `1px solid ${PURPLE}18`, borderRadius: 16, padding: '16px 18px' }}>
-                  <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: PURPLE, marginBottom: 6 }}>Course</div>
+                <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px 16px' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 5 }}>Course</div>
                   <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', lineHeight: 1.3 }}>{course}</div>
                 </div>
               )}
             </div>
           )}
-
           {targetJamb && (
-            <div style={{ background: `${ORANGE}08`, border: `1px solid ${ORANGE}20`, borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${ORANGE}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: ORANGE, flexShrink: 0, letterSpacing: '.04em' }}>
-                JAMB
-              </div>
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: ORANGE, marginBottom: 3 }}>JAMB target score</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.03em', lineHeight: 1 }}>{targetJamb}</div>
-              </div>
+            <div style={{ borderRadius: 16, background: `${BLUE}07`, border: `1px solid ${BLUE}18`, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-sec)' }}>JAMB target</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: BLUE, letterSpacing: '-.02em' }}>{targetJamb}</span>
             </div>
           )}
-
           {waecGrades.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '16px 18px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 12 }}>
-                WAEC target grades
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {waecGrades.map(([subject, grade]) => (
-                  <div key={subject} style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: `${gradeColor(grade)}0f`,
-                    border: `1px solid ${gradeColor(grade)}28`,
-                    borderRadius: 10, padding: '7px 12px',
-                  }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-sec)' }}>{subject}</span>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: gradeColor(grade) }}>{grade}</span>
+            <div style={{ borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '14px 16px' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 10 }}>WAEC targets</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {waecGrades.map(([subj, grade]) => (
+                  <div key={subj} style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 10, background: `${gradeColor(grade)}10`, border: `1px solid ${gradeColor(grade)}28`, padding: '5px 10px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-sec)' }}>{subj}</span>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: gradeColor(grade) }}>{grade}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
         </div>
       )}
     </div>
@@ -221,34 +223,35 @@ function ExamTargets({ profile, exams }) {
 
 
 // ─── PRACTICE ACTIVITY ────────────────────────────────────────────────────────
-// Synced with progress page — reads the same ep_activity localStorage key
-// via readWeeklyActivity(). Streak reads ep_streak via readLocalStreak().
 function PracticeActivity({ activity, streak }) {
-  const days     = ['M','T','W','T','F','S','S']
-  const todayIdx = (new Date().getDay() + 6) % 7
-  const maxH     = Math.max(...activity, 1)
-  const total    = activity.reduce((a, b) => a + b, 0)
+  const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+  const max  = Math.max(...activity, 1)
+  const today = new Date().getDay()
+  const todayIdx = today === 0 ? 6 : today - 1
+
+  const total = activity.reduce((s, v) => s + v, 0)
 
   return (
-    <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', padding: '20px 20px 18px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', letterSpacing: '-.01em' }}>Practice activity</span>
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)' }}>This week</span>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>This Week</span>
+        <Link href="/student/progress" style={{ fontSize: 11, fontWeight: 700, color: BLUE, textDecoration: 'none' }}>Progress →</Link>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 56, marginBottom: 8 }}>
-        {days.map((d, i) => {
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 52 }}>
+        {activity.map((v, i) => {
           const isToday = i === todayIdx
-          const h = activity[i] > 0 ? Math.max(Math.round((activity[i] / maxH) * 48), 7) : 3
+          const pct = v / max
           return (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, height: '100%', justifyContent: 'flex-end' }}>
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <div style={{
-                width: '100%', borderRadius: '4px 4px 0 0', height: h,
+                width: '100%', borderRadius: 5,
+                height: Math.max(4, pct * 44),
                 background: isToday ? ORANGE : BLUE,
-                opacity: isToday ? 1 : activity[i] > 0 ? 0.55 : 0.12,
+                opacity: isToday ? 1 : v > 0 ? 0.5 : 0.1,
                 transition: 'height .3s ease',
               }} />
-              <span style={{ fontSize: 9, fontWeight: 700, color: isToday ? ORANGE : 'var(--text-tert)', textTransform: 'uppercase' }}>{d}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: isToday ? ORANGE : 'var(--text-tert)' }}>{DAYS[i]}</span>
             </div>
           )
         })}
@@ -272,15 +275,13 @@ function PracticeActivity({ activity, streak }) {
 
 
 // ─── LEADERBOARD SNIPPET ─────────────────────────────────────────────────────
-// Reads from the same ep_leaderboard_cache key as the full leaderboard page.
-// Background-fetches on stale, so it's always fresh without blocking render.
 function LeaderboardSnap({ board, myId }) {
-  const medals = ['🥇','🥈','🥉']
+  const medals = ['🥇', '🥈', '🥉']
 
   return (
-    <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', padding: '20px 20px 4px' }}>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', padding: '18px 20px 8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-prim)' }}>Leaderboard</span>
         <Link href="/student/leaderboard" style={{ fontSize: 11, fontWeight: 700, color: BLUE, textDecoration: 'none' }}>See all →</Link>
       </div>
       <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-tert)', marginBottom: 14 }}>
@@ -288,8 +289,8 @@ function LeaderboardSnap({ board, myId }) {
       </div>
 
       {!board.length ? (
-        <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>
+        <div style={{ textAlign: 'center', padding: '18px 0 14px' }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>🏆</div>
           <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.6 }}>Practise to appear<br />on the board!</div>
         </div>
       ) : board.map((entry, i) => {
@@ -318,7 +319,7 @@ function LeaderboardSnap({ board, myId }) {
           </div>
         )
       })}
-      <div style={{ height: 16 }} />
+      <div style={{ height: 12 }} />
     </div>
   )
 }
@@ -328,14 +329,14 @@ function LeaderboardSnap({ board, myId }) {
 function GuestNudge() {
   return (
     <div style={{ borderRadius: 18, background: `${BLUE}07`, border: `1px solid ${BLUE}18`, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-      <div style={{ fontSize: 28, flexShrink: 0 }}>☁️</div>
+      <div style={{ fontSize: 26, flexShrink: 0 }}>☁️</div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 4 }}>Back up your progress</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Back up your progress</div>
         <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.55, marginBottom: 12 }}>
           You're practising as a guest. Create a free account to save your XP and streak.
         </div>
         <Link href="/signup" style={{ textDecoration: 'none' }}>
-          <div style={{ display: 'inline-block', padding: '9px 18px', borderRadius: 11, background: BLUE, color: '#fff', fontSize: 12, fontWeight: 800 }}>
+          <div style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 10, background: BLUE, color: '#fff', fontSize: 12, fontWeight: 800 }}>
             Create free account →
           </div>
         </Link>
@@ -354,7 +355,6 @@ export default function HomePage() {
   const isGuest = !!profile?.isGuest
   const isReady = profile !== null
 
-  const exams    = profile?.exam_types ?? (profile?.exams ? profile.exams : ['WAEC'])
   const activity = isReady ? readWeeklyActivity() : [0,0,0,0,0,0,0]
   const streak   = isReady ? readLocalStreak()    : 0
 
@@ -388,9 +388,10 @@ export default function HomePage() {
   const name = cap(profile?.full_name?.split(' ')[0] || profile?.username || 'Student')
 
   if (!isReady) return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ borderRadius: 24, background: `linear-gradient(135deg,${NAVY},#0d2464)`, minHeight: 224, opacity: .65 }} />
-      <div style={{ height: 100, borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ borderRadius: 24, background: `linear-gradient(135deg,${NAVY},#0d2464)`, minHeight: 200, opacity: .65 }} />
+      <div style={{ height: 90, borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)' }} />
+      <div style={{ height: 120, borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)' }} />
     </div>
   )
 
@@ -398,14 +399,14 @@ export default function HomePage() {
     <PageGrid
       left={<>
         <Hero name={name} />
-        {isGuest && <GuestNudge />}
-        {/* <DailyChallenge profile={profile} /> */}
-        {/* Daily Challenge hidden — returning as theory/harder format */}
-        <ExamTargets profile={profile} exams={exams} />
+        <BattleCard />
+        <ExamTargets profile={profile} />
       </>}
       right={<>
+        {isGuest && <GuestNudge />}
         <PracticeActivity activity={activity} streak={streak} />
         <LeaderboardSnap board={board} myId={myId} />
+        {isGuest && <GuestNudge />}
       </>}
     />
   )

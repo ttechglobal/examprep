@@ -18,6 +18,7 @@ import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
 // import DailyChallenge from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
 import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
+import BattleEntryCard from '@/components/battle/BattleEntryCard'
 
 // ── Subject ID cache — persists resolved UUIDs across sessions
 // Avoids a network round-trip every time the practice page loads.
@@ -100,27 +101,146 @@ function SecLabel({ children, right }) {
 }
 
 
-// ─── HERO BANNER ──────────────────────────────────────────────────────────────
-function HeroBanner({ dark }) {
+// ─── HERO ─────────────────────────────────────────────────────────────────────
+function HeroBanner() {
   return (
-    <div style={{ borderRadius: 22, overflow: 'hidden', position: 'relative', background: dark ? `linear-gradient(135deg,#062A78,#0a1f5e,#0e2875)` : `linear-gradient(135deg,#062A78,#0c2360,#1040a0)`, padding: '22px 24px', display: 'flex', alignItems: 'center', minHeight: 110 }}>
-      <div style={{ position: 'absolute', top: 0, right: 0, width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle,rgba(24,183,242,.12) 0%,transparent 70%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', top: 14, right: '38%', fontSize: 14, color: GOLD, opacity: .5 }}>✦</div>
-      <div style={{ position: 'absolute', top: 28, right: '34%', fontSize: 8, color: CYAN, opacity: .6 }}>✦</div>
-      <div style={{ position: 'absolute', bottom: 18, right: '40%', fontSize: 10, color: GOLD, opacity: .4 }}>✦</div>
-      <div style={{ flex: 1, zIndex: 1 }}>
-        <div style={{ fontSize: 21, fontWeight: 900, color: '#fff', letterSpacing: '-.03em', lineHeight: 1.2, marginBottom: 6 }}>Practice makes progress!</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,.55)' }}>Stay consistent and you'll crush your goals.</div>
+    <div style={{ paddingBottom:4 }}>
+      <div style={{ fontSize:22, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', lineHeight:1.2, marginBottom:4 }}>
+        How do you want to practise?
       </div>
-      <div style={{ width: 100, height: 100, flexShrink: 0, zIndex: 1 }}>
-        <img src="/images/zara_studybuddy.png" alt="Zara" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,.35))' }} onError={e => { e.currentTarget.style.display = 'none' }} />
+      <div style={{ fontSize:13, color:'var(--text-tert)', fontWeight:500 }}>
+        Pick a mode and get started.
       </div>
     </div>
   )
 }
 
 
-// ─── PRACTICE MODE CARDS ──────────────────────────────────────────────────────
+// ─── PRIMARY MODE CARDS ────────────────────────────────────────────────────────
+// Battle / Study / Mock — the three things students should see first
+
+function BattlePrimaryCard({ onClick }) {
+  return (
+    <div onClick={() => onClick('battle')} style={{ cursor: 'pointer' }}>
+      <BattleEntryCard />
+    </div>
+  )
+}
+
+function StudyCard({ onClick }) {
+  return (
+    <PrimaryCard
+      onClick={() => onClick('custom')}
+      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h14M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
+      iconBg="linear-gradient(135deg,#059669,#047857)"
+      iconShadow="rgba(5,150,105,.4)"
+      tag="Study"
+      title="Practise with answers"
+      desc="Work through questions with explanations as you go. Best for active learning."
+      cta="Start Study"
+      ctaColor={GREEN}
+    />
+  )
+}
+
+function MockCard({ onClick }) {
+  return (
+    <PrimaryCard
+      onClick={() => onClick('mock')}
+      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
+      iconBg="linear-gradient(135deg,#7C3AED,#4c1d95)"
+      iconShadow="rgba(124,58,237,.4)"
+      tag="Mock Exam"
+      title="Full exam simulation"
+      desc="Timed, no peeking. Exactly how the real exam feels. +200 XP."
+      cta="Start Mock"
+      ctaColor={PURPLE}
+    />
+  )
+}
+
+function PrimaryCard({ onClick, icon, iconBg, iconShadow, tag, title, desc, cta, ctaColor }) {
+  const [hov, setHov] = useState(false)
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        borderRadius:20, border:`1.5px solid ${hov ? ctaColor+'44' : 'var(--border)'}`,
+        background:'var(--bg-card)', cursor:'pointer', padding:'18px 18px',
+        display:'flex', flexDirection:'column', gap:12,
+        boxShadow: hov ? `0 6px 24px ${ctaColor}1a` : '0 2px 10px rgba(6,42,120,.05)',
+        transform: hov ? 'translateY(-2px)' : 'none',
+        transition:'all .15s',
+      }}
+    >
+      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <div style={{ width:44, height:44, borderRadius:14, background:iconBg, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 4px 14px ${iconShadow}`, flexShrink:0 }}>
+          {icon}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:ctaColor, marginBottom:2 }}>{tag}</div>
+          <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', lineHeight:1.2 }}>{title}</div>
+        </div>
+      </div>
+      <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.6, fontWeight:500 }}>{desc}</div>
+      <div style={{ display:'inline-flex', alignItems:'center', gap:7, alignSelf:'flex-start', background:`${ctaColor}12`, border:`1.5px solid ${ctaColor}30`, borderRadius:999, padding:'8px 16px', boxShadow:`0 2px 0 ${ctaColor}20` }}>
+        <span style={{ fontSize:12, fontWeight:800, color:ctaColor }}>{cta}</span>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke={ctaColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+    </div>
+  )
+}
+
+
+// ─── SECONDARY MODES (expandable) ─────────────────────────────────────────────
+function SecondaryModes({ onStart }) {
+  const [open, setOpen] = useState(false)
+
+  const SECONDARY = [
+    { key:'topic',  icon:'📚', label:'Topic Practice',  desc:'Drill a specific topic', color:'#0891b2' },
+    { key:'quick5', icon:'⚡', label:'Quick 5',          desc:'5 random questions fast', color:GREEN    },
+    { key:'timed',  icon:'⏱', label:'Speed Round',      desc:'Beat the clock',          color:ORANGE   },
+  ]
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 0', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', width:'100%' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}>
+          <path d="M2 5l5 5 5-5" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span style={{ fontSize:12, fontWeight:700, color:'var(--text-tert)' }}>
+          {open ? 'Hide other modes' : 'See more practice modes'}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:6 }}>
+          {SECONDARY.map(m => (
+            <div key={m.key} onClick={() => onStart(m.key)}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderRadius:16, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer' }}>
+              <div style={{ width:36, height:36, borderRadius:11, background:`${m.color}14`, border:`1.5px solid ${m.color}28`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>{m.icon}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)' }}>{m.label}</div>
+                <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:1 }}>{m.desc}</div>
+              </div>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ opacity:.3, flexShrink:0 }}>
+                <path d="M4 2l6 5-6 5" stroke="var(--text-prim)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─── PRACTICE MODE CARDS (legacy — kept for PracticeSetupSheet compatibility) ──
 const MODES = [
   {
     key: 'topic',
@@ -159,32 +279,6 @@ const MODES = [
     xp: '+200 XP', color: PURPLE,
   },
 ]
-
-function PracticeModeCards({ onStart, dark }) {
-  const [hov, setHov] = useState(null)
-  return (
-    <div>
-      <SecLabel>Practice Modes</SecLabel>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, gridAutoRows: 'auto' }}>
-        {MODES.map(m => (
-          <div key={m.key} onClick={() => onStart(m.key)}
-            onMouseEnter={() => setHov(m.key)} onMouseLeave={() => setHov(null)}
-            style={{ borderRadius: 20, border: `1px solid ${hov === m.key ? m.color + '55' : 'var(--border)'}`, background: 'var(--bg-card)', cursor: 'pointer', padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 12, transition: 'all .18s', boxShadow: hov === m.key ? `0 8px 28px ${m.color}22` : '0 2px 12px rgba(6,42,120,.05)', transform: hov === m.key ? 'translateY(-2px)' : 'none' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 14, background: m.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 16px ${m.color}45`, flexShrink: 0 }}>{m.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.02em', marginBottom: 3 }}>{m.label}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.desc}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <button style={{ fontSize: 13, fontWeight: 800, color: m.color, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Start ›</button>
-              <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: `${m.color}14`, color: m.color, border: `1px solid ${m.color}25` }}>{m.xp}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 
 // ─── NO SUBJECTS PROMPT ───────────────────────────────────────────────────────
@@ -734,7 +828,6 @@ export default function PracticePage() {
     <>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
-        @keyframes shimmer { 0% { background-position: -200% center } 100% { background-position: 200% center } }
         * { box-sizing: border-box }
       `}</style>
 
@@ -752,19 +845,34 @@ export default function PracticePage() {
         </Link>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-        <HeroBanner dark={dark} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <HeroBanner />
 
-        {/* If no subjects yet, show a clear prompt instead of broken empty states */}
-        {!hasSubjects && !loadingSubjects
-          ? <NoSubjectsPrompt isGuest={isGuest} />
-          : <>
-              <PracticeModeCards onStart={openSheet} dark={dark} />
-              {/* <DailyChallenge profile={profile} /> */}
-              {/* Daily Challenge hidden — returning as theory/harder format */}
-              <SessionHistory />
-            </>
-        }
+        {!hasSubjects && !loadingSubjects ? (
+          <NoSubjectsPrompt isGuest={isGuest} />
+        ) : (
+          <>
+            {/* ── Primary mode: Battle ── */}
+            <BattlePrimaryCard onClick={(mode) => {
+              if (mode === 'battle') { router.push('/student/battle'); return }
+              openSheet(mode)
+            }} />
+
+            {/* ── Primary modes: Study + Mock side by side ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <StudyCard onClick={openSheet} />
+              <MockCard onClick={openSheet} />
+            </div>
+
+            {/* ── Divider + secondary modes ── */}
+            <div style={{ height:1, background:'var(--border)', margin:'2px 0' }}/>
+            <SecondaryModes onStart={openSheet} />
+
+            {/* ── Session history ── */}
+            <div style={{ height:1, background:'var(--border)', margin:'2px 0' }}/>
+            <SessionHistory />
+          </>
+        )}
       </div>
 
       {showSheet && (

@@ -190,19 +190,35 @@ export async function GET(request) {
         countResults
           .filter(({ total }) => total > 0)
           .map(({ year: yr, total }) => {
-            // Random offset so each session gets different questions from each year
-            const maxOffset = Math.max(0, total - perYear)
-            const offset    = Math.floor(Math.random() * (maxOffset + 1))
+            // When the pool is bigger than what we need, use random offset (fast index scan).
+            // When the pool is small (total <= perYear × 2), there's no room for offset
+            // randomness so use ORDER BY RANDOM() instead — it's only slow on large tables.
+            const useRandomOrder = total <= perYear * 2
 
-            const fetchYear = (useArray) =>
-              applyBase(service.from('questions').select(SELECT), useArray)
-                .eq('year', yr)
-                .order('id')                        // stable order so .range() is consistent
-                .range(offset, offset + perYear - 1)
+            const fetchYear = (useArray) => {
+              let q = applyBase(service.from('questions').select(SELECT), useArray).eq('year', yr)
+              if (useRandomOrder) {
+                // True random via Postgres — acceptable cost on small sets
+                q = q.order('id')  // Supabase doesn't expose ORDER BY RANDOM() directly;
+                                    // we'll shuffle the result in JS after fetching all of them
+                return q.limit(Math.min(total, perYear * 3))
+              } else {
+                const maxOffset = Math.max(0, total - perYear)
+                const offset    = Math.floor(Math.random() * (maxOffset + 1))
+                return q.order('id').range(offset, offset + perYear - 1)
+              }
+            }
 
             return fetchYear(true)
               .then(({ data, error }) => {
                 if (error || !data?.length) return fetchYear(false).then(fb => fb.data ?? [])
+                return data
+              })
+              .then(data => {
+                // Shuffle small-pool results so different questions surface each session
+                if (useRandomOrder && data.length > perYear) {
+                  return shuffle(data).slice(0, perYear)
+                }
                 return data
               })
               .catch(() => [])

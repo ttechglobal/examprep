@@ -18,7 +18,7 @@ const GOLD = '#FFB800'
 const ORANGE = '#FF6A00'
 const CYAN = '#18B7F2'
 
-const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects', '/student/learn/world']
+const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects', '/student/learn/world', '/student/battle']
 
 // ── Shared profile context — fetched once in layout, available to all pages ───
 export const StudentUserContext = createContext(null)
@@ -283,7 +283,8 @@ function StudentLayoutInner({ children }) {
       </div>
 
       {/* ── MOBILE — Tailwind hides this on desktop ── */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:80, position:'relative', zIndex:1 }}>
+      {/* paddingBottom:88 = 68px nav + 20px breathing room; FAB sits above nav */}
+      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:88, position:'relative', zIndex:1 }}>
         <MobileTopbar pageTitle={active.label} />
         <div style={{ padding:'12px 16px 0' }}>
           <Suspense fallback={null}>{children}</Suspense>

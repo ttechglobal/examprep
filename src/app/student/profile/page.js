@@ -22,7 +22,7 @@ import { usePoints }       from '@/contexts/PointsContext'
 import { setLocalProfile, cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
 import JoinSchool from '@/components/student/JoinSchool'
-import { InviteFriendsCard } from '@/app/student/leaderboard/page'
+import { InviteFriendsCard } from '@/components/student/InviteFriendsCard'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
