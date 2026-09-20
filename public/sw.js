@@ -1,112 +1,91 @@
-// public/sw.js — ExamPrep Service Worker
-// Strategy:
-//   • App shell (HTML nav pages): Network-first with cache fallback → offline page
-//   • Static assets (JS, CSS, images): Cache-first with network update
-//   • API calls: Network-only (never cached — stale exam data is harmful)
+// public/sw.js — ExamPrep A1 Service Worker v3
+// Notifications are now server-driven (pg_cron → Edge Function → Web Push).
+// This SW only needs to: cache the shell, receive push events, handle clicks.
 
-const CACHE_NAME    = 'examprep-shell-v2'
-const STATIC_CACHE  = 'examprep-static-v2'
-const OFFLINE_URL   = '/offline'
+const CACHE_NAME = 'ep-shell-v3'
+const SHELL_URLS = ['/', '/student/home', '/images/examprep_logo.png']
 
-// Pages to pre-cache on install (app shell)
-const SHELL_URLS = [
-  '/student/home',
-  '/student/practice',
-  '/student/learn',
-  '/student/leaderboard',
-  '/student/progress',
-  '/student/profile',
-  '/offline',
-]
-
-// ── Install: pre-cache shell pages ────────────────────────────────────────────
+// ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
+  self.skipWaiting()
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(SHELL_URLS))
-      .then(() => self.skipWaiting())
-      .catch(err => console.warn('[SW] Pre-cache failed:', err))
+      .then(c => c.addAll(SHELL_URLS).catch(() => {}))
   )
 })
 
-// ── Activate: clean up old caches ─────────────────────────────────────────────
+// ── Activate ──────────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
-        keys
-          .filter(k => k !== CACHE_NAME && k !== STATIC_CACHE)
-          .map(k => { console.log('[SW] Deleting old cache:', k); return caches.delete(k) })
+        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   )
 })
 
-// ── Fetch: routing strategy ───────────────────────────────────────────────────
+// ── Fetch: network-first, shell fallback for navigation ──────────────────────
 self.addEventListener('fetch', event => {
-  const { request } = event
-  const url = new URL(request.url)
-
-  // Skip non-GET, non-same-origin, and chrome-extension requests
-  if (request.method !== 'GET') return
+  if (event.request.method !== 'GET') return
+  const url = new URL(event.request.url)
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api/')) return          // API: always network-only
+  if (event.request.mode !== 'navigate')   return
 
-  // Static assets (/_next/static/): cache-first, then network
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.match(/\.(png|jpg|jpeg|svg|gif|ico|webp|woff2|woff|ttf)$/)) {
-    event.respondWith(
-      caches.open(STATIC_CACHE).then(cache =>
-        cache.match(request).then(cached => {
-          if (cached) {
-            // Return cache immediately AND update in background
-            fetch(request).then(res => { if (res.ok) cache.put(request, res.clone()) }).catch(() => {})
-            return cached
-          }
-          return fetch(request).then(res => {
-            if (res.ok) cache.put(request, res.clone())
-            return res
-          })
-        })
-      )
-    )
-    return
-  }
-
-  // Navigation requests (HTML pages): network-first, fall back to cache, then offline
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then(res => {
-          // Cache a fresh copy of successful navigations
-          if (res.ok) {
-            const clone = res.clone()
-            caches.open(CACHE_NAME).then(cache => cache.put(request, clone))
-          }
-          return res
-        })
-        .catch(() =>
-          // Network failed — try cache first, then offline page
-          caches.match(request)
-            .then(cached => cached ?? caches.match(OFFLINE_URL))
-        )
-    )
-    return
-  }
-
-  // Everything else: network with cache fallback
   event.respondWith(
-    fetch(request).catch(() => caches.match(request))
+    fetch(event.request)
+      .catch(() => caches.match('/') || caches.match(event.request))
   )
 })
 
-// ── Background sync: flush offline answer queue ───────────────────────────────
-self.addEventListener('sync', event => {
-  if (event.tag === 'ep-sync-answers') {
-    event.waitUntil(
-      // Signal all clients to run their offline sync queue
-      self.clients.matchAll().then(clients =>
-        clients.forEach(client => client.postMessage({ type: 'SYNC_ANSWERS' }))
-      )
-    )
+// ── Push: receive server-sent notification ────────────────────────────────────
+// Payload shape: { title, body, url, tag }
+self.addEventListener('push', event => {
+  const defaults = {
+    title: 'ExamPrep A1',
+    body:  '📚 Time to practise!',
+    url:   '/student/practice',
+    tag:   'ep-reminder',
   }
+
+  let data = defaults
+  try { data = { ...defaults, ...event.data.json() } } catch {}
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body:     data.body,
+      icon:     '/images/examprep_logo.png',
+      badge:    '/images/examprep_logo.png',
+      tag:      data.tag,
+      renotify: true,
+      data:     { url: data.url },
+      actions:  [
+        { action: 'open',    title: '📚 Practise now' },
+        { action: 'dismiss', title: 'Later'            },
+      ],
+    })
+  )
+})
+
+// ── Notification click ────────────────────────────────────────────────────────
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  if (event.action === 'dismiss') return
+
+  const target = event.notification.data?.url || '/student/practice'
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clients => {
+        for (const client of clients) {
+          if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+            client.focus()
+            client.navigate(target)
+            return
+          }
+        }
+        if (self.clients.openWindow) return self.clients.openWindow(target)
+      })
+  )
 })

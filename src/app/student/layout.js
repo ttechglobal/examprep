@@ -11,6 +11,7 @@ import { StudentSidebar, StudentBottomNav, NAV } from '@/components/student/Stud
 import { createClient } from '@/lib/supabase/client'
 import { cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
+import NotificationScheduler from '@/components/ui/NotificationScheduler'
 
 const NAVY = '#062A78'
 const BLUE = '#1264E5'
@@ -298,6 +299,11 @@ function StudentLayoutInner({ children }) {
       <div className="lg:hidden">
         <StudentBottomNav active={active.id} dark={dark} />
       </div>
+
+      {/* ── NOTIFICATION PERMISSION BANNER — position:fixed, zIndex 8888 ── */}
+      {/* Sits above everything. Only renders when permission is 'default'.  */}
+      {/* Scheduling is server-side; this component only handles the prompt. */}
+      <NotificationScheduler />
     </StudentUserContext.Provider>
   )
 }
