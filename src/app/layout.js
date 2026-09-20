@@ -1,8 +1,10 @@
 import { Plus_Jakarta_Sans } from 'next/font/google'
-import Script from 'next/script'
 import './globals.css'
 import { ThemeProvider }  from '@/contexts/ThemeContext'
 import { PointsProvider } from '@/contexts/PointsContext'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
+import InstallPrompt from '@/components/ui/InstallPrompt'
+
 
 const jakarta = Plus_Jakarta_Sans({
   subsets:  ['latin'],
@@ -37,9 +39,23 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head>
-        {/* Theme script moved to next/script beforeInteractive below */}
+        {/*
+          Prevent flash of wrong theme: runs synchronously before first paint,
+          before React hydrates. A plain <script> in <head> is the correct
+          App Router pattern for this — next/script is not needed and causes
+          a React warning with Turbopack when used for inline beforeInteractive.
+        */}
+        <script
+          dangerouslySetInnerHTML={{ __html: `(function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();` }}
+        />
       </head>
       <body className="font-jakarta antialiased bg-base text-primary">
+        {/*
+          ServiceWorkerRegistration is a 'use client' component that registers
+          the SW via useEffect — the correct App Router pattern, no next/script needed.
+        */}
+        <ServiceWorkerRegistration />
+        <InstallPrompt />
         <ThemeProvider>
           {/*
             PointsProvider lives here so XP is available to any part of the app.
@@ -52,21 +68,6 @@ export default function RootLayout({ children }) {
             {children}
           </PointsProvider>
         </ThemeProvider>
-
-        {/* Prevent flash of wrong theme — runs before first paint */}
-        <Script id="theme-init" strategy="beforeInteractive">{`
-          (function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();
-        `}</Script>
-
-        {/* Register service worker for PWA / offline support */}
-        <Script id="sw-register" strategy="afterInteractive">{`
-          if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                .catch(function(err) { console.warn('[SW] Registration failed:', err); });
-            });
-          }
-        `}</Script>
       </body>
     </html>
   )

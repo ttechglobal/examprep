@@ -163,6 +163,7 @@ export default function BattleSetupPage() {
   const [count,     setCount]     = useState(10)
   const [timerOn,   setTimerOn]   = useState(false)
   const [timerSec,  setTimerSec]  = useState(30)
+  const [exam,      setExam]      = useState('WAEC')
   const [step,      setStep]      = useState('subject')
   const [xp,        setXp]        = useState(null)
 
@@ -248,6 +249,7 @@ export default function BattleSetupPage() {
   function handleStart() {
     const config = {
       opponent:'computer',
+      exam,
       subject_id: subject.id, subject_name: subject.name,
       questionSet: qSet,
       topic_id:   qSet === 'topic' ? topic?.id   : null,
@@ -403,7 +405,6 @@ export default function BattleSetupPage() {
                         onClick={() => setTopic(t)}
                         style={{ width:'100%', border:`2px solid ${sel ? GOLD : 'rgba(255,255,255,.1)'}`, borderRadius:14, padding:0, background:'none', cursor:'pointer', outline:'none', marginBottom:8, boxShadow: sel ? `0 5px 0 rgba(0,0,0,.25), 0 0 0 2px ${GOLD}33` : '0 4px 0 rgba(0,0,0,.15)' }}>
                         <div style={{ background: sel ? 'rgba(255,184,0,.12)' : 'rgba(255,255,255,.07)', borderRadius:12, padding:'12px 14px', display:'flex', alignItems:'center', gap:12, position:'relative' }}>
-                          {sel && <div style={{ position:'absolute', left:0, top:0, bottom:0, width:4, background:`linear-gradient(to bottom,${GOLD},#FF6A00)`, borderRadius:'4px 0 0 4px' }}/>}
                           <div style={{ width:36, height:36, borderRadius:11, background: sel ? GOLD : 'rgba(255,255,255,.12)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:900, color: sel ? NAVY : 'rgba(255,255,255,.7)', flexShrink:0, boxShadow: sel ? `0 3px 0 ${GOLD2}` : '0 2px 0 rgba(0,0,0,.2)' }}>{i + 1}</div>
                           <div style={{ flex:1, textAlign:'left' }}>
                             <div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>{t.name}</div>
@@ -485,51 +486,45 @@ export default function BattleSetupPage() {
             )}
           </Panel>
 
-          {/* Match preview card */}
+          {/* Choose Exam panel */}
           <Panel>
-            <SectionLabel>Your Match</SectionLabel>
-            <div style={{ background:`linear-gradient(135deg,${NAVY},#1264E5)`, borderRadius:16, overflow:'hidden', boxShadow:'0 6px 0 rgba(0,0,0,.3)', border:'1px solid rgba(255,255,255,.1)' }}>
-              {/* VS header */}
-              <div style={{ padding:'16px 18px' }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 52px 1fr', alignItems:'center', gap:8 }}>
-                  {/* Player */}
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <div style={{ width:40, height:40, borderRadius:'50%', border:'2px solid rgba(255,255,255,.4)', background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, boxShadow:'0 2px 8px rgba(0,0,0,.2)' }}>🎓</div>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:900, color:'#fff' }}>You</div>
-                      <div style={{ fontSize:9, color:'rgba(255,255,255,.55)' }}>Challenger</div>
+            <SectionLabel>Choose Exam</SectionLabel>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              {[
+                { v:'WAEC', icon:'📝', label:'WAEC',  desc:'West African Examinations' },
+                { v:'JAMB', icon:'🏫', label:'JAMB',  desc:'Unified Tertiary Admissions' },
+              ].map(({ v, icon, label, desc }) => {
+                const sel = exam === v
+                return (
+                  <button key={v}
+                    onClick={() => setExam(v)}
+                    style={{
+                      border:`2.5px solid ${sel ? GOLD : 'rgba(255,255,255,.12)'}`,
+                      borderRadius:16, padding:0, background:'none', cursor:'pointer', outline:'none',
+                      boxShadow: sel ? `0 5px 0 rgba(0,0,0,.3), 0 0 0 2px ${GOLD}44` : '0 4px 0 rgba(0,0,0,.18)',
+                      transition:'box-shadow .15s, border-color .15s',
+                    }}>
+                    <div style={{
+                      background: sel ? `linear-gradient(135deg,${GOLD},#FBBF24)` : 'rgba(255,255,255,.08)',
+                      borderRadius:13, padding:'16px 14px',
+                      display:'flex', flexDirection:'column', alignItems:'flex-start',
+                      position:'relative', overflow:'hidden',
+                    }}>
+                      {/* Sheen on selected */}
+                      {sel && <div style={{ position:'absolute', top:0, left:0, right:0, height:'40%', background:'linear-gradient(to bottom,rgba(255,255,255,.18),transparent)', pointerEvents:'none' }}/>}
+                      {/* Check badge */}
+                      {sel && (
+                        <div style={{ position:'absolute', top:8, right:8, width:20, height:20, borderRadius:'50%', background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', zIndex:5 }}>
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                      )}
+                      <div style={{ fontSize:26, marginBottom:8, position:'relative', zIndex:1 }}>{icon}</div>
+                      <div style={{ fontSize:16, fontWeight:900, color: sel ? NAVY : '#fff', position:'relative', zIndex:1, letterSpacing:'-.01em' }}>{label}</div>
+                      <div style={{ fontSize:10, color: sel ? 'rgba(6,42,120,.65)' : 'rgba(255,255,255,.48)', marginTop:3, position:'relative', zIndex:1, lineHeight:1.3 }}>{desc}</div>
                     </div>
-                  </div>
-                  {/* VS */}
-                  <div style={{ display:'flex', justifyContent:'center' }}>
-                    <div style={{ width:36, height:36, borderRadius:'50%', background:GOLD, color:NAVY, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, fontStyle:'italic', boxShadow:`0 3px 0 ${GOLD2}` }}>VS</div>
-                  </div>
-                  {/* Computer */}
-                  <div style={{ display:'flex', alignItems:'center', gap:8, flexDirection:'row-reverse' }}>
-                    <div style={{ width:40, height:40, borderRadius:'50%', border:'2px solid rgba(255,255,255,.4)', background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, boxShadow:'0 2px 8px rgba(0,0,0,.2)' }}>🤖</div>
-                    <div style={{ textAlign:'right' }}>
-                      <div style={{ fontSize:13, fontWeight:900, color:'#fff' }}>Computer</div>
-                      <div style={{ fontSize:9, color:'rgba(255,255,255,.55)' }}>Difficulty: Easy</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* Match details strip */}
-              <div style={{ background:'rgba(0,0,0,.25)', padding:'12px 18px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'center', borderTop:'1px solid rgba(255,255,255,.08)' }}>
-                {[
-                  { icon: getStyle(subject.name).icon, val: subject.name,                                        label:'Subject' },
-                  { icon:'🎯', val: qSet === 'topic' ? (topic?.name ?? '—') : 'Random Mix',                     label:'Mode'    },
-                  { icon:'📋', val: `${count} questions · ${timerOn ? timerSec + 's timer' : 'No timer'}`,      label:'Settings' },
-                ].map(({ icon, val, label }) => (
-                  <div key={label} style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ fontSize:16 }}>{icon}</span>
-                    <div>
-                      <div style={{ fontSize:12, fontWeight:900, color:'#fff' }}>{val}</div>
-                      <div style={{ fontSize:9, color:'rgba(255,255,255,.45)' }}>{label}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  </button>
+                )
+              })}
             </div>
           </Panel>
 

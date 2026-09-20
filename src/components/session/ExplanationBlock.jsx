@@ -101,7 +101,7 @@ function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
 
   if (correctLetter && correctText) {
     return (
-      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, marginBottom:14 }}>
+      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, marginBottom:10, marginTop:10 }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
           <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
             <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
@@ -131,7 +131,7 @@ function FormattedAnswerNote({ answerNote, correctLetter, correctText }) {
 
   if (answerNote) {
     return (
-      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:14 }}>
+      <div style={{ padding:'13px 16px', borderRadius:12, background:`${GREEN}10`, border:`1.5px solid ${GREEN}35`, display:'flex', alignItems:'flex-start', gap:10, marginBottom:12 }}>
         <div style={{ width:22, height:22, borderRadius:6, background:GREEN, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
           <span style={{ fontSize:13, color:'#fff', fontWeight:900 }}>✓</span>
         </div>
@@ -219,7 +219,6 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
 
   return (
     <>
-      {concept && <div style={{ fontSize:14, fontWeight:800, color:BLUE, marginBottom:intro?6:0 }}>{concept}</div>}
       {intro && <p style={{ fontSize:14, color:'var(--text-sec)', lineHeight:1.65, margin:`${concept?4:0}px 0 ${(formulaBox||hasSteps||svgDiagram)?12:0}px` }}>{intro}</p>}
 
       <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>

@@ -74,92 +74,191 @@ const DECOS = [
 ]
 
 // ── VS Header ─────────────────────────────────────────────────────────────────
+// Desktop: [☰ Menu] ←──── wide gap ────[Avatar|PANEL ⚡VS⚡ PANEL|Avatar]──── wide gap ────→ [🚩 Q X of Y]
+// Mobile:  [☰ Menu] ──────────────────────────────────────── [🚩 Q X/Y]
+//          [Avatar | PANEL ⚡VS⚡ PANEL | Avatar]   (full-width row)
+//
+// Panel shape: parallelogram — outer edge rounded, inner edge angled toward VS.
+// Avatar is positioned so it sits perfectly centred on the panel's outer face.
 function VSHeader({ qIndex, total, studentScore, cpuScore, studentDots, cpuDots, onMenu, floatSide, floatKey, cpuAnswered }) {
-  // Avatar size — same for both sides so the overlap is consistent
-  const AV = 54
+  const AV   = 62    // avatar diameter
+  const SKEW = 18    // px — how far the inner edge of each panel angles inward
+
   return (
-    <div style={{ background:`linear-gradient(180deg,${NAVY} 0%,${NAVY2} 100%)`, flexShrink:0, zIndex:100, boxShadow:`0 4px 0 rgba(3,21,72,.5),0 6px 20px rgba(26,36,104,.25)`, paddingTop:'env(safe-area-inset-top,0px)' }}>
+    <div style={{ background:`linear-gradient(180deg,#0B1138 0%,${NAVY2} 100%)`, flexShrink:0, zIndex:100, boxShadow:`0 4px 0 rgba(3,10,50,.65),0 8px 24px rgba(0,0,0,.45)`, paddingTop:'env(safe-area-inset-top,0px)' }}>
       <style>{`
-        /* Top utility bar — always visible, provides breathing room on mobile */
-        .vs-topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 0; }
-        /* Progress bar */
-        .vs-progress { height:3px; margin:6px 16px 0; background:rgba(255,255,255,.12); border-radius:999px; overflow:hidden; }
-        /* VS strip — full width on mobile, capped on desktop */
-        .vs-strip { display:grid; grid-template-columns:1fr ${AV}px 1fr; padding:10px 14px 14px; align-items:center; position:relative; max-width:860px; margin:0 auto; }
+        @keyframes tdot{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
+        @keyframes floatup{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-36px);opacity:0}}
+
+        /* ── utility row: always visible ── */
+        .vsh-util{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;}
+
+        /* ── VS strip: full width on mobile ── */
+        .vsh-vs{display:flex;align-items:center;padding:0 10px 14px;gap:0;position:relative;}
+
+        /* ── DESKTOP ≥640px: single row, full expanse ── */
+        @media(min-width:640px){
+          /* hide mobile util row; VS strip becomes a 3-col grid */
+          .vsh-util{display:none;}
+          .vsh-vs{
+            display:grid;
+            grid-template-columns:auto 1fr auto;
+            align-items:center;
+            padding:12px 20px 16px;
+            gap:20px;
+          }
+          /* centre column: the actual VS strip */
+          .vsh-vs-centre{display:flex;align-items:center;gap:0;position:relative;}
+        }
+        /* mobile: hide desktop-only elements */
+        .vsh-dt-menu,.vsh-dt-qc{display:none;}
+        @media(min-width:640px){
+          .vsh-dt-menu,.vsh-dt-qc{display:flex;}
+        }
       `}</style>
 
-      {/* ── Top utility bar: Menu (left) · Q counter (right) ── */}
-      <div className="vs-topbar" style={{ maxWidth:860, margin:'0 auto' }}>
-        <button onClick={onMenu}
-          style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(255,255,255,.12)', border:'1.5px solid rgba(255,255,255,.2)', borderRadius:10, padding:'7px 12px', color:'#fff', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit' }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
+      {/* ── Mobile utility row (Menu + Q counter) ── */}
+      <div className="vsh-util">
+        {/* Menu */}
+        <button onClick={onMenu} style={{ display:'flex', alignItems:'center', gap:7, background:'rgba(8,14,60,.6)', border:'1.5px solid rgba(255,255,255,.18)', borderRadius:12, padding:'8px 14px', color:'#fff', fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 2px 8px rgba(0,0,0,.25)' }}>
+          <svg width="16" height="13" viewBox="0 0 16 13" fill="none"><path d="M1 1.5h14M1 6.5h14M1 11.5h14" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>
           Menu
         </button>
-        <div style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(255,255,255,.12)', border:'1.5px solid rgba(255,255,255,.2)', borderRadius:10, padding:'7px 12px', fontSize:11, fontWeight:900, color:'#fff' }}>
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.5 4l3.5.5-2.5 2.5.6 3.5L6 9l-3.1 1.5.6-3.5L1 4.5 4.5 4z" fill="white" opacity=".8"/></svg>
-          Question {qIndex + 1} of {total}
+        {/* Q counter — compact on mobile */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(8,14,60,.6)', border:'1.5px solid rgba(255,255,255,.18)', borderRadius:12, padding:'8px 13px', color:'#fff', fontSize:12, fontWeight:800, boxShadow:'0 2px 8px rgba(0,0,0,.25)' }}>
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 1v12" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><path d="M2 1l9 3.5L2 8" fill="white"/></svg>
+          Q {qIndex+1}/{total}
         </div>
       </div>
 
-      {/* ── Progress bar ── */}
-      <div className="vs-progress">
-        <div style={{ height:'100%', width:`${((qIndex + 1) / total) * 100}%`, background:`linear-gradient(90deg,${GOLD},#FF6A00)`, borderRadius:999, transition:'width .4s ease' }}/>
-      </div>
+      {/* ── VS strip row (mobile: standalone; desktop: grid col 1→3) ── */}
+      <div className="vsh-vs">
 
-      {/* ── VS strip ── */}
-      <div className="vs-strip">
+        {/* Desktop Menu (far left) */}
+        <button className="vsh-dt-menu" onClick={onMenu} style={{ alignItems:'center', gap:7, background:'rgba(8,14,60,.6)', border:'1.5px solid rgba(255,255,255,.18)', borderRadius:12, padding:'9px 16px', color:'#fff', fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 2px 8px rgba(0,0,0,.25)', whiteSpace:'nowrap', flexShrink:0 }}>
+          <svg width="16" height="13" viewBox="0 0 16 13" fill="none"><path d="M1 1.5h14M1 6.5h14M1 11.5h14" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>
+          Menu
+        </button>
 
-        {/* ── Player side ── */}
-        <div style={{ display:'flex', alignItems:'center' }}>
-          {/* Score panel — right side rounded, left side square so avatar covers it */}
-          <div style={{ flex:1, background:'rgba(59,91,219,.9)', border:'1px solid rgba(255,255,255,.15)', borderRadius:'14px 14px 14px 14px', padding:`7px 12px 7px ${AV * 0.55}px`, minWidth:0, boxShadow:'inset 0 -3px 0 rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.12)', position:'relative', overflow:'hidden' }}>
-            <div style={{ fontSize:8, fontWeight:900, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(255,255,255,.7)', lineHeight:1 }}>YOU</div>
-            <div style={{ fontSize:26, fontWeight:900, color:'#fff', lineHeight:1.1, fontVariantNumeric:'tabular-nums' }}>{studentScore}</div>
-            <div style={{ display:'flex', gap:2, marginTop:4 }}>
-              {Array.from({length:5}).map((_,i)=><div key={i} style={{ flex:1, height:4, borderRadius:3, background: i < studentDots ? '#60A5FA' : 'rgba(255,255,255,.2)', transition:'background .3s' }}/>)}
+        {/* Centre VS strip (flex on mobile, centre grid cell on desktop) */}
+        <div className="vsh-vs-centre" style={{ flex:1, display:'flex', alignItems:'center', gap:0, position:'relative', minWidth:0 }}>
+
+          {/* ── Player (YOU) side ── */}
+          <div style={{ flex:1, display:'flex', alignItems:'center', minWidth:0, position:'relative' }}>
+            {/* Panel — parallelogram: left outer edge rounded, right inner edge angled */}
+            <div style={{
+              flex:1, minWidth:0,
+              background:'linear-gradient(160deg,#2A5CE8,#1A3FC0)',
+              borderRadius:'16px 0 0 16px',
+              clipPath:`polygon(0 0, calc(100% - ${SKEW}px) 0, 100% 100%, 0 100%)`,
+              boxShadow:'inset 0 -5px 0 rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18)',
+              position:'relative', overflow:'hidden', zIndex:1,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              // pad away from avatar (left) and from angled cut (right)
+              paddingLeft:`${AV * 0.52 + 4}px`, paddingRight:`${SKEW + 8}px`,
+              paddingTop:8, paddingBottom:8,
+            }}>
+              {/* Top sheen */}
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:'44%', background:'linear-gradient(to bottom,rgba(255,255,255,.2),transparent)', pointerEvents:'none' }}/>
+              <div style={{ position:'relative', zIndex:1, textAlign:'center', width:'100%' }}>
+                <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.1em', color:'rgba(255,255,255,.65)', lineHeight:1, marginBottom:3 }}>YOU</div>
+                <div style={{ fontSize:30, fontWeight:900, color:'#fff', lineHeight:1, fontVariantNumeric:'tabular-nums', textShadow:'0 2px 0 rgba(0,0,0,.25)' }}>{studentScore}</div>
+                <div style={{ display:'flex', gap:3, marginTop:5 }}>
+                  {Array.from({length:5}).map((_,i)=>(
+                    <div key={i} style={{ flex:1, height:5, borderRadius:3, background: i<studentDots ? '#60A5FA' : 'rgba(255,255,255,.2)', transition:'background .3s', boxShadow: i<studentDots ? '0 0 5px #60A5FA' : 'none' }}/>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Avatar — centred ON the panel's outer (left) face; z above panel */}
+            <div style={{
+              position:'absolute', left:0,
+              width:AV, height:AV, borderRadius:'50%',
+              background:'linear-gradient(150deg,#F59E0B,#FBBF24)',
+              border:'3.5px solid #fff',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:30, zIndex:4,
+              boxShadow:'0 4px 16px rgba(0,0,0,.4)',
+              // Centre the avatar horizontally on the panel's left edge
+              transform:'translateX(0)',
+            }}>🧑🏾</div>
+          </div>
+
+          {/* ── VS badge — lightning + bold italic text ── */}
+          <div style={{ flexShrink:0, zIndex:10, width:54, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', position:'relative' }}>
+            {/* Left bolt */}
+            <svg style={{ position:'absolute', left:-8, top:'50%', transform:'translateY(-50%)' }} width="16" height="28" viewBox="0 0 16 28" fill="none">
+              <path d="M10 1L2 14h6L4 27l12-15H9L10 1z" fill={GOLD} stroke={GOLD2} strokeWidth="0.5"/>
+            </svg>
+            <span style={{ fontSize:20, fontWeight:900, fontStyle:'italic', color:GOLD, lineHeight:1, letterSpacing:'-.02em', textShadow:`0 0 14px rgba(255,184,0,.7),0 2px 0 ${GOLD2}`, position:'relative', zIndex:1 }}>VS</span>
+            {/* Right bolt */}
+            <svg style={{ position:'absolute', right:-8, top:'50%', transform:'translateY(-50%)' }} width="16" height="28" viewBox="0 0 16 28" fill="none">
+              <path d="M6 1l8 13H8l4 13L0 12h7L6 1z" fill={GOLD} stroke={GOLD2} strokeWidth="0.5"/>
+            </svg>
+          </div>
+
+          {/* ── Computer side ── */}
+          <div style={{ flex:1, display:'flex', alignItems:'center', minWidth:0, position:'relative' }}>
+            {/* Panel — mirrored parallelogram */}
+            <div style={{
+              flex:1, minWidth:0,
+              background:'linear-gradient(160deg,#7C3AED,#5B20C0)',
+              borderRadius:'0 16px 16px 0',
+              clipPath:`polygon(${SKEW}px 0, 100% 0, 100% 100%, 0 100%)`,
+              boxShadow:'inset 0 -5px 0 rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.14)',
+              position:'relative', overflow:'hidden', zIndex:1,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              paddingRight:`${AV * 0.52 + 4}px`, paddingLeft:`${SKEW + 8}px`,
+              paddingTop:8, paddingBottom:8,
+            }}>
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:'44%', background:'linear-gradient(to bottom,rgba(255,255,255,.14),transparent)', pointerEvents:'none' }}/>
+              <div style={{ position:'relative', zIndex:1, textAlign:'center', width:'100%' }}>
+                <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.1em', color:'rgba(255,255,255,.65)', lineHeight:1, marginBottom:3 }}>COMPUTER</div>
+                <div style={{ fontSize:30, fontWeight:900, color:'#fff', lineHeight:1, fontVariantNumeric:'tabular-nums', textShadow:'0 2px 0 rgba(0,0,0,.25)' }}>{cpuScore}</div>
+                <div style={{ display:'flex', gap:3, marginTop:5, flexDirection:'row-reverse' }}>
+                  {Array.from({length:5}).map((_,i)=>(
+                    <div key={i} style={{ flex:1, height:5, borderRadius:3, background: i<cpuDots ? '#C084FC' : 'rgba(255,255,255,.2)', transition:'background .3s', boxShadow: i<cpuDots ? '0 0 5px #C084FC' : 'none' }}/>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* CPU Avatar + status pill — centred on panel's right face */}
+            <div style={{ position:'absolute', right:0, zIndex:4, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+              <div style={{
+                width:AV, height:AV, borderRadius:'50%',
+                background:'linear-gradient(150deg,#9333EA,#7C3AED)',
+                border:'3.5px solid #fff',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:28,
+                boxShadow:'0 4px 16px rgba(0,0,0,.4)',
+              }}>🤖</div>
+              {/* CPU status pill */}
+              <div style={{ background: cpuAnswered ? '#16A34A' : '#7C3AED', borderRadius:999, padding:'2px 8px', display:'flex', alignItems:'center', gap:3, boxShadow:'0 2px 6px rgba(0,0,0,.35)', whiteSpace:'nowrap' }}>
+                {cpuAnswered
+                  ? <span style={{ fontSize:8, fontWeight:900, color:'#fff' }}>✓ Answered</span>
+                  : <>
+                      <span style={{ fontSize:8, fontWeight:900, color:'rgba(255,255,255,.9)' }}>Thinking</span>
+                      <span style={{ display:'inline-flex', gap:2 }}>
+                        {[0,1,2].map(i=><span key={i} style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,.8)', display:'inline-block', animation:`tdot .9s ${i*.2}s ease-in-out infinite` }}/>)}
+                      </span>
+                    </>
+                }
+              </div>
             </div>
           </div>
-          {/* Avatar — overlaps the score panel's left edge */}
-          <div style={{ width:AV, height:AV, borderRadius:'50%', border:'3px solid #fff', background:'linear-gradient(135deg,#F59E0B,#FBBF24)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0, zIndex:5, marginLeft:`-${AV * 0.42}px`, boxShadow:'0 3px 10px rgba(0,0,0,.3)' }}>🧑🏾</div>
+
+          {/* Score float */}
+          {floatSide && (
+            <div key={floatKey} style={{ position:'absolute', top:0, [floatSide==='student'?'left':'right']:AV+24, fontSize:18, fontWeight:900, color: floatSide==='student'?'#4ADE80':'#F87171', animation:'floatup .8s ease-out forwards', pointerEvents:'none', zIndex:20 }}>+10</div>
+          )}
         </div>
 
-        {/* ── VS badge ── */}
-        <div style={{ width:AV, height:AV, borderRadius:'50%', background:GOLD, display:'flex', alignItems:'center', justifyContent:'center', zIndex:10, alignSelf:'center', flexShrink:0, boxShadow:`0 3px 0 ${GOLD2},0 0 0 3px rgba(255,184,0,.2),0 5px 12px rgba(0,0,0,.35)` }}>
-          <span style={{ fontSize:15, fontWeight:900, color:NAVY, fontStyle:'italic', letterSpacing:'-.02em' }}>VS</span>
+        {/* Desktop Q counter (far right) */}
+        <div className="vsh-dt-qc" style={{ alignItems:'center', gap:7, background:'rgba(8,14,60,.6)', border:'1.5px solid rgba(255,255,255,.18)', borderRadius:12, padding:'9px 16px', color:'#fff', fontSize:13, fontWeight:800, boxShadow:'0 2px 8px rgba(0,0,0,.25)', whiteSpace:'nowrap', flexShrink:0 }}>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 1v12" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><path d="M2 1l9 3.5L2 8" fill="white"/></svg>
+          Question {qIndex+1} of {total}
         </div>
 
-        {/* ── Computer side ── */}
-        <div style={{ display:'flex', alignItems:'center', flexDirection:'row-reverse' }}>
-          {/* Score panel — left side rounded, right side square so avatar covers it */}
-          <div style={{ flex:1, background:'rgba(109,40,217,.9)', border:'1px solid rgba(255,255,255,.15)', borderRadius:'14px 14px 14px 14px', padding:`7px ${AV * 0.55}px 7px 12px`, textAlign:'right', minWidth:0, boxShadow:'inset 0 -3px 0 rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.12)', position:'relative', overflow:'hidden' }}>
-            <div style={{ fontSize:8, fontWeight:900, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(255,255,255,.7)', lineHeight:1 }}>COMPUTER</div>
-            <div style={{ fontSize:26, fontWeight:900, color:'#fff', lineHeight:1.1, fontVariantNumeric:'tabular-nums' }}>{cpuScore}</div>
-            <div style={{ display:'flex', gap:2, marginTop:4, flexDirection:'row-reverse' }}>
-              {Array.from({length:5}).map((_,i)=><div key={i} style={{ flex:1, height:4, borderRadius:3, background: i < cpuDots ? '#C084FC' : 'rgba(255,255,255,.2)', transition:'background .3s' }}/>)}
-            </div>
-          </div>
-          {/* Avatar + CPU status stacked — overlaps the score panel's right edge */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0, marginRight:`-${AV * 0.42}px`, zIndex:5, gap:3 }}>
-            <div style={{ width:AV, height:AV, borderRadius:'50%', border:'3px solid #fff', background:'linear-gradient(135deg,#8B5CF6,#7C3AED)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 3px 10px rgba(0,0,0,.3)' }}>🤖</div>
-            {/* CPU status pill */}
-            <div style={{ background: cpuAnswered ? '#16A34A' : '#7C3AED', borderRadius:999, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, boxShadow:'0 2px 6px rgba(0,0,0,.3)', whiteSpace:'nowrap', minWidth:52 }}>
-              {cpuAnswered
-                ? <span style={{ fontSize:8, fontWeight:900, color:'#fff', letterSpacing:'.02em' }}>✓ Answered</span>
-                : <>
-                    <span style={{ fontSize:8, fontWeight:900, color:'rgba(255,255,255,.9)' }}>Thinking</span>
-                    <span style={{ display:'inline-flex', gap:2 }}>
-                      {[0,1,2].map(i=><span key={i} style={{ width:3, height:3, borderRadius:'50%', background:'rgba(255,255,255,.8)', display:'inline-block', animation:`tdot .9s ${i*.2}s ease-in-out infinite` }}/>)}
-                    </span>
-                  </>
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* Score float */}
-        {floatSide && (
-          <div key={floatKey} style={{ position:'absolute', top:0, [floatSide==='student'?'left':'right']:60, fontSize:16, fontWeight:900, color: floatSide==='student' ? '#4ADE80' : '#F87171', animation:'floatup .8s ease-out forwards', pointerEvents:'none', zIndex:20 }}>+10</div>
-        )}
       </div>
     </div>
   )
@@ -241,60 +340,96 @@ function BattleResults({ questions, answersLog, studentScore, cpuScore, xpAwarde
   ).filter(([,c]) => c >= 2).map(([t]) => t)
 
   const OUTCOME = {
-    win:  { icon:'🏆', label:'You Won!',       color:GOLD,      heroBg:`linear-gradient(150deg,${NAVY} 0%,${NAVY2} 60%,#1a1060 100%)` },
-    draw: { icon:'🤝', label:"It's a Draw!",   color:'#60A5FA', heroBg:'linear-gradient(150deg,#0369A1 0%,#0E4C7A 60%,#0c3060 100%)' },
-    loss: { icon:'🤖', label:'Computer Won',   color:'#C4B5FD', heroBg:'linear-gradient(150deg,#4C1D95 0%,#6D28D9 60%,#1a1060 100%)' },
+    win:  { icon:'🏆', label:'You Won!',       sub:'Outstanding performance!',        heroBg:`linear-gradient(160deg,#0C1240 0%,#1A2468 55%,#0D1A5C 100%)`, accentColor:GOLD,      },
+    draw: { icon:'🤝', label:"It's a Draw!",  sub:'A very close match!',             heroBg:'linear-gradient(160deg,#0369A1 0%,#0E4C7A 55%,#083460 100%)',  accentColor:'#60A5FA', },
+    loss: { icon:'🤖', label:'Computer Won',   sub:"Keep practising — you'll get it!", heroBg:'linear-gradient(160deg,#3B1280 0%,#5B21B6 55%,#2D0E6B 100%)', accentColor:'#C4B5FD', },
   }[outcome]
 
-  const sh    = `0 5px 0 #031548,0 8px 20px rgba(26,36,104,.35)`
-  const shPrs = `0 1px 0 #031548`
-  const pr = e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow=shPrs }
-  const rl = e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=sh }
+  const shBtn    = `0 5px 0 #031548,0 8px 20px rgba(26,36,104,.35)`
+  const shBtnPrs = `0 1px 0 #031548`
+  const pr = e => { e.currentTarget.style.transform='translateY(3px)'; e.currentTarget.style.boxShadow=shBtnPrs }
+  const rl = e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=shBtn }
+
+  const SKEW = 16
+  const ScorePanel = ({ label, score, isWinner, side }) => (
+    <div style={{ flex:1, display:'flex', alignItems:'stretch', minWidth:0 }}>
+      <div style={{
+        flex:1, minWidth:0,
+        background: isWinner
+          ? (side==='left' ? 'linear-gradient(160deg,#2A5CE8,#1A3FC0)' : 'linear-gradient(160deg,#7C3AED,#5B20C0)')
+          : 'rgba(26,36,104,.08)',
+        borderRadius: side==='left' ? '14px 0 0 14px' : '0 14px 14px 0',
+        clipPath: side==='left'
+          ? `polygon(0 0, calc(100% - ${SKEW}px) 0, 100% 100%, 0 100%)`
+          : `polygon(${SKEW}px 0, 100% 0, 100% 100%, 0 100%)`,
+        padding: side==='left' ? `14px ${SKEW+14}px 14px 18px` : `14px 18px 14px ${SKEW+14}px`,
+        textAlign: side==='left' ? 'left' : 'right',
+        border: `1.5px solid ${isWinner ? 'rgba(255,255,255,.2)' : 'rgba(26,36,104,.1)'}`,
+        boxShadow: isWinner ? 'inset 0 -4px 0 rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.18)' : 'none',
+        position:'relative', overflow:'hidden',
+      }}>
+        {isWinner && <div style={{ position:'absolute', top:0, left:0, right:0, height:'45%', background:'linear-gradient(to bottom,rgba(255,255,255,.16),transparent)', pointerEvents:'none' }}/>}
+        <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.1em', color: isWinner ? 'rgba(255,255,255,.7)' : '#9CA3AF', lineHeight:1, marginBottom:5 }}>{label}</div>
+        <div style={{ fontSize:38, fontWeight:900, lineHeight:1, fontVariantNumeric:'tabular-nums', color: isWinner ? '#fff' : '#374151', textShadow: isWinner ? '0 2px 0 rgba(0,0,0,.25)' : 'none' }}>{score}</div>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1500, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <SkyBg/>
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5 }}>
+      <div style={{ maxWidth:520, margin:'0 auto' }}>
 
         {/* Hero */}
-        <div style={{ background:OUTCOME.heroBg, padding:'52px 18px 0', textAlign:'center', position:'relative', overflow:'hidden', flexShrink:0 }}>
-          <div style={{ position:'absolute', inset:0, backgroundImage:"url(\"data:image/svg+xml,%3Csvg width='60' height='52' viewBox='0 0 60 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 2 L58 17 L58 35 L30 50 L2 35 L2 17 Z' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='1.2'/%3E%3C/svg%3E\")", backgroundSize:'60px 52px', pointerEvents:'none' }}/>
-          <div style={{ fontSize:52, marginBottom:6, position:'relative', zIndex:1 }}>{OUTCOME.icon}</div>
-          <div style={{ fontSize:28, fontWeight:900, color:OUTCOME.color, letterSpacing:'-.04em', lineHeight:1, marginBottom:5, position:'relative', zIndex:1, textShadow:'0 2px 0 rgba(0,0,0,.3)' }}>{OUTCOME.label}</div>
-          <div style={{ fontSize:12, color:'rgba(255,255,255,.5)', marginBottom:22, position:'relative', zIndex:1 }}>
+        <div style={{ background:OUTCOME.heroBg, padding:'52px 22px 0', textAlign:'center', position:'relative', overflow:'hidden' }}>
+          <div style={{ position:'absolute', inset:0, backgroundImage:"url(\"data:image/svg+xml,%3Csvg width='52' height='46' viewBox='0 0 52 46' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M26 2L50 15v16L26 44 2 31V15z' fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1'/%3E%3C/svg%3E\")", backgroundSize:'52px 46px', pointerEvents:'none' }}/>
+          <div style={{ fontSize:60, lineHeight:1, marginBottom:10, position:'relative', zIndex:1, filter:'drop-shadow(0 4px 16px rgba(0,0,0,.4))' }}>{OUTCOME.icon}</div>
+          <div style={{ fontSize:30, fontWeight:900, color:OUTCOME.accentColor, letterSpacing:'-.04em', lineHeight:1, marginBottom:6, position:'relative', zIndex:1, textShadow:'0 2px 0 rgba(0,0,0,.3)' }}>{OUTCOME.label}</div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,.55)', marginBottom:6, position:'relative', zIndex:1 }}>{OUTCOME.sub}</div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,.3)', marginBottom:26, position:'relative', zIndex:1 }}>
             {questions[0]?.subject_name ?? 'Battle'} · {questions.length} questions
           </div>
-          <svg viewBox="0 0 375 24" fill="none" preserveAspectRatio="none" style={{ display:'block', width:'100%', marginTop:'-1px', position:'relative', zIndex:6 }}>
-            <path d="M0 24 L0 12 Q60 0 120 9 Q180 18 240 7 Q300 0 375 11 L375 24 Z" fill="#D5E5F5"/>
+          <svg viewBox="0 0 520 28" fill="none" preserveAspectRatio="none" style={{ display:'block', width:'100%', position:'relative', zIndex:6, marginBottom:-1 }}>
+            <path d="M0 28 L0 14 Q65 0 130 10 Q195 20 260 8 Q325 0 390 12 Q455 22 520 10 L520 28 Z" fill="#D5E5F5"/>
           </svg>
         </div>
 
-        {/* Scoreboard */}
-        <div style={{ padding:'0 16px', marginTop:'-16px', position:'relative', zIndex:10 }}>
-          <div style={{ background:'#fff', border:'2.5px solid rgba(26,36,104,.14)', borderRadius:22, padding:16, boxShadow:'0 8px 0 rgba(26,36,104,.12),0 12px 28px rgba(26,36,104,.12),inset 0 1px 0 rgba(255,255,255,.9)' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:10, alignItems:'center' }}>
-              <div style={{ background: outcome==='win'?'rgba(255,215,0,.1)':'#F0F4FF', border:`1.5px solid ${outcome==='win'?'rgba(255,184,0,.35)':'rgba(26,36,104,.1)'}`, borderRadius:14, padding:'12px 10px', textAlign:'center', boxShadow:'inset 0 2px 5px rgba(26,36,104,.06)' }}>
-                <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.08em', color:'#6B7280', marginBottom:5 }}>You</div>
-                <div style={{ fontSize:38, fontWeight:900, color: outcome==='win'?'#B45309':'#1A1F5E', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{studentScore}</div>
-              </div>
-              <div style={{ fontSize:13, fontWeight:900, color:'#9CA3AF', textAlign:'center' }}>VS</div>
-              <div style={{ background: outcome==='loss'?'rgba(255,215,0,.1)':'#F0F4FF', border:`1.5px solid ${outcome==='loss'?'rgba(255,184,0,.35)':'rgba(26,36,104,.1)'}`, borderRadius:14, padding:'12px 10px', textAlign:'center', boxShadow:'inset 0 2px 5px rgba(26,36,104,.06)' }}>
-                <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'.08em', color:'#6B7280', marginBottom:5 }}>Computer</div>
-                <div style={{ fontSize:38, fontWeight:900, color: outcome==='loss'?'#B45309':'#1A1F5E', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{cpuScore}</div>
-              </div>
+        {/* Score panels + VS */}
+        <div style={{ background:'#D5E5F5', padding:'6px 16px 0' }}>
+          <div style={{ display:'flex', alignItems:'stretch', gap:0 }}>
+            <ScorePanel label="YOU" score={studentScore} isWinner={outcome==='win'} side="left"/>
+            <div style={{ flexShrink:0, width:52, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', position:'relative', zIndex:2 }}>
+              <svg style={{ position:'absolute', left:-5, top:'50%', transform:'translateY(-50%)' }} width="13" height="22" viewBox="0 0 13 22" fill="none">
+                <path d="M8 1L1 11h5L2 21l11-13H8L8 1z" fill={GOLD} stroke={GOLD2} strokeWidth="0.4"/>
+              </svg>
+              <span style={{ fontSize:17, fontWeight:900, fontStyle:'italic', color:GOLD, textShadow:`0 0 10px rgba(255,184,0,.5),0 1px 0 ${GOLD2}` }}>VS</span>
+              <svg style={{ position:'absolute', right:-5, top:'50%', transform:'translateY(-50%)' }} width="13" height="22" viewBox="0 0 13 22" fill="none">
+                <path d="M5 1l7 10H7l3 10L0 8h5L5 1z" fill={GOLD} stroke={GOLD2} strokeWidth="0.4"/>
+              </svg>
             </div>
-            <div style={{ marginTop:10, background:'rgba(245,158,11,.1)', border:'1.5px solid rgba(245,158,11,.25)', borderRadius:12, padding:'9px 12px', display:'flex', alignItems:'center', justifyContent:'center', gap:7, fontSize:13, fontWeight:900, color:'#92400E' }}>
-              ⚡ +{xpAwarded} XP earned this battle
+            <ScorePanel label="COMPUTER" score={cpuScore} isWinner={outcome==='loss'} side="right"/>
+          </div>
+        </div>
+
+        {/* Stats card */}
+        <div style={{ background:'#D5E5F5', padding:'12px 16px 0' }}>
+          <div style={{ background:'#fff', border:'2.5px solid rgba(26,36,104,.12)', borderRadius:20, padding:14, boxShadow:'0 6px 0 rgba(26,36,104,.1),0 10px 24px rgba(26,36,104,.1),inset 0 1px 0 rgba(255,255,255,.9)' }}>
+            {/* XP badge */}
+            <div style={{ background:`linear-gradient(135deg,${GOLD},#FBBF24)`, borderRadius:14, padding:'11px 14px', display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginBottom:12, boxShadow:`0 4px 0 ${GOLD2},0 6px 14px rgba(245,158,11,.3)` }}>
+              <span style={{ fontSize:18 }}>⚡</span>
+              <span style={{ fontSize:15, fontWeight:900, color:NAVY }}>+{xpAwarded} XP earned this battle</span>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginTop:10 }}>
+            {/* Stat chips */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
               {[
-                { num:correctCount,                     label:'Correct',  color:'#15803D' },
-                { num:questions.length - correctCount,  label:'Missed',   color:'#B91C1C' },
-                { num:`${Math.round(correctCount/questions.length*100)}%`, label:'Accuracy', color:'#1A1F5E' },
-              ].map(({ num, label, color }) => (
-                <div key={label} style={{ background:'#F0F4FF', border:'1.5px solid rgba(26,36,104,.08)', borderRadius:12, padding:'10px 8px', textAlign:'center', boxShadow:'inset 0 2px 5px rgba(26,36,104,.05)' }}>
-                  <div style={{ fontSize:20, fontWeight:900, color, lineHeight:1 }}>{num}</div>
-                  <div style={{ fontSize:8, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'.08em', marginTop:3 }}>{label}</div>
+                { num:correctCount,                     label:'Correct',  color:'#15803D', bg:'#DCFCE7', border:'rgba(34,197,94,.2)'  },
+                { num:questions.length - correctCount,  label:'Missed',   color:'#B91C1C', bg:'#FEE2E2', border:'rgba(239,68,68,.2)'  },
+                { num:`${Math.round(correctCount/questions.length*100)}%`, label:'Accuracy', color:NAVY, bg:'#EEF2FF', border:'rgba(26,36,104,.12)' },
+              ].map(({ num, label, color, bg, border }) => (
+                <div key={label} style={{ background:bg, border:`1.5px solid ${border}`, borderRadius:14, padding:'12px 8px', textAlign:'center', boxShadow:'inset 0 2px 4px rgba(0,0,0,.04)' }}>
+                  <div style={{ fontSize:22, fontWeight:900, color, lineHeight:1 }}>{num}</div>
+                  <div style={{ fontSize:9, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'.08em', marginTop:4 }}>{label}</div>
                 </div>
               ))}
             </div>
@@ -303,58 +438,68 @@ function BattleResults({ questions, answersLog, studentScore, cpuScore, xpAwarde
 
         {/* Weak topics */}
         {weakTopics.length > 0 && (
-          <div style={{ margin:'10px 16px 0', background:'rgba(245,158,11,.08)', border:'1.5px solid rgba(245,158,11,.25)', borderRadius:14, padding:'11px 13px' }}>
-            <div style={{ fontSize:11, fontWeight:900, color:'#92400E', marginBottom:3 }}>⚠ You missed multiple questions on:</div>
-            <div style={{ fontSize:11, color:'#374151', lineHeight:1.5 }}>{weakTopics.join(', ')} — consider revising.</div>
+          <div style={{ margin:'10px 16px 0', background:'rgba(245,158,11,.08)', border:'1.5px solid rgba(245,158,11,.3)', borderRadius:14, padding:'11px 14px', display:'flex', gap:10, alignItems:'flex-start' }}>
+            <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize:12, fontWeight:900, color:'#92400E', marginBottom:2 }}>Missed multiple on:</div>
+              <div style={{ fontSize:11, color:'#78350F', lineHeight:1.5 }}>{weakTopics.join(' · ')}</div>
+            </div>
           </div>
         )}
 
         {/* Actions */}
-        <div style={{ padding:'12px 16px 100px', display:'flex', flexDirection:'column', gap:9 }}>
-          {/* Review Session */}
+        <div style={{ padding:'14px 16px max(100px,calc(80px + env(safe-area-inset-bottom)))', display:'flex', flexDirection:'column', gap:10 }}>
           <button onClick={onReview}
-            style={{ width:'100%', padding:'14px', borderRadius:16, border:'2.5px solid #1A2468', background:'#fff', color:'#1A2468', fontSize:14, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:'0 5px 0 rgba(26,36,104,.2),0 7px 16px rgba(26,36,104,.1)', display:'flex', alignItems:'center', justifyContent:'center', gap:8, letterSpacing:'-.01em' }}
-            onPointerDown={e=>{e.currentTarget.style.transform='translateY(3px)';e.currentTarget.style.boxShadow='0 2px 0 rgba(26,36,104,.2)'}}
-            onPointerUp={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 rgba(26,36,104,.2),0 7px 16px rgba(26,36,104,.1)'}}
-            onPointerLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 rgba(26,36,104,.2),0 7px 16px rgba(26,36,104,.1)'}}>
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="#1A2468" strokeWidth="1.6"/><line x1="5" y1="6" x2="11" y2="6" stroke="#1A2468" strokeWidth="1.4" strokeLinecap="round"/><line x1="5" y1="9" x2="9" y2="9" stroke="#1A2468" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            📋 Review Session
+            style={{ width:'100%', padding:'15px', borderRadius:18, border:'2.5px solid rgba(26,36,104,.2)', background:'#fff', color:NAVY2, fontSize:14, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:'0 5px 0 rgba(26,36,104,.15),0 7px 18px rgba(26,36,104,.08)', display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}
+            onPointerDown={e=>{e.currentTarget.style.transform='translateY(3px)';e.currentTarget.style.boxShadow='0 1px 0 rgba(26,36,104,.15)'}}
+            onPointerUp={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 rgba(26,36,104,.15),0 7px 18px rgba(26,36,104,.08)'}}
+            onPointerLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 5px 0 rgba(26,36,104,.15),0 7px 18px rgba(26,36,104,.08)'}}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke={NAVY2} strokeWidth="1.6"/><line x1="5" y1="6" x2="11" y2="6" stroke={NAVY2} strokeWidth="1.4" strokeLinecap="round"/><line x1="5" y1="9" x2="9" y2="9" stroke={NAVY2} strokeWidth="1.4" strokeLinecap="round"/></svg>
+            📋 Review Answers
           </button>
           <button onClick={onRematch}
-            style={{ width:'100%', padding:'14px', borderRadius:16, border:'none', background:NAVY2, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:sh, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}
+            style={{ width:'100%', padding:'15px', borderRadius:18, border:'none', background:`linear-gradient(135deg,${NAVY2},#2A3A8C)`, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:shBtn, display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}
             onPointerDown={pr} onPointerUp={rl} onPointerLeave={rl}>
             🔁 Rematch
           </button>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>
-            {[{l:'⚔️ New Battle',fn:onNewBattle},{l:'🏠 Home',fn:onHome}].map(({l,fn})=>(
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {[
+              { l:'⚔️ New Battle', fn:onNewBattle, bg:`linear-gradient(135deg,${GOLD},#FBBF24)`, color:NAVY,  sh:`0 5px 0 ${GOLD2},0 6px 14px rgba(245,158,11,.3)` },
+              { l:'🏠 Home',       fn:onHome,       bg:'#fff',                                    color:NAVY2, sh:'0 4px 0 rgba(26,36,104,.1)', border:'2px solid rgba(26,36,104,.14)' },
+            ].map(({ l, fn, bg, color, sh, border }) => (
               <button key={l} onClick={fn}
-                style={{ padding:'12px', borderRadius:14, background:'#fff', border:'2px solid rgba(26,36,104,.12)', color:'#1A1F5E', fontSize:12, fontWeight:800, fontFamily:'inherit', cursor:'pointer', boxShadow:'0 4px 0 rgba(26,36,104,.1),0 5px 12px rgba(26,36,104,.06)', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                style={{ padding:'13px', borderRadius:16, background:bg, border:border||'none', color, fontSize:13, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:sh, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
+                onPointerDown={e=>{e.currentTarget.style.transform='translateY(2px)'}}
+                onPointerUp={e=>{e.currentTarget.style.transform=''}}
+                onPointerLeave={e=>{e.currentTarget.style.transform=''}}>
                 {l}
               </button>
             ))}
           </div>
         </div>
+
+      </div>{/* /maxWidth:520 */}
       </div>
     </div>
   )
 }
 
+
 // ── BattleReview ──────────────────────────────────────────────────────────────
 function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
   const [idx, setIdx] = useState(0)
 
-  const q         = questions[idx]
-  const opts      = q ? normaliseOptions(q.options) : []
-  const log       = answersLog[idx] ?? {}
-  const selIdx    = log.selectedIdx ?? null
-  const isCorrect = log.isCorrect ?? false
-  const skipped   = selIdx === null && !isCorrect
+  const q          = questions[idx]
+  const opts       = q ? normaliseOptions(q.options) : []
+  const log        = answersLog[idx] ?? {}
+  const selIdx     = log.selectedIdx ?? null
+  const isCorrect  = log.isCorrect ?? false
+  const skipped    = selIdx === null && !isCorrect
   const correctIdx = opts.findIndex((_, i) => checkCorrect(opts, i, q?.correct_answer))
-  const cpuAns    = cpuChoices[idx]
-  const cpuIdx    = cpuAns != null ? opts.indexOf(cpuAns) : -1
-  const total     = questions.length
-  const hasExpl   = hasDisplayableExplanation(q?.explanation)
-  // Selected answer letter for wrong_options highlighting (same as ReviewSession)
+  const cpuAns     = cpuChoices[idx]
+  const cpuIdx     = cpuAns != null ? opts.indexOf(cpuAns) : -1
+  const total      = questions.length
+  const hasExpl    = hasDisplayableExplanation(q?.explanation)
   const selectedKey = selIdx != null ? LETTERS[selIdx] ?? null : null
 
   const sh    = `0 5px 0 #031548,0 7px 16px rgba(26,36,104,.3)`
@@ -364,90 +509,94 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
     <div style={{ position:'fixed', inset:0, zIndex:1500, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <SkyBg/>
 
-      {/* Review top bar */}
-      <div style={{ background:`linear-gradient(180deg,${NAVY} 0%,${NAVY2} 100%)`, flexShrink:0, zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,.4)', paddingTop:'env(safe-area-inset-top)' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px 8px' }}>
-          <button onClick={onDone}
-            style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(255,255,255,.12)', border:'1.5px solid rgba(255,255,255,.2)', borderRadius:10, padding:'7px 12px', color:'#fff', fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit' }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      {/* ── Top bar — matches game header style ── */}
+      <div style={{ background:`linear-gradient(180deg,#0B1138 0%,${NAVY2} 100%)`, flexShrink:0, zIndex:100, boxShadow:'0 4px 0 rgba(3,10,50,.6),0 6px 20px rgba(0,0,0,.4)', paddingTop:'env(safe-area-inset-top,0px)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 16px 10px' }}>
+          {/* Back to results */}
+          <button onClick={onDone} style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(8,14,60,.6)', border:'1.5px solid rgba(255,255,255,.18)', borderRadius:12, padding:'8px 14px', color:'#fff', fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 2px 8px rgba(0,0,0,.25)' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Results
           </button>
+          {/* Centre label */}
           <div style={{ textAlign:'center' }}>
-            <div style={{ fontSize:9, fontWeight:900, color:'rgba(255,255,255,.55)', textTransform:'uppercase', letterSpacing:'.1em' }}>Reviewing</div>
-            <div style={{ fontSize:13, fontWeight:900, color:'#fff' }}>Question {idx + 1} of {total}</div>
+            <div style={{ fontSize:9, fontWeight:900, color:'rgba(255,255,255,.5)', textTransform:'uppercase', letterSpacing:'.1em', lineHeight:1, marginBottom:3 }}>Reviewing</div>
+            <div style={{ fontSize:14, fontWeight:900, color:'#fff' }}>Q {idx+1} of {total}</div>
           </div>
-          <div style={{ background:'rgba(255,184,0,.15)', border:'1px solid rgba(255,184,0,.3)', borderRadius:9, padding:'5px 10px', fontSize:11, fontWeight:900, color:'#FCD34D' }}>
+          {/* Score chip */}
+          <div style={{ background:'rgba(255,184,0,.15)', border:'1.5px solid rgba(255,184,0,.35)', borderRadius:12, padding:'7px 12px', fontSize:12, fontWeight:900, color:GOLD }}>
             {answersLog.filter(a => a.isCorrect).length}/{total} ✓
           </div>
         </div>
-        <div style={{ height:3, margin:'0 12px 10px', background:'rgba(255,255,255,.12)', borderRadius:999, overflow:'hidden' }}>
-          <div style={{ height:'100%', width:`${((idx + 1) / total) * 100}%`, background:`linear-gradient(90deg,${GOLD},#FF6A00)`, borderRadius:999, transition:'width .4s ease' }}/>
+        {/* Progress bar */}
+        <div style={{ height:3, margin:'0 14px 0', background:'rgba(255,255,255,.1)', borderRadius:999, overflow:'hidden' }}>
+          <div style={{ height:'100%', width:`${((idx+1)/total)*100}%`, background:`linear-gradient(90deg,${GOLD},#FF6A00)`, borderRadius:999, transition:'width .4s ease' }}/>
         </div>
       </div>
 
-      {/* Canvas */}
-      <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, padding:'18px 13px 0', display:'flex', flexDirection:'column', alignItems:'center' }}>
-        <div style={{ width:'100%', maxWidth:480, display:'flex', flexDirection:'column', gap:12 }}>
+      {/* ── Canvas ── */}
+      <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5 }}>
+        <div style={{ maxWidth:560, margin:'0 auto', padding:'20px 14px 0', display:'flex', flexDirection:'column', gap:13 }}>
 
-          {/* Question card */}
-          <div style={{ position:'relative', marginTop:16 }}>
-            <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:'linear-gradient(135deg,#F59E0B,#FBBF24)', border:'3px solid #D5E5F5', borderRadius:999, padding:'5px 18px', display:'flex', alignItems:'center', gap:7, fontSize:12, fontWeight:900, color:NAVY, whiteSpace:'nowrap', zIndex:5, boxShadow:`0 4px 0 ${GOLD2},0 6px 14px rgba(245,158,11,.35)` }}>
+          {/* ── Question card — game style, no icon ── */}
+          <div style={{ position:'relative', marginTop:14 }}>
+            {/* Subject pill */}
+            <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:`linear-gradient(135deg,${GOLD},#FBBF24)`, border:'3px solid rgba(255,255,255,.5)', borderRadius:999, padding:'5px 20px', display:'flex', alignItems:'center', gap:7, fontSize:12, fontWeight:900, color:NAVY, whiteSpace:'nowrap', zIndex:5, boxShadow:`0 4px 0 ${GOLD2},0 6px 14px rgba(245,158,11,.35)` }}>
               <span>{subjectEmoji(config?.subject_name)}</span>
               <span>{config?.subject_name || q?.subject_name || 'Question'}</span>
             </div>
-            <div style={{ background:'#FAFBFF', border:'3px solid #1A2468', borderRadius:22, boxShadow:'0 6px 0 rgba(26,36,104,.25),0 10px 24px rgba(26,36,104,.15),inset 0 1px 0 rgba(255,255,255,.9)', position:'relative', overflow:'visible' }}>
-              {[{left:'-8px'},{right:'-8px'}].map((s,i)=>(
-                <div key={i} style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:14, height:14, borderRadius:'50%', background:'#3B5BDB', border:'2.5px solid #D5E5F5', boxShadow:'0 2px 4px rgba(0,0,0,.2)', ...s }}/>
+            <div style={{ background:'#FAFBFF', border:'3px solid #1A2468', borderRadius:22, boxShadow:'0 8px 0 rgba(26,36,104,.22),0 12px 28px rgba(26,36,104,.14),inset 0 1px 0 rgba(255,255,255,.9)', position:'relative', overflow:'visible' }}>
+              {[{left:'-9px'},{right:'-9px'}].map((s,i)=>(
+                <div key={i} style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:16, height:16, borderRadius:'50%', background:'#3B5BDB', border:'2.5px solid #D5E5F5', boxShadow:'0 2px 5px rgba(0,0,0,.22)', zIndex:2, ...s }}/>
               ))}
-              <div style={{ padding:'28px 16px 18px', display:'flex', alignItems:'flex-start', gap:10 }}>
-                <div style={{ flex:1, fontSize:16, fontWeight:900, color:'#1A1F5E', lineHeight:1.6, minWidth:0, wordBreak:'break-word' }}>
+              <div style={{ padding:'30px 18px 20px' }}>
+                <div style={{ fontSize:16, fontWeight:900, color:'#1A1F5E', lineHeight:1.65, wordBreak:'break-word' }}>
                   <MathText text={q?.text ?? q?.question_text ?? ''} as="span" className=""/>
                 </div>
-                <div style={{ fontSize:40, flexShrink:0, alignSelf:'center', filter:'drop-shadow(0 3px 6px rgba(0,0,0,.14))' }}>{subjectEmoji(config?.subject_name)}</div>
               </div>
             </div>
           </div>
 
-          {/* Answer tiles — frozen post-reveal */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {/* ── Answer tiles — 1 col mobile, 2-col desktop, matching active battle style ── */}
+          <div className="btiles">
             {opts.map((opt, i) => {
               const isC    = i === correctIdx
               const isW    = i === selIdx && !isCorrect
               const dim    = !isC && !isW
               const tileBg = isC ? '#16A34A' : isW ? '#DC2626' : TILE[i]?.bg ?? '#3B82F6'
-              const tileSh = isC ? '0 5px 0 #15803D,0 7px 18px rgba(22,163,74,.4)' : isW ? '0 5px 0 #991B1B,0 7px 18px rgba(220,38,38,.4)' : `0 6px 0 ${TILE[i]?.press ?? '#1D4ED8'}`
+              const tileSh = isC ? '0 5px 0 #15803D,0 7px 18px rgba(22,163,74,.4)' : isW ? '0 5px 0 #991B1B,0 7px 18px rgba(220,38,38,.4)' : `0 5px 0 ${TILE[i]?.press ?? '#1D4ED8'}`
               const letter = isC ? '✓' : isW ? '✗' : LETTERS[i]
-              const ltrBg  = isC || isW ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.25)'
+              const ltrBg  = isC || isW ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.22)'
               const showYou = i === selIdx
               const showCpu = i === cpuIdx
               return (
                 <div key={i} style={{ position:'relative', borderRadius:18, opacity: dim ? .26 : 1 }}>
-                  <div style={{ display:'flex', alignItems:'center', padding:'0 9px 0 0', borderRadius:18, background:tileBg, boxShadow:tileSh, minHeight:64, position:'relative', overflow:'hidden', border:`2px solid ${isC ? 'rgba(255,255,255,.4)' : 'transparent'}` }}>
+                  <div className="btile-h" style={{ display:'flex', alignItems:'center', padding:'0 10px 0 0', borderRadius:18, background:tileBg, boxShadow:tileSh, position:'relative', overflow:'hidden', border:`2px solid ${isC ? 'rgba(255,255,255,.4)' : 'transparent'}` }}>
                     <div style={{ position:'absolute', top:0, left:0, right:0, height:'42%', background:'linear-gradient(to bottom,rgba(255,255,255,.25),transparent)', borderRadius:'16px 16px 0 0', pointerEvents:'none' }}/>
-                    <div style={{ width:36, height:36, borderRadius:'50%', background:ltrBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:900, color:'#fff', flexShrink:0, margin:'0 10px', boxShadow:'inset 0 2px 4px rgba(0,0,0,.15)', position:'relative', zIndex:1 }}>{letter}</div>
-                    <div style={{ flex:1, fontSize:13, fontWeight:800, color:'#fff', lineHeight:1.35, minWidth:0, wordBreak:'break-word', position:'relative', zIndex:1 }}>
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:5, background:'rgba(0,0,0,.16)', borderRadius:'0 0 16px 16px', pointerEvents:'none' }}/>
+                    <div style={{ width:38, height:38, borderRadius:'50%', background:ltrBg, border:'2px solid rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:900, color:'#fff', flexShrink:0, margin:'0 11px', boxShadow:'inset 0 2px 4px rgba(0,0,0,.15)', position:'relative', zIndex:1 }}>{letter}</div>
+                    <div style={{ flex:1, fontSize:14, fontWeight:800, color:'#fff', lineHeight:1.4, minWidth:0, wordBreak:'break-word', position:'relative', zIndex:1 }}>
                       <MathText text={String(opt ?? '')} as="span" className=""/>
                     </div>
-                    <div style={{ flexShrink:0, position:'relative', zIndex:1 }}>{DECOS[i]}</div>
+                    {DECOS[i] && <div style={{ flexShrink:0, position:'relative', zIndex:1, marginRight:4 }}>{DECOS[i]}</div>}
                   </div>
-                  {/* ── Player / CPU choice badges — large & clear ── */}
+                  {/* Player / CPU choice badges */}
                   {(showYou || showCpu) && (
-                    <div style={{ position:'absolute', top:-14, right:6, display:'flex', gap:4, zIndex:10 }}>
-                      {showYou && (
+                    <div style={{ position:'absolute', top:-13, right:8, display:'flex', gap:4, zIndex:10 }}>
+                      {showYou && !showCpu && (
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                          <div style={{ width:36, height:36, borderRadius:'50%', background:'#3B5BDB', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>👤</div>
+                          <div style={{ width:34, height:34, borderRadius:'50%', background:'#3B5BDB', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>👤</div>
                           <span style={{ fontSize:8, fontWeight:900, color:'#fff', background:'#3B5BDB', borderRadius:999, padding:'1px 5px', boxShadow:'0 1px 4px rgba(0,0,0,.3)', whiteSpace:'nowrap' }}>You</span>
                         </div>
                       )}
                       {showCpu && !showYou && (
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                          <div style={{ width:36, height:36, borderRadius:'50%', background:'#6D28D9', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>🤖</div>
+                          <div style={{ width:34, height:34, borderRadius:'50%', background:'#6D28D9', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>🤖</div>
                           <span style={{ fontSize:8, fontWeight:900, color:'#fff', background:'#6D28D9', borderRadius:999, padding:'1px 5px', boxShadow:'0 1px 4px rgba(0,0,0,.3)', whiteSpace:'nowrap' }}>CPU</span>
                         </div>
                       )}
                       {showCpu && showYou && (
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                          <div style={{ width:36, height:36, borderRadius:'50%', background:NAVY2, border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>🤝</div>
+                          <div style={{ width:34, height:34, borderRadius:'50%', background:NAVY2, border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, boxShadow:'0 3px 8px rgba(0,0,0,.35)' }}>🤝</div>
                           <span style={{ fontSize:8, fontWeight:900, color:'#fff', background:NAVY2, borderRadius:999, padding:'1px 5px', boxShadow:'0 1px 4px rgba(0,0,0,.3)', whiteSpace:'nowrap' }}>Both</span>
                         </div>
                       )}
@@ -458,25 +607,25 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
             })}
           </div>
 
-          {/* Result banner */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:16, background: isCorrect?'#DCFCE7':skipped?'#F3F4F6':'#FEE2E2', border:`2px solid ${isCorrect?'rgba(34,197,94,.3)':skipped?'rgba(107,114,128,.2)':'rgba(239,68,68,.25)'}`, boxShadow:'0 2px 8px rgba(0,0,0,.06)' }}>
-            <div style={{ width:36, height:36, borderRadius:'50%', background: isCorrect?'#16A34A':skipped?'#6B7280':'#DC2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:'#fff', flexShrink:0, boxShadow:`0 3px 8px ${isCorrect?'rgba(22,163,74,.35)':'rgba(220,38,38,.3)'}` }}>
+          {/* ── Result banner — game-styled ── */}
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 15px', borderRadius:18, background: isCorrect ? 'linear-gradient(135deg,#DCFCE7,#F0FDF4)' : skipped ? 'linear-gradient(135deg,#F3F4F6,#F9FAFB)' : 'linear-gradient(135deg,#FEE2E2,#FFF5F5)', border:`2.5px solid ${isCorrect ? 'rgba(34,197,94,.35)' : skipped ? 'rgba(107,114,128,.25)' : 'rgba(239,68,68,.3)'}`, boxShadow:'0 4px 0 rgba(26,36,104,.08),0 5px 14px rgba(26,36,104,.06)' }}>
+            <div style={{ width:44, height:44, borderRadius:'50%', background: isCorrect ? '#16A34A' : skipped ? '#6B7280' : '#DC2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, color:'#fff', flexShrink:0, boxShadow:`0 4px 10px ${isCorrect ? 'rgba(22,163,74,.4)' : skipped ? 'rgba(107,114,128,.3)' : 'rgba(220,38,38,.35)'}` }}>
               {isCorrect ? '✓' : skipped ? '⏱' : '✗'}
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:900, color: isCorrect?'#15803D':skipped?'#4B5563':'#B91C1C' }}>
+              <div style={{ fontSize:15, fontWeight:900, color: isCorrect ? '#15803D' : skipped ? '#4B5563' : '#B91C1C' }}>
                 {isCorrect ? 'Correct — +10 pts' : skipped ? "Time's up — 0 pts" : 'Wrong — 0 pts'}
               </div>
               {!isCorrect && !skipped && q?.correct_answer && (
-                <div style={{ fontSize:11, color:'#6B7280', marginTop:2 }}>
+                <div style={{ fontSize:12, color:'#6B7280', marginTop:3 }}>
                   Correct: <strong style={{ color:'#15803D' }}>{opts[correctIdx] ?? q.correct_answer}</strong>
                 </div>
               )}
             </div>
-            {isCorrect && <div style={{ fontSize:12, fontWeight:900, color:'#92400E', background:'#FEF3C7', border:'1px solid rgba(245,158,11,.3)', borderRadius:999, padding:'3px 10px', flexShrink:0 }}>+10 XP ⚡</div>}
+            {isCorrect && <div style={{ fontSize:12, fontWeight:900, color:'#92400E', background:`linear-gradient(135deg,${GOLD},#FBBF24)`, borderRadius:999, padding:'5px 12px', flexShrink:0, boxShadow:`0 3px 0 ${GOLD2}` }}>+10 XP ⚡</div>}
           </div>
 
-          {/* Explanation — uses ExplanationBlock, identical to practice ReviewSession */}
+          {/* Explanation */}
           {hasExpl && q && (
             <ExplanationBlock
               explanation={q.explanation}
@@ -494,20 +643,21 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
               <div key={i} style={{ height:7, borderRadius:4, transition:'all .25s', background: i < idx ? GOLD : i === idx ? NAVY2 : 'rgba(26,36,104,.15)', width: i === idx ? 20 : i < idx ? 14 : 8 }}/>
             ))}
           </div>
+
           <div style={{ height:'max(90px,calc(80px + env(safe-area-inset-bottom)))', flexShrink:0 }}/>
         </div>
       </div>
 
-      {/* Bottom nav */}
-      <div style={{ flexShrink:0, zIndex:100, background:'linear-gradient(to top,#D5E5F5 65%,transparent)', padding:'10px 14px', paddingBottom:'max(14px,env(safe-area-inset-bottom))' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, maxWidth:480, margin:'0 auto' }}>
-          <button onClick={() => { setIdx(i => Math.max(0, i - 1)) }} disabled={idx === 0}
-            style={{ padding:'13px', borderRadius:999, border:'2px solid rgba(26,36,104,.2)', background:'#fff', color:NAVY2, fontSize:14, fontWeight:900, fontFamily:'inherit', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? .4 : 1, boxShadow: idx === 0 ? 'none' : '0 4px 0 rgba(26,36,104,.15)', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+      {/* ── Bottom nav ── */}
+      <div style={{ flexShrink:0, zIndex:100, background:`linear-gradient(to top,#C8DDEF 65%,transparent)`, padding:'10px 14px', paddingBottom:'max(14px,env(safe-area-inset-bottom))' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, maxWidth:560, margin:'0 auto' }}>
+          <button onClick={() => setIdx(i => Math.max(0, i-1))} disabled={idx===0}
+            style={{ padding:'13px', borderRadius:999, border:'2.5px solid rgba(26,36,104,.2)', background:'#fff', color:NAVY2, fontSize:14, fontWeight:900, fontFamily:'inherit', cursor: idx===0 ? 'not-allowed' : 'pointer', opacity: idx===0 ? .4 : 1, boxShadow: idx===0 ? 'none' : '0 4px 0 rgba(26,36,104,.15)', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Previous
           </button>
-          {idx < total - 1 ? (
-            <button onClick={() => { setIdx(i => i + 1) }}
+          {idx < total-1 ? (
+            <button onClick={() => setIdx(i => i+1)}
               style={{ padding:'13px', borderRadius:999, border:'none', background:NAVY2, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:sh, display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}
               onPointerDown={e=>{e.currentTarget.style.transform='translateY(3px)';e.currentTarget.style.boxShadow=shPrs}}
               onPointerUp={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=sh}}
@@ -696,10 +846,12 @@ export default function BattleSessionPage() {
     opponent.current = createComputerOpponent(stats.ai_difficulty || 'easy')
 
     const totalCount  = cfg.count || 10
-    const baseParams  = { mode: 'battle', _t: String(Date.now()) }
+    const baseParams  = { mode: 'battle', _t: String(Date.now()), exam: cfg.exam || 'WAEC' }
     if (cfg.subject_id)   baseParams.subject_id = cfg.subject_id
     else if (cfg.subject_name) baseParams.subjects = cfg.subject_name
     if (cfg.topic_id)    baseParams.topic_id = cfg.topic_id
+    // On rematch: exclude previous question IDs so we get a fresh set
+    if (cfg._exclude)    baseParams.exclude = cfg._exclude
 
     // ── Phase 1: first batch ─────────────────────────────────────────────────
     const p1 = new URLSearchParams({ ...baseParams, count: String(Math.min(FIRST_BATCH, totalCount)) })
@@ -807,8 +959,11 @@ export default function BattleSessionPage() {
     setPhase('saving')
     const correct = answersLog.current.filter(a => a.is_correct).length
     const finalS  = correct * 10
+    // Guard: cpuChoices may have been pre-filled for questions that never arrived
     const finalC  = cpuChoices.current.reduce((acc, ans, i) => {
-      const q = questions[i], opts = normaliseOptions(q.options)
+      const q = questions[i]
+      if (!q || !ans) return acc   // ← crash fix: skip if question didn't arrive
+      const opts = normaliseOptions(q.options)
       const cor = opts.indexOf(ans) >= 0 ? checkCorrect(opts, opts.indexOf(ans), q.correct_answer) : ans === q.correct_answer
       return acc + (cor ? 10 : 0)
     }, 0)
@@ -917,7 +1072,20 @@ export default function BattleSessionPage() {
     <BattleResults
       questions={questions} answersLog={answersLog.current}
       studentScore={saveData.finalS} cpuScore={saveData.finalC} xpAwarded={saveData.xp}
-      onRematch={() => { try{sessionStorage.setItem('battle_config',JSON.stringify(config))}catch{} window.location.reload() }}
+      onRematch={() => {
+        try {
+          const cfg = { ...config }
+          // Always bust cache so the API fetches a fresh set
+          cfg._rematch_t = Date.now()
+          // For non-topic-drill modes, also exclude the current question IDs
+          // so the student never gets the exact same questions again
+          if (!cfg.topic_id) {
+            cfg._exclude = questions.map(q => q.id).join(',')
+          }
+          sessionStorage.setItem('battle_config', JSON.stringify(cfg))
+        } catch {}
+        window.location.reload()
+      }}
       onNewBattle={() => router.push('/student/battle/setup')}
       onHome={() => router.push('/student/home')}
       onReview={() => setPhase('review')}
@@ -985,25 +1153,30 @@ export default function BattleSessionPage() {
                     <TimerRing key={timerKey} secs={config.timerSecs||30} onTimeUp={handleTimerUp} revealed={revealed}/>
                   )}
                 </div>
-                {/* Card */}
-                <div style={{ background:'#FAFBFF', border:'3px solid #1A2468', borderRadius:24, boxShadow:'0 10px 0 rgba(26,36,104,.2),0 14px 32px rgba(26,36,104,.14),inset 0 1px 0 rgba(255,255,255,.9)', position:'relative', overflow:'visible', minHeight:'clamp(140px,20vw,240px)' }}>
+                {/* Card — question only, no icon */}
+                <div style={{ background:'#FAFBFF', border:'3px solid #1A2468', borderRadius:24, boxShadow:'0 10px 0 rgba(26,36,104,.2),0 14px 32px rgba(26,36,104,.14),inset 0 1px 0 rgba(255,255,255,.9)', position:'relative', overflow:'visible' }}>
                   {[{left:'-10px'},{right:'-10px'}].map((s,i)=>(
                     <div key={i} style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:18, height:18, borderRadius:'50%', background:'#3B5BDB', border:'3px solid #D5E5F5', boxShadow:'0 2px 6px rgba(0,0,0,.25)', ...s }}/>
                   ))}
-                  <div style={{ padding:'clamp(32px,5vw,52px) clamp(20px,4vw,36px) clamp(24px,4vw,40px)', display:'flex', alignItems:'flex-start', gap:18, minHeight:'clamp(140px,20vw,240px)' }}>
-                    <div style={{ flex:1, fontSize:'clamp(17px,2.4vw,26px)', fontWeight:900, color:'#1A1F5E', lineHeight:1.65, minWidth:0, wordBreak:'break-word' }}>
+                  <div style={{ padding:'clamp(32px,5vw,52px) clamp(22px,4vw,38px) clamp(24px,4vw,40px)' }}>
+                    <div style={{ fontSize:'clamp(17px,2.4vw,26px)', fontWeight:900, color:'#1A1F5E', lineHeight:1.65, wordBreak:'break-word' }}>
                       <MathText text={q.text ?? q.question_text ?? ''} as="span" className=""/>
-                    </div>
-                    <div style={{ fontSize:'clamp(46px,7vw,68px)', flexShrink:0, alignSelf:'center', filter:'drop-shadow(0 3px 8px rgba(0,0,0,.16))' }}>
-                      {subjectEmoji(config?.subject_name)}
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 2×2 Answer tiles */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'clamp(10px,1.5vw,16px)', alignItems:'stretch' }}>
+            {/* Answer tiles — 1 col mobile, 2×2 desktop */}
+            <style>{`
+              .btiles{display:grid;grid-template-columns:1fr;gap:11px;align-items:stretch}
+              .btile-h{min-height:clamp(56px,8vw,72px)}
+              @media(min-width:600px){
+                .btiles{grid-template-columns:1fr 1fr;gap:clamp(10px,1.5vw,16px)}
+                .btile-h{min-height:clamp(80px,12vw,110px)}
+              }
+            `}</style>
+            <div className="btiles">
               {opts.map((opt, idx) => {
                 const tile   = TILE[idx] ?? TILE[0]
                 const isCor  = checkCorrect(opts, idx, q?.correct_answer)
@@ -1040,7 +1213,7 @@ export default function BattleSessionPage() {
                     className={isSel && !revealed ? 'tile-pop' : ''}
                     style={{ background:'none', border:'none', padding:0, cursor:revealed?'default':'pointer', borderRadius:18, opacity, WebkitTapHighlightColor:'transparent', position:'relative', display:'flex', flexDirection:'column' }}
                   >
-                    <div style={{ flex:1, display:'flex', alignItems:'center', padding:'0 clamp(12px,2vw,20px) 0 0', borderRadius:18, background:bg, boxShadow:shadow, border, minHeight:'clamp(80px,12vw,110px)', position:'relative', overflow:'hidden', transition:'box-shadow .1s, opacity .1s' }}>
+                    <div className="btile-h" style={{ flex:1, display:'flex', alignItems:'center', padding:'0 clamp(12px,2vw,18px) 0 0', borderRadius:18, background:bg, boxShadow:shadow, border, position:'relative', overflow:'hidden', transition:'box-shadow .1s, opacity .1s' }}>
                       {/* Sheen */}
                       <div style={{ position:'absolute', top:0, left:0, right:0, height:'42%', background:'linear-gradient(to bottom,rgba(255,255,255,.28),transparent)', borderRadius:'16px 16px 0 0', pointerEvents:'none' }}/>
                       {/* Press shadow strip */}

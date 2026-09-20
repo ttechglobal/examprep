@@ -4,11 +4,14 @@
 
 import { useState, useEffect } from 'react'
 import Link                    from 'next/link'
+import { Baloo_2 }             from 'next/font/google'
 import { usePoints }           from '@/contexts/PointsContext'
 import { useTheme }            from '@/contexts/ThemeContext'
 import { useStudentUser }      from '@/app/student/layout'
 import { readWeeklyActivity, readLocalStreak } from '@/lib/localSessionSync'
 import BattleEntryCard from '@/components/battle/BattleEntryCard'
+
+const baloo = Baloo_2({ subsets: ['latin'], weight: ['800'], display: 'swap' })
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -24,11 +27,13 @@ const BOARD_TTL = 2 * 60 * 1000
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
 
 const GREETINGS = [
-  { pre: 'Ready to',    em: 'practise?',   sub: 'Your goals are waiting.' },
-  { pre: "Let's go,",   em: 'crush it.',   sub: 'Every question takes you closer.' },
-  { pre: 'Back at it,', em: 'keep going.', sub: 'Consistent effort is what separates you.' },
-  { pre: 'Time to',     em: 'level up.',   sub: 'Sharpen your skills, crush your goals.' },
+  { em: "let's practice!",  sub: "5 minutes. Let's go.",  subIcon: "🔥" },
+  { em: "let's level up!",  sub: "Every question counts.", subIcon: "⚡" },
+  { em: "crush it today!",  sub: "You've got what it takes.", subIcon: "💪" },
+  { em: "let's go again!",  sub: "Consistency wins exams.", subIcon: "🎯" },
+  { em: "show out today!",  sub: "Your goals are waiting.", subIcon: "🚀" },
 ]
+
 
 // ─── LAYOUT GRID ─────────────────────────────────────────────────────────────
 function PageGrid({ left, right }) {
@@ -50,76 +55,114 @@ function PageGrid({ left, right }) {
 
 
 // ─── HERO ─────────────────────────────────────────────────────────────────────
-// Mascot floats freely — not inside the card. Card is clean text + CTA only.
+// Reference design: "[Name], let's practice!" large bold + sparkles, no card.
+// Sub-line small below. Mascot top-right, large. Below: compact CTA card.
 function Hero({ name }) {
   const g = GREETINGS[Math.floor(Date.now() / 86400000) % GREETINGS.length]
 
   return (
-    <div style={{ position: 'relative' }}>
-      {/* Free-floating mascot — sits outside the card, overlaps top-right edge */}
-      <div style={{
-        position: 'absolute', right: 0, bottom: 0, width: 150, zIndex: 3,
-        pointerEvents: 'none',
-        transform: 'translateY(-8px)',
-      }}>
-        <img
-          src="/images/zara_studybuddy.png"
-          alt=""
-          style={{
-            width: '100%', display: 'block', objectFit: 'contain',
-            objectPosition: 'bottom',
-            filter: 'drop-shadow(0 16px 32px rgba(0,0,0,.45))',
-          }}
-          onError={e => { e.currentTarget.style.display = 'none' }}
-        />
-      </div>
+    <div>
+      {/* ── Greeting area — no card, lives on page background ── */}
+      <div style={{ position: 'relative', minHeight: 140, paddingRight: 200 }}>
 
-      <Link href="/student/practice" style={{ textDecoration: 'none', display: 'block' }}>
-        <div style={{
-          borderRadius: 24,
-          background: `linear-gradient(140deg, ${NAVY} 0%, #0d2464 55%, #0e1e50 100%)`,
-          overflow: 'hidden', position: 'relative',
-          padding: '32px 180px 32px 32px', // right padding clears floating mascot
-          minHeight: 200,
-        }}>
-          {/* Subtle radial lights */}
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 55% 90% at 15% 50%, rgba(18,100,229,.2) 0%, transparent 70%)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 35% 50% at 90% 100%, rgba(255,184,0,.06) 0%, transparent 60%)', pointerEvents: 'none' }} />
+        {/* Mascot — large, top-right, free-floating */}
+        <div style={{ position: 'absolute', right: -8, top: -16, width: 190, zIndex: 3, pointerEvents: 'none' }}>
+          <img
+            src="/images/zara_studybuddy.png"
+            alt=""
+            style={{ width: '100%', display: 'block', objectFit: 'contain', objectPosition: 'bottom', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,.2))' }}
+            onError={e => { e.currentTarget.style.display = 'none' }}
+          />
+        </div>
 
-          {/* Decorative dots */}
-          {[[14,'8%','78%',GOLD],[10,'22%','88%',BLUE],[8,'72%','15%','#4A9EF8']].map(([fs,top,left,c],i) => (
-            <div key={i} style={{ position:'absolute', top, left, fontSize:fs, color:c, opacity:.25, pointerEvents:'none' }}>✦</div>
-          ))}
+        {/* Greeting text */}
+        <div style={{ paddingTop: 16, position: 'relative', zIndex: 2 }}>
+          {/* Main headline: "[Name], let's practice!" — Baloo 2 ExtraBold, playfully distorted */}
+          <div className={baloo.className} style={{
+            fontSize: 'clamp(26px, 5vw, 38px)',
+            fontWeight: 800,
+            lineHeight: 1.08,
+            marginBottom: 10,
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 5px',
+          }}>
+            {/* Sparkle left — wobbles */}
+            <span style={{
+              fontSize: 'clamp(16px, 3vw, 22px)', color: GOLD, marginRight: 2,
+              display: 'inline-block',
+              transform: 'rotate(-15deg) scale(1.1)',
+            }}>✦</span>
 
-          <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.4)', marginBottom: 4 }}>
-              {name},
-            </div>
-            <div style={{ fontSize: 27, fontWeight: 900, color: '#fff', lineHeight: 1.15, letterSpacing: '-.03em', marginBottom: 6 }}>
-              {g.pre}<br />
-              <span style={{ color: '#4A9EF8' }}>{g.em}</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.35)', fontWeight: 500, lineHeight: 1.55, marginBottom: 24 }}>
-              {g.sub}
-            </div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 9,
-              background: BLUE, borderRadius: 13, padding: '12px 20px',
-              boxShadow: '0 4px 18px rgba(18,100,229,.5)',
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Practice Now</span>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".7"/>
-              </svg>
-            </div>
+            {/* Name — slight upward tilt */}
+            <span style={{
+              color: NAVY,
+              display: 'inline-block',
+              transform: 'rotate(-1.5deg) skewX(-3deg)',
+              transformOrigin: 'bottom left',
+            }}>{name},</span>
+
+            {/* Playful phrase — squish + tilt the other way */}
+            <span style={{
+              color: BLUE,
+              display: 'inline-block',
+              transform: 'rotate(1deg) skewX(2deg) scaleY(1.04)',
+              transformOrigin: 'bottom left',
+            }}>{g.em}</span>
+
+            {/* Sparkle right */}
+            <span style={{
+              fontSize: 'clamp(13px, 2.5vw, 17px)', color: GOLD, marginLeft: 2,
+              display: 'inline-block',
+              transform: 'rotate(20deg) scale(1.15)',
+            }}>✦</span>
+          </div>
+
+          {/* Sub-line */}
+          <div style={{
+            fontSize: 'clamp(13px, 2vw, 16px)',
+            fontWeight: 700,
+            color: 'var(--text-sec)',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span>{g.sub}</span>
+            <span>{g.subIcon}</span>
           </div>
         </div>
-      </Link>
+      </div>
+
+      {/* ── Compact CTA card — button only ── */}
+      <div style={{ marginTop: 22 }}>
+        <Link href="/student/practice" style={{ textDecoration: 'none', display: 'block' }}>
+          <div style={{
+            borderRadius: 20,
+            background: `linear-gradient(135deg, ${NAVY} 0%, #0d2464 60%, #162878 100%)`,
+            padding: '16px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            boxShadow: `0 6px 0 rgba(6,42,120,.28), 0 10px 24px rgba(6,42,120,.18)`,
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '42%', background: 'linear-gradient(to bottom,rgba(255,255,255,.08),transparent)', pointerEvents: 'none', borderRadius: '20px 20px 0 0' }}/>
+            {/* Stars */}
+            {[[GOLD,'10%','6%',8],[BLUE,'78%','16%',6],['#4A9EF8','38%','90%',5]].map(([c,t,l,fs],i)=>(
+              <div key={i} style={{ position:'absolute', top:t, left:l, fontSize:fs, color:c, opacity:.35, pointerEvents:'none' }}>✦</div>
+            ))}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.4)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.12em' }}>READY TO GO?</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-.01em' }}>Start Practising Now</div>
+            </div>
+            <div style={{
+              position: 'relative', zIndex: 1, flexShrink: 0,
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: BLUE, borderRadius: 13, padding: '11px 18px',
+              boxShadow: '0 4px 0 rgba(10,54,180,.45)',
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: '#fff' }}>Go →</span>
+            </div>
+          </div>
+        </Link>
+      </div>
     </div>
   )
 }
-
-
 // ─── BATTLE SECTION ───────────────────────────────────────────────────────────
 // Mirrors the battle page aesthetic — VS scoreboard, sky bg, game feel
 function BattleCard() {
@@ -406,7 +449,6 @@ export default function HomePage() {
         {isGuest && <GuestNudge />}
         <PracticeActivity activity={activity} streak={streak} />
         <LeaderboardSnap board={board} myId={myId} />
-        {isGuest && <GuestNudge />}
       </>}
     />
   )
