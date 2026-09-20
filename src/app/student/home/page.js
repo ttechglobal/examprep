@@ -63,10 +63,14 @@ function Hero({ name }) {
   return (
     <div>
       {/* ── Greeting area — no card, lives on page background ── */}
-      <div style={{ position: 'relative', minHeight: 140, paddingRight: 200 }}>
+      <style>{`
+        .hero-mascot-wrap { position: absolute; right: -8px; top: 8px; width: 175px; zIndex: 3; pointer-events: none; }
+        @media (min-width: 768px) { .hero-mascot-wrap { top: -20px; width: 210px; right: -12px; } }
+      `}</style>
+      <div style={{ position: 'relative', minHeight: 140, paddingRight: 185, paddingLeft: 6 }}>
 
         {/* Mascot — large, top-right, free-floating */}
-        <div style={{ position: 'absolute', right: -8, top: -16, width: 190, zIndex: 3, pointerEvents: 'none' }}>
+        <div className="hero-mascot-wrap">
           <img
             src="/images/zara_studybuddy.png"
             alt=""

@@ -11,10 +11,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { Baloo_2 } from 'next/font/google'
 import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
+
+const baloo = Baloo_2({ subsets: ['latin'], weight: ['800'], display: 'swap' })
 // import DailyChallenge from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
 import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
@@ -102,14 +105,55 @@ function SecLabel({ children, right }) {
 
 
 // ─── HERO ─────────────────────────────────────────────────────────────────────
-function HeroBanner() {
+const PRACTICE_GREETINGS = [
+  { em: 'time to practise!',  sub: 'Pick a mode and get going.', subIcon: '📚' },
+  { em: 'keep it up!',        sub: 'Consistency wins exams.',    subIcon: '🔥' },
+  { em: 'let\'s drill it!',   sub: 'Every rep counts.',          subIcon: '⚡' },
+  { em: 'lock in today!',     sub: 'Your best score is ahead.',  subIcon: '🎯' },
+  { em: 'grind time!',        sub: 'Hard work pays off.',        subIcon: '💪' },
+]
+
+function HeroBanner({ name }) {
+  const g = PRACTICE_GREETINGS[Math.floor(Date.now() / 86400000) % PRACTICE_GREETINGS.length]
+  const displayName = name || 'Student'
+
   return (
-    <div style={{ paddingBottom:4 }}>
-      <div style={{ fontSize:22, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em', lineHeight:1.2, marginBottom:4 }}>
-        How do you want to practise?
-      </div>
-      <div style={{ fontSize:13, color:'var(--text-tert)', fontWeight:500 }}>
-        Pick a mode and get started.
+    <div>
+      <style>{`
+        .practice-mascot { position: absolute; right: -8px; top: 6px; width: 165px; pointer-events: none; z-index: 3; }
+        @media (min-width: 768px) { .practice-mascot { top: -18px; width: 200px; right: -10px; } }
+      `}</style>
+      <div style={{ position: 'relative', minHeight: 130, paddingRight: 175, paddingLeft: 6 }}>
+
+        {/* Mascot */}
+        <div className="practice-mascot">
+          <img
+            src="/images/zara_studybuddy.png"
+            alt=""
+            style={{ width: '100%', display: 'block', objectFit: 'contain', objectPosition: 'bottom', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,.2))' }}
+            onError={e => { e.currentTarget.style.display = 'none' }}
+          />
+        </div>
+
+        {/* Greeting */}
+        <div style={{ paddingTop: 14, position: 'relative', zIndex: 2 }}>
+          <div className={baloo.className} style={{
+            fontSize: 'clamp(22px, 4.5vw, 34px)',
+            fontWeight: 800,
+            lineHeight: 1.1,
+            marginBottom: 8,
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 5px',
+          }}>
+            <span style={{ fontSize: 'clamp(14px, 2.5vw, 20px)', color: GOLD, marginRight: 2, display: 'inline-block', transform: 'rotate(-15deg) scale(1.1)' }}>✦</span>
+            <span style={{ color: 'var(--text-prim)', display: 'inline-block', transform: 'rotate(-1.5deg) skewX(-3deg)', transformOrigin: 'bottom left' }}>{displayName},</span>
+            <span style={{ color: BLUE, display: 'inline-block', transform: 'rotate(1deg) skewX(2deg) scaleY(1.04)', transformOrigin: 'bottom left' }}>{g.em}</span>
+            <span style={{ fontSize: 'clamp(12px, 2vw, 16px)', color: GOLD, marginLeft: 2, display: 'inline-block', transform: 'rotate(20deg) scale(1.15)' }}>✦</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-tert)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span>{g.sub}</span>
+            <span>{g.subIcon}</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -146,7 +190,7 @@ function StudyCard({ onClick }) {
 function MockCard({ onClick }) {
   return (
     <PrimaryCard
-      onClick={() => onClick('mock')}
+      onClick={() => onClick()}
       icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
       iconBg="linear-gradient(135deg,#7C3AED,#4c1d95)"
       iconShadow="rgba(124,58,237,.4)"
@@ -846,7 +890,7 @@ export default function PracticePage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <HeroBanner />
+        <HeroBanner name={profile?.full_name?.split(' ')[0] ?? profile?.username ?? ''} />
 
         {!hasSubjects && !loadingSubjects ? (
           <NoSubjectsPrompt isGuest={isGuest} />
@@ -861,7 +905,7 @@ export default function PracticePage() {
             {/* ── Primary modes: Study + Mock side by side ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <StudyCard onClick={openSheet} />
-              <MockCard onClick={openSheet} />
+              <MockCard onClick={() => router.push('/student/practice/mock')} />
             </div>
 
             {/* ── Divider + secondary modes ── */}

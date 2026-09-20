@@ -44,15 +44,27 @@ function ExamPicker({ onPick, onBack }) {
         <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:24 }}>Select the exam you want to simulate.</div>
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           {[
-            { exam:'WAEC', icon:'📗', color:GREEN,  desc:`1 subject · ${WAEC_COUNT} questions · ${WAEC_MINS} minutes` },
-            { exam:'JAMB', icon:'📘', color:PURPLE, desc:`Up to 4 subjects · ${JAMB_COUNT} questions each · ${JAMB_MINS} minutes` },
-          ].map(({ exam, icon, color, desc }) => (
+            { exam:'WAEC', logo:'/images/waec-logo.png',  color:GREEN,  desc:`1 subject · ${WAEC_COUNT} questions · ${WAEC_MINS} minutes` },
+            { exam:'JAMB', logo:'/images/jamb-logo.png',  color:PURPLE, desc:`Up to 4 subjects · ${JAMB_COUNT} questions each · ${JAMB_MINS} minutes` },
+          ].map(({ exam, logo, color, desc }) => (
             <button key={exam} onClick={() => onPick(exam)}
-              style={{ display:'flex', alignItems:'center', gap:16, padding:'20px', borderRadius:20, border:`2px solid var(--border)`, background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
-              <div style={{ width:48, height:48, borderRadius:14, background:`${color}15`, border:`1.5px solid ${color}40`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:24 }}>{icon}</div>
+              style={{ display:'flex', alignItems:'center', gap:16, padding:'20px', borderRadius:20, border:`2px solid var(--border)`, background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'border-color .15s, box-shadow .15s' }}>
+              {/* Logo tile */}
+              <div style={{ width:56, height:56, borderRadius:16, background:`${color}10`, border:`1.5px solid ${color}30`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden', padding:6 }}>
+                <img
+                  src={logo}
+                  alt={exam}
+                  style={{ width:'100%', height:'100%', objectFit:'contain' }}
+                  onError={e => {
+                    // fallback to initials if logo not found yet
+                    e.currentTarget.style.display = 'none'
+                    e.currentTarget.parentElement.innerHTML = `<span style="font-size:18px;font-weight:900;color:${color}">${exam}</span>`
+                  }}
+                />
+              </div>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:16, fontWeight:900, color:'var(--text-prim)', marginBottom:3 }}>{exam}</div>
-                <div style={{ fontSize:12, color:'var(--text-tert)' }}>{desc}</div>
+                <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', marginBottom:3, letterSpacing:'-.01em' }}>{exam}</div>
+                <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.4 }}>{desc}</div>
               </div>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>

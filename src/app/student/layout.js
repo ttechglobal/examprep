@@ -54,93 +54,27 @@ function getRankFromXp(xp) {
 }
 
 // ── Background ────────────────────────────────────────────────────────────────
-// Light mode: crisp white with a very subtle light-blue tint, faint illustrated
-// education icons (pencil, book, stars, graduation cap) exactly like the reference.
-// Dark mode: keeps the existing deep navy feel.
+// Shows the app background image (globals.css sets --app-bg-image).
+// Solid colour (--bg-base) paints instantly as a fallback — visible on poor
+// connections or if the image never arrives. Overlay tint adjusts per theme.
 function AppBackground({ dark }) {
-  if (dark) {
-    // Dark mode: deep navy with subtle grid + glows (unchanged)
-    return (
-      <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden', background:'#080E1E' }}>
-        <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px)', backgroundSize:'28px 28px' }}/>
-        <div style={{ position:'absolute', width:350, height:350, borderRadius:'50%', background:'rgba(18,100,229,.08)', filter:'blur(70px)', top:-100, right:-80 }}/>
-        <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(6,42,120,.15)', filter:'blur(60px)', bottom:-80, left:-80 }}/>
-        {['📐','⚗️','📚','🧬','✏️','🔭'].map((ic,i) => (
-          <div key={i} style={{ position:'absolute', fontSize:20, opacity:0.07, userSelect:'none', ...([{top:'8%',right:'6%'},{top:'22%',left:'3%'},{top:'48%',right:'4%'},{bottom:'28%',left:'5%'},{bottom:'12%',right:'9%'},{top:'68%',left:'2%'}][i]) }}>{ic}</div>
-        ))}
-        {[[14,'12%','18%',GOLD],[10,'78%','8%',BLUE],[8,'45%','92%',CYAN],[12,'88%','55%',GOLD]].map(([sz,top,left,c],i) => (
-          <div key={i} style={{ position:'absolute', top, left, fontSize:sz, color:c, opacity:0.15 }}>✦</div>
-        ))}
-      </div>
-    )
-  }
-
-  // Light mode: white → very light periwinkle base, with illustrated education SVG
-  // elements at very low opacity — matching the reference screenshot exactly.
   return (
-    <div aria-hidden="true" style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', overflow:'hidden', background:'linear-gradient(160deg, #F5F7FF 0%, #EEF2FF 40%, #F0F5FF 100%)' }}>
-      {/* Faint dot grid */}
-      <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(circle, rgba(6,42,120,.055) 1px, transparent 1px)', backgroundSize:'30px 30px' }}/>
-
-      {/* Large soft colour blobs — very subtle, like the reference */}
-      <div style={{ position:'absolute', width:500, height:380, borderRadius:'50%', background:'rgba(18,100,229,.04)', filter:'blur(80px)', top:-80, right:-60, transform:'rotate(-20deg)' }}/>
-      <div style={{ position:'absolute', width:400, height:300, borderRadius:'50%', background:'rgba(122,90,248,.03)', filter:'blur(70px)', bottom:-60, left:-40 }}/>
-      <div style={{ position:'absolute', width:320, height:320, borderRadius:'50%', background:'rgba(255,184,0,.03)', filter:'blur(60px)', top:'40%', right:'20%' }}/>
-
-      {/* Illustrated education icons — exactly like the reference: pencil, book, stars, cap */}
-      {/* Graduation cap - top centre-right */}
-      <svg style={{ position:'absolute', top:'5%', right:'30%', opacity:.07 }} width="70" height="60" viewBox="0 0 70 60" fill="none">
-        <ellipse cx="35" cy="20" rx="30" ry="10" fill="#062A78"/>
-        <polygon points="35,4 5,20 35,36 65,20" fill="#062A78"/>
-        <rect x="58" y="20" width="3" height="20" fill="#062A78"/>
-        <ellipse cx="59.5" cy="40" rx="4" ry="3" fill="#062A78"/>
-      </svg>
-
-      {/* Pencil - top left area */}
-      <svg style={{ position:'absolute', top:'12%', left:'8%', opacity:.07, transform:'rotate(-30deg)' }} width="14" height="60" viewBox="0 0 14 60" fill="none">
-        <rect x="2" y="6" width="10" height="46" rx="2" fill="#1264E5"/>
-        <polygon points="2,52 12,52 7,60" fill="#FFB800"/>
-        <rect x="2" y="2" width="10" height="6" rx="1" fill="#FF6A00"/>
-      </svg>
-
-      {/* Open book - right side mid */}
-      <svg style={{ position:'absolute', top:'35%', right:'4%', opacity:.065 }} width="68" height="52" viewBox="0 0 68 52" fill="none">
-        <path d="M34 8 C34 8 14 6 4 12 L4 46 C14 40 34 42 34 42" stroke="#062A78" strokeWidth="2.5" fill="rgba(6,42,120,.06)"/>
-        <path d="M34 8 C34 8 54 6 64 12 L64 46 C54 40 34 42 34 42" stroke="#062A78" strokeWidth="2.5" fill="rgba(6,42,120,.06)"/>
-        <line x1="34" y1="8" x2="34" y2="42" stroke="#062A78" strokeWidth="2"/>
-      </svg>
-
-      {/* Small pencil - bottom left */}
-      <svg style={{ position:'absolute', bottom:'18%', left:'4%', opacity:.06, transform:'rotate(20deg)' }} width="10" height="44" viewBox="0 0 10 44" fill="none">
-        <rect x="1" y="4" width="8" height="33" rx="1.5" fill="#1264E5"/>
-        <polygon points="1,37 9,37 5,44" fill="#FFB800"/>
-        <rect x="1" y="1" width="8" height="5" rx="1" fill="#FF6A00"/>
-      </svg>
-
-      {/* Stars / sparkles — scattered like in reference */}
-      {[
-        { top:'8%',  left:'18%', sz:16, c:'#FFB800', op:.22 },
-        { top:'6%',  left:'55%', sz:10, c:'#1264E5', op:.18 },
-        { top:'22%', left:'42%', sz:8,  c:'#FFB800', op:.15 },
-        { top:'55%', left:'6%',  sz:12, c:'#FFB800', op:.16 },
-        { top:'70%', right:'12%',sz:9,  c:'#1264E5', op:.14 },
-        { top:'40%', left:'22%', sz:6,  c:'#7A5AF8', op:.13 },
-        { bottom:'8%',right:'28%',sz:13,c:'#FFB800', op:.18 },
-        { bottom:'22%',left:'38%',sz:7, c:'#1264E5', op:.12 },
-      ].map((s, i) => (
-        <div key={i} style={{ position:'absolute', top:s.top, bottom:s.bottom, left:s.left, right:s.right, fontSize:s.sz, color:s.c, opacity:s.op, lineHeight:1 }}>✦</div>
-      ))}
-
-      {/* Small circles — scattered dots like in reference */}
-      {[
-        { top:'28%', left:'15%', sz:6, c:'#1264E5' },
-        { top:'60%', right:'22%',sz:5, c:'#FFB800' },
-        { top:'80%', left:'55%', sz:4, c:'#1264E5' },
-        { top:'15%', right:'15%',sz:5, c:'#7A5AF8' },
-      ].map((d, i) => (
-        <div key={i} style={{ position:'absolute', top:d.top, bottom:d.bottom, left:d.left, right:d.right, width:d.sz, height:d.sz, borderRadius:'50%', background:d.c, opacity:.1 }}/>
-      ))}
-    </div>
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+        // Solid colour shows instantly — zero network dependency
+        backgroundColor: dark ? '#0a0c14' : '#f0f4ff',
+        // Image loads on top; if it never arrives the solid colour remains
+        backgroundImage: dark
+          ? "linear-gradient(rgba(10,12,20,.88),rgba(10,12,20,.88)),url('/images/app-bg.jpg')"
+          : "linear-gradient(rgba(240,244,255,.82),rgba(240,244,255,.82)),url('/images/app-bg.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center center',
+        backgroundAttachment: 'fixed',
+        backgroundRepeat: 'no-repeat',
+      }}
+    />
   )
 }
 
