@@ -28,12 +28,20 @@ export async function GET(request) {
     .select(`
       id,
       full_name,
+      username,
       email,
       exam_type,
       subjects,
+      subjects_waec,
+      subjects_jamb,
       created_at,
       total_points,
       school_id,
+      school_name,
+      student_school_name,
+      phone_number,
+      plan,
+      plan_expires_at,
       schools ( name )
     `)
     .eq('role', 'student')
@@ -72,19 +80,32 @@ export async function GET(request) {
       ? Math.round((attempts.correct / attempts.total) * 100)
       : null
 
+    const allSubjects = [
+      ...(p.subjects_waec ?? []),
+      ...(p.subjects_jamb ?? []),
+      ...(p.subjects ?? []),
+    ]
+    // Deduplicate subjects
+    const subjectsDisplay = [...new Set(allSubjects)]
+
     return {
-      id:              p.id,
-      full_name:       p.full_name,
-      email:           p.email,
-      exam_type:       p.exam_type,
-      subjects:        p.subjects ?? [],
-      created_at:      p.created_at,
-      total_points:    p.total_points ?? 0,
-      school_name:     p.schools?.name ?? null,
-      last_active:     streak?.last_active_date ?? null,
-      streak:          streak?.current_streak ?? 0,
+      id:                  p.id,
+      full_name:           p.full_name,
+      username:            p.username           ?? null,
+      email:               p.email,
+      phone_number:        p.phone_number        ?? null,
+      exam_type:           p.exam_type,
+      subjects:            subjectsDisplay,
+      created_at:          p.created_at,
+      total_points:        p.total_points        ?? 0,
+      school_name:         p.schools?.name       ?? p.school_name ?? null,
+      student_school_name: p.student_school_name ?? null,
+      plan:                p.plan                ?? 'free',
+      plan_expires_at:     p.plan_expires_at     ?? null,
+      last_active:         streak?.last_active_date ?? null,
+      streak:              streak?.current_streak   ?? 0,
       accuracy,
-      isActiveThisWeek: streak?.last_active_date >= weekAgo,
+      isActiveThisWeek:    streak?.last_active_date >= weekAgo,
     }
   })
 

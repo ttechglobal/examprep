@@ -23,7 +23,7 @@ const SELECT_COLS_SAFE = [
 ].join(', ')
 
 // Extended columns added by migration (may not exist yet).
-const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at'
+const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at, phone_number, student_school_name'
 
 // Try extended select; fall back to safe if the DB rejects unknown columns.
 async function selectProfile(db, userId) {
@@ -42,10 +42,13 @@ const ALLOWED_PATCH = [
   // school_name is intentionally excluded — it must only be set by the
   // access-code redeem route or /api/school/join, not by the student directly.
   // Allowing free-text here breaks the school dashboard's data integrity.
+  // student_school_name is the free-text display field students edit themselves.
   'exam_type', 'exam_types',
   'subjects_waec', 'subjects_jamb',
   'target_waec', 'target_jamb', 'target_jamb_breakdown',
   'target_university', 'target_course',
+  'phone_number',
+  'student_school_name',
 ]
 
 export async function GET() {
@@ -67,8 +70,10 @@ export async function GET() {
     subjects_waec: data.subjects_waec ?? (examType === 'WAEC' ? (data.subjects ?? []) : []),
     subjects_jamb: data.subjects_jamb ?? (examType === 'JAMB' ? (data.subjects ?? []) : []),
     onboarded:     data.onboarded     ?? true,
-    plan:          data.plan          ?? 'free',
-    plan_expires_at: data.plan_expires_at ?? null,
+    plan:               data.plan               ?? 'free',
+    plan_expires_at:    data.plan_expires_at    ?? null,
+    phone_number:       data.phone_number       ?? null,
+    student_school_name: data.student_school_name ?? null,
   }
   return NextResponse.json(normalised)
 }

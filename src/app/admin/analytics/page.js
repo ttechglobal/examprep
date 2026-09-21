@@ -321,9 +321,14 @@ function EngagementTab({ data, period }) {
       {/* Mode breakdown */}
       <SectionCard title="Practice modes" sub="Which modes students use most">
         {modeBreakdown.length === 0 ? (
-          <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '24px 0' }}>
-            No session data yet for this period. Data appears after the <code style={{ fontSize: 11 }}>practice_sessions</code> migration is applied.
-          </p>
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <p style={{ fontSize: 28, marginBottom: 8 }}>📊</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>No session data yet for this period</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+              Mode breakdown appears once students complete practice sessions.<br/>
+              Make sure the <code style={{ fontSize: 11, background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>practice_sessions</code> migration has been applied in Supabase.
+            </p>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {modeBreakdown.map(m => {

@@ -49,11 +49,25 @@ export async function GET(request) {
     if (c.is_active) cohortMap[c.school_id].active++
   }
 
+  // Fetch school admin profiles — one per school (role='school_admin')
+  const { data: adminProfiles } = await db
+    .from('profiles')
+    .select('school_id, full_name, email')
+    .eq('role', 'school_admin')
+    .in('school_id', schoolIds)
+
+  const adminMap = {}
+  for (const a of adminProfiles ?? []) {
+    if (!adminMap[a.school_id]) adminMap[a.school_id] = a
+  }
+
   const enriched = (schools ?? []).map(s => ({
     ...s,
-    studentCount: countMap[s.id] ?? 0,
-    cohortCount:  cohortMap[s.id]?.total ?? 0,
-    activeCohort: (cohortMap[s.id]?.active ?? 0) > 0,
+    studentCount:  countMap[s.id]      ?? 0,
+    cohortCount:   cohortMap[s.id]?.total ?? 0,
+    activeCohort:  (cohortMap[s.id]?.active ?? 0) > 0,
+    admin_name:    adminMap[s.id]?.full_name ?? null,
+    admin_email:   adminMap[s.id]?.email     ?? null,
   }))
 
   return NextResponse.json({ schools: enriched })

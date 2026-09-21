@@ -233,29 +233,37 @@ function SaveButton({ onClick, saving, label = 'Save changes' }) {
 
 // ── SHEET 1: My Information ────────────────────────────────────────────────────
 function InfoSheet({ profile, isGuest, onClose, onSaved }) {
-  const [fullName,   setFullName]   = useState(profile?.full_name   ?? '')
-  const [username,   setUsername]   = useState(profile?.username    ?? '')
-  const [classLevel, setClassLevel] = useState(profile?.class_level ?? '')
-  const [saving,     setSaving]     = useState(false)
-  const [error,      setError]      = useState(null)
+  const [fullName,         setFullName]         = useState(profile?.full_name          ?? '')
+  const [username,         setUsername]         = useState(profile?.username           ?? '')
+  const [classLevel,       setClassLevel]       = useState(profile?.class_level        ?? '')
+  const [phoneNumber,      setPhoneNumber]      = useState(profile?.phone_number       ?? '')
+  const [studentSchoolName, setStudentSchoolName] = useState(profile?.student_school_name ?? '')
+  const [saving,           setSaving]           = useState(false)
+  const [error,            setError]            = useState(null)
 
   async function save() {
     setSaving(true)
     setError(null)
     try {
-      const trimName = fullName.trim()
-      const trimUser = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/__+/g, '_')
+      const trimName   = fullName.trim()
+      const trimUser   = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/__+/g, '_')
+      const trimPhone  = phoneNumber.trim()
+      const trimSchool = studentSchoolName.trim()
       if (!trimName) throw new Error('Full name is required')
       if (trimUser && trimUser.length < 3) throw new Error('Username must be at least 3 characters')
 
-      const patch = { full_name: trimName, username: trimUser || undefined, class_level: classLevel || undefined }
+      const patch = {
+        full_name:           trimName,
+        username:            trimUser  || undefined,
+        class_level:         classLevel || undefined,
+        phone_number:        trimPhone  || null,
+        student_school_name: trimSchool || null,
+      }
 
       if (isGuest) {
-        // Guest: save to localStorage only
         setLocalProfile({ ...patch, full_name: trimName, username: trimUser })
         try { localStorage.setItem('ep_student_name', trimName) } catch {}
       } else {
-        // Auth user: save via API
         const res  = await fetch('/api/student/profile', {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patch),
@@ -265,7 +273,6 @@ function InfoSheet({ profile, isGuest, onClose, onSaved }) {
           if (data.error?.includes('unique') || data.error?.includes('duplicate')) throw new Error('That username is taken — try another')
           throw new Error(data.error ?? 'Save failed')
         }
-        // Keep local cache in sync
         setLocalProfile(patch)
         try { localStorage.setItem('ep_student_name', trimName) } catch {}
       }
@@ -288,9 +295,11 @@ function InfoSheet({ profile, isGuest, onClose, onSaved }) {
           </p>
         </div>
       )}
-      <Field label="Full name"  value={fullName}   onChange={setFullName}   placeholder="Ada Okafor" />
-      <Field label="Username"   value={username}   onChange={setUsername}   placeholder="ada_okafor" hint="Shown on the leaderboard — no spaces" />
-      <SelectField label="Class" value={classLevel} onChange={setClassLevel} options={['SS1', 'SS2', 'SS3']} />
+      <Field label="Full name"  value={fullName}          onChange={setFullName}          placeholder="Ada Okafor" />
+      <Field label="Username"   value={username}          onChange={setUsername}          placeholder="ada_okafor" hint="Shown on the leaderboard — no spaces" />
+      <Field label="Phone number" value={phoneNumber}     onChange={setPhoneNumber}       placeholder="08012345678" hint="Optional — not shown publicly" />
+      <Field label="Your school" value={studentSchoolName} onChange={setStudentSchoolName} placeholder="e.g. Kings College Lagos" hint="The school you attend" />
+      <SelectField label="Class" value={classLevel}       onChange={setClassLevel}        options={['SS1', 'SS2', 'SS3']} />
       {error && <p style={{ fontSize: 12, color: RED, marginBottom: 12 }}>{error}</p>}
       <SaveButton onClick={save} saving={saving} />
     </Sheet>
@@ -827,9 +836,34 @@ function AvatarCard({ profile, xp, isGuest, onEditInfo, onLinked }) {
           </div>
         </div>
 
-        {!isGuest && (
-          <div style={{ marginTop: 14 }}>
+        {/* School name — free-text display field */}
+        {profile?.student_school_name && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 15 }}>🏫</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-prim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile.student_school_name}
+            </span>
+          </div>
+        )}
+
+        {/* Connect to school — shown when not yet linked to a cohort */}
+        {!isGuest && !profile?.school_id && (
+          <div style={{ marginTop: 10 }}>
             <JoinSchool profile={profile} onLinked={onLinked} compact={false} />
+          </div>
+        )}
+
+        {/* Already connected badge */}
+        {!isGuest && profile?.school_id && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 12px', borderRadius: 10, background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.25)' }}>
+            <span style={{ fontSize: 15 }}>🏫</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: GREEN }}>School connected</div>
+              {profile?.school_name && (
+                <div style={{ fontSize: 11, color: 'var(--text-tert)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.school_name}</div>
+              )}
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: GREEN }}>✓</span>
           </div>
         )}
 

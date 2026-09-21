@@ -125,15 +125,15 @@ export async function GET(request) {
       .eq('role', 'student').gte('created_at', prevSince).lt('created_at', since),
 
     // Total sessions ever
-    db.from('practice_sessions').select('*', { count: 'exact', head: true }),
+    db.from('practice_sessions').select('*', { count: 'exact', head: true }).then(r => r).catch(() => ({ count: 0 })),
 
     // Sessions this period
     db.from('practice_sessions').select('*', { count: 'exact', head: true })
-      .gte('created_at', since),
+      .gte('created_at', since).then(r => r).catch(() => ({ count: 0 })),
 
     // Sessions prev period
     db.from('practice_sessions').select('*', { count: 'exact', head: true })
-      .gte('created_at', prevSince).lt('created_at', since),
+      .gte('created_at', prevSince).lt('created_at', since).then(r => r).catch(() => ({ count: 0 })),
 
     // Total attempts ever
     db.from('question_attempts').select('*', { count: 'exact', head: true }),
@@ -168,7 +168,7 @@ export async function GET(request) {
     // Full session rows this period for mode/accuracy breakdown
     db.from('practice_sessions')
       .select('mode, exam_type, subject_name, questions_count, correct_count, duration_secs, created_at')
-      .gte('created_at', since),
+      .gte('created_at', since).then(r => r).catch(() => ({ data: null })),
 
     // Subject breakdown from question_attempts
     db.from('question_attempts')

@@ -1,145 +1,185 @@
 'use client'
 // src/app/admin/schools/page.js
-// School management — list all partner schools, student counts, cohort status.
-// Admin can create schools, view details, see which have active cohorts.
+// Lists all partner schools registered via the school registration portal.
+// Schools are never created manually here — they register themselves.
+// Click any row to view the full school profile.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+
+const BLUE  = '#1264E5'
+const GREEN = '#10b981'
 
 function formatDate(d) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export default function AdminSchoolsPage() {
+  const router              = useRouter()
   const [schools,  setSchools]  = useState([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
   const [search,   setSearch]   = useState('')
-  const [creating, setCreating] = useState(false)
-  const [form,     setForm]     = useState({ name: '', city: '', state: '' })
-  const [saving,   setSaving]   = useState(false)
-  const [formErr,  setFormErr]  = useState(null)
 
-  useEffect(() => {
-    fetch('/api/admin/schools')
-      .then(r => r.json())
-      .then(d => { if (d.error) setError(d.error); else setSchools(d.schools ?? []); setLoading(false) })
-      .catch(() => { setError('Failed to load schools'); setLoading(false) })
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res  = await fetch('/api/admin/schools')
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Failed to load schools')
+      setSchools(data.schools ?? [])
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  async function createSchool() {
-    if (!form.name.trim()) return
-    setSaving(true); setFormErr(null)
-    const res  = await fetch('/api/admin/schools', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-    const data = await res.json()
-    if (data.error) { setFormErr(data.error); setSaving(false); return }
-    setSchools(prev => [{ ...data.school, studentCount: 0, cohortCount: 0, activeCohort: false }, ...prev])
-    setCreating(false); setForm({ name: '', city: '', state: '' })
-    setSaving(false)
-  }
+  useEffect(() => { load() }, [load])
 
-  const filtered = schools.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.city?.toLowerCase().includes(search.toLowerCase()))
+  const filtered = schools.filter(s => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      s.name?.toLowerCase().includes(q) ||
+      s.city?.toLowerCase().includes(q) ||
+      s.state?.toLowerCase().includes(q) ||
+      s.admin_name?.toLowerCase().includes(q) ||
+      s.admin_email?.toLowerCase().includes(q)
+    )
+  })
 
   if (loading) return (
-    <div className="flex items-center justify-center py-24">
-      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: `3px solid ${BLUE}`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 
   if (error) return (
-    <div className="flex items-center justify-center py-24 text-center">
-      <div><p className="text-3xl mb-3">⚠️</p><p className="text-sm font-bold text-gray-700">{error}</p></div>
+    <div style={{ textAlign: 'center', padding: '60px 0' }}>
+      <p style={{ fontSize: 32, marginBottom: 10 }}>⚠️</p>
+      <p style={{ fontSize: 14, fontWeight: 700, color: '#374151', marginBottom: 16 }}>{error}</p>
+      <button onClick={load} style={{ padding: '9px 20px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Retry</button>
     </div>
   )
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div style={{ maxWidth: 1000, fontFamily: 'inherit' }}>
+      <style>{`* { box-sizing: border-box }`}</style>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900">Schools</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{schools.length} partner school{schools.length !== 1 ? 's' : ''}</p>
-        </div>
-        <button onClick={() => setCreating(c => !c)}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors">
-          + Add school
-        </button>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-.03em', marginBottom: 4 }}>Schools</h1>
+        <p style={{ fontSize: 13, color: '#64748b' }}>
+          {schools.length} partner school{schools.length !== 1 ? 's' : ''} registered via the school portal
+        </p>
       </div>
 
-      {/* Create school form */}
-      {creating && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
-          <p className="font-black text-gray-900">New partner school</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="School name *"
-              className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white" />
-            <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="City"
-              className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white" />
-            <input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder="State (e.g. Lagos)"
-              className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white" />
-          </div>
-          {formErr && <p className="text-xs text-red-600">{formErr}</p>}
-          <div className="flex gap-2">
-            <button onClick={() => setCreating(false)} className="px-4 py-2 border border-gray-200 text-sm font-bold text-gray-600 rounded-xl hover:bg-gray-50">Cancel</button>
-            <button onClick={createSchool} disabled={saving || !form.name.trim()}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 disabled:opacity-40 transition-colors">
-              {saving ? 'Creating…' : 'Create school →'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Search */}
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search schools…"
-        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      <div style={{ marginBottom: 16 }}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by school name, city, state, admin…"
+          style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: '#0f172a' }}
+        />
+      </div>
 
-      {/* Schools table */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      {/* Table */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         {filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-3xl mb-3">🏫</p>
-            <p className="text-sm font-bold text-gray-700">{search ? 'No schools match' : 'No schools yet'}</p>
-            {!search && <p className="text-xs text-gray-400 mt-1">Add partner schools to track their students.</p>}
+          <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+            <p style={{ fontSize: 32, marginBottom: 10 }}>🏫</p>
+            <p style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
+              {search ? 'No schools match that search' : 'No schools registered yet'}
+            </p>
+            <p style={{ fontSize: 12, color: '#94a3b8' }}>
+              Schools appear here when they register via the school registration portal.
+            </p>
           </div>
         ) : (
-          <table className="w-full">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide">School</th>
-                <th className="text-left px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide hidden sm:table-cell">Location</th>
-                <th className="text-right px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide">Students</th>
-                <th className="text-right px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide hidden sm:table-cell">Cohorts</th>
-                <th className="text-center px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="text-right px-4 py-3 text-xs font-black text-gray-500 uppercase tracking-wide hidden md:table-cell">Added</th>
+              <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>School</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Admin</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Location</th>
+                <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Students</th>
+                <th style={{ textAlign: 'center', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Status</th>
+                <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Registered</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(school => (
-                <tr key={school.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-base flex-shrink-0">🏫</div>
-                      <p className="text-sm font-bold text-gray-900">{school.name}</p>
+            <tbody>
+              {filtered.map((school, i) => (
+                <tr
+                  key={school.id}
+                  onClick={() => router.push(`/admin/schools/${school.id}`)}
+                  style={{
+                    borderBottom: i < filtered.length - 1 ? '1px solid #f8fafc' : 'none',
+                    cursor: 'pointer',
+                    transition: 'background .1s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  {/* School name */}
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                        🏫
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{school.name}</p>
+                        {school.slots_purchased != null && (
+                          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+                            {school.slots_used ?? 0}/{school.slots_purchased} slots used
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 hidden sm:table-cell">
-                    <p className="text-xs text-gray-500">{[school.city, school.state].filter(Boolean).join(', ') || '—'}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <p className="text-sm font-bold text-gray-900">{school.studentCount.toLocaleString()}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-right hidden sm:table-cell">
-                    <p className="text-sm text-gray-600">{school.cohortCount}</p>
-                  </td>
-                  <td className="px-4 py-3.5 text-center">
-                    {school.activeCohort ? (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
+
+                  {/* Admin */}
+                  <td style={{ padding: '12px 16px' }}>
+                    {school.admin_name ? (
+                      <div>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{school.admin_name}</p>
+                        {school.admin_email && (
+                          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{school.admin_email}</p>
+                        )}
+                      </div>
                     ) : (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">No cohort</span>
+                      <p style={{ fontSize: 12, color: '#cbd5e1' }}>—</p>
                     )}
                   </td>
-                  <td className="px-4 py-3.5 text-right hidden md:table-cell">
-                    <p className="text-xs text-gray-400">{formatDate(school.created_at)}</p>
+
+                  {/* Location */}
+                  <td style={{ padding: '12px 16px' }}>
+                    <p style={{ fontSize: 12, color: '#64748b' }}>
+                      {[school.city, school.state].filter(Boolean).join(', ') || '—'}
+                    </p>
+                  </td>
+
+                  {/* Students */}
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>{(school.studentCount ?? 0).toLocaleString()}</span>
+                  </td>
+
+                  {/* Status */}
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    {school.activeCohort ? (
+                      <span style={{ display: 'inline-flex', padding: '2px 9px', borderRadius: 999, fontSize: 10, fontWeight: 800, background: '#f0fdf4', color: GREEN, border: '1px solid #bbf7d0' }}>Active</span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', padding: '2px 9px', borderRadius: 999, fontSize: 10, fontWeight: 800, background: '#f8fafc', color: '#94a3b8', border: '1px solid #e2e8f0' }}>No cohort</span>
+                    )}
+                  </td>
+
+                  {/* Registered */}
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <p style={{ fontSize: 11, color: '#94a3b8' }}>{formatDate(school.created_at)}</p>
                   </td>
                 </tr>
               ))}
@@ -147,7 +187,6 @@ export default function AdminSchoolsPage() {
           </table>
         )}
       </div>
-
     </div>
   )
 }
