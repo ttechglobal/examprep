@@ -16,7 +16,7 @@ function svc() {
 }
 
 
-export async function GET() {
+export async function GET(request) {
   const authError = await requireAdmin(request)
   if (authError) return authError
 

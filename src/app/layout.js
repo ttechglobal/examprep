@@ -4,6 +4,8 @@ import { ThemeProvider }  from '@/contexts/ThemeContext'
 import { PointsProvider } from '@/contexts/PointsContext'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 import InstallPrompt from '@/components/ui/InstallPrompt'
+import { Analytics }     from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 
 const jakarta = Plus_Jakarta_Sans({
@@ -56,6 +58,8 @@ export default function RootLayout({ children }) {
         */}
         <ServiceWorkerRegistration />
         <InstallPrompt />
+        <Analytics />
+        <SpeedInsights />
         <ThemeProvider>
           {/*
             PointsProvider lives here so XP is available to any part of the app.

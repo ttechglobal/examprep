@@ -2,7 +2,7 @@
 // GET  — list all codes with redemption stats
 // POST — generate one or bulk codes
 
-import { createClient }              from '@/lib/supabase/server'
+import { requireAdmin }              from '@/lib/adminAuth'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
 import crypto                        from 'crypto'
@@ -33,10 +33,9 @@ function generateCode(type, prefix = '') {
   return `PROMO-${rand(6)}`
 }
 
-export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(request) {
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const db = svc()
 
@@ -80,9 +79,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const body = await request.json()
   const {
@@ -149,9 +147,8 @@ export async function POST(request) {
 
 export async function PATCH(request) {
   // Toggle is_active on a code
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
 
   const { id, is_active } = await request.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

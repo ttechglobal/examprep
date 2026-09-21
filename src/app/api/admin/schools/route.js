@@ -2,9 +2,9 @@
 // GET  — list all schools with student counts
 // POST — create a new school
 
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin }              from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { NextResponse }              from 'next/server'
 
 function svc() {
   return createServiceClient(
@@ -13,10 +13,9 @@ function svc() {
   )
 }
 
-export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(request) {
+  const authError = await requireAdmin(request)
+  if (authError) return authError
   const db = svc()
 
   const { data: schools } = await db
@@ -61,9 +60,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin(request)
+  if (authError) return authError
   const db = svc()
 
   const body = await request.json()

@@ -6,7 +6,7 @@
 // Called by localSessionSync.flushSyncQueue() after local save succeeds.
 //
 // Guests   → { ok: true, guest: true }  — no DB write, queue stays for later
-// Auth     → inserts question_attempts rows, awards XP, returns { ok, xp_awarded }
+// Auth     → inserts question_attempts rows, awards XP, records practice_session
 //
 // The insert into question_attempts is BEST-EFFORT — if it fails (missing
 // columns etc.), XP is still awarded. Never returns 500; always returns 200.
@@ -34,8 +34,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'results array required' }, { status: 400 })
     }
 
-    // exam comes at payload level (e.g. 'WAEC' | 'JAMB') — not per result.
-    // We propagate it to every row so the school dashboard can filter by exam later.
     const examType = exam ?? null
 
     // ── Auth check ───────────────────────────────────────────────────────────
@@ -50,19 +48,15 @@ export async function POST(request) {
     const userId  = user.id
 
     // ── Insert question_attempts (best-effort) ────────────────────────────────
-    // Schema constraints that must be satisfied:
-    //   - question_id  NOT NULL  → skip any result that has no question_id
-    //   - context      NOT NULL  → always 'practice' for this route
-    //   - context      CHECK IN ('diagnostic','lesson','practice','exam')
     try {
       const sessionId = body.session_id ?? null
       const rows = results
-        .filter(r => !!r.question_id)   // question_id is NOT NULL — drop rows without one
+        .filter(r => !!r.question_id)
         .map(r => ({
           student_id:  userId,
           question_id: r.question_id,
           is_correct:  r.is_correct ?? false,
-          context:     'practice',       // required NOT NULL; this route is always practice
+          context:     'practice',
           ...(r.topic_id             ? { topic_id:      r.topic_id             } : {}),
           ...(r.subject_id           ? { subject_id:    r.subject_id           } : {}),
           ...(r.subject_name         ? { subject_name:  r.subject_name         } : {}),
@@ -78,12 +72,47 @@ export async function POST(request) {
 
         if (insertError) {
           console.warn('[session/save] question_attempts insert failed:', insertError.message)
-          // XP is still awarded below — a failed insert never blocks XP
         }
       }
     } catch (insertEx) {
       console.error('[session/save] insert threw:', insertEx.message)
-      // Never block XP for an insert failure
+    }
+
+    // ── Record practice session (best-effort) ─────────────────────────────────
+    // This gives analytics the session-level view: mode, completion, duration.
+    // Upserts on session_id so duplicate syncs are idempotent.
+    try {
+      const sessionId     = body.session_id     ?? null
+      const mode          = body.mode           ?? 'practice'
+      const subjectName   = body.subject_name   ?? null
+      const topicName     = body.topic_name     ?? null
+      const questionsCount = body.questions_count ?? results.length
+      const correctCount  = body.correct_count  ?? results.filter(r => r.is_correct).length
+      const durationSecs  = body.duration_secs  ?? null
+
+      const sessionRow = {
+        student_id:      userId,
+        exam_type:       examType,
+        mode,
+        subject_name:    subjectName,
+        topic_name:      topicName,
+        questions_count: questionsCount,
+        correct_count:   correctCount,
+        duration_secs:   durationSecs,
+        completed:       true,
+      }
+      if (sessionId) sessionRow.session_id = sessionId
+
+      const { error: sessionError } = await service
+        .from('practice_sessions')
+        .upsert(sessionRow, { onConflict: 'session_id', ignoreDuplicates: true })
+
+      if (sessionError) {
+        console.warn('[session/save] practice_sessions upsert failed:', sessionError.message)
+        // Non-fatal — question_attempts already inserted
+      }
+    } catch (sessionEx) {
+      console.warn('[session/save] practice_sessions threw:', sessionEx.message)
     }
 
     // ── Compute XP ───────────────────────────────────────────────────────────
@@ -97,12 +126,10 @@ export async function POST(request) {
     )
 
     // ── Award XP to profile ──────────────────────────────────────────────────
-    // Use RPC if it exists, otherwise fall back to a raw UPDATE with addition.
     const { error: rpcError } = await service
       .rpc('increment_points', { user_id: userId, points: xp })
 
     if (rpcError) {
-      // RPC doesn't exist — fall back to read-then-write
       const { data: prof } = await service
         .from('profiles')
         .select('total_points')
@@ -152,7 +179,6 @@ export async function POST(request) {
     })
 
   } catch (err) {
-    // Top-level safety net — should never reach here
     console.error('[session/save] unexpected error:', err)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
   }

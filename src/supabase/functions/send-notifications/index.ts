@@ -63,17 +63,23 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  // Parse slot
-  let slot = 'noon'
+  // Parse body — supports scheduled slots and custom admin blasts
+  let parsedBody: Record<string, string> = {}
   try {
-    const body = await req.json()
-    slot = body.slot ?? 'noon'
+    parsedBody = await req.json()
   } catch {
     return new Response('Bad request', { status: 400 })
   }
 
-  if (!['noon', 'afternoon', 'evening'].includes(slot)) {
+  const isCustom = parsedBody.custom === true || (parsedBody as any).custom === 'true'
+  const slot     = parsedBody.slot ?? 'noon'
+
+  if (!isCustom && !['noon', 'afternoon', 'evening'].includes(slot)) {
     return new Response('Invalid slot', { status: 400 })
+  }
+
+  if (isCustom && (!parsedBody.title?.trim() || !parsedBody.body?.trim())) {
+    return new Response('Custom blast requires title and body', { status: 400 })
   }
 
   // Set up VAPID
@@ -106,13 +112,24 @@ Deno.serve(async (req) => {
     })
   }
 
-  const msg     = pickMessage(slot)
-  const payload = JSON.stringify({
-    title: msg.title,
-    body:  msg.body,
-    url:   '/student/practice',
-    tag:   `ep-${slot}`,
-  })
+  // Build payload — custom blast uses supplied fields, scheduled uses message pool
+  let payload: string
+  if (isCustom) {
+    payload = JSON.stringify({
+      title: parsedBody.title.trim(),
+      body:  parsedBody.body.trim(),
+      url:   parsedBody.url?.trim() || '/student/practice',
+      tag:   parsedBody.tag?.trim() || 'ep-custom',
+    })
+  } else {
+    const msg = pickMessage(slot)
+    payload = JSON.stringify({
+      title: msg.title,
+      body:  msg.body,
+      url:   '/student/practice',
+      tag:   `ep-${slot}`,
+    })
+  }
 
   // Send to all subscriptions concurrently
   const staleIds: string[] = []
@@ -142,7 +159,8 @@ Deno.serve(async (req) => {
   }
 
   const result = {
-    slot,
+    mode:  isCustom ? 'custom' : 'scheduled',
+    slot:  isCustom ? null : slot,
     sent:  subs.length - staleIds.length,
     stale: staleIds.length,
   }

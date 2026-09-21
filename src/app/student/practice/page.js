@@ -187,6 +187,22 @@ function StudyCard({ onClick }) {
   )
 }
 
+function TopicCard({ onClick }) {
+  return (
+    <PrimaryCard
+      onClick={() => onClick('topic')}
+      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h12M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
+      iconBg="linear-gradient(135deg,#0891b2,#0e7490)"
+      iconShadow="rgba(8,145,178,.4)"
+      tag="Topic Practice"
+      title="Drill a specific topic"
+      desc="Pick a subject and topic, then practise only questions from that topic. Great for targeted revision."
+      cta="Choose Topic"
+      ctaColor="#0891b2"
+    />
+  )
+}
+
 function MockCard({ onClick }) {
   return (
     <PrimaryCard
@@ -243,9 +259,9 @@ function SecondaryModes({ onStart }) {
   const [open, setOpen] = useState(false)
 
   const SECONDARY = [
-    { key:'topic',  icon:'📚', label:'Topic Practice',  desc:'Drill a specific topic', color:'#0891b2' },
-    { key:'quick5', icon:'⚡', label:'Quick 5',          desc:'5 random questions fast', color:GREEN    },
-    { key:'timed',  icon:'⏱', label:'Speed Round',      desc:'Beat the clock',          color:ORANGE   },
+    { key:'custom', icon:'📖', label:'Study Practice',  desc:'Practise with instant explanations', color:GREEN  },
+    { key:'quick5', icon:'⚡', label:'Quick 5',          desc:'5 random questions fast',            color:GREEN  },
+    { key:'timed',  icon:'⏱', label:'Speed Round',      desc:'Beat the clock',                     color:ORANGE },
   ]
 
   return (
@@ -902,10 +918,13 @@ export default function PracticePage() {
               openSheet(mode)
             }} />
 
-            {/* ── Primary modes: Study + Mock side by side ── */}
+            {/* ── Primary modes: Topic Practice + Mock side by side ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <StudyCard onClick={openSheet} />
-              <MockCard onClick={() => router.push('/student/practice/mock')} />
+              <TopicCard onClick={openSheet} />
+              <MockCard onClick={() => {
+                sessionStorage.setItem('mock_config', JSON.stringify({ subjects }))
+                router.push('/student/practice/mock')
+              }} />
             </div>
 
             {/* ── Divider + secondary modes ── */}
