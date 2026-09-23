@@ -1,7 +1,7 @@
 {
   "id": "/student/home",
   "name": "ExamPrep A1",
-  "short_name": "ExamPrep",
+  "short_name": "ExamPrep A1",
   "description": "Prepare for WAEC and JAMB with confidence",
   "start_url": "/student/home",
   "scope": "/",

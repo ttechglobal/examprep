@@ -40,7 +40,7 @@ export const metadata = {
   appleWebApp: {
     capable:         true,
     statusBarStyle:  'black-translucent',
-    title:           'ExamPrep',
+    title:           'ExamPrep A1',
     startupImage:    IOS_STARTUP_IMAGES,
   },
   icons: {
@@ -80,10 +80,10 @@ export default function RootLayout({ children }) {
           Launch splash: when the installed app opens on /student or /onboarding,
           show the navy brand screen from the very first frame (styles in
           globals.css). lib/launchSplash.js fades it out when the first screen
-          is ready; the 5 s timer here is a safety net so it can never stick.
+          is ready (after at least 2.5 s); the 6 s timer here is a safety net.
         */}
         <script
-          dangerouslySetInnerHTML={{ __html: `(function(){try{var h=document.documentElement,p=location.pathname;var app=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;if(app&&(p.indexOf('/student')===0||p.indexOf('/onboarding')===0)){h.classList.add('ep-launching');setTimeout(function(){h.classList.remove('ep-launching','ep-launch-out')},5000)}}catch(e){}})();` }}
+          dangerouslySetInnerHTML={{ __html: `(function(){try{var h=document.documentElement,p=location.pathname;var app=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;if(app&&(p.indexOf('/student')===0||p.indexOf('/onboarding')===0)){h.classList.add('ep-launching');setTimeout(function(){h.classList.remove('ep-launching','ep-launch-out')},6000)}}catch(e){}})();` }}
         />
         <link rel="preload" as="image" href="/icons/launch-splash.webp" type="image/webp" />
         {/*
