@@ -6,51 +6,35 @@
 // dismisses or installs.
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { usePWAInstall, promptInstall, DISMISS_KEY } from '@/lib/pwaInstall'
 
-const DISMISS_KEY = 'ep_install_dismissed'
-const DELAY_MS    = 60_000   // 1 minute
+const DELAY_MS = 60_000   // 1 minute
+
+// Marketing pages have their own Install buttons, so no timed banner there.
+const SKIP_PATHS = ['/', '/schools', '/ambassador', '/demo']
 
 export default function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [visible,        setVisible]        = useState(false)
-  const [installing,     setInstalling]     = useState(false)
+  // Shared with the landing page buttons (lib/pwaInstall.js), so the
+  // browser's one-time install offer is never missed or used twice.
+  const pwa      = usePWAInstall()
+  const pathname = usePathname()
+  const [visible,    setVisible]    = useState(false)
+  const [installing, setInstalling] = useState(false)
+
+  const eligible =
+    pwa.canPrompt && !pwa.standalone && !pwa.installed && !SKIP_PATHS.includes(pathname)
 
   useEffect(() => {
-    // If already dismissed or already installed, bail out immediately
-    try {
-      if (localStorage.getItem(DISMISS_KEY)) return
-    } catch {}
-
-    // Don't show if already running as standalone (i.e. already installed)
-    if (window.matchMedia('(display-mode: standalone)').matches) return
-    if (window.navigator.standalone === true) return   // iOS Safari
-
-    let timer
-
-    const handler = (e) => {
-      e.preventDefault()           // stop the browser's own mini-bar
-      setDeferredPrompt(e)
-      // Start the 1-minute timer from the moment the event fires
-      timer = setTimeout(() => setVisible(true), DELAY_MS)
-    }
-
-    window.addEventListener('beforeinstallprompt', handler)
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handler)
-      clearTimeout(timer)
-    }
-  }, [])
+    if (!eligible) { setVisible(false); return }
+    try { if (localStorage.getItem(DISMISS_KEY)) return } catch {}
+    const timer = setTimeout(() => setVisible(true), DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [eligible])
 
   async function handleInstall() {
-    if (!deferredPrompt) return
     setInstalling(true)
-    deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    if (outcome === 'accepted') {
-      try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
-    }
-    setDeferredPrompt(null)
+    await promptInstall()          // marks dismissed-for-good when accepted
     setVisible(false)
     setInstalling(false)
   }
@@ -106,7 +90,7 @@ export default function InstallPrompt() {
         {/* Text */}
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary, #0f172a)', marginBottom: 6 }}>
-            Install ExamPrep
+            Install ExamPrep A1
           </div>
           <div style={{ fontSize: 14, color: 'var(--text-secondary, #64748b)', lineHeight: 1.5, maxWidth: 300 }}>
             Add to your home screen for faster access, offline practice, and the full app experience.

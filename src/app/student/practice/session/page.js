@@ -50,8 +50,10 @@ export default function PracticeSessionPage() {
 
   // ── Load questions — progressive ──────────────────────────────────────────
   // Phase 1: fetch FIRST_BATCH questions immediately → start session fast.
-  // Phase 2: fetch remaining questions in the background while student answers.
-  // This means the student sees Q1 in ~500ms instead of waiting for all 20.
+  //   count=3 hits the questions API fast path (single pool, no year machinery)
+  //   so phase 1 typically completes in one DB round-trip (~100ms).
+  // Phase 2: fetch remaining questions in the background while student answers Q1–Q3.
+  //   This means the student sees Q1 in ~100-200ms instead of waiting for all 20.
   const FIRST_BATCH = 3
 
   useEffect(() => {

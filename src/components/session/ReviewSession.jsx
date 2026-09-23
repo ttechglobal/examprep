@@ -25,8 +25,21 @@ import { QuestionNav } from './SessionPrimitives'
 import { ExplanationBlock } from './ExplanationBlock'
 import { QuestionCard } from './QuestionCard'
 
-export function ReviewSession({ questions, answers, onDone, dark }) {
+// subjects — optional array of {name} for JAMB multi-subject sessions.
+// subjectSize — how many questions each subject has (JAMB_COUNT, e.g. 40).
+// When present, a subject-switcher tab row renders below the top bar.
+export function ReviewSession({ questions, answers, onDone, dark, subjects, subjectSize }) {
   const [rIndex, setRIndex] = useState(0)
+
+  // Jump to the first question of a subject (JAMB only)
+  function jumpToSubject(subIdx) {
+    setRIndex(subIdx * (subjectSize ?? 0))
+  }
+
+  // Which subject tab is currently active (derived from rIndex)
+  const activeSubjectIdx = (subjects && subjectSize)
+    ? Math.min(Math.floor(rIndex / subjectSize), subjects.length - 1)
+    : -1
 
   function handleNext() {
     if (rIndex < questions.length - 1) setRIndex(i => i + 1)
@@ -135,6 +148,38 @@ export function ReviewSession({ questions, answers, onDone, dark }) {
           <span style={{ fontSize:11, fontWeight:800, padding:'2px 9px', borderRadius:999, background:`${BLUE}12`, color:BLUE }}>Review</span>
           <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{pct(rIndex+1, questions.length)}% reviewed</span>
         </div>
+
+        {/* ── SUBJECT TABS (JAMB only) ── */}
+        {subjects && subjects.length > 1 && (
+          <div style={{ display:'flex', gap:6, padding:'6px 12px 8px', overflowX:'auto', borderTop:'1px solid var(--border)' }}>
+            {subjects.map((s, i) => {
+              const isActive = i === activeSubjectIdx
+              const start    = i * (subjectSize ?? 0)
+              const end      = start + (subjectSize ?? 0)
+              const correct  = answers.slice(start, end).filter(a => a?.isCorrect).length
+              return (
+                <button key={i} onClick={() => jumpToSubject(i)}
+                  style={{
+                    flexShrink: 0, padding: '5px 14px', borderRadius: 999,
+                    border: isActive ? 'none' : '1px solid var(--border)',
+                    background: isActive ? BLUE : 'transparent',
+                    color: isActive ? '#fff' : 'var(--text-sec)',
+                    fontSize: 12, fontWeight: isActive ? 800 : 500,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                  {s.name}
+                  <span style={{
+                    fontSize: 10, fontWeight: 800, opacity: 0.85,
+                    background: isActive ? 'rgba(255,255,255,.2)' : 'var(--bg-subtle)',
+                    color: isActive ? '#fff' : correct > 0 ? GREEN : 'var(--text-tert)',
+                    padding: '1px 6px', borderRadius: 999,
+                  }}>{correct}/{subjectSize ?? 0}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── BODY ── */}

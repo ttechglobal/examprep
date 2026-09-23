@@ -1,26 +1,16 @@
-// src/app/api/student/questions/route.js — v4
+// src/app/api/student/questions/route.js — v5
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-year parallel sampling — guaranteed year spread.
 //
-// THE PROBLEM WITH v3:
-//   v3 fetched a single pool of (count × 4) rows with no ORDER BY RANDOM().
-//   Supabase returns rows in storage/insertion order, so a subject where 2022
-//   was imported first fills the pool with 2022 questions. The JS bucketing
-//   then "spreads across years" but only the years that happened to appear in
-//   those first 80 rows. 2019 and 2020 questions, imported later, never show up.
+// EXAM FILTERING:
+//   exam_type TEXT ('WAEC'|'JAMB'|'BOTH') is the active column.
+//   exam_types TEXT[] exists in the schema but is null for all rows.
+//   Filter: exam_type IN (exam, 'BOTH') — single, direct, no fallback needed.
 //
-// THE FIX (v4):
-//   1. Discover available years (cheap index scan — unchanged from v3).
-//   2. For each year, count how many questions exist, pick a random offset,
-//      and fetch a small quota. This guarantees every year is represented.
-//   3. Run all year queries in parallel (Promise.all) — total latency equals
-//      the slowest single query, not the sum of all queries.
-//   4. Merge, shuffle (so years interleave), and slice to requested count.
-//
-// WHY RANDOM OFFSET INSTEAD OF ORDER BY RANDOM():
-//   ORDER BY RANDOM() forces a full sequential scan + sort on every request.
-//   A random offset with .range(offset, offset + quota) uses the index and is
-//   ~10× faster on large tables. Randomness comes from the offset, not sorting.
+// SMALL-COUNT FAST PATH (count ≤ 5):
+//   Phase-1 always fetches 3 questions. The per-year machinery (year discovery +
+//   N parallel count + N parallel fetch) makes no sense for 3 results — it can
+//   spawn 15+ DB round-trips. count ≤ 5 goes straight to a single pool fetch.
 //
 // PARAMETERS:
 //   exam        — 'WAEC' | 'JAMB' | 'IGCSE'
@@ -80,6 +70,12 @@ export async function GET(request) {
     const service = db()
 
     // ── 1. Resolve subject IDs ────────────────────────────────────────────────
+    // When subject_id is supplied directly (happy path), use it as-is.
+    // When falling back to name resolution, MUST filter by exam_type so we get
+    // the correct row — subjects table has one row per exam per name (e.g.
+    // "Mathematics WAEC" and "Mathematics JAMB" are separate rows with different
+    // UUIDs). Without the exam filter the wrong UUID can be returned, causing
+    // questions tagged under the correct exam's UUID to be missed entirely.
     let resolvedSubjectIds = []
     if (subjectId) {
       resolvedSubjectIds = [subjectId]
@@ -88,6 +84,7 @@ export async function GET(request) {
         .from('subjects')
         .select('id, name')
         .in('name', subjectNames)
+        .eq('exam_type', exam)
       resolvedSubjectIds = (subjRows ?? []).map(s => s.id)
     }
 
@@ -96,18 +93,13 @@ export async function GET(request) {
     }
 
     // ── 2. Base filter builder ────────────────────────────────────────────────
-    // The questions table has two columns for exam filtering:
-    //   exam_types — new array column  ['WAEC'] or ['WAEC','JAMB']
-    //   exam_type  — legacy string     'WAEC' | 'JAMB' | 'BOTH'
-    const legacyValues = [exam, 'BOTH']
-
-    const applyBase = (q, useArrayCol = true) => {
-      q = q.eq('is_active', true).in('subject_id', resolvedSubjectIds)
-      if (useArrayCol) {
-        q = q.contains('exam_types', [exam])
-      } else {
-        q = q.in('exam_type', legacyValues)
-      }
+    // exam_type is TEXT: 'WAEC' | 'JAMB' | 'BOTH'.
+    // exam_types (TEXT[]) exists in the schema but is null for every row —
+    // the import pipeline never populated it. Filter on exam_type only.
+    const applyBase = (q) => {
+      q = q.eq('is_active', true)
+           .in('subject_id', resolvedSubjectIds)
+           .in('exam_type', [exam, 'BOTH'])
       if (topicId)           q = q.eq('topic_id', topicId)
       if (excludeIds.length) q = q.not('id', 'in', `(${excludeIds.join(',')})`)
       return q
@@ -125,41 +117,35 @@ export async function GET(request) {
     // ── 3. Discover available years (cheap index scan) ────────────────────────
     // Only fetches the year column — Postgres can satisfy this from the index.
     // Limit 1000 covers any realistic question bank.
-    let yearRows = []
-    {
-      const { data, error } = await applyBase(
-        service.from('questions').select('year'), true
-      ).not('year', 'is', null).limit(1000)
+    //
+    // SMALL-COUNT FAST PATH: for count ≤ 5 (first-batch=3, quick5=5) the
+    // per-year machinery is pure overhead — year-spread across 3–5 questions is
+    // meaningless and spawns up to 16 parallel DB round-trips. Skip straight to
+    // a single pool fetch instead. Same single-pool path used when no years exist.
+    const USE_YEAR_SPREAD = count > 5
 
-      if (error || !data?.length) {
-        const fb = await applyBase(
-          service.from('questions').select('year'), false
-        ).not('year', 'is', null).limit(1000)
-        yearRows = fb.data ?? []
-      } else {
-        yearRows = data
-      }
+    let yearRows = []
+    if (USE_YEAR_SPREAD) {
+      const { data } = await applyBase(
+        service.from('questions').select('year')
+      ).not('year', 'is', null).limit(1000)
+      yearRows = data ?? []
     }
 
-    const availableYears = [
-      ...new Set(yearRows.map(r => r.year).filter(Boolean))
-    ].sort()
+    const availableYears = USE_YEAR_SPREAD
+      ? [...new Set(yearRows.map(r => r.year).filter(Boolean))].sort()
+      : []
 
     // ── 4. Per-year parallel fetch ────────────────────────────────────────────
     let questions = []
 
     if (availableYears.length === 0) {
-      // No year data — single pool fallback
+      // Single pool path — used for small counts AND when no year data exists.
+      // For small counts (≤5): one query is faster than the year machinery.
       const POOL = Math.min(count * 4, 200)
-      let { data, error } = await applyBase(
-        service.from('questions').select(SELECT), true
+      const { data } = await applyBase(
+        service.from('questions').select(SELECT)
       ).limit(POOL)
-      if (error || !data?.length) {
-        const fb = await applyBase(
-          service.from('questions').select(SELECT), false
-        ).limit(POOL)
-        data = fb.data ?? []
-      }
       questions = data ?? []
 
     } else {
@@ -169,19 +155,10 @@ export async function GET(request) {
       const countResults = await Promise.all(
         availableYears.map(yr =>
           applyBase(
-            service.from('questions').select('id', { count: 'exact', head: true }), true
+            service.from('questions').select('id', { count: 'exact', head: true })
           )
           .eq('year', yr)
-          .then(({ count: c, error }) => {
-            if (error || c == null || c === 0) {
-              return applyBase(
-                service.from('questions').select('id', { count: 'exact', head: true }), false
-              )
-              .eq('year', yr)
-              .then(({ count: c2 }) => ({ year: yr, total: c2 ?? 0 }))
-            }
-            return { year: yr, total: c }
-          })
+          .then(({ count: c }) => ({ year: yr, total: c ?? 0 }))
         )
       )
 
@@ -195,31 +172,26 @@ export async function GET(request) {
             // randomness so use ORDER BY RANDOM() instead — it's only slow on large tables.
             const useRandomOrder = total <= perYear * 2
 
-            const fetchYear = (useArray) => {
-              let q = applyBase(service.from('questions').select(SELECT), useArray).eq('year', yr)
+            const fetchYear = () => {
+              let q = applyBase(service.from('questions').select(SELECT)).eq('year', yr)
               if (useRandomOrder) {
-                // True random via Postgres — acceptable cost on small sets
-                q = q.order('id')  // Supabase doesn't expose ORDER BY RANDOM() directly;
-                                    // we'll shuffle the result in JS after fetching all of them
-                return q.limit(Math.min(total, perYear * 3))
+                // Small pool — fetch all candidates and shuffle in JS
+                return q.order('id').limit(Math.min(total, perYear * 3))
               } else {
+                // Large pool — random offset into the index (fast, avoids full scan)
                 const maxOffset = Math.max(0, total - perYear)
                 const offset    = Math.floor(Math.random() * (maxOffset + 1))
                 return q.order('id').range(offset, offset + perYear - 1)
               }
             }
 
-            return fetchYear(true)
-              .then(({ data, error }) => {
-                if (error || !data?.length) return fetchYear(false).then(fb => fb.data ?? [])
-                return data
-              })
-              .then(data => {
-                // Shuffle small-pool results so different questions surface each session
-                if (useRandomOrder && data.length > perYear) {
-                  return shuffle(data).slice(0, perYear)
+            return fetchYear()
+              .then(({ data }) => {
+                const rows = data ?? []
+                if (useRandomOrder && rows.length > perYear) {
+                  return shuffle(rows).slice(0, perYear)
                 }
-                return data
+                return rows
               })
               .catch(() => [])
           })
@@ -232,7 +204,7 @@ export async function GET(request) {
         console.warn('[student/questions] per-year fetch yielded nothing, falling back to pool')
         const POOL = Math.min(count * 4, 200)
         const { data } = await applyBase(
-          service.from('questions').select(SELECT), true
+          service.from('questions').select(SELECT)
         ).limit(POOL)
         questions = data ?? []
       }

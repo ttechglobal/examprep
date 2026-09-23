@@ -172,3 +172,56 @@ export function getLocalDisplayName() {
   if (!profile) return ''
   return profile.full_name || profile.username || ''
 }
+
+// ── Subject ID cache ──────────────────────────────────────────────────────────
+// Maps subject names → { id, name } objects for a given exam type.
+// Stored in localStorage so every page (practice, battle, mock setup) shares
+// the same warm cache. One fetch per student per 24 hours — not one per page.
+//
+// Shape: { WAEC: [{id, name}, ...], JAMB: [{id, name}, ...], ts: <epoch ms> }
+// The ts field is updated on every write, so both exams expire together after
+// 24 hours. This is intentional — subject UUIDs never change in normal
+// operation, and a 24h stale window is safe.
+
+const SUBJECT_ID_CACHE_KEY = 'ep_subject_ids'
+const SUBJECT_ID_CACHE_TTL = 24 * 60 * 60 * 1000  // 24 hours
+
+/**
+ * Read cached subject rows for a given exam type.
+ * Returns an array of { id, name } objects, or null if the cache is
+ * missing, expired, or doesn't contain an entry for that exam.
+ */
+export function readSubjectIdCache(exam) {
+  if (typeof window === 'undefined') return null
+  try {
+    const c = JSON.parse(localStorage.getItem(SUBJECT_ID_CACHE_KEY) || 'null')
+    if (!c || Date.now() - (c.ts || 0) > SUBJECT_ID_CACHE_TTL) return null
+    return c[exam] ?? null
+  } catch { return null }
+}
+
+/**
+ * Write subject rows for a given exam type into the shared cache.
+ * Merges with any existing data for other exam types.
+ * subjects must be an array of { id, name } objects.
+ */
+export function writeSubjectIdCache(exam, subjects) {
+  if (typeof window === 'undefined') return
+  try {
+    const existing = JSON.parse(localStorage.getItem(SUBJECT_ID_CACHE_KEY) || '{}')
+    localStorage.setItem(
+      SUBJECT_ID_CACHE_KEY,
+      JSON.stringify({ ...existing, [exam]: subjects, ts: Date.now() })
+    )
+  } catch {}
+}
+
+/**
+ * Invalidate the entire subject ID cache — call this after the student
+ * saves a new subject selection on the profile page, so the next page
+ * load re-fetches with the updated list.
+ */
+export function clearSubjectIdCache() {
+  if (typeof window === 'undefined') return
+  try { localStorage.removeItem(SUBJECT_ID_CACHE_KEY) } catch {}
+}

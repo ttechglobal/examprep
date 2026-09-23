@@ -67,6 +67,15 @@ export function toLatex(expr) {
   // Already LaTeX (has \frac, \sqrt etc) — return as-is
   if (/\\(frac|sqrt|cdot|times|div|pm|log|ln|sin|cos|tan|pi|alpha|beta|theta)/.test(s)) return s
 
+  // Bare # as Naira sign (Nigerian exam data): #500 → ₦500
+  s = s.replace(/#\s*(\d)/g, '₦$1')
+
+  // Restore stripped backslashes on known LaTeX commands.
+  // MyQuest and some PDF extractors drop the backslash, producing e.g.
+  // 'frac{3}{2}' instead of '\\frac{3}{2}'. Re-insert the backslash
+  // so KaTeX can render them correctly.
+  s = s.replace(/(?<![\\a-zA-Z])(frac|dfrac|sqrt|cdot|times|div|pm|leq|geq|neq|approx|infty|theta|alpha|beta|gamma|pi|Delta|Sigma|Omega)(?=\s*\{)/g, '\\\\$1')
+
   // Greek words → symbols
   s = s.replace(/\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|pi|sigma|phi|omega)\b/gi,
     (_, g) => `\\${g.toLowerCase()}`)
@@ -230,7 +239,7 @@ function splitSegments(text) {
   // SAFETY NET: if any text segment contains raw LaTeX commands (\frac, \circ etc.)
   // that slipped through without delimiters, wrap the whole segment as math.
   // \text{ ... } wrappers are stripped first — their contents may be math commands.
-  const rawLatexPattern = /\\(?:text\s*\{|frac\s*\{|circ|sqrt\s*\{|times|div|leq|geq|cdot|theta|alpha|beta|pi|Delta|angle|therefore|approx)/
+  const rawLatexPattern = /(?:\\\\(?:text\s*\{|frac\s*\{|circ|sqrt\s*\{|times|div|leq|geq|cdot|theta|alpha|beta|pi|Delta|angle|therefore|approx)|(?<![a-zA-Z\\])(?:frac|dfrac|sqrt)\s*\{)/
 
   // Strip \text{...} including nested braces, e.g. \text{ \frac{g}{mol} } → \frac{g}{mol}
   function stripTextWrapper(s) {

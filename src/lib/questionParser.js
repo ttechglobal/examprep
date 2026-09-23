@@ -70,6 +70,8 @@ export function cleanLatex(text) {
   // 2. \text{N} naira notation → ₦
   s = s.replace(/\\text\{N\}/g, '₦')
   s = s.replace(/\\text\{\\#\}/g, '₦')
+  // Bare # as Naira sign: #500 → ₦500  (only when immediately preceding a digit)
+  s = s.replace(/#\s*(\d)/g, '₦$1')
 
   // 3. delta/Delta before uppercase label → \Delta
   s = s.replace(/\bdelta([A-Z])/g, '\\Delta $1')
@@ -97,12 +99,10 @@ export function cleanLatex(text) {
   // 6. Double-escaped dollar inside $: $\$500$ → $500
   s = s.replace(/(\$)\\\$(\d)/g, '$1$2')
 
-  // 7. Stray LaTeX display/inline delimiters that leaked into plain text
-  //    e.g. \$ appearing as literal text (not inside math), \text{...}, \dfrac leaked
-  //    Strip backslash-dollar that isn't part of a $ math block
-  s = s.replace(/\\dfrac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')
-  s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2')
-  s = s.replace(/\\text\{([^}]*)\}/g, '$1')
+  // 7. Stray LaTeX display/inline delimiters: strip backslash-dollar
+  //    that appears as literal text (not inside a $ math block)
+  // NOTE: \\frac, \\dfrac, and \\text{} are NOT stripped here — they are valid LaTeX
+  // that MathText/KaTeX renders correctly. Stripping them destroys math content.
 
   // 8. "The correct answer is X - text" → use em dash instead of hyphen
   //    Normalise hyphen-minus used as separator after answer letter

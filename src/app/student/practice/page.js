@@ -15,7 +15,7 @@ import { Baloo_2 } from 'next/font/google'
 import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
+import { getLocalExamType, getLocalSubjects, readSubjectIdCache, writeSubjectIdCache } from '@/lib/localProfile'
 
 const baloo = Baloo_2({ subsets: ['latin'], weight: ['800'], display: 'swap' })
 // import DailyChallenge from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
@@ -23,23 +23,8 @@ import SessionHistory from '@/components/student/SessionHistory'
 import Link from 'next/link'
 import BattleEntryCard from '@/components/battle/BattleEntryCard'
 
-// ── Subject ID cache — persists resolved UUIDs across sessions
-// Avoids a network round-trip every time the practice page loads.
-const SUBJ_ID_CACHE_KEY = 'ep_subject_ids'
-const SUBJ_ID_CACHE_TTL = 24 * 60 * 60 * 1000  // 24 hours (subjects rarely change)
-function readSubjectIdCache(exam) {
-  try {
-    const c = JSON.parse(localStorage.getItem(SUBJ_ID_CACHE_KEY) || 'null')
-    if (!c || Date.now() - (c.ts || 0) > SUBJ_ID_CACHE_TTL) return null
-    return c[exam] ?? null
-  } catch { return null }
-}
-function writeSubjectIdCache(exam, subjects) {
-  try {
-    const c = JSON.parse(localStorage.getItem(SUBJ_ID_CACHE_KEY) || '{}')
-    localStorage.setItem(SUBJ_ID_CACHE_KEY, JSON.stringify({ ...c, [exam]: subjects, ts: Date.now() }))
-  } catch {}
-}
+// readSubjectIdCache / writeSubjectIdCache are imported from @/lib/localProfile.
+// They live there so practice, battle setup, and any future page share one cache.
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -452,16 +437,33 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode = 'c
   const isCustom    = mode === 'custom'
   const isTopic     = mode === 'topic'
   const totalSteps  = (isCustom || isTopic) ? 2 : 1
+  // Require a resolved subject ID (not just a stub with id:null) before allowing
+  // Start. Stubs appear for ~100ms while /api/student/subjects resolves IDs in
+  // the background. Without this check a null subject_id is written to
+  // practice_config, the session page drops it, and the questions API falls back
+  // to name-based resolution which may hit the wrong subject row.
+  const hasId = (s) => !!(s?.id)
   const canNext     = mode === 'mock' ? true
-    : mode === 'quick5' ? !!q5Subject
-    : mode === 'timed'  ? !!spSubject
-    : mode === 'topic'  ? (step === 1 ? !!tpSubject : !!tpTopic)
-    : step === 1 ? !!subject : true
+    : mode === 'quick5' ? hasId(q5Subject)
+    : mode === 'timed'  ? hasId(spSubject)
+    : mode === 'topic'  ? (step === 1 ? hasId(tpSubject) : !!tpTopic)
+    : step === 1 ? hasId(subject) : true
 
   const modeAccent  = { topic: '#0891b2', custom: BLUE, quick5: GREEN, timed: ORANGE, mock: PURPLE }[mode] ?? BLUE
   const modeShadow  = { topic: '#065f7a', custom: '#0a3fa0', quick5: '#166534', timed: '#b84200', mock: '#3b0764' }[mode] ?? '#0a3fa0'
 
-  const btnLabel = mode === 'mock'   ? '📝 Start Mock Exam'
+  // Show "Loading…" if subject IDs haven't resolved yet (stubs have id:null)
+  const subjectLoading = loadingSubjects || (
+    mode !== 'mock' && step === 1 && (
+      (mode === 'quick5' && q5Subject && !q5Subject.id) ||
+      (mode === 'timed'  && spSubject && !spSubject.id) ||
+      (mode === 'topic'  && tpSubject && !tpSubject.id) ||
+      (mode !== 'quick5' && mode !== 'timed' && mode !== 'topic' && subject && !subject.id)
+    )
+  )
+  const btnLabel = subjectLoading && mode !== 'mock' && step === 1
+    ? 'Loading subjects…'
+    : mode === 'mock'   ? '📝 Start Mock Exam'
     : mode === 'quick5' ? '⚡ Start Quick 5'
     : mode === 'timed'  ? '⏱ Start Speed Round'
     : mode === 'topic'  ? (step === 1 ? 'Choose Topic →' : '📚 Start Topic Practice')
@@ -568,9 +570,13 @@ export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode = 'c
                     {subjects.map(sub => {
                       const a = getAccent(sub.name)
                       const currentSubj = mode === 'quick5' ? q5Subject : mode === 'timed' ? spSubject : mode === 'topic' ? tpSubject : subject
-                      const on = currentSubj?.id === sub.id
+                      // Use name as key when IDs haven't resolved yet (stubs have id:null).
+                      // Compare by name too when both are stubs, so only one shows as selected.
+                      const on = sub.id
+                        ? currentSubj?.id === sub.id
+                        : currentSubj?.name === sub.name
                       return (
-                        <button key={sub.id} onClick={() => {
+                        <button key={sub.id ?? sub.name} onClick={() => {
                           if (mode === 'quick5') setQ5Subject(sub)
                           else if (mode === 'timed') setSpSubject(sub)
                           else if (mode === 'topic') setTpSubject(sub)
@@ -922,7 +928,7 @@ export default function PracticePage() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <TopicCard onClick={openSheet} />
               <MockCard onClick={() => {
-                sessionStorage.setItem('mock_config', JSON.stringify({ subjects }))
+                sessionStorage.setItem('mock_config', JSON.stringify({ subjects, examType: exam }))
                 router.push('/student/practice/mock')
               }} />
             </div>
@@ -947,7 +953,7 @@ export default function PracticePage() {
           onExamChange={handleExamChange}
           onClose={() => setShowSheet(false)}
           onStart={handleStart}
-          onMockExam={() => { setShowSheet(false); sessionStorage.setItem('mock_config', JSON.stringify({ subjects })); router.push('/student/practice/mock') }}
+          onMockExam={() => { setShowSheet(false); sessionStorage.setItem('mock_config', JSON.stringify({ subjects, examType: exam })); router.push('/student/practice/mock') }}
         />
       )}
     </>

@@ -50,6 +50,14 @@ export default function RootLayout({ children }) {
         <script
           dangerouslySetInnerHTML={{ __html: `(function(){try{var s=localStorage.getItem('ep-theme');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();` }}
         />
+        {/*
+          Catch the browser's one-time install offer before React hydrates.
+          It often fires early; without this, Install buttons miss it.
+          lib/pwaInstall.js reads it from window.__epInstallPrompt.
+        */}
+        <script
+          dangerouslySetInnerHTML={{ __html: `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__epInstallPrompt=e;window.dispatchEvent(new Event('ep:installprompt'))});` }}
+        />
       </head>
       <body className="font-jakarta antialiased bg-base text-primary">
         {/*

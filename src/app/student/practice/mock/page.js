@@ -258,17 +258,26 @@ export default function MockPage() {
     if (!cfg.subjects?.length) { setErrMsg('No subjects found. Go back and try again.'); setPhase('error'); return }
     setAllSubjects(cfg.subjects)
     setConfig(cfg)
-    setPhase('pick-exam')
+    // If the practice page already knew the exam type (written since the JAMB-UUID fix),
+    // skip the exam-picker entirely so WAEC subjects are never used for a JAMB session
+    // and vice versa.  Fall back to 'pick-exam' only for stale configs that lack examType.
+    if (cfg.examType === 'WAEC' || cfg.examType === 'JAMB') {
+      setExamType(cfg.examType)
+      setPhase('setup')
+    } else {
+      setPhase('pick-exam')
+    }
   }, [])
 
-  // ── Fetch one JAMB subject ────────────────────────────────────────────────
-  const fetchSubjectQuestions = useCallback(async (idx, subList) => {
+  // ── Fetch one non-WAEC subject (JAMB) ────────────────────────────────────
+  // examType is captured from state at call time — do NOT hardcode 'JAMB' here.
+  const fetchSubjectQuestions = useCallback(async (idx, subList, resolvedExam) => {
     if (fetchedRef.current.has(idx)) return
     fetchedRef.current.add(idx)
     const s = subList[idx]
     if (!s?.id) return
     try {
-      const p = new URLSearchParams({ exam:'JAMB', subject_id:s.id, count:String(JAMB_COUNT), mode:'mock' })
+      const p = new URLSearchParams({ exam: resolvedExam, subject_id: s.id, count: String(JAMB_COUNT), mode: 'mock' })
       const data = await fetch(`/api/student/questions?${p}`).then(r => r.json())
       setSubjectQs(prev => { const n=[...prev]; n[idx]=data.questions??[]; return n })
       setSubjectLoaded(prev => { const n=[...prev]; n[idx]=true; return n })
@@ -280,7 +289,31 @@ export default function MockPage() {
   // ── Start ─────────────────────────────────────────────────────────────────
   async function handleStart(picked) {
     // picked = single subject (WAEC) or array of subjects (JAMB)
-    const subList = Array.isArray(picked) ? picked : [picked]
+    // subject objects carry {id, name} but the IDs may have been resolved for a
+    // different exam on the practice page.  Re-resolve IDs here for the exam the
+    // student actually chose so WAEC UUIDs are never used for a JAMB session.
+    let subList = Array.isArray(picked) ? picked : [picked]
+
+    if (examType !== 'WAEC') {
+      // Re-resolve subject IDs for the chosen exam from the canonical subjects API.
+      // This is a single fast query (≤4 names) and ensures the UUIDs match examType.
+      try {
+        const names = subList.map(s => s.name)
+        const res = await fetch(`/api/student/subjects?exam=${examType}&names=${encodeURIComponent(names.join(','))}`)
+        if (res.ok) {
+          const rows = await res.json()
+          if (Array.isArray(rows) && rows.length) {
+            // Merge resolved IDs back, preserving original order
+            const idMap = {}
+            rows.forEach(r => { idMap[r.name] = r.id })
+            subList = subList.map(s => ({ ...s, id: idMap[s.name] ?? s.id }))
+          }
+        }
+      } catch {
+        // Non-fatal: fall through with whatever IDs we have
+      }
+    }
+
     setSessionSubjects(subList)
     setPhase('session')
     startTimeRef.current = Date.now()
@@ -291,7 +324,7 @@ export default function MockPage() {
       const s = subList[0]
       setConfig(prev => ({ ...prev, activeSubject: s.name, subject_id: s.id }))
       try {
-        const p = new URLSearchParams({ exam:'WAEC', subject_id:s.id, count:String(WAEC_COUNT), mode:'mock' })
+        const p = new URLSearchParams({ exam: 'WAEC', subject_id: s.id, count: String(WAEC_COUNT), mode: 'mock' })
         const data = await fetch(`/api/student/questions?${p}`).then(r => r.json())
         if (!data.questions?.length) { setErrMsg(`No questions found for ${s.name}.`); setPhase('error'); return }
         setQuestions(data.questions); setQIndex(0); setAnswerMap({})
@@ -300,14 +333,14 @@ export default function MockPage() {
       const len = subList.length
       setSubjectQs(Array(len).fill([])); setSubjectLoaded(Array(len).fill(false))
       setAnswerMaps(Array(len).fill({})); setActiveTab(0); setQIndex(0)
-      fetchSubjectQuestions(0, subList)
-      for (let i = 1; i < len; i++) setTimeout(() => fetchSubjectQuestions(i, subList), i * 800)
+      fetchSubjectQuestions(0, subList, examType)
+      for (let i = 1; i < len; i++) setTimeout(() => fetchSubjectQuestions(i, subList, examType), i * 800)
     }
   }
 
   function handleSwitchTab(idx) {
     setActiveTab(idx); setQIndex(0)
-    if (!fetchedRef.current.has(idx)) fetchSubjectQuestions(idx, sessionSubjects)
+    if (!fetchedRef.current.has(idx)) fetchSubjectQuestions(idx, sessionSubjects, examType)
   }
 
   // ── Record answer immediately when option is tapped ───────────────────────
@@ -359,7 +392,14 @@ export default function MockPage() {
   if (phase==='error')     return <ErrorScreen message={errMsg} onBack={()=>router.push('/student/practice')}/>
   if (phase==='pick-exam') return <ExamPicker onPick={e=>{setExamType(e);setPhase('setup')}} onBack={()=>router.push('/student/practice')}/>
   if (phase==='setup')     return <MockSetup examType={examType} allSubjects={allSubjects} onStart={handleStart} onBack={()=>setPhase('pick-exam')}/>
-  if (phase==='review')    return <ReviewSession questions={allQuestions} answers={allAnswers} onDone={()=>setPhase('results')} dark={dark}/>
+  if (phase==='review')    return <ReviewSession
+    questions={allQuestions}
+    answers={allAnswers}
+    onDone={() => setPhase('results')}
+    dark={dark}
+    subjects={!isWAEC ? sessionSubjects : undefined}
+    subjectSize={!isWAEC ? JAMB_COUNT : undefined}
+  />
   if (phase==='results')   return (
     <>
       <SessionResults

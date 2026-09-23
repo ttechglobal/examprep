@@ -2,7 +2,7 @@
 // src/app/student/battle/setup/page.js
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getLocalExamType, getLocalSubjects } from '@/lib/localProfile'
+import { getLocalExamType, getLocalSubjects, readSubjectIdCache, writeSubjectIdCache } from '@/lib/localProfile'
 import Image from 'next/image'
 
 const NAVY = '#12195A', NAVY2 = '#1A2468', GOLD = '#FFB800', GOLD2 = '#CC8F00'
@@ -167,38 +167,54 @@ export default function BattleSetupPage() {
   const [step,      setStep]      = useState('subject')
   const [xp,        setXp]        = useState(null)
 
-  // Load subjects — local cache first, then API with ID resolution.
-  // Must pass names= so the API returns real UUIDs (Path A).
-  // Without names= it hits the auth-based Path B which returns a plain array
-  // with no .subjects property, so IDs never resolve and topic fetch never fires.
+  // Load subjects — shared cache first (ep_subject_ids in localStorage), then API.
+  // Uses the same cache that practice/page.js writes, so if the student came from
+  // the practice page first, subjects are already cached and load instantly here
+  // with real UUIDs — no network call needed.
   useEffect(() => {
-    const exam       = getLocalExamType() || 'WAEC'
-    const localNames = getLocalSubjects(exam)   // string[] from localProfile
-    if (localNames?.length) {
-      setSubjects(localNames.map(n => ({ id: null, name: n })))
-      setLoadingS(false)
-    }
+    const currentExam = getLocalExamType() || 'WAEC'
+    setExam(currentExam)
+    const localNames  = getLocalSubjects(currentExam)  // string[] from localProfile
+
     if (!localNames?.length) { setLoadingS(false); return }
-    // Fetch with names so the API resolves real UUIDs
-    fetch(`/api/student/subjects?exam=${exam}&names=${encodeURIComponent(localNames.join(','))}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        // API returns a plain array of { id, name, slug, exam_type }
-        if (Array.isArray(d) && d.length) {
-          setSubjects(d)
-          // If a subject was already selected as a stub (id: null), upgrade it
-          setSubject(prev => {
-            if (!prev || prev.id) return prev
-            const match = d.find(s => s.name === prev.name)
-            return match ?? prev
-          })
-        }
-      })
-      .catch(() => {}).finally(() => setLoadingS(false))
-    fetch('/api/student/battle/stats')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.stats?.total_battle_xp != null) setXp(d.stats.total_battle_xp) })
-      .catch(() => {})
+
+    // 1. Check shared localStorage cache first
+    const cached = readSubjectIdCache(currentExam)
+    if (cached?.length) {
+      const cachedNames = new Set(cached.map(s => s.name))
+      // Only use cache if it covers all the student's current subjects
+      if (localNames.every(n => cachedNames.has(n))) {
+        setSubjects(cached)
+        setSubject(cached[0] ?? null)
+        setLoadingS(false)
+        // Fetch battle stats in background — doesn't block subject display
+        fetch('/api/student/battle/stats')
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.stats?.total_battle_xp != null) setXp(d.stats.total_battle_xp) })
+          .catch(() => {})
+        return
+      }
+    }
+
+    // 2. Cache miss — fetch real UUIDs from API, then cache for next time.
+    // Show name-only stubs while fetching so UI is never blank.
+    const stubs = localNames.map(n => ({ id: null, name: n }))
+    setSubjects(stubs)
+
+    Promise.all([
+      fetch(`/api/student/subjects?exam=${currentExam}&names=${encodeURIComponent(localNames.join(','))}`)
+        .then(r => r.ok ? r.json() : null),
+      fetch('/api/student/battle/stats')
+        .then(r => r.ok ? r.json() : null),
+    ]).then(([subjectData, statsData]) => {
+      if (Array.isArray(subjectData) && subjectData.length) {
+        const rows = subjectData.map(s => ({ id: s.id, name: s.name }))
+        writeSubjectIdCache(currentExam, rows)
+        setSubjects(rows)
+        setSubject(rows[0] ?? null)
+      }
+      if (statsData?.stats?.total_battle_xp != null) setXp(statsData.stats.total_battle_xp)
+    }).catch(() => {}).finally(() => setLoadingS(false))
   }, [])
 
   // Load topics — fires whenever subject ID changes (pre-fetch so topics are
@@ -246,11 +262,40 @@ export default function BattleSetupPage() {
       .catch(() => {}).finally(() => setLoadingT(false))
   }, [subject?.id])
 
-  function handleStart() {
+  async function handleStart() {
+    // The subjects list is loaded once at mount using the profile's primary exam type.
+    // If the student switches exam in Step 3 (e.g. profile is WAEC but they pick JAMB),
+    // subject.id is the UUID for the wrong exam — the questions API would return nothing.
+    // Re-resolve the correct UUID for the chosen exam before writing battle_config.
+    let resolvedSubjectId = subject.id
+
+    // 1. Check the shared subject-ID cache first (same cache used by practice page)
+    const cached = readSubjectIdCache(exam)
+    if (cached?.length) {
+      const match = cached.find(s => s.name === subject.name)
+      if (match?.id) resolvedSubjectId = match.id
+    }
+
+    // 2. If cache missed (different exam from profile's primary, never cached),
+    //    do a single fast API call to get the right UUID.
+    if (resolvedSubjectId === subject.id && exam !== getLocalExamType()) {
+      try {
+        const res  = await fetch(`/api/student/subjects?exam=${exam}&names=${encodeURIComponent(subject.name)}`)
+        const rows = res.ok ? await res.json() : []
+        if (Array.isArray(rows) && rows.length) {
+          resolvedSubjectId = rows[0].id ?? subject.id
+          // Cache the result so the next battle is instant
+          writeSubjectIdCache(exam, rows.map(r => ({ id: r.id, name: r.name })))
+        }
+      } catch {
+        // Non-fatal: fall through with the original ID — session will surface an empty-questions error
+      }
+    }
+
     const config = {
       opponent:'computer',
       exam,
-      subject_id: subject.id, subject_name: subject.name,
+      subject_id: resolvedSubjectId, subject_name: subject.name,
       questionSet: qSet,
       topic_id:   qSet === 'topic' ? topic?.id   : null,
       topic_name: qSet === 'topic' ? topic?.name : null,

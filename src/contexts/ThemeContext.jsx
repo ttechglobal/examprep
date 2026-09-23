@@ -9,6 +9,10 @@ const ThemeContext = createContext({ dark: false, toggle: () => {} })
 
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(false)
+  // False until the stored preference has been read. Until then we leave
+  // <html class="dark"> alone: the head script in layout.js already set it,
+  // and toggling it with the initial `false` caused a light flash on load.
+  const [ready, setReady] = useState(false)
 
   // On mount: read localStorage override, else use system preference
   useEffect(() => {
@@ -18,12 +22,14 @@ export function ThemeProvider({ children }) {
     } else {
       setDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
     }
+    setReady(true)
   }, [])
 
   // Apply class to <html> whenever dark changes
   useEffect(() => {
+    if (!ready) return
     document.documentElement.classList.toggle('dark', dark)
-  }, [dark])
+  }, [dark, ready])
 
   // Listen for system preference changes (only when no manual override)
   useEffect(() => {
