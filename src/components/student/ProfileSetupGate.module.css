@@ -1,0 +1,35 @@
+/* src/components/student/ProfileSetupGate.module.css */
+.backdrop {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(6,42,120,.45); backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  animation: fade .2s ease both;
+}
+:global(html.dark) .backdrop { background: rgba(0,0,0,.6); }
+.card {
+  width: 100%; max-width: 400px; border-radius: 26px; padding: 22px 20px 20px;
+  background: var(--bg-card); border: 1.5px solid var(--border); color: var(--text-prim);
+  box-shadow: var(--shadow-modal); font-family: var(--font-jakarta), system-ui, sans-serif;
+  animation: rise .3s cubic-bezier(.2,.8,.2,1) both;
+}
+:global(html.dark) .card { background: #141a2b; border-color: rgba(255,255,255,.08); }
+.head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.title { font-size: 21px; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; margin: 0 0 4px; }
+.text { font-size: 14px; line-height: 1.5; color: var(--text-sec); margin: 0; }
+.steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; }
+.step { display: flex; align-items: center; gap: 11px; padding: 11px 13px; border-radius: 14px; background: var(--bg-subtle); font-size: 14px; font-weight: 700; }
+.tick { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; flex-shrink: 0; border: 2px solid var(--border-strong); color: var(--text-tert); }
+.done { background: #22c55e; border-color: #22c55e; color: #fff; }
+.stepDone { color: var(--text-tert); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.cta {
+  width: 100%; min-height: 52px; border: 0; border-radius: 15px; cursor: pointer;
+  background: #1264E5; color: #fff; font: inherit; font-size: 15.5px; font-weight: 800;
+  box-shadow: 0 5px 0 #0a3fa0, 0 10px 22px rgba(18,100,229,.25); transition: transform .08s, box-shadow .08s;
+}
+.cta:active { transform: translateY(4px); box-shadow: 0 1px 0 #0a3fa0; }
+.cta:focus-visible { outline: 3px solid rgba(18,100,229,.55); outline-offset: 3px; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } }
+@media (min-width: 768px) { .backdrop { align-items: center; } }
+@media (prefers-reduced-motion: reduce) { .backdrop, .card { animation: none; } }

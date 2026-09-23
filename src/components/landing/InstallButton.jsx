@@ -120,7 +120,7 @@ function InstallSheet({ mode, env, onClose }) {
           <p className={s.sheetSub} style={{ margin: '6px 0 18px' }}>Open it from your home screen or app list, or start right here.</p>
         </div>
         <div className={s.sheetActions}>
-          <Link href="/onboarding" className={`${s.btn} ${s.btnBlue}`}>Start practising</Link>
+          <Link href="/onboarding?mode=signup" className={`${s.btn} ${s.btnBlue}`}>Start practising</Link>
           <button ref={closeRef} type="button" className={`${s.btn} ${s.btnGhost}`} onClick={onClose}>Close</button>
         </div>
       </>
@@ -131,7 +131,7 @@ function InstallSheet({ mode, env, onClose }) {
         {head('Almost there', 'The install is still finishing in the background.')}
         <p className={s.sheetNote}>Check your home screen or app list for ExamPrep A1. If it isn’t there, tap Install again.</p>
         <div className={s.sheetActions}>
-          <Link href="/onboarding" className={`${s.btn} ${s.btnBlue}`}>Start in the browser</Link>
+          <Link href="/onboarding?mode=signup" className={`${s.btn} ${s.btnBlue}`}>Start in the browser</Link>
           <button ref={closeRef} type="button" className={`${s.btn} ${s.btnGhost}`} onClick={onClose}>Close</button>
         </div>
       </>
@@ -147,7 +147,7 @@ function InstallSheet({ mode, env, onClose }) {
         </ol>
         <div className={s.sheetActions}>
           <button ref={closeRef} type="button" className={`${s.btn} ${s.btnBlue}`} onClick={onClose}>Got it</button>
-          <Link href="/onboarding" className={`${s.btn} ${s.btnGhost}`}>Start in the browser instead</Link>
+          <Link href="/onboarding?mode=signup" className={`${s.btn} ${s.btnGhost}`}>Start in the browser instead</Link>
         </div>
       </>
     )
@@ -183,7 +183,7 @@ function InstallSheet({ mode, env, onClose }) {
         </ol>
         <p className={s.sheetNote}>Already installed? Open ExamPrep A1 from your home screen or app list.</p>
         <div className={s.sheetActions}>
-          <Link href="/onboarding" className={`${s.btn} ${s.btnBlue}`}>Start in the browser</Link>
+          <Link href="/onboarding?mode=signup" className={`${s.btn} ${s.btnBlue}`}>Start in the browser</Link>
           <button ref={closeRef} type="button" className={`${s.btn} ${s.btnGhost}`} onClick={onClose}>Close</button>
         </div>
       </>

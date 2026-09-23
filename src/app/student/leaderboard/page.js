@@ -212,7 +212,7 @@ function ConnectSchoolCTA({ isGuest, onLinked, profile }) {
 
   if (isGuest) {
     return (
-      <Link href="/signup" style={{ textDecoration:'none', display:'block' }}>
+      <Link href="/onboarding?mode=signup" style={{ textDecoration:'none', display:'block' }}>
         <SchoolButton label="Create account to connect your school"/>
       </Link>
     )

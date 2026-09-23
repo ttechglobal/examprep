@@ -33,6 +33,7 @@ export default function DarkSplash({ message = '' }) {
   }, [])
 
   const bg      = isDark ? '#0a0c14' : '#f0f4ff'
+  const track   = isDark ? 'rgba(255,255,255,.1)' : '#dde4f5'
   const cardBg  = isDark ? 'rgba(255,255,255,.04)' : '#ffffff'
   const border  = isDark ? 'rgba(255,255,255,.07)' : '#dde4f5'
   const textPrim = isDark ? '#ffffff' : '#071B49'
@@ -41,7 +42,7 @@ export default function DarkSplash({ message = '' }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: bg,
+      backgroundColor: bg,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       gap: 24,
@@ -85,15 +86,21 @@ export default function DarkSplash({ message = '' }) {
       <div style={{
         width: 24, height: 24,
         borderRadius: '50%',
-        border: `2.5px solid ${isDark ? 'rgba(255,255,255,.1)' : '#dde4f5'}`,
+        // Longhands only: React warns when a shorthand (border) and one of its
+        // parts (borderTopColor) are both set and change between renders.
+        borderWidth: 2.5,
+        borderStyle: 'solid',
         borderTopColor: '#1264E5',
+        borderRightColor: track,
+        borderBottomColor: track,
+        borderLeftColor: track,
         animation: 'splash-spin .7s linear infinite',
       }} />
 
       {/* Shimmer bar */}
       <div style={{
         width: 120, height: 3, borderRadius: 99,
-        background: isDark
+        backgroundImage: isDark
           ? 'linear-gradient(90deg, rgba(255,255,255,.04) 0%, rgba(18,100,229,.4) 50%, rgba(255,255,255,.04) 100%)'
           : 'linear-gradient(90deg, #dde4f5 0%, #1264E5 50%, #dde4f5 100%)',
         backgroundSize: '200% 100%',

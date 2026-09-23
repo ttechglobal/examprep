@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic } from '@/lib/questionParser'
 import { MathText } from '@/lib/mathRenderer'
+import { heldQuestionsStore } from '@/lib/heldQuestionsStore'
 
 // ── Sdash slug map: ExamPrep subject name → SdashAPI slug ────────────────────
 // Covers every ExamPrep subject name variant. Lookup is case-insensitive.
@@ -499,11 +500,12 @@ export default function SdashImportPage() {
   useEffect(() => { setMounted(true) }, [])
 
   // Load held (diagram) questions from localStorage
-  function loadHeldGroups() {
-    try {
-      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
-      setHeldGroups(Array.isArray(held) ? held : [])
-    } catch { setHeldGroups([]) }
+  // Held (diagram) questions live in IndexedDB, not localStorage. See lib/heldQuestionsStore.js
+  const heldStore = useMemo(() => heldQuestionsStore('sdash'), [])
+
+  async function loadHeldGroups() {
+    try { setHeldGroups(await heldStore.list()) }
+    catch (e) { console.error('held questions:', e); setHeldGroups([]) }
   }
 
   useEffect(() => { if (mounted) loadHeldGroups() }, [mounted])
@@ -621,11 +623,8 @@ export default function SdashImportPage() {
       if (diagramQs.length) {
         try {
           const key  = `ep_diagram_hold_${sdashSlug}_${sdashType}_${year}`
-          const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
-          const newEntry = { key, subject: selectedSubject?.name, exam: examType, year, questions: diagramQs, savedAt: new Date().toISOString() }
-          const updated  = [...held.filter(h => h.key !== key), newEntry]
-          localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
-        } catch {}
+          setHeldGroups(await heldStore.putGroup({ key, subject: selectedSubject?.name, exam: examType, year, questions: diagramQs, savedAt: new Date().toISOString() }))
+        } catch (e) { console.error('held questions:', e) }
       }
 
       setFetchedQuestions(cleanQs)
@@ -894,30 +893,17 @@ export default function SdashImportPage() {
 
   // ── Held questions helpers ─────────────────────────────────────────────────
 
-  function deleteHeldGroup(key) {
-    try {
-      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
-      const updated = held.filter(h => h.key !== key)
-      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
-      setHeldGroups(updated)
-    } catch {}
+  async function deleteHeldGroup(key) {
+    try { setHeldGroups(await heldStore.deleteGroup(key)) }
+    catch (e) { console.error('held questions:', e) }
   }
 
-  function deleteHeldQuestion(groupKey, qIndex) {
-    try {
-      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
-      const updated = held.map(h => {
-        if (h.key !== groupKey) return h
-        const qs = [...h.questions]
-        qs.splice(qIndex, 1)
-        return { ...h, questions: qs }
-      }).filter(h => h.questions.length > 0)
-      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
-      setHeldGroups(updated)
-    } catch {}
+  async function deleteHeldQuestion(groupKey, qIndex) {
+    try { setHeldGroups(await heldStore.deleteQuestion(groupKey, qIndex)) }
+    catch (e) { console.error('held questions:', e) }
   }
 
-  function saveHeldEdit(groupKey, qIndex) {
+  async function saveHeldEdit(groupKey, qIndex) {
     setHeldEditError(null)
     let parsed
     try { parsed = JSON.parse(heldEditText) } catch (e) {
@@ -925,15 +911,7 @@ export default function SdashImportPage() {
       return
     }
     try {
-      const held = JSON.parse(localStorage.getItem('ep_diagram_held') ?? '[]')
-      const updated = held.map(h => {
-        if (h.key !== groupKey) return h
-        const qs = [...h.questions]
-        qs[qIndex] = { ...qs[qIndex], ...parsed }
-        return { ...h, questions: qs }
-      })
-      localStorage.setItem('ep_diagram_held', JSON.stringify(updated))
-      setHeldGroups(updated)
+      setHeldGroups(await heldStore.updateQuestion(groupKey, qIndex, parsed))
       setHeldEditTarget(null)
       setHeldEditText('')
     } catch (e) { setHeldEditError(e.message) }

@@ -894,7 +894,7 @@ export default function ProgressPage() {
           <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.5, marginBottom:12 }}>
             Create a free account to keep your performance data across devices and never lose your history.
           </div>
-          <Link href="/signup" style={{ textDecoration:'none' }}>
+          <Link href="/onboarding?mode=signup" style={{ textDecoration:'none' }}>
             <div style={{ padding:'10px 16px', borderRadius:11, background:BLUE, color:'#fff', fontSize:13, fontWeight:800, textAlign:'center' }}>
               Create free account →
             </div>

@@ -7,6 +7,16 @@ import { createContext, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext({ dark: false, toggle: () => {} })
 
+// Storage can be unavailable (private mode) or full. The theme must still
+// switch, so a failed save only means the choice isn't remembered.
+function readTheme() {
+  try { return localStorage.getItem('ep-theme') } catch { return null }
+}
+function saveTheme(value) {
+  try { localStorage.setItem('ep-theme', value) }
+  catch (e) { console.warn('Could not save theme preference:', e?.name ?? e) }
+}
+
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(false)
   // False until the stored preference has been read. Until then we leave
@@ -16,7 +26,7 @@ export function ThemeProvider({ children }) {
 
   // On mount: read localStorage override, else use system preference
   useEffect(() => {
-    const stored = localStorage.getItem('ep-theme')
+    const stored = readTheme()
     if (stored) {
       setDark(stored === 'dark')
     } else {
@@ -35,18 +45,18 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     function handler(e) {
-      if (!localStorage.getItem('ep-theme')) setDark(e.matches)
+      if (!readTheme()) setDark(e.matches)
     }
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
 
   function toggle() {
-    setDark(d => {
-      const next = !d
-      localStorage.setItem('ep-theme', next ? 'dark' : 'light')
-      return next
-    })
+    // Save outside the state updater: updaters must be pure, and React may
+    // call them twice in development.
+    const next = !dark
+    setDark(next)
+    saveTheme(next ? 'dark' : 'light')
   }
 
   return (

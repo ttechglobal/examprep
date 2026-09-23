@@ -14,9 +14,12 @@
 // After every save, localProfile is updated so topbar + other pages stay fresh.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
-import { useRouter }       from 'next/navigation'
-import { useStudentUser }  from '@/app/student/layout'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useStudentUser, useUpdateStudentProfile } from '@/app/student/layout'
+import { signOut } from '@/lib/auth/client'
+import { normalizePhone, formatPhoneForDisplay } from '@/lib/auth/phone'
+import { nextSetupStep } from '@/lib/profileSetup'
 import { useTheme }        from '@/contexts/ThemeContext'
 import { usePoints }       from '@/contexts/PointsContext'
 import { setLocalProfile, cacheAuthProfile } from '@/lib/localProfile'
@@ -251,12 +254,14 @@ function InfoSheet({ profile, isGuest, onClose, onSaved }) {
       const trimSchool = studentSchoolName.trim()
       if (!trimName) throw new Error('Full name is required')
       if (trimUser && trimUser.length < 3) throw new Error('Username must be at least 3 characters')
+      const phoneLogin = profile?.signup_method === 'phone'
+      if (!phoneLogin && trimPhone && !normalizePhone(trimPhone)) throw new Error('Enter a full 11-digit phone number, like 0801 234 5678')
 
       const patch = {
         full_name:           trimName,
         username:            trimUser  || undefined,
         class_level:         classLevel || undefined,
-        phone_number:        trimPhone  || null,
+        ...(profile?.signup_method === 'phone' ? {} : { phone_number: trimPhone ? normalizePhone(trimPhone) : null }),
         student_school_name: trimSchool || null,
       }
 
@@ -297,7 +302,15 @@ function InfoSheet({ profile, isGuest, onClose, onSaved }) {
       )}
       <Field label="Full name"  value={fullName}          onChange={setFullName}          placeholder="Ada Okafor" />
       <Field label="Username"   value={username}          onChange={setUsername}          placeholder="ada_okafor" hint="Shown on the leaderboard — no spaces" />
-      <Field label="Phone number" value={phoneNumber}     onChange={setPhoneNumber}       placeholder="08012345678" hint="Optional — not shown publicly" />
+      {profile?.signup_method === 'phone' ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tert)', marginBottom: 6 }}>Phone number</div>
+          <div style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-sec)', fontSize: 14, fontWeight: 600 }}>{formatPhoneForDisplay(phoneNumber)}</div>
+          <p style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 5 }}>You sign in with this number, so it can't be changed here.</p>
+        </div>
+      ) : (
+        <Field label="Phone number" value={phoneNumber}     onChange={setPhoneNumber}       placeholder="08012345678" hint="Optional — not shown publicly" />
+      )}
       <Field label="Your school" value={studentSchoolName} onChange={setStudentSchoolName} placeholder="e.g. Kings College Lagos" hint="The school you attend" />
       <SelectField label="Class" value={classLevel}       onChange={setClassLevel}        options={['SS1', 'SS2', 'SS3']} />
       {error && <p style={{ fontSize: 12, color: RED, marginBottom: 12 }}>{error}</p>}
@@ -972,22 +985,42 @@ export default function ProfilePage() {
   // Local profile state seeded from layout context, patched on save
   const [profile, setProfile] = useState(null)
   const [sheet,   setSheet]   = useState(null)
+  const updateLayoutProfile = useUpdateStudentProfile()
+
+  // ?setup=1: new students are walked through name → exams & subjects.
+  // Each save bumps setupTick; when the open sheet closes after a save we open
+  // the next step, or send them home once everything is filled in. Closing a
+  // sheet without saving just leaves them on the profile page.
+  const searchParams = useSearchParams()
+  const setupMode    = searchParams.get('setup') === '1'
+  const [setupTick, setSetupTick] = useState(0)
+  const handledTick  = useRef(-1)
 
   useEffect(() => {
     if (layoutProfile !== null) setProfile(layoutProfile)
   }, [layoutProfile])
 
+  useEffect(() => {
+    if (!setupMode || !profile || sheet || handledTick.current === setupTick) return
+    handledTick.current = setupTick
+    const next = nextSetupStep(profile)
+    if (next) setSheet({ type: next })
+    else if (setupTick > 0) router.replace('/student/home')
+  }, [setupMode, profile, sheet, setupTick, router])
+
   function patchProfile(updates) {
     setProfile(p => ({ ...p, ...updates }))
+    updateLayoutProfile(updates)
+  }
+
+  function saveAndContinue(updates) {
+    patchProfile(updates)
+    setSetupTick(t => t + 1)
   }
 
   async function logout() {
-    const { createClient } = await import('@/lib/supabase/client')
-    const s = createClient()
-    await s.auth.signOut()
-    // Clear local auth cache but preserve guest data
-    try { localStorage.removeItem('ep_profile_cache') } catch {}
-    router.replace('/onboarding')
+    await signOut()
+    router.replace('/onboarding?mode=signin')
   }
 
   // Skeleton while layout resolves
@@ -1019,12 +1052,28 @@ export default function ProfilePage() {
         }
       `}</style>
 
+      {/* Setup reminder: shown until name and subjects are both filled in */}
+      {nextSetupStep(profile) && (
+        <div style={{ borderRadius: 16, padding: '16px 18px', background: 'rgba(18,100,229,.07)', border: '1.5px solid rgba(18,100,229,.25)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 3 }}>Finish setting up your profile</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-sec)', lineHeight: 1.5 }}>
+              {nextSetupStep(profile) === 'info' ? 'Add your name, then pick your exams and subjects.' : 'Pick your exams and subjects to start practising.'}
+            </div>
+          </div>
+          <button onClick={() => setSheet({ type: nextSetupStep(profile) })}
+            style={{ padding: '10px 18px', borderRadius: 11, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 13.5, background: BLUE, color: '#fff', boxShadow: '0 4px 0 #0a3fa0' }}>
+            {nextSetupStep(profile) === 'info' ? 'Add your name' : 'Pick subjects'}
+          </button>
+        </div>
+      )}
+
       {/* Guest banner */}
       {isGuest && (
         <div style={{ borderRadius: 16, padding: '16px 18px', background: `${ORANGE}08`, border: `1.5px solid ${ORANGE}30`, marginBottom: 4 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-prim)', marginBottom: 4 }}>Back up your progress 📲</div>
           <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.5, marginBottom: 10 }}>Create a free account to save progress and sync across devices.</div>
-          <Link href="/register" style={{ textDecoration: 'none' }}>
+          <Link href="/onboarding?mode=signup" style={{ textDecoration: 'none' }}>
             <button style={{ padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 900, fontSize: 13, background: ORANGE, color: '#fff' }}>Create Free Account →</button>
           </Link>
         </div>
@@ -1121,10 +1170,10 @@ export default function ProfilePage() {
 
       {/* Sheets */}
       {sheet?.type === 'info' && (
-        <InfoSheet profile={profile} isGuest={isGuest} onClose={() => setSheet(null)} onSaved={patchProfile} />
+        <InfoSheet profile={profile} isGuest={isGuest} onClose={() => setSheet(null)} onSaved={saveAndContinue} />
       )}
       {sheet?.type === 'subjects' && (
-        <SubjectsSheet profile={profile} isGuest={isGuest} onClose={() => setSheet(null)} onSaved={patchProfile} />
+        <SubjectsSheet profile={profile} isGuest={isGuest} onClose={() => setSheet(null)} onSaved={saveAndContinue} />
       )}
       {sheet?.type === 'goals' && (
         <GoalsSheet profile={profile} isGuest={isGuest} focus={sheet?.focus ?? null} onClose={() => setSheet(null)} onSaved={patchProfile} />

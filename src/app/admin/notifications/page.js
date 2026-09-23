@@ -48,7 +48,7 @@ const BUILT_IN_TEMPLATES = [
     label: '📚 New Content',
     title: '📚 New lessons are live!',
     body:  'Fresh content has just been added. Check it out before your next exam.',
-    url:   '/student/subjects',
+    url:   '/student/profile?setup=1',
     tag:   'ep-content',
   },
   {

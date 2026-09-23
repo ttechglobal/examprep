@@ -17,8 +17,8 @@ export default function SiteFooter() {
           </div>
           <div className={s.footerCol}>
             <p className={s.footerHead}>Students</p>
-            <Link href="/onboarding">Start free trial</Link>
-            <Link href="/login">Sign in</Link>
+            <Link href="/onboarding?mode=signup">Start free trial</Link>
+            <Link href="/onboarding?mode=signin">Sign in</Link>
           </div>
           <div className={s.footerCol}>
             <p className={s.footerHead}>Schools</p>

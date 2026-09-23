@@ -12,7 +12,7 @@ import { usePWAInstall, promptInstall, DISMISS_KEY } from '@/lib/pwaInstall'
 const DELAY_MS = 60_000   // 1 minute
 
 // Marketing pages have their own Install buttons, so no timed banner there.
-const SKIP_PATHS = ['/', '/schools', '/ambassador', '/demo']
+const SKIP_PATHS = ['/', '/schools', '/ambassador', '/demo', '/onboarding']
 
 export default function InstallPrompt() {
   // Shared with the landing page buttons (lib/pwaInstall.js), so the

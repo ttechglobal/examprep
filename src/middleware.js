@@ -29,7 +29,11 @@ export async function middleware(request) {
   )
 
   if (!hasSession) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    // Send them to sign in, then straight back to where they were going.
+    const url = new URL('/onboarding', request.url)
+    url.searchParams.set('mode', 'signin')
+    url.searchParams.set('from', pathname)
+    return NextResponse.redirect(url)
   }
 
   return NextResponse.next()

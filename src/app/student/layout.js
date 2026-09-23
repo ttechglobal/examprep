@@ -1,8 +1,8 @@
 'use client'
 // src/app/student/layout.js
 
-import { useState, useEffect, createContext, useContext } from 'react'
-import { usePathname } from 'next/navigation'
+import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 import { useTheme }      from '@/contexts/ThemeContext'
 import { usePoints }     from '@/contexts/PointsContext'
@@ -12,6 +12,9 @@ import { createClient } from '@/lib/supabase/client'
 import { cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
 import NotificationScheduler from '@/components/ui/NotificationScheduler'
+import ProfileSetupGate from '@/components/student/ProfileSetupGate'
+import DarkSplash from '@/components/ui/DarkSplash'
+import { hasLocalIdentity } from '@/lib/auth/client'
 
 const NAVY = '#062A78'
 const BLUE = '#1264E5'
@@ -19,11 +22,15 @@ const GOLD = '#FFB800'
 const ORANGE = '#FF6A00'
 const CYAN = '#18B7F2'
 
-const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/subjects', '/student/learn/world', '/student/battle']
+const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/learn/world', '/student/battle']
 
 // ── Shared profile context — fetched once in layout, available to all pages ───
 export const StudentUserContext = createContext(null)
 export function useStudentUser() { return useContext(StudentUserContext) }
+
+// Lets pages push a saved change into the shared profile: useUpdateStudentProfile()(patch)
+const StudentProfileUpdateContext = createContext(() => {})
+export function useUpdateStudentProfile() { return useContext(StudentProfileUpdateContext) }
 
 // ── Active nav ────────────────────────────────────────────────────────────────
 function useActiveNav() {
@@ -172,51 +179,81 @@ function StudentLayoutInner({ children }) {
   const isExcluded = SHELL_EXCLUDED.some(p => pathname.startsWith(p))
 
   // Fetch full profile once — share via context to every page
+  const router   = useRouter()
   const [profile, setProfile] = useState(null)
+
+  // 'ready'    → render the app
+  // 'checking' → nothing on this device yet; confirm there's a session before
+  //              rendering, and send the visitor to /onboarding if there isn't.
+  // Devices that already have a guest or cached profile render immediately.
+  const [gate, setGate] = useState('ready')
+
+  // Merge a change into the shared profile (used by the profile page after a
+  // save) so every screen, including the setup prompt, sees it immediately.
+  const updateProfile = useCallback(patch => {
+    setProfile(p => (p ? { ...p, ...patch } : p))
+  }, [])
+
+  // Runs before first paint, so a fresh install never flashes the app shell.
+  useLayoutEffect(() => {
+    if (!hasLocalIdentity()) setGate('checking')
+  }, [])
+
   useEffect(() => {
     ;(async () => {
       try {
         const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          try {
-            const g = JSON.parse(localStorage.getItem('ep_guest') || '{}')
-            // Normalise guest profile: ep_guest saves 'exams' array, pages expect 'exam_type' singular
-            const examType = g.exam_type ?? g.exams?.[0] ?? 'WAEC'
-            // Resolve subjects — handle both old ep_guest (subjects[]) and new (subjects_waec/jamb)
-            const legacySubjects = g.subjects ?? []
-            const waecSubs = g.subjects_waec?.length ? g.subjects_waec
-              : (g.exams?.includes?.('WAEC') || g.exam_types?.includes?.('WAEC') || examType === 'WAEC')
-                ? legacySubjects : []
-            const jambSubs = g.subjects_jamb?.length ? g.subjects_jamb
-              : (g.exams?.includes?.('JAMB') || g.exam_types?.includes?.('JAMB'))
-                ? legacySubjects : []
+        // getSession reads the stored session without a network round trip, so
+        // signed-in students aren't treated as guests when they're offline.
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user ?? null
 
-            const guestProfile = {
-              ...g,
-              exam_type:     examType,
-              exam_types:    g.exams ?? (g.exam_type ? [g.exam_type] : ['WAEC']),
-              subjects:      legacySubjects,
-              subjects_waec: waecSubs,
-              subjects_jamb: jambSubs,
-              isGuest: true,
-            }
-            setProfile(guestProfile)
-            if (g.full_name || g.username) {
-              try { localStorage.setItem('ep_student_name', g.full_name || g.username) } catch {}
-            }
-          } catch {}
+        if (!user) {
+          try { localStorage.removeItem('ep_profile_cache') } catch {}
+          let g = null
+          try { g = JSON.parse(localStorage.getItem('ep_guest') || 'null') } catch {}
+
+          // No account and no guest profile: this is a fresh install or a
+          // signed-out device. Everyone starts at the welcome / sign-up screen.
+          if (!g || g.migrated_to) {
+            router.replace('/onboarding')
+            return
+          }
+
+          // Normalise the guest profile to the same shape as a Supabase row.
+          const examTypes = g.exam_types ?? g.exams ?? (g.exam_type ? [g.exam_type] : [])
+          const examType  = examTypes[0] ?? 'WAEC'
+          const legacySubjects = g.subjects ?? []
+          const waecSubs = g.subjects_waec?.length ? g.subjects_waec
+            : examTypes.includes('WAEC') ? legacySubjects : []
+          const jambSubs = g.subjects_jamb?.length ? g.subjects_jamb
+            : examTypes.includes('JAMB') ? legacySubjects : []
+
+          setProfile({
+            ...g,
+            exam_type:     examType,
+            exam_types:    examTypes.length ? examTypes : [examType],
+            subjects:      legacySubjects,
+            subjects_waec: waecSubs,
+            subjects_jamb: jambSubs,
+            isGuest: true,
+          })
+          if (g.full_name || g.username) {
+            try { localStorage.setItem('ep_student_name', g.full_name || g.username) } catch {}
+          }
+          setGate('ready')
           return
         }
-        // Fetch only columns guaranteed to exist. exam_types / subjects_waec /
-        // subjects_jamb / onboarded may not exist yet (pre-migration) and would
-        // cause a 400. If the select fails, fall back to the API route which uses
-        // the service role and handles missing columns more gracefully.
-        // Try to fetch extended columns; fall back to safe set if rejected.
-        // subjects_waec/subjects_jamb/exam_types exist after the profile migration.
+
+        setGate('ready')
+
+        // exam_types / subjects_waec / subjects_jamb / onboarded may not exist
+        // yet (pre-migration). If the select fails, fall back to the API route,
+        // which handles missing columns; if that fails too (offline), use the
+        // cached copy from the last visit.
         const { data, error: profileError } = await supabase
           .from('profiles')
-          .select('id,full_name,username,total_points,exam_type,exam_types,subjects,subjects_waec,subjects_jamb,school_id,onboarded')
+          .select('id,full_name,username,total_points,exam_type,exam_types,subjects,subjects_waec,subjects_jamb,school_id,onboarded,phone_number')
           .eq('id', user.id).single()
 
         let profileData = data
@@ -224,6 +261,12 @@ function StudentLayoutInner({ children }) {
           try {
             const apiRes = await fetch('/api/student/profile')
             if (apiRes.ok) profileData = await apiRes.json()
+          } catch {}
+        }
+        if (!profileData) {
+          try {
+            const cached = JSON.parse(localStorage.getItem('ep_profile_cache') || 'null')
+            if (cached?.id === user.id) profileData = cached
           } catch {}
         }
 
@@ -237,32 +280,42 @@ function StudentLayoutInner({ children }) {
             subjects_waec: profileData.subjects_waec ?? (examType === 'WAEC' ? (profileData.subjects ?? []) : []),
             subjects_jamb: profileData.subjects_jamb ?? (examType === 'JAMB' ? (profileData.subjects ?? []) : []),
             onboarded:     profileData.onboarded     ?? true,
+            signup_method: user.user_metadata?.signup_method ?? 'email',
           }
           setProfile(normalised)
           cacheAuthProfile(normalised)
-          try { localStorage.setItem('ep_student_name', data.full_name || data.username || '') } catch {}
+          try { localStorage.setItem('ep_student_name', profileData.full_name || profileData.username || '') } catch {}
 
-          // Flush guest session queue — handles Google OAuth path where
-          // syncOnLogin() isn't called explicitly after the callback redirect.
+          // Flush any practice sessions saved while offline or as a guest.
           import('@/lib/localSessionSync')
             .then(({ syncOnLogin }) => syncOnLogin())
             .catch(() => {})
         }
-      } catch (e) { console.error('layout profile:', e) }
+      } catch (e) {
+        console.error('layout profile:', e)
+        setGate('ready')
+      }
     })()
-  }, [])
+  }, [router])
 
   // Name for topbar — from profile or localStorage cache
   const name = profile?.full_name || profile?.username ||
     (() => { try { return localStorage.getItem('ep_student_name') || '' } catch { return '' } })()
 
+  // Fresh install / signed out: brand splash while we confirm, then /onboarding.
+  if (gate === 'checking') return <DarkSplash />
+
   if (isExcluded) return (
-    <StudentUserContext.Provider value={profile}>
-      {children}
-    </StudentUserContext.Provider>
+    <StudentProfileUpdateContext.Provider value={updateProfile}>
+      <StudentUserContext.Provider value={profile}>
+        {children}
+        <ProfileSetupGate profile={profile} />
+      </StudentUserContext.Provider>
+    </StudentProfileUpdateContext.Provider>
   )
 
   return (
+    <StudentProfileUpdateContext.Provider value={updateProfile}>
     <StudentUserContext.Provider value={profile}>
       <style>{`* { box-sizing: border-box } @keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <AppBackground dark={dark} />
@@ -304,7 +357,11 @@ function StudentLayoutInner({ children }) {
       {/* Sits above everything. Only renders when permission is 'default'.  */}
       {/* Scheduling is server-side; this component only handles the prompt. */}
       <NotificationScheduler />
+
+      {/* Asks new students to set up their profile before anything else */}
+      <ProfileSetupGate profile={profile} />
     </StudentUserContext.Provider>
+    </StudentProfileUpdateContext.Provider>
   )
 }
 

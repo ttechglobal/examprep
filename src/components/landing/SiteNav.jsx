@@ -29,7 +29,7 @@ export default function SiteNav({ audience = 'students' }) {
         </nav>
 
         <div className={s.navRight}>
-          <Link href={isSchools ? '/school-login' : '/login'} className={`${s.navLink} ${s.desktopOnly}`}>Sign in</Link>
+          <Link href={isSchools ? '/school-login' : '/onboarding?mode=signin'} className={`${s.navLink} ${s.desktopOnly}`}>Sign in</Link>
           <button type="button" className={s.themeBtn} onClick={toggle} aria-label="Switch between light and dark theme">
             <span className={s.iconMoon} aria-hidden="true">🌙</span>
             <span className={s.iconSun} aria-hidden="true">☀️</span>

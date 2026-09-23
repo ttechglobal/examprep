@@ -5,6 +5,7 @@
 import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
+import { normalizePhone, phoneVariants } from '@/lib/auth/phone'
 
 const db = () => svcClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -90,6 +91,28 @@ export async function PATCH(request) {
   const updates = {}
   for (const key of ALLOWED_PATCH) {
     if (body[key] !== undefined) updates[key] = body[key]
+  }
+
+  // Phone numbers: one account per number, stored as +234XXXXXXXXXX.
+  // Students who sign in with their phone can't change it here, because it's
+  // their login.
+  if (updates.phone_number !== undefined) {
+    if (user.user_metadata?.signup_method === 'phone') {
+      delete updates.phone_number
+    } else if (updates.phone_number) {
+      const phone = normalizePhone(String(updates.phone_number))
+      if (!phone) {
+        return NextResponse.json({ error: 'Enter a full 11-digit phone number, like 0801 234 5678' }, { status: 400 })
+      }
+      const { data: taken } = await db()
+        .from('profiles').select('id').in('phone_number', phoneVariants(phone)).neq('id', user.id).limit(1)
+      if (taken?.length) {
+        return NextResponse.json({ error: 'That phone number is already used by another account' }, { status: 409 })
+      }
+      updates.phone_number = phone
+    } else {
+      updates.phone_number = null
+    }
   }
 
   if (!Object.keys(updates).length) {

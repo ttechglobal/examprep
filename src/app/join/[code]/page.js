@@ -46,8 +46,8 @@ export default async function JoinPage({ params }) {
   const info = await lookupCode(code)
 
   // Encode the code so the login/signup page can redirect back and auto-join
-  const signupUrl  = `/signup?join=${code}&type=${info?.type ?? 'class'}`
-  const loginUrl   = `/login?join=${code}&type=${info?.type ?? 'class'}`
+  const signupUrl  = `/onboarding?mode=signup&join=${encodeURIComponent(code)}`
+  const loginUrl   = `/onboarding?mode=signin&join=${encodeURIComponent(code)}`
 
   if (!info) {
     // Code not found — still show something useful, not a 404
@@ -63,7 +63,7 @@ export default async function JoinPage({ params }) {
               This invite code (<span className="font-mono font-bold text-primary">{code.toUpperCase()}</span>) doesn't match any class or school. It may have expired or been typed incorrectly.
             </p>
           </div>
-          <Link href="/signup"
+          <Link href="/onboarding?mode=signup"
             className="block w-full py-3.5 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-500 transition-colors text-center">
             Create a free account anyway →
           </Link>

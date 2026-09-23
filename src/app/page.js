@@ -26,7 +26,7 @@ export const metadata = {
   },
 }
 
-const START = '/onboarding'
+const START = '/onboarding?mode=signup'
 
 const MODES = [
   { icon: '⚔️', bg: 'rgba(18,100,229,.12)',  title: 'Battle',         tag: 'New',             text: 'You vs the computer, question for question, against the clock.' },
@@ -77,7 +77,7 @@ export default function LandingPage() {
                 <InstallButton size="lg" />
                 <Link href={START} className={`${s.btn} ${s.btnGhost} ${s.btnLg}`}>Start practising free</Link>
               </div>
-              <p className={s.heroNote}>Already have an account? <Link href="/login">Sign in</Link></p>
+              <p className={s.heroNote}>Already have an account? <Link href="/onboarding?mode=signin">Sign in</Link></p>
               <ul className={s.chips}>
                 <li><span className={s.dot} />7-day free trial</li>
                 <li><span className={s.dot} />Real WAEC &amp; JAMB past questions</li>

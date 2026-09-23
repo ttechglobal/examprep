@@ -382,7 +382,7 @@ function GuestNudge() {
         <div style={{ fontSize: 12, color: 'var(--text-tert)', lineHeight: 1.55, marginBottom: 12 }}>
           You're practising as a guest. Create a free account to save your XP and streak.
         </div>
-        <Link href="/signup" style={{ textDecoration: 'none' }}>
+        <Link href="/onboarding?mode=signup" style={{ textDecoration: 'none' }}>
           <div style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 10, background: BLUE, color: '#fff', fontSize: 12, fontWeight: 800 }}>
             Create free account →
           </div>

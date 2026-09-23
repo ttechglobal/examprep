@@ -56,7 +56,7 @@ const GOLD2 = '#CC8F00'
 // ── Demo constants ─────────────────────────────────────────────────────────────
 const DEMO_COUNT   = 5    // questions per session — locked
 const WHATSAPP_URL = 'https://wa.me/2348166528437?text=Hi%2C%20I%27m%20interested%20in%20ExamPrep%20for%20my%20school'
-const SIGNUP_URL   = '/signup'          // adjust if your signup URL differs
+const SIGNUP_URL   = '/onboarding?mode=signup'          // adjust if your signup URL differs
 const AMBASSADOR_URL = '/ambassador'    // adjust if you have a separate page
 
 // ── Subject metadata ───────────────────────────────────────────────────────────
