@@ -224,7 +224,7 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
       <FormulaBox formulaBox={formulaBox} variablesKey={variablesKey}/>
 
       {svgDiagram && svgDiagram.trim().toLowerCase().startsWith('<svg') && (
-        <div style={{ borderRadius:12, overflow:'hidden', border:'1px solid var(--border)', background:'#fff', marginBottom:14 }}>
+        <div style={{ borderRadius:12, overflow:'hidden', border:'1px solid var(--border)', background:'var(--bg-card)', marginBottom:14 }}>
           <div style={{ padding:'6px 12px', background:'var(--bg-subtle)', borderBottom:'1px solid var(--border)' }}>
             <span style={{ fontSize:10, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em' }}>Diagram</span>
           </div>
@@ -283,8 +283,9 @@ function ExplanationContent({ explanation, isCorrect, selectedKey, correctLetter
 function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, correctText, onClose }) {
   const hasWrong = Object.keys(explanation.wrong_options ?? {}).length > 0
   const resultColor = isCorrect ? '#16a34a' : '#dc2626'
-  const resultBg    = isCorrect ? '#f0fdf4' : '#fef2f2'
-  const resultBorder= isCorrect ? '#bbf7d0' : '#fecaca'
+  // Tints, not pastels: pale on light, still visible on dark
+  const resultBg    = isCorrect ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)'
+  const resultBorder= isCorrect ? 'rgba(34,197,94,.35)' : 'rgba(239,68,68,.35)'
   const resultIcon  = isCorrect ? '✓' : '✗'
   const resultLabel = isCorrect ? 'Correct!' : 'Incorrect'
 
@@ -293,30 +294,30 @@ function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, 
       {/* Tap backdrop to close */}
       <div style={{ flex:1 }} onClick={onClose}/>
 
-      <div style={{ background:'#fff', borderRadius:'24px 24px 0 0', maxHeight:'88dvh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 -8px 40px rgba(0,0,0,.18)' }}>
+      <div style={{ background:'var(--bg-card)', borderRadius:'24px 24px 0 0', maxHeight:'88dvh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 -8px 40px rgba(0,0,0,.18)' }}>
 
         {/* Drag handle */}
         <div style={{ display:'flex', justifyContent:'center', padding:'12px 0 6px', flexShrink:0 }}>
-          <div style={{ width:40, height:4, borderRadius:2, background:'#e2e8f0' }}/>
+          <div style={{ width:40, height:4, borderRadius:2, background:'var(--border-strong)' }}/>
         </div>
 
         {/* Header row */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'2px 20px 14px', flexShrink:0, borderBottom:'1px solid #f1f5f9' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'2px 20px 14px', flexShrink:0, borderBottom:'1px solid var(--border)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             {/* Result icon pill */}
             <div style={{ width:32, height:32, borderRadius:10, background:resultBg, border:`1.5px solid ${resultBorder}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
               <span style={{ fontSize:16, fontWeight:900, color:resultColor }}>{resultIcon}</span>
             </div>
             <div>
-              <div style={{ fontSize:15, fontWeight:900, color:'#0f172a' }}>Explanation</div>
+              <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)' }}>Explanation</div>
               <div style={{ fontSize:11, fontWeight:700, color:resultColor, marginTop:1 }}>{resultLabel}</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ width:30, height:30, borderRadius:9, border:'1.5px solid #e2e8f0', background:'#f8fafc', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
+          <button onClick={onClose} style={{ width:30, height:30, borderRadius:9, border:'1.5px solid var(--border-strong)', background:'var(--bg-subtle)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-tert)', fontSize:16, fontWeight:700, fontFamily:'inherit' }}>×</button>
         </div>
 
         {/* Scrollable content */}
-        <div style={{ overflowY:'auto', padding:'20px 20px 40px', flex:1, background:'#fff' }}>
+        <div style={{ overflowY:'auto', padding:'20px 20px 40px', flex:1, background:'var(--bg-card)' }}>
           <ExplanationContent
             explanation={explanation}
             isCorrect={isCorrect}
@@ -328,7 +329,7 @@ function ExplanationModal({ explanation, isCorrect, selectedKey, correctLetter, 
         </div>
 
         {/* Done button */}
-        <div style={{ padding:'12px 20px 24px', flexShrink:0, background:'#fff', borderTop:'1px solid #f1f5f9' }}>
+        <div style={{ padding:'12px 20px 24px', flexShrink:0, background:'var(--bg-card)', borderTop:'1px solid var(--border)' }}>
           <button onClick={onClose}
             style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0` }}>
             Got it
@@ -347,15 +348,16 @@ function ExplanationTriggerCard({ explanation, isCorrect, hasWrong, onClick }) {
   const intro      = explanation.intro   ?? ''
   const preview    = concept || (intro ? intro.slice(0, 80) + (intro.length > 80 ? '…' : '') : '')
   const resultColor = isCorrect ? '#16a34a' : '#dc2626'
-  const resultBg    = isCorrect ? '#f0fdf4' : '#fef2f2'
-  const resultBorder= isCorrect ? '#bbf7d0' : '#fecaca'
+  // Tints, not pastels: pale on light, still visible on dark
+  const resultBg    = isCorrect ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)'
+  const resultBorder= isCorrect ? 'rgba(34,197,94,.35)' : 'rgba(239,68,68,.35)'
 
   return (
     <button onClick={onClick} style={{ marginTop:16, width:'100%', textAlign:'left', cursor:'pointer', fontFamily:'inherit', background:'none', border:'none', padding:0 }}>
       <div style={{
         borderRadius:16,
         border:`1.5px solid ${BLUE}25`,
-        background:'#fff',
+        background:'var(--bg-card)',
         boxShadow:'0 2px 12px rgba(6,42,120,.08), 0 0 0 1px rgba(6,42,120,.04)',
         overflow:'hidden',
       }}>
@@ -382,7 +384,7 @@ function ExplanationTriggerCard({ explanation, isCorrect, hasWrong, onClick }) {
 
           {/* Preview text */}
           {preview && (
-            <p style={{ fontSize:13, color:'#475569', lineHeight:1.55, margin:'0 0 10px', fontWeight:500 }}>
+            <p style={{ fontSize:13, color:'var(--text-sec)', lineHeight:1.55, margin:'0 0 10px', fontWeight:500 }}>
               {preview}
             </p>
           )}
@@ -393,7 +395,7 @@ function ExplanationTriggerCard({ explanation, isCorrect, hasWrong, onClick }) {
               Full explanation →
             </span>
             {hasWrong && (
-              <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999, background:'#fff7ed', color:'#ea580c', border:'1px solid #fed7aa' }}>
+              <span style={{ fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:999, background:'rgba(234,88,12,.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,.3)' }}>
                 Why others wrong
               </span>
             )}

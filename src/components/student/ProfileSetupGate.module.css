@@ -13,7 +13,6 @@
   box-shadow: var(--shadow-modal); font-family: var(--font-jakarta), system-ui, sans-serif;
   animation: rise .3s cubic-bezier(.2,.8,.2,1) both;
 }
-:global(html.dark) .card { background: #141a2b; border-color: rgba(255,255,255,.08); }
 .head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .title { font-size: 21px; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; margin: 0 0 4px; }
 .text { font-size: 14px; line-height: 1.5; color: var(--text-sec); margin: 0; }

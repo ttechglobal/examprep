@@ -249,11 +249,14 @@ export const QuestionCard = forwardRef(function QuestionCard({
     return selected === idx ? 'chosen' : 'idle'
   }
 
+  // Dark mode: options are solid tiles (a 4% white tint was nearly invisible
+  // on the canvas) and state tints are stronger so the colour reads, not just
+  // the border. Light mode is unchanged.
   const SS = {
-    idle:    { bg: dark?'rgba(255,255,255,.04)':'rgba(6,42,120,.025)', border:'var(--border)',  text:'var(--text-prim)', pill: dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.07)' },
-    chosen:  { bg:`${BLUE}12`,  border:BLUE,  text:BLUE,  pill:BLUE          },
-    correct: { bg:`${GREEN}10`, border:GREEN, text:GREEN, pill:`${GREEN}35`  },
-    wrong:   { bg:`${RED}08`,   border:RED,   text:RED,   pill:`${RED}28`    },
+    idle:    { bg: dark?'var(--bg-subtle)':'rgba(6,42,120,.025)', border: dark?'var(--border-strong)':'var(--border)', text:'var(--text-prim)', pill: dark?'rgba(255,255,255,.08)':'rgba(6,42,120,.07)' },
+    chosen:  { bg:`${BLUE}${dark?'2e':'12'}`,  border:BLUE,  text: dark?'#7fb0ff':BLUE, pill:BLUE          },
+    correct: { bg:`${GREEN}${dark?'26':'10'}`, border:GREEN, text:GREEN, pill:`${GREEN}35`  },
+    wrong:   { bg:`${RED}${dark?'22':'08'}`,   border:RED,   text:RED,   pill:`${RED}28`    },
   }
 
   const opts              = shuffledOptions.map(o => o.text)

@@ -20,7 +20,8 @@ import { createClient } from '@/lib/supabase/client'
 import { hasSeenIntro, markIntroSeen, continueAsGuest, destinationAfterAuth } from '@/lib/auth/client'
 import IntroSlides from '@/components/onboarding/IntroSlides'
 import AuthPanel from '@/components/onboarding/AuthPanel'
-import DarkSplash from '@/components/ui/DarkSplash'
+import LoadingScreen from '@/components/ui/LoadingScreen'
+import { endLaunchSplash } from '@/lib/launchSplash'
 import s from '@/components/onboarding/onboarding.module.css'
 
 function Onboarding() {
@@ -49,6 +50,11 @@ function Onboarding() {
     return () => { cancelled = true }
   }, [router, mode, from, join])
 
+  // Intro or sign-up is on screen: end the installed-app launch splash.
+  useEffect(() => {
+    if (view !== 'checking') endLaunchSplash()
+  }, [view])
+
   async function handleAuthed() {
     router.replace(await destinationAfterAuth({ from, join }))
   }
@@ -59,7 +65,7 @@ function Onboarding() {
     router.replace('/student/home')
   }
 
-  if (view === 'checking') return <DarkSplash />
+  if (view === 'checking') return <LoadingScreen />
 
   return (
     <main className={s.screen}>
@@ -88,7 +94,7 @@ function Onboarding() {
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<DarkSplash />}>
+    <Suspense fallback={<LoadingScreen />}>
       <Onboarding />
     </Suspense>
   )

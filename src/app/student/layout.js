@@ -13,7 +13,8 @@ import { cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
 import NotificationScheduler from '@/components/ui/NotificationScheduler'
 import ProfileSetupGate from '@/components/student/ProfileSetupGate'
-import DarkSplash from '@/components/ui/DarkSplash'
+import LoadingScreen from '@/components/ui/LoadingScreen'
+import { endLaunchSplash } from '@/lib/launchSplash'
 import { hasLocalIdentity } from '@/lib/auth/client'
 
 const NAVY = '#062A78'
@@ -73,9 +74,11 @@ function AppBackground({ dark }) {
         position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
         // Solid colour shows instantly — zero network dependency
         backgroundColor: dark ? '#0a0c14' : '#f0f4ff',
+        // Dark mode is a plain canvas. The photo behind an 88% tint made every
+        // card look smudged, so it's light-mode only.
         // Image loads on top; if it never arrives the solid colour remains
         backgroundImage: dark
-          ? "linear-gradient(rgba(10,12,20,.88),rgba(10,12,20,.88)),url('/images/app-bg.jpg')"
+          ? 'none'
           : "linear-gradient(rgba(240,244,255,.82),rgba(240,244,255,.82)),url('/images/app-bg.jpg')",
         backgroundSize: 'cover',
         backgroundPosition: 'center center',
@@ -190,6 +193,12 @@ function StudentLayoutInner({ children }) {
 
   // Merge a change into the shared profile (used by the profile page after a
   // save) so every screen, including the setup prompt, sees it immediately.
+  // The first real screen is ready once we know who this is: end the
+  // installed-app launch splash (no-op everywhere else).
+  useEffect(() => {
+    if (gate === 'ready' && profile) endLaunchSplash()
+  }, [gate, profile])
+
   const updateProfile = useCallback(patch => {
     setProfile(p => (p ? { ...p, ...patch } : p))
   }, [])
@@ -290,10 +299,13 @@ function StudentLayoutInner({ children }) {
           import('@/lib/localSessionSync')
             .then(({ syncOnLogin }) => syncOnLogin())
             .catch(() => {})
+        } else {
+          endLaunchSplash()   // no profile data at all: show what we can
         }
       } catch (e) {
         console.error('layout profile:', e)
         setGate('ready')
+        endLaunchSplash()
       }
     })()
   }, [router])
@@ -303,7 +315,7 @@ function StudentLayoutInner({ children }) {
     (() => { try { return localStorage.getItem('ep_student_name') || '' } catch { return '' } })()
 
   // Fresh install / signed out: brand splash while we confirm, then /onboarding.
-  if (gate === 'checking') return <DarkSplash />
+  if (gate === 'checking') return <LoadingScreen />
 
   if (isExcluded) return (
     <StudentProfileUpdateContext.Provider value={updateProfile}>

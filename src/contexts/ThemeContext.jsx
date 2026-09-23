@@ -4,6 +4,7 @@
 // Default: system preference. Manual toggle persisted to localStorage.
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { applyThemeColor } from '@/lib/themeColor'
 
 const ThemeContext = createContext({ dark: false, toggle: () => {} })
 
@@ -39,6 +40,7 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     if (!ready) return
     document.documentElement.classList.toggle('dark', dark)
+    applyThemeColor()   // status bar follows the canvas (navy while launching)
   }, [dark, ready])
 
   // Listen for system preference changes (only when no manual override)

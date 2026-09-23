@@ -21,7 +21,8 @@ const JAMB_COUNT = 40
 const JAMB_MINS  = 120
 
 // ─── DARK-SAFE MODAL BACKGROUND ──────────────────────────────────────────────
-// --bg-card is rgba(255,255,255,0.04) in dark mode — invisible. Use solid color.
+// Header bars use the page canvas so they blend with it. (--bg-card is solid
+// in dark mode now too; this used to be a workaround for it being see-through.)
 const MODAL_BG = 'var(--bg-base)'
 
 // ─── EXAM TYPE PICKER ─────────────────────────────────────────────────────────

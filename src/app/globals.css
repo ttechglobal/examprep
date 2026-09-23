@@ -108,9 +108,12 @@
 .dark {
   /* Canvas */
   --bg-base:           #0a0c14;  /* deep game canvas — near-black, navy tint        */
-  --bg-card:           rgba(255,255,255,0.04);  /* glass card surface              */
-  --bg-subtle:         rgba(255,255,255,0.06);  /* hover, chip bg                  */
-  --bg-inset:          rgba(255,255,255,0.08);  /* inset within cards              */
+  /* Solid surfaces, not glass: see-through cards let the canvas and anything
+     behind a sheet or dropdown show through the text. Each step is a little
+     lighter, so depth still reads without transparency. */
+  --bg-card:           #141826;  /* cards, panels, sheets, dropdowns                */
+  --bg-subtle:         #1b2032;  /* hover, chip bg, inputs                          */
+  --bg-inset:          #222840;  /* inset within cards                              */
   --bg-overlay:        rgba(0,0,0,0.70);
 
   /* Text */
@@ -119,8 +122,8 @@
   --text-tert:         rgba(255,255,255,0.35);  /* placeholders, hints             */
 
   /* Borders */
-  --border:            rgba(255,255,255,0.07);
-  --border-strong:     rgba(255,255,255,0.14);
+  --border:            #252b3f;
+  --border-strong:     #333b55;
 
   /* Brand CTA — EXL Blue, same as light */
   --cta-bg:            #1264E5;
@@ -439,4 +442,44 @@ button, a, [role="button"] {
   .school-mobile-header { display: none !important; }
   .school-mobile-bottom { display: none !important; }
   /* padding-left is injected by SchoolNav.jsx — no margin-left override here */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LAUNCH SPLASH (installed app only)
+   The head script in app/layout.js adds .ep-launching to <html> before first
+   paint when the installed app opens on /student or /onboarding. These two
+   pseudo-elements then draw the same navy screen and logo as the phone's own
+   splash, so the hand-over is invisible. lib/launchSplash.js fades it out once
+   the first real screen is ready. No React state, so it can't flash.
+   ══════════════════════════════════════════════════════════════════════════ */
+html.ep-launching::before,
+html.ep-launching::after {
+  content: '';
+  position: fixed;
+  z-index: 2147483647;
+  opacity: 1;
+}
+html.ep-launching::before {
+  inset: 0;
+  background-color: #062A78;
+}
+/* Logo disc + "ExamPrep A1" + tagline, one image (scripts/make_icons.py).
+   Positioned by the disc's centre so the logo sits exactly where the phone's
+   own splash drew its icon; the text appears underneath. */
+html.ep-launching::after {
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 251px;
+  margin: -84px 0 0 -160px;
+  background-image: url('/icons/launch-splash.webp');
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+html.ep-launching.ep-launch-out::before,
+html.ep-launching.ep-launch-out::after {
+  opacity: 0;
+  transition: opacity .28s ease;
 }

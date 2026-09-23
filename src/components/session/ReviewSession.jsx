@@ -204,7 +204,7 @@ export function ReviewSession({ questions, answers, onDone, dark, subjects, subj
           {q && (
             <div className="rev-card-mobile" style={{
               borderRadius:18,
-              background:'#fff',
+              background:'var(--bg-card)',   // was #fff: white text on white in dark mode
               boxShadow:`0 2px 16px rgba(6,42,120,.08), ${cardGlow}`,
               border:`1.5px solid ${cardBorder}`,
               padding:'20px 16px',

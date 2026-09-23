@@ -1,4 +1,5 @@
 {
+  "id": "/student/home",
   "name": "ExamPrep A1",
   "short_name": "ExamPrep",
   "description": "Prepare for WAEC and JAMB with confidence",
@@ -11,18 +12,10 @@
   "categories": ["education"],
   "lang": "en",
   "icons": [
-    {
-      "src": "/images/examprep_logo.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/examprep_logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
     {
@@ -30,14 +23,14 @@
       "short_name": "Practice",
       "description": "Start a practice session",
       "url": "/student/practice",
-      "icons": [{ "src": "/images/examprep_logo.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icons/shortcut-96.png", "sizes": "96x96", "type": "image/png" }]
     },
     {
       "name": "Daily Challenge",
       "short_name": "Daily",
       "description": "Today's daily challenge",
       "url": "/student/daily-challenge",
-      "icons": [{ "src": "/images/examprep_logo.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icons/shortcut-96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]
 }
