@@ -24,7 +24,7 @@ const SELECT_COLS_SAFE = [
 ].join(', ')
 
 // Extended columns added by migration (may not exist yet).
-const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at, phone_number, student_school_name'
+const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at, phone_number, student_school_name, parent_email'
 
 // Try extended select; fall back to safe if the DB rejects unknown columns.
 async function selectProfile(db, userId) {
@@ -50,6 +50,8 @@ const ALLOWED_PATCH = [
   'target_university', 'target_course',
   'phone_number',
   'student_school_name',
+  // Where the weekly parent report goes (read by /api/school/parent-report).
+  'parent_email',
 ]
 
 export async function GET() {
@@ -75,6 +77,7 @@ export async function GET() {
     plan_expires_at:    data.plan_expires_at    ?? null,
     phone_number:       data.phone_number       ?? null,
     student_school_name: data.student_school_name ?? null,
+    parent_email:        data.parent_email        ?? null,
   }
   return NextResponse.json(normalised)
 }
@@ -113,6 +116,14 @@ export async function PATCH(request) {
     } else {
       updates.phone_number = null
     }
+  }
+
+  if (updates.parent_email !== undefined) {
+    const email = String(updates.parent_email ?? '').trim().toLowerCase()
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return NextResponse.json({ error: 'Enter a valid email address, like parent@example.com' }, { status: 400 })
+    }
+    updates.parent_email = email || null
   }
 
   if (!Object.keys(updates).length) {

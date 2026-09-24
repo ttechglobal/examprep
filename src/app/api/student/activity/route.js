@@ -1,20 +1,21 @@
-// src/app/api/student/activity/route.js — v1 (clean build)
+// src/app/api/student/activity/route.js — v2
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/student/activity?period=week
+// GET /api/student/activity?period=week|month
 //
-// Returns daily question counts + headline stats for the
-// Home page activity chart and Progress page bar chart.
+// Daily question counts + headline stats for the signed-in student.
 //
-// period: week (default) | month
+//   week  (default) → Monday 00:00 → now, 7 buckets Mon–Sun
+//   month           → 1st of this month → now, one bucket per day so far
 //
 // Response:
 // {
 //   period: 'week',
-//   days: [{ date, label, count }],      // 7 items Mon-Sun
-//   stats: {
-//     questions_answered, accuracy, xp_earned, streak_days
-//   }
+//   days:   [{ date, label, count }],
+//   stats:  { questions_answered, accuracy, time_spent_secs, streak_days, xp_earned }
 // }
+//
+// v2: honours `period` (v1 accepted it but always returned the week) and adds
+// time_spent_secs, summed from practice_sessions.duration_secs.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }              from '@/lib/supabase/server'
@@ -26,13 +27,16 @@ const db = () => svcClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-function getWeekRange() {
-  const now    = new Date()
-  const dow    = now.getDay()                     // 0=Sun
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - ((dow + 6) % 7)) // back to Monday
-  monday.setHours(0, 0, 0, 0)
-  return monday
+const PERIODS    = new Set(['week', 'month'])
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_MS     = 86_400_000
+
+function rangeStartFor(period, now = new Date()) {
+  const start = new Date(now)
+  if (period === 'month') start.setDate(1)
+  else start.setDate(now.getDate() - ((now.getDay() + 6) % 7))   // back to Monday
+  start.setHours(0, 0, 0, 0)
+  return start
 }
 
 export async function GET(request) {
@@ -42,65 +46,68 @@ export async function GET(request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    const period  = searchParams.get('period') ?? 'week'
-    const service = db()
-    const userId  = user.id
+    const requested = searchParams.get('period') ?? 'week'
+    const period    = PERIODS.has(requested) ? requested : 'week'
 
-    // ── Date range ─────────────────────────────────────────────────────────
-    const rangeStart = getWeekRange()
+    const service    = db()
     const rangeEnd   = new Date()
+    const rangeStart = rangeStartFor(period, rangeEnd)
+    const from = rangeStart.toISOString()
+    const to   = rangeEnd.toISOString()
 
-    // ── Fetch attempts in range ────────────────────────────────────────────
-    const { data: attempts } = await service
-      .from('question_attempts')
-      .select('created_at, is_correct')
-      .eq('student_id', userId)
-      .gte('created_at', rangeStart.toISOString())
-      .lte('created_at', rangeEnd.toISOString())
+    const [attemptsRes, sessionsRes, profileRes] = await Promise.all([
+      service.from('question_attempts')
+        .select('created_at, is_correct')
+        .eq('student_id', user.id)
+        .gte('created_at', from).lte('created_at', to),
+      service.from('practice_sessions')
+        .select('duration_secs')
+        .eq('student_id', user.id)
+        .gte('created_at', from).lte('created_at', to),
+      service.from('profiles')
+        .select('total_points, streak_days')
+        .eq('id', user.id)
+        .single(),
+    ])
 
-    // ── Build 7-day buckets (Mon = 0 … Sun = 6) ───────────────────────────
-    const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-    const counts  = [0, 0, 0, 0, 0, 0, 0]
-    let totalCorrect = 0
-    let totalAnswered = 0
+    // ── Buckets ──────────────────────────────────────────────────────────────
+    const bucketCount = period === 'week'
+      ? 7
+      : Math.floor((rangeEnd - rangeStart) / DAY_MS) + 1
+    const counts = new Array(bucketCount).fill(0)
 
-    for (const a of attempts ?? []) {
-      const d    = new Date(a.created_at)
-      const dow  = (d.getDay() + 6) % 7   // Mon=0 … Sun=6
-      counts[dow]++
-      totalAnswered++
-      if (a.is_correct) totalCorrect++
+    let answered = 0
+    let correct  = 0
+    for (const a of attemptsRes.data ?? []) {
+      const idx = Math.floor((new Date(a.created_at) - rangeStart) / DAY_MS)
+      if (idx >= 0 && idx < bucketCount) counts[idx]++
+      answered++
+      if (a.is_correct) correct++
     }
 
-    const days = DAY_LABELS.map((label, i) => {
-      const d = new Date(rangeStart)
-      d.setDate(rangeStart.getDate() + i)
+    const days = counts.map((count, i) => {
+      const d = new Date(rangeStart.getTime() + i * DAY_MS)
       return {
         date:  d.toISOString().slice(0, 10),
-        label,
-        count: counts[i],
+        label: period === 'week' ? DAY_LABELS[i] : String(d.getDate()),
+        count,
       }
     })
 
-    // ── Fetch profile for XP + streak ────────────────────────────────────
-    const { data: prof } = await service
-      .from('profiles')
-      .select('total_points, streak_days')
-      .eq('id', userId)
-      .single()
-
-    const accuracy = totalAnswered > 0
-      ? Math.round((totalCorrect / totalAnswered) * 100)
-      : 0
+    // A missing practice_sessions table or column shouldn't take the whole
+    // response down — time spent just reads as zero.
+    const timeSpentSecs = (sessionsRes.error ? [] : sessionsRes.data ?? [])
+      .reduce((sum, s) => sum + (Number(s.duration_secs) || 0), 0)
 
     return NextResponse.json({
       period,
       days,
       stats: {
-        questions_answered: totalAnswered,
-        accuracy,
-        xp_earned:    prof?.total_points ?? 0,
-        streak_days:  prof?.streak_days  ?? 0,
+        questions_answered: answered,
+        accuracy:           answered > 0 ? Math.round((correct / answered) * 100) : 0,
+        time_spent_secs:    timeSpentSecs,
+        streak_days:        profileRes.data?.streak_days  ?? 0,
+        xp_earned:          profileRes.data?.total_points ?? 0,
       },
     }, { headers: { 'Cache-Control': 'private, max-age=120' } })
 
