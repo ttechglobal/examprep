@@ -60,10 +60,14 @@ export async function GET() {
 
   const { data: profile } = await service
     .from('profiles')
-    .select('school_id')
+    .select('school_id, role')
     .eq('id', user.id)
     .single()
 
+  // Only the school's admin may see its roster.
+  if (profile?.role !== 'school_admin') {
+    return NextResponse.json({ error: 'School admin access only' }, { status: 403 })
+  }
   if (!profile?.school_id) {
     return NextResponse.json({ cohort: null, members: [] })
   }
@@ -73,6 +77,8 @@ export async function GET() {
     .select('*')
     .eq('school_id', profile.school_id)
     .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (!cohort) {
@@ -101,20 +107,21 @@ export async function POST(request) {
 
   const { name, session, invite_code, school_id: bodySchoolId } = await request.json()
 
-  // Get school_id from body (onboarding) or profile (dashboard)
-  let schoolId = bodySchoolId
-  if (!schoolId) {
-    const { data: profile } = await service
-      .from('profiles')
-      .select('school_id')
-      .eq('id', user.id)
-      .single()
-    schoolId = profile?.school_id
+  // The caller must be the admin of the school they're creating a cohort for.
+  // (Previously any signed-in user could pass any school_id and replace that
+  // school's active cohort and invite code.)
+  const { data: profile } = await service
+    .from('profiles')
+    .select('school_id, role')
+    .eq('id', user.id)
+    .single()
+  if (profile?.role !== 'school_admin' || !profile?.school_id) {
+    return NextResponse.json({ error: 'School admin access only' }, { status: 403 })
   }
-
-  if (!schoolId) {
-    return NextResponse.json({ error: 'No school assigned' }, { status: 403 })
+  if (bodySchoolId && bodySchoolId !== profile.school_id) {
+    return NextResponse.json({ error: 'Not your school' }, { status: 403 })
   }
+  const schoolId = profile.school_id
 
   // Fetch school name to build the readable code slug
   const { data: school } = await service

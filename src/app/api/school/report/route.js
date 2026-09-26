@@ -1,21 +1,40 @@
-// src/app/api/school/report/route.js
-// REBUILT — three report types:
+// src/app/api/school/report/route.js — v2
+// Three report types:
 //   ?type=students&period=month   → all-students progress table (CSV or JSON)
 //   ?type=subjects&period=month   → per-subject topic accuracy (JSON for PDF)
 //   ?type=management&period=month → executive summary (JSON for PDF)
 //
 // The PDF is assembled client-side from the JSON data.
 // CSV is still available for the students report.
+//
+// v2: school_admin role required; totals grouped in Postgres (no 1,000-row
+// cut-off); activity and streaks come from real practice data (the old
+// student_streaks table is never written, so everyone showed as inactive).
 
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { createClient }     from '@/lib/supabase/server'
+import { supabaseAdmin }    from '@/lib/server/supabaseAdmin'
+import { schoolStudentIds, selectAll } from '@/lib/server/paging'
+import { requireSchoolAdmin, selectByIds, loadSchoolStats, groupTopicsBySubject, csvCell } from '@/lib/server/schoolStats'
+import { effectiveStreak }  from '@/lib/streak'
+import { NextResponse }     from 'next/server'
 
-function svc() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
+// Completed lessons per student in the period. lesson_progress may not exist
+// on every deployment — then everyone simply has 0.
+async function completedLessons(db, studentIds, since) {
+  const done = {}
+  try {
+    for (let i = 0; i < studentIds.length; i += 200) {
+      const part = studentIds.slice(i, i + 200)
+      const rows = await selectAll(() => db.from('lesson_progress')
+        .select('student_id')
+        .in('student_id', part)
+        .eq('completed', true)
+        .gte('started_at', since)
+        .order('student_id'))
+      for (const r of rows) done[r.student_id] = (done[r.student_id] ?? 0) + 1
+    }
+  } catch { /* table missing — report without lessons */ }
+  return done
 }
 
 export async function GET(request) {
@@ -25,115 +44,72 @@ export async function GET(request) {
   const format = searchParams.get('format') ?? 'json'
 
   const supabase = await createClient()
-  const db = svc()
-
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: adminProfile } = await db
-    .from('profiles')
-    .select('school_id, schools(name, city, state)')
-    .eq('id', user.id)
-    .single()
-
-  if (!adminProfile?.school_id) {
-    return NextResponse.json({ error: 'No school assigned' }, { status: 403 })
+  try {
+    return await buildReport({ userId: user.id, type, period, format })
+  } catch (err) {
+    console.error('[school/report] error:', err?.message ?? err)
+    return NextResponse.json({ error: 'Could not build report' }, { status: 500 })
   }
+}
 
-  const schoolId   = adminProfile.school_id
-  const schoolName = adminProfile.schools?.name ?? 'School'
-  const schoolCity = adminProfile.schools?.city ?? ''
-  const daysBack   = period === 'week' ? 7 : 30
-  const since      = new Date(Date.now() - daysBack * 86400000).toISOString()
+async function buildReport({ userId, type, period, format }) {
+  const db = supabaseAdmin()
+  const { profile: adminProfile, error: denied } = await requireSchoolAdmin(
+    db, userId, 'school_id, role, schools(name, city, state)'
+  )
+  if (denied) return denied
+
+  const schoolId    = adminProfile.school_id
+  const schoolName  = adminProfile.schools?.name ?? 'School'
+  const schoolCity  = adminProfile.schools?.city ?? ''
+  const daysBack    = period === 'week' ? 7 : 30
+  const since       = new Date(Date.now() - daysBack * 86400000).toISOString()
   const periodLabel = period === 'week' ? 'Last 7 days' : 'Last 30 days'
 
-  // Get active cohort students
-  const { data: activeCohort } = await db
-    .from('cohorts')
-    .select('id, name, session')
-    .eq('school_id', schoolId)
-    .eq('is_active', true)
-    .maybeSingle()
-
-  let studentIds = []
-  if (activeCohort) {
-    const { data: members } = await db
-      .from('cohort_members')
-      .select('student_id')
-      .eq('cohort_id', activeCohort.id)
-    studentIds = (members ?? []).map(m => m.student_id)
-  } else {
-    const { data: students } = await db
-      .from('profiles')
-      .select('id')
-      .eq('school_id', schoolId)
-      .eq('role', 'student')
-    studentIds = (students ?? []).map(s => s.id)
+  const { cohort, studentIds } = await schoolStudentIds(db, schoolId)
+  let activeCohort = cohort
+  if (cohort) {
+    const { data } = await db.from('cohorts').select('id, name, session').eq('id', cohort.id).maybeSingle()
+    activeCohort = data ?? cohort
   }
 
   if (!studentIds.length) {
     return NextResponse.json({ error: 'No students found' }, { status: 404 })
   }
 
-  // Core data fetch
-  const [
-    { data: profiles },
-    { data: attempts },
-    { data: progress },
-    { data: streaks },
-  ] = await Promise.all([
-    db.from('profiles').select('id, full_name, exam_type, subjects').in('id', studentIds),
-    db.from('question_attempts')
-      .select('student_id, is_correct, subject_id, topic_id, subjects(name), topics(name)')
-      .in('student_id', studentIds).gte('created_at', since),
-    db.from('lesson_progress')
-      .select('student_id, completed').in('student_id', studentIds).gte('started_at', since),
-    db.from('student_streaks')
-      .select('student_id, current_streak, last_active_date').in('student_id', studentIds),
+  const [profiles, stats, progress] = await Promise.all([
+    selectByIds(db, 'profiles', 'id, full_name, exam_type, subjects, streak_days, last_active_date', studentIds),
+    loadSchoolStats(db, studentIds, since),
+    completedLessons(db, studentIds, since),
   ])
 
-  const streakMap   = {}
-  ;(streaks ?? []).forEach(s => { streakMap[s.student_id] = s })
-  const profileMap  = {}
-  ;(profiles ?? []).forEach(p => { profileMap[p.id] = p })
+  const profileMap = {}
+  for (const p of profiles) profileMap[p.id] = p
+  const lessonsDone = progress
 
   const weekAgo = new Date(Date.now() - 7 * 86400000)
 
   // Per-student stats
   const studentStats = studentIds.map(id => {
-    const p         = profileMap[id] ?? { id, full_name: 'Unknown' }
-    const att       = (attempts ?? []).filter(a => a.student_id === id)
-    const prog      = (progress ?? []).filter(x => x.student_id === id)
-    const streak    = streakMap[id]
-    const correct   = att.filter(a => a.is_correct).length
-    const total     = att.length
-    const accuracy  = total > 0 ? Math.round((correct / total) * 100) : null
-    const lessons   = prog.filter(x => x.completed).length
-    const lastActive = streak?.last_active_date
-    const isActive   = lastActive && new Date(lastActive) >= weekAgo
-
-    const subjectAcc = {}
-    att.forEach(a => {
-      const sn = a.subjects?.name
-      if (!sn) return
-      if (!subjectAcc[sn]) subjectAcc[sn] = { correct: 0, total: 0 }
-      subjectAcc[sn].total++
-      if (a.is_correct) subjectAcc[sn].correct++
-    })
-
+    const p   = profileMap[id] ?? { id, full_name: 'Unknown' }
+    const s   = stats.byStudent.get(id) ?? { answered: 0, correct: 0, lastActive: null }
+    const lastActive = s.lastActive ?? (p.last_active_date ?? null)
     return {
       id,
       name:        p.full_name ?? '',
       exam:        p.exam_type ?? '',
       subjects:    p.subjects ?? [],
-      accuracy,
-      correct,
-      total,
-      lessons,
-      streak:      streak?.current_streak ?? 0,
-      lastActive:  lastActive ?? null,
-      isActive:    !!isActive,
-      subjectAcc,
+      accuracy:    s.answered > 0 ? Math.round((s.correct / s.answered) * 100) : null,
+      correct:     s.correct,
+      total:       s.answered,
+      lessons:     lessonsDone[id] ?? 0,
+      streak:      effectiveStreak(p),
+      lastActive,
+      isActive:    !!lastActive && new Date(lastActive) >= weekAgo,
+      subjectAcc:  stats.subjectsByStudent.get(id) ?? {},
     }
   })
 
@@ -142,15 +118,15 @@ export async function GET(request) {
     if (format === 'csv') {
       const headers = ['Student Name','Exam','Subjects','Lessons','Questions','Accuracy %','Streak','Last Active']
       const lines   = [
-        `# ${schoolName} — Student Report (${periodLabel})`,
+        `# ${schoolName.replace(/[\r\n]/g, ' ')} — Student Report (${periodLabel})`,
         `# Generated: ${new Date().toLocaleDateString('en-GB')}`,
         `# Cohort: ${activeCohort?.name ?? 'All students'}`,
         '',
         headers.join(','),
         ...studentStats.map(s => [
-          `"${s.name}"`,
-          s.exam,
-          `"${s.subjects.join('; ')}"`,
+          csvCell(s.name),
+          csvCell(s.exam),
+          csvCell(s.subjects.join('; ')),
           s.lessons,
           s.total,
           s.accuracy ?? 0,
@@ -161,7 +137,7 @@ export async function GET(request) {
       return new NextResponse(lines.join('\n'), {
         headers: {
           'Content-Type': 'text/csv',
-          'Content-Disposition': `attachment; filename="${schoolName.replace(/\s/g, '_')}_students_${period}.csv"`,
+          'Content-Disposition': `attachment; filename="${schoolName.replace(/[^A-Za-z0-9_-]+/g, '_')}_students_${period === 'week' ? 'week' : 'month'}.csv"`,
         },
       })
     }
@@ -185,38 +161,7 @@ export async function GET(request) {
 
   // ── SUBJECT REPORT ─────────────────────────────────────────────────────────
   if (type === 'subjects') {
-    const topicMap = {}
-    ;(attempts ?? []).forEach(a => {
-      const sn = a.subjects?.name
-      const tn = a.topics?.name
-      if (!sn || !tn || !a.topic_id) return
-      const key = `${sn}||${a.topic_id}`
-      if (!topicMap[key]) topicMap[key] = { subjectName: sn, topicName: tn, topicId: a.topic_id, correct: 0, total: 0 }
-      topicMap[key].total++
-      if (a.is_correct) topicMap[key].correct++
-    })
-
-    const subjectGroups = {}
-    Object.values(topicMap).forEach(t => {
-      if (!subjectGroups[t.subjectName]) subjectGroups[t.subjectName] = []
-      subjectGroups[t.subjectName].push({
-        topicId:   t.topicId,
-        topicName: t.topicName,
-        correct:   t.correct,
-        total:     t.total,
-        accuracy:  Math.round((t.correct / t.total) * 100),
-      })
-    })
-
-    const subjects = Object.entries(subjectGroups).map(([name, topics]) => {
-      const totAtt = topics.reduce((a, t) => a + t.total, 0)
-      const totCor = topics.reduce((a, t) => a + t.correct, 0)
-      return {
-        name,
-        accuracy: totAtt > 0 ? Math.round((totCor / totAtt) * 100) : null,
-        topics: topics.sort((a, b) => a.accuracy - b.accuracy),
-      }
-    }).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100))
+    const subjects = groupTopicsBySubject(stats.topics, 'name')
 
     return NextResponse.json({
       type: 'subjects', schoolName, schoolCity, periodLabel,
@@ -243,12 +188,13 @@ export async function GET(request) {
 
     // Subject summaries
     const subAcc = {}
-    ;(attempts ?? []).forEach(a => {
-      const sn = a.subjects?.name; if (!sn) return
-      if (!subAcc[sn]) subAcc[sn] = { correct: 0, total: 0 }
-      subAcc[sn].total++
-      if (a.is_correct) subAcc[sn].correct++
-    })
+    for (const m of stats.subjectsByStudent.values()) {
+      for (const [name, d] of Object.entries(m)) {
+        const cur = (subAcc[name] ??= { correct: 0, total: 0 })
+        cur.correct += d.correct
+        cur.total   += d.total
+      }
+    }
     const subjectSummary = Object.entries(subAcc).map(([name, d]) => ({
       name, accuracy: d.total > 0 ? Math.round((d.correct / d.total) * 100) : null, total: d.total,
     })).sort((a, b) => (a.accuracy ?? 100) - (b.accuracy ?? 100))

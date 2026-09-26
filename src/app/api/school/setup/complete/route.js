@@ -12,12 +12,26 @@ export async function POST(request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { school_id } = await request.json()
+  let body = {}
+  try { body = await request.json() } catch {}
+
+  // Only the school's own admin may mark its setup complete.
+  const { data: profile } = await service
+    .from('profiles')
+    .select('school_id, role')
+    .eq('id', user.id)
+    .single()
+  if (profile?.role !== 'school_admin' || !profile?.school_id) {
+    return NextResponse.json({ error: 'School admin access only' }, { status: 403 })
+  }
+  if (body.school_id && body.school_id !== profile.school_id) {
+    return NextResponse.json({ error: 'Not your school' }, { status: 403 })
+  }
 
   await service
     .from('schools')
     .update({ setup_complete: true })
-    .eq('id', school_id)
+    .eq('id', profile.school_id)
 
   return NextResponse.json({ success: true })
 }

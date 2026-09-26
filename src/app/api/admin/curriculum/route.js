@@ -18,6 +18,9 @@ function slugify(str) {
 
 // ── GET — fetch curriculum tree ──────────────────────────────
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')
   if (!subjectId) return NextResponse.json({ error: 'subjectId required' }, { status: 400 })

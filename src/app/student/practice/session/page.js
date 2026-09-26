@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
+import { computeSessionXP } from '@/lib/xp'
 
 import { BLUE, CYAN, GREEN, RED, ORANGE, GOLD, pct, msToSecs } from '@/components/session/SessionUtils'
 import { LoadingScreen, ErrorScreen, EndDialog, QuestionNav, SessionTimer, QuestionCountdown } from '@/components/session/SessionPrimitives'
@@ -189,13 +190,8 @@ export default function PracticeSessionPage() {
       correct_count:   correctCount,
     }
 
-    // Local-first: instant, never fails
-    const localXP = Math.max(5,
-      results.filter(r => r.selectedIdx !== null).length * 5 +
-      correctCount * 10 +
-      (results.length > 0 && Math.round((correctCount / results.length) * 100) >= 80 ? 50
-        : Math.round((correctCount / results.length) * 100) >= 60 ? 25 : 0)
-    )
+    // Local-first: instant, never fails. Same formula the server uses.
+    const localXP = computeSessionXP(payload.mode, results)
     saveSessionLocally(payload, localXP)
     try { localStorage.removeItem('ep_pending_session') } catch {}
 

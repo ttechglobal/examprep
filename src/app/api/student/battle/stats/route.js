@@ -1,30 +1,56 @@
-// src/app/api/student/battle/stats/route.js
-import { createClient as svc } from '@supabase/supabase-js'
-import { createClient }        from '@/lib/supabase/server'
-import { NextResponse }        from 'next/server'
+// src/app/api/student/battle/stats/route.js — v2
+// GET  → the signed-in student's battle record (defaults for guests)
+// POST → record one finished match vs the computer: { outcome, xp_awarded }
+//
+// v2: POST validates input and updates the record in one atomic statement
+// (record_battle_result). XP for the match itself is awarded by the session
+// save, which re-checks the answers; this only keeps battle stats.
+import { createClient }  from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { BATTLE_OUTCOMES } from '@/lib/xp'
+import { NextResponse }  from 'next/server'
 
-const db = () => svc(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const defaults = () => ({ battles_played:0, battles_won:0, battles_drawn:0, battles_lost:0, ai_difficulty:'easy', total_battle_xp:0, last_battle_at:null })
-const diff = w => w>=8?'hard':w>=3?'medium':'easy'
+
+// A 50-question battle with a win is the most a single match can earn.
+const MAX_MATCH_XP = 50 * 10 + 20
+
+async function currentUser() {
+  const supabase = await createClient()
+  return (await supabase.auth.getUser()).data?.user ?? null
+}
 
 export async function GET() {
   try {
-    const { data:{ user } } = await createClient().auth.getUser()
+    const user = await currentUser()
     if (!user) return NextResponse.json({ stats: defaults() })
-    const { data } = await db().from('battle_stats').select('*').eq('student_id', user.id).maybeSingle()
+    const { data } = await supabaseAdmin()
+      .from('battle_stats')
+      .select('battles_played, battles_won, battles_drawn, battles_lost, ai_difficulty, total_battle_xp, last_battle_at')
+      .eq('student_id', user.id).maybeSingle()
     return NextResponse.json({ stats: data ?? defaults() })
   } catch { return NextResponse.json({ stats: defaults() }) }
 }
 
 export async function POST(req) {
   try {
-    const { data:{ user } } = await createClient().auth.getUser()
-    if (!user) return NextResponse.json({ ok:true, guest:true })
-    const { outcome, xp_awarded=0 } = await req.json()
-    const { data:cur } = await db().from('battle_stats').select('*').eq('student_id', user.id).maybeSingle()
-    const c = cur ?? defaults()
-    const newWins = c.battles_won + (outcome==='win'?1:0)
-    await db().from('battle_stats').upsert({ student_id:user.id, battles_played:c.battles_played+1, battles_won:newWins, battles_drawn:c.battles_drawn+(outcome==='draw'?1:0), battles_lost:c.battles_lost+(outcome==='loss'?1:0), ai_difficulty:diff(newWins), total_battle_xp:c.total_battle_xp+xp_awarded, last_battle_at:new Date().toISOString(), updated_at:new Date().toISOString() }, { onConflict:'student_id' })
-    return NextResponse.json({ ok:true })
-  } catch (e) { return NextResponse.json({ error:e.message }, { status:500 }) }
+    const user = await currentUser()
+    if (!user) return NextResponse.json({ ok: true, guest: true })
+
+    let body = {}
+    try { body = await req.json() } catch {}
+    if (!BATTLE_OUTCOMES.includes(body.outcome)) {
+      return NextResponse.json({ error: 'outcome must be win, draw or loss' }, { status: 400 })
+    }
+    const xp = Math.min(Math.max(Math.round(Number(body.xp_awarded) || 0), 0), MAX_MATCH_XP)
+
+    const { error } = await supabaseAdmin().rpc('record_battle_result', {
+      p_student: user.id, p_outcome: body.outcome, p_xp: xp,
+    })
+    if (error) throw error
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    console.error('[battle/stats] POST:', e?.message ?? e)
+    return NextResponse.json({ error: 'Could not save battle result' }, { status: 500 })
+  }
 }

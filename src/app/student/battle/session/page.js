@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePoints } from '@/contexts/PointsContext'
 import { createComputerOpponent, readLocalBattleStats, saveLocalBattleStats } from '@/lib/battleAI'
+import { computeSessionXP } from '@/lib/xp'
 import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
 import { MathText } from '@/lib/mathRenderer'
 import { ExplanationBlock } from '@/components/session/ExplanationBlock'
@@ -488,6 +489,13 @@ function BattleResults({ questions, answersLog, studentScore, cpuScore, xpAwarde
 // ── BattleReview ──────────────────────────────────────────────────────────────
 function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
   const [idx, setIdx] = useState(0)
+  const canvasRef = useRef(null)
+
+  // Previous / Next always land at the top of the new question, even if the
+  // student had scrolled down to read an explanation.
+  useEffect(() => {
+    canvasRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [idx])
 
   const q          = questions[idx]
   const opts       = q ? normaliseOptions(q.options) : []
@@ -534,8 +542,16 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
       </div>
 
       {/* ── Canvas ── */}
-      <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5 }}>
-        <div style={{ maxWidth:560, margin:'0 auto', padding:'20px 14px 0', display:'flex', flexDirection:'column', gap:13 }}>
+      <div ref={canvasRef} style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5 }}>
+        <style>{`
+          .rtiles{display:grid;grid-template-columns:1fr;gap:22px;padding-top:6px}
+          .rtile{min-height:68px;padding:14px 14px 16px 0}
+          @media(min-width:640px){
+            .rtiles{grid-template-columns:1fr 1fr;gap:22px 16px}
+            .rtile{min-height:84px}
+          }
+        `}</style>
+        <div style={{ maxWidth:680, margin:'0 auto', padding:'24px 18px 0', display:'flex', flexDirection:'column', gap:22 }}>
 
           {/* ── Question card — game style, no icon ── */}
           <div style={{ position:'relative', marginTop:14 }}>
@@ -548,8 +564,8 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
               {[{left:'-9px'},{right:'-9px'}].map((s,i)=>(
                 <div key={i} style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:16, height:16, borderRadius:'50%', background:'#3B5BDB', border:'2.5px solid #D5E5F5', boxShadow:'0 2px 5px rgba(0,0,0,.22)', zIndex:2, ...s }}/>
               ))}
-              <div style={{ padding:'30px 18px 20px' }}>
-                <div style={{ fontSize:16, fontWeight:900, color:'#1A1F5E', lineHeight:1.65, wordBreak:'break-word' }}>
+              <div style={{ padding:'34px 24px 26px' }}>
+                <div style={{ fontSize:17, fontWeight:900, color:'#1A1F5E', lineHeight:1.65, wordBreak:'break-word' }}>
                   <MathText text={q?.text ?? q?.question_text ?? ''} as="span" className=""/>
                 </div>
               </div>
@@ -557,7 +573,7 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
           </div>
 
           {/* ── Answer tiles — 1 col mobile, 2-col desktop, matching active battle style ── */}
-          <div className="btiles">
+          <div className="rtiles">
             {opts.map((opt, i) => {
               const isC    = i === correctIdx
               const isW    = i === selIdx && !isCorrect
@@ -569,12 +585,12 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
               const showYou = i === selIdx
               const showCpu = i === cpuIdx
               return (
-                <div key={i} style={{ position:'relative', borderRadius:18, opacity: dim ? .26 : 1 }}>
-                  <div className="btile-h" style={{ display:'flex', alignItems:'center', padding:'0 10px 0 0', borderRadius:18, background:tileBg, boxShadow:tileSh, position:'relative', overflow:'hidden', border:`2px solid ${isC ? 'rgba(255,255,255,.4)' : 'transparent'}` }}>
+                <div key={i} style={{ position:'relative', borderRadius:18, opacity: dim ? .4 : 1 }}>
+                  <div className="rtile" style={{ display:'flex', alignItems:'center', borderRadius:18, background:tileBg, boxShadow:tileSh, position:'relative', overflow:'hidden', border:`2px solid ${isC ? 'rgba(255,255,255,.4)' : 'transparent'}` }}>
                     <div style={{ position:'absolute', top:0, left:0, right:0, height:'42%', background:'linear-gradient(to bottom,rgba(255,255,255,.25),transparent)', borderRadius:'16px 16px 0 0', pointerEvents:'none' }}/>
                     <div style={{ position:'absolute', bottom:0, left:0, right:0, height:5, background:'rgba(0,0,0,.16)', borderRadius:'0 0 16px 16px', pointerEvents:'none' }}/>
-                    <div style={{ width:38, height:38, borderRadius:'50%', background:ltrBg, border:'2px solid rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:900, color:'#fff', flexShrink:0, margin:'0 11px', boxShadow:'inset 0 2px 4px rgba(0,0,0,.15)', position:'relative', zIndex:1 }}>{letter}</div>
-                    <div style={{ flex:1, fontSize:14, fontWeight:800, color:'#fff', lineHeight:1.4, minWidth:0, wordBreak:'break-word', position:'relative', zIndex:1 }}>
+                    <div style={{ width:44, height:44, borderRadius:'50%', background:ltrBg, border:'2px solid rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:900, color:'#fff', flexShrink:0, margin:'0 14px', boxShadow:'inset 0 2px 4px rgba(0,0,0,.15)', position:'relative', zIndex:1 }}>{letter}</div>
+                    <div style={{ flex:1, fontSize:15, fontWeight:800, color:'#fff', lineHeight:1.5, minWidth:0, wordBreak:'break-word', position:'relative', zIndex:1, paddingRight:(showYou || showCpu) ? 30 : 0 }}>
                       <MathText text={String(opt ?? '')} as="span" className=""/>
                     </div>
                     {DECOS[i] && <div style={{ flexShrink:0, position:'relative', zIndex:1, marginRight:4 }}>{DECOS[i]}</div>}
@@ -608,7 +624,7 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
           </div>
 
           {/* ── Result banner — game-styled ── */}
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 15px', borderRadius:18, background: isCorrect ? 'linear-gradient(135deg,#DCFCE7,#F0FDF4)' : skipped ? 'linear-gradient(135deg,#F3F4F6,#F9FAFB)' : 'linear-gradient(135deg,#FEE2E2,#FFF5F5)', border:`2.5px solid ${isCorrect ? 'rgba(34,197,94,.35)' : skipped ? 'rgba(107,114,128,.25)' : 'rgba(239,68,68,.3)'}`, boxShadow:'0 4px 0 rgba(26,36,104,.08),0 5px 14px rgba(26,36,104,.06)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, padding:'16px 18px', borderRadius:18, background: isCorrect ? 'linear-gradient(135deg,#DCFCE7,#F0FDF4)' : skipped ? 'linear-gradient(135deg,#F3F4F6,#F9FAFB)' : 'linear-gradient(135deg,#FEE2E2,#FFF5F5)', border:`2.5px solid ${isCorrect ? 'rgba(34,197,94,.35)' : skipped ? 'rgba(107,114,128,.25)' : 'rgba(239,68,68,.3)'}`, boxShadow:'0 4px 0 rgba(26,36,104,.08),0 5px 14px rgba(26,36,104,.06)' }}>
             <div style={{ width:44, height:44, borderRadius:'50%', background: isCorrect ? '#16A34A' : skipped ? '#6B7280' : '#DC2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, color:'#fff', flexShrink:0, boxShadow:`0 4px 10px ${isCorrect ? 'rgba(22,163,74,.4)' : skipped ? 'rgba(107,114,128,.3)' : 'rgba(220,38,38,.35)'}` }}>
               {isCorrect ? '✓' : skipped ? '⏱' : '✗'}
             </div>
@@ -644,13 +660,13 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
             ))}
           </div>
 
-          <div style={{ height:'max(90px,calc(80px + env(safe-area-inset-bottom)))', flexShrink:0 }}/>
+          <div style={{ height:24, flexShrink:0 }}/>
         </div>
       </div>
 
       {/* ── Bottom nav ── */}
       <div style={{ flexShrink:0, zIndex:100, background:`linear-gradient(to top,#C8DDEF 65%,transparent)`, padding:'10px 14px', paddingBottom:'max(14px,env(safe-area-inset-bottom))' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, maxWidth:560, margin:'0 auto' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, maxWidth:680, margin:'0 auto' }}>
           <button onClick={() => setIdx(i => Math.max(0, i-1))} disabled={idx===0}
             style={{ padding:'13px', borderRadius:999, border:'2.5px solid rgba(26,36,104,.2)', background:'#fff', color:NAVY2, fontSize:14, fontWeight:900, fontFamily:'inherit', cursor: idx===0 ? 'not-allowed' : 'pointer', opacity: idx===0 ? .4 : 1, boxShadow: idx===0 ? 'none' : '0 4px 0 rgba(26,36,104,.15)', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -682,7 +698,7 @@ function BattleReview({ questions, answersLog, cpuChoices, config, onDone }) {
 
 // ── Explanation helpers ───────────────────────────────────────────────────────
 // ExplanationBlock (from session/ExplanationBlock.jsx) is the canonical renderer.
-// This helper is only used to decide whether to show the "Explain" button.
+// Explanations are shown only in the post-match review, never mid-battle.
 function hasDisplayableExplanation(explanation) {
   if (!explanation) return false
   if (typeof explanation === 'string') return explanation.trim().length > 0
@@ -694,106 +710,6 @@ function hasDisplayableExplanation(explanation) {
     (Array.isArray(explanation.workings) && explanation.workings.length) ||
     (explanation.wrong_options && Object.keys(explanation.wrong_options).length) ||
     explanation.formula_box || explanation.svg_diagram
-  )
-}
-
-// ── Battle Explanation Bottom Sheet ──────────────────────────────────────────
-// Styled to match the battle UI: dark navy header, gold accent, battle colours.
-// On desktop capped at 540px wide and centred — not a full-width sheet.
-function BattleExplanationSheet({ question, isCorrect, selectedKey, onClose }) {
-  if (!question?.explanation) return null
-  return (
-    <div
-      onClick={onClose}
-      style={{ position:'fixed', inset:0, zIndex:4000, background:'rgba(6,12,44,.88)', backdropFilter:'blur(6px)', display:'flex', flexDirection:'column', justifyContent:'flex-end', alignItems:'center' }}
-    >
-      {/* Tap backdrop to close */}
-      <div style={{ flex:1, width:'100%' }} onClick={onClose}/>
-
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width:'100%', maxWidth:540,
-          background:'#fff',
-          borderRadius:'24px 24px 0 0',
-          maxHeight:'88dvh',
-          display:'flex', flexDirection:'column',
-          overflow:'hidden',
-          boxShadow:'0 -12px 50px rgba(0,0,0,.5)',
-          animation:'modalin .28s cubic-bezier(.32,.72,0,1)',
-        }}
-      >
-        {/* Drag handle */}
-        <div style={{ display:'flex', justifyContent:'center', padding:'12px 0 0', flexShrink:0, background:NAVY }}>
-          <div style={{ width:40, height:4, borderRadius:2, background:'rgba(255,255,255,.25)' }}/>
-        </div>
-
-        {/* Header — battle-themed navy */}
-        <div style={{
-          background: `linear-gradient(135deg,${NAVY},#1264E5)`,
-          padding:'14px 20px 16px',
-          flexShrink:0,
-          borderBottom:`3px solid ${GOLD}`,
-        }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              {/* Result icon */}
-              <div style={{
-                width:38, height:38, borderRadius:12, flexShrink:0,
-                background: isCorrect ? 'rgba(74,222,128,.2)' : 'rgba(248,113,113,.2)',
-                border: `2px solid ${isCorrect ? 'rgba(74,222,128,.5)' : 'rgba(248,113,113,.5)'}`,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                boxShadow: isCorrect ? '0 0 12px rgba(74,222,128,.3)' : '0 0 12px rgba(248,113,113,.25)',
-              }}>
-                <span style={{ fontSize:20, fontWeight:900, color: isCorrect ? '#4ade80' : '#f87171' }}>
-                  {isCorrect ? '✓' : '✗'}
-                </span>
-              </div>
-              <div>
-                <div style={{ fontSize:16, fontWeight:900, color:'#fff', letterSpacing:'-.02em' }}>Explanation</div>
-                <div style={{ fontSize:11, fontWeight:800, color: isCorrect ? '#4ade80' : '#f87171', marginTop:2, textTransform:'uppercase', letterSpacing:'.05em' }}>
-                  {isCorrect ? 'Correct!' : 'Incorrect'}
-                </div>
-              </div>
-            </div>
-            {/* XP badge if correct */}
-            {isCorrect && (
-              <div style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(255,184,0,.18)', border:'1.5px solid rgba(255,184,0,.4)', borderRadius:999, padding:'4px 12px', flexShrink:0 }}>
-                <span style={{ fontSize:12 }}>⚡</span>
-                <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>+10 XP</span>
-              </div>
-            )}
-            <button onClick={onClose}
-              style={{ width:32, height:32, borderRadius:9, border:'1.5px solid rgba(255,255,255,.22)', background:'rgba(255,255,255,.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,.7)', fontSize:16, fontWeight:700, fontFamily:'inherit', marginLeft:8, flexShrink:0 }}>
-              ×
-            </button>
-          </div>
-        </div>
-
-        {/* Gold divider line */}
-        <div style={{ height:3, background:`linear-gradient(90deg,${GOLD},#FF6A00,${GOLD})`, flexShrink:0 }}/>
-
-        {/* Scrollable body — ExplanationBlock renders everything */}
-        <div style={{ overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'20px 20px 16px', flex:1, background:'#fff' }}>
-          <ExplanationBlock
-            explanation={question.explanation}
-            isCorrect={isCorrect}
-            dark={false}
-            mobileModal={false}
-            selectedKey={selectedKey}
-            question={question}
-          />
-        </div>
-
-        {/* Close button — battle navy style */}
-        <div style={{ padding:'12px 20px 24px', flexShrink:0, background:'#fff', borderTop:'1px solid #f1f5f9' }}>
-          <button onClick={onClose}
-            style={{ width:'100%', padding:'14px', borderRadius:14, border:'none', cursor:'pointer', background:NAVY2, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 5px 0 #031548,0 8px 20px rgba(26,36,104,.3)`, letterSpacing:'-.01em' }}>
-            Got it ✓
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -817,7 +733,6 @@ export default function BattleSessionPage() {
   const [cpuScore,     setCpuScore]    = useState(0)
   const [floatSide,    setFloatSide]   = useState(null)
   const [floatKey,     setFloatKey]    = useState(0)
-  const [explOpen,     setExplOpen]    = useState(false)
   const [saveData,     setSaveData]    = useState(null)
   const [studentDots,  setStudentDots] = useState(0)
   const [cpuDots,      setCpuDots]     = useState(0)
@@ -828,6 +743,12 @@ export default function BattleSessionPage() {
   const answersLog = useRef([])
   const cpuTimer   = useRef(null)
   const sessionId  = useRef(crypto.randomUUID())
+  const canvasRef  = useRef(null)
+
+  // Each new question starts at the top of the screen.
+  useEffect(() => {
+    canvasRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [qIndex])
 
   // ── Load questions — progressive (matches practice session pattern) ──────────
   // Phase 1: fetch FIRST_BATCH questions immediately → start countdown fast.
@@ -937,10 +858,10 @@ export default function BattleSessionPage() {
       if (sCorr) { setStudentScore(s => s+10); setStudentDots(d => d+1); animateFloat('student') }
       if (cCorr) { setCpuScore(s => s+10); setCpuDots(d => d+1); if (!sCorr) animateFloat('cpu') }
       answersLog.current[qIndex] = { ...answersLog.current[qIndex], isCorrect:sCorr, is_correct:sCorr, selectedIdx }
-      setCpuAnswered(true); setRevealed(true); setExplOpen(false)
+      setCpuAnswered(true); setRevealed(true)
     } else {
       if (qIndex < questions.length - 1) {
-        setQIndex(i => i+1); setSelectedIdx(null); setRevealed(false); setTimerKey(k => k+1); setExplOpen(false); setPopKey(0)
+        setQIndex(i => i+1); setSelectedIdx(null); setRevealed(false); setTimerKey(k => k+1); setPopKey(0)
       } else { finishMatch() }
     }
   }
@@ -952,7 +873,7 @@ export default function BattleSessionPage() {
     const cCorr  = opts.indexOf(cpuAns) >= 0 ? checkCorrect(opts, opts.indexOf(cpuAns), q.correct_answer) : cpuAns === q.correct_answer
     if (cCorr) { setCpuScore(s => s+10); setCpuDots(d => d+1); animateFloat('cpu') }
     answersLog.current[qIndex] = { ...answersLog.current[qIndex], isCorrect:false, is_correct:false, selectedIdx:null }
-    setCpuAnswered(true); setRevealed(true); setExplOpen(false)
+    setCpuAnswered(true); setRevealed(true)
   }, [revealed, qIndex, questions])
 
   function finishMatch() {
@@ -968,7 +889,7 @@ export default function BattleSessionPage() {
       return acc + (cor ? 10 : 0)
     }, 0)
     const outcome = finalS > finalC ? 'win' : finalS < finalC ? 'loss' : 'draw'
-    const xp      = correct * 10 + (outcome==='win'?20:outcome==='draw'?10:0)
+    const xp      = computeSessionXP('battle', answersLog.current, { outcome })
     saveSessionLocally({ session_id:sessionId.current, exam:config?.examType||'WAEC', mode:'battle', session_type:'battle', opponent:'computer', opponent_score:finalC, battle_outcome:outcome, subject_name:config?.subject_name??'Mixed', results:answersLog.current, questions_count:questions.length, correct_count:correct }, xp)
     setTotalPoints((currentXP||0) + xp)
     showXPToast(xp, 'Battle done!')
@@ -1120,14 +1041,6 @@ export default function BattleSessionPage() {
       <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <SkyBg/>
         {paused && <PauseMenu onResume={() => setPaused(false)} onQuit={() => { clearTimeout(cpuTimer.current); router.push('/student/battle') }}/>}
-        {explOpen && q?.explanation && (
-          <BattleExplanationSheet
-            question={q}
-            isCorrect={selectedIdx !== null && checkCorrect(normaliseOptions(q.options), selectedIdx, q.correct_answer)}
-            selectedKey={selectedIdx !== null ? LETTERS[selectedIdx] ?? null : null}
-            onClose={() => setExplOpen(false)}
-          />
-        )}
 
         <VSHeader
           qIndex={qIndex} total={questions.length}
@@ -1139,7 +1052,7 @@ export default function BattleSessionPage() {
         />
 
         {/* Canvas */}
-        <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', overscrollBehavior:'contain', position:'relative', zIndex:5, padding:'20px 20px 0', display:'flex', flexDirection:'column', alignItems:'center' }}>
+        <div ref={canvasRef} style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', overscrollBehavior:'contain', position:'relative', zIndex:5, padding:'20px 20px 0', display:'flex', flexDirection:'column', alignItems:'center' }}>
           <div style={{ width:'100%', maxWidth:860, display:'flex', flexDirection:'column', gap:14, animation:'slidein .3s ease' }}>
 
             {/* Question card */}
@@ -1261,57 +1174,50 @@ export default function BattleSessionPage() {
               })}
             </div>
 
-            {/* Reveal banner */}
-            {revealed && (() => {
-              const cor = selectedIdx !== null && checkCorrect(opts, selectedIdx, q?.correct_answer)
-              const skp = selectedIdx === null
-              const hasExpl = hasDisplayableExplanation(q?.explanation)
-              return (
-                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:16, flexWrap:'wrap', background:cor?'#DCFCE7':skp?'#F3F4F6':'#FEE2E2', border:`2px solid ${cor?'rgba(34,197,94,.3)':skp?'rgba(107,114,128,.2)':'rgba(239,68,68,.25)'}`, boxShadow:'0 2px 8px rgba(0,0,0,.06)' }}>
-                  <div style={{ width:42, height:42, borderRadius:'50%', background:cor?'#16A34A':skp?'#6B7280':'#DC2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, color:'#fff', flexShrink:0, boxShadow:`0 3px 8px ${cor?'rgba(22,163,74,.35)':skp?'rgba(107,114,128,.2)':'rgba(220,38,38,.3)'}` }}>
-                    {cor?'✓':skp?'⏱':'✗'}
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:15, fontWeight:900, color:cor?'#15803D':skp?'#4B5563':'#B91C1C' }}>
-                      {cor?'Correct! +10 pts':skp?`Time's up — 0 pts`:`Wrong — 0 pts`}
-                    </div>
-                    {!cor && !skp && q?.correct_answer && (
-                      <div style={{ fontSize:12, color:'#6B7280', marginTop:3 }}>
-                        Correct: <strong style={{ color:'#15803D' }}>{opts[opts.findIndex((_,i)=>checkCorrect(opts,i,q.correct_answer))] ?? q.correct_answer}</strong>
-                      </div>
-                    )}
-                  </div>
-                  {cor && <div style={{ fontSize:12, fontWeight:900, color:'#92400E', background:'#FEF3C7', border:'1px solid rgba(245,158,11,.3)', borderRadius:999, padding:'4px 12px', flexShrink:0 }}>+10 XP ⚡</div>}
-                  {hasExpl && (
-                    <button onClick={() => setExplOpen(true)}
-                      style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 16px', borderRadius:12, background:NAVY2, border:'none', boxShadow:`0 4px 0 #031548,0 5px 14px rgba(26,36,104,.3)`, fontSize:13, fontWeight:900, color:'#fff', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
-                      📖 Explain
-                    </button>
-                  )}
-                </div>
-              )
-            })()}
-
-            {/* Progress dots + Next row */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:4 }}>
-              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                {questions.map((_, i) => (
-                  <div key={i} style={{ height:9, width:9, borderRadius:'50%', background: i < qIndex ? GOLD : i === qIndex ? NAVY2 : 'rgba(26,36,104,.18)', boxShadow: i === qIndex ? `0 0 6px ${GOLD}` : 'none', transition:'all .25s' }}/>
-                ))}
-              </div>
-              <button onClick={handleNext}
-                style={{ display:'flex', alignItems:'center', gap:8, padding:'clamp(11px,1.5vw,16px) clamp(22px,3vw,36px)', borderRadius:999, border:'none', background:NAVY2, color:'#fff', fontSize:'clamp(14px,1.6vw,18px)', fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:submitSh, letterSpacing:'-.01em' }}
-                onPointerDown={e=>{e.currentTarget.style.transform='translateY(3px)';e.currentTarget.style.boxShadow=submitShPrs}}
-                onPointerUp={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=submitSh}}
-                onPointerLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=submitSh}}>
-                {!revealed ? (selectedIdx===null?'Skip':'Submit') : isLast?'Finish':'Next'}
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 7h6M8 4l3 3-3 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-
-            <div style={{ height:'max(80px,calc(70px + env(safe-area-inset-bottom)))', flexShrink:0 }}/>
+            <div style={{ height:24, flexShrink:0 }}/>
           </div>
         </div>
+
+        {/* Action dock — always on screen, so Next never needs a scroll */}
+        {(() => {
+          const cor = revealed && selectedIdx !== null && checkCorrect(opts, selectedIdx, q?.correct_answer)
+          const skp = revealed && selectedIdx === null
+          const label = !revealed ? (selectedIdx === null ? 'Skip' : 'Submit') : isLast ? 'Finish' : 'Next'
+          return (
+            <div style={{ flexShrink:0, position:'relative', zIndex:20, padding:'10px 16px', paddingBottom:'max(12px,env(safe-area-inset-bottom))', background:'linear-gradient(to top,rgba(200,221,239,.98) 70%,rgba(200,221,239,0))' }}>
+              <div style={{ maxWidth:860, margin:'0 auto', display:'flex', alignItems:'center', gap:10, background:'#fff', border:'2px solid rgba(26,36,104,.12)', borderRadius:20, padding:'8px 8px 8px 12px', boxShadow:'0 6px 0 rgba(26,36,104,.1),0 10px 24px rgba(26,36,104,.12)' }}>
+                {revealed ? (
+                  <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:10, animation:'slidein .2s ease' }}>
+                    <div style={{ width:34, height:34, borderRadius:'50%', flexShrink:0, background:cor?'#16A34A':skp?'#6B7280':'#DC2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, color:'#fff' }}>
+                      {cor?'✓':skp?'⏱':'✗'}
+                    </div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:900, color:cor?'#15803D':skp?'#4B5563':'#B91C1C', lineHeight:1.2 }}>
+                        {cor ? 'Correct! +10' : skp ? "Time's up" : 'Wrong'}
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:700, color:'#6B7280', marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        {cor ? 'Keep it going' : 'See why in review'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color: selectedIdx === null ? '#6B7280' : NAVY2 }}>
+                    {selectedIdx === null ? 'Pick an answer' : `Your pick: ${LETTERS[selectedIdx] ?? ''}`}
+                    <div style={{ fontSize:11, fontWeight:700, color:'#9CA3AF', marginTop:1 }}>Question {qIndex + 1} of {questions.length}</div>
+                  </div>
+                )}
+                <button onClick={handleNext}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'13px clamp(22px,4vw,34px)', borderRadius:999, border:'none', background: revealed && isLast ? `linear-gradient(135deg,${GOLD},#FBBF24)` : NAVY2, color: revealed && isLast ? NAVY : '#fff', fontSize:15, fontWeight:900, fontFamily:'inherit', cursor:'pointer', boxShadow:submitSh, letterSpacing:'-.01em', flexShrink:0 }}
+                  onPointerDown={e=>{e.currentTarget.style.transform='translateY(3px)';e.currentTarget.style.boxShadow=submitShPrs}}
+                  onPointerUp={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=submitSh}}
+                  onPointerLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=submitSh}}>
+                  {label}
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M4 7h6M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </>
   )

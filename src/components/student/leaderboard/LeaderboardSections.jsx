@@ -11,6 +11,7 @@ import {
   NigeriaFlag, SchoolIcon, LevelBadge, RankCoin,
 } from './icons'
 import { shareInvite } from '@/components/student/InviteFriendsCard'
+import { PODIUM_IMAGES, AVATAR_RIM_OFFSET, INVITE_IMAGE } from './art'
 
 // ── Avatars ──────────────────────────────────────────────────────────────────
 // No profile photos yet: a stable tint per student from their id.
@@ -53,15 +54,21 @@ const CONFETTI = [
 ]
 
 function Spot({ entry, place }) {
-  const p = PLACE[place]
+  const p   = PLACE[place]
+  const art = PODIUM_IMAGES[place]
   return (
     <div className={s.spot} data-place={place} style={{ '--ring': p.ring, '--p1': p.p1, '--p2': p.p2 }}>
-      <span className={s.spotAvatar} style={{ background: p.avatar }} aria-hidden="true">
+      <span
+        className={s.spotAvatar}
+        style={{ background: p.avatar, translate: `0 ${AVATAR_RIM_OFFSET[place] ?? 0}px` }}
+        aria-hidden="true"
+      >
         {place === 1 && <span className={s.spotCrown}><Crown size={34} /></span>}
         {(entry?.name || '?').charAt(0).toUpperCase()}
         <span className={s.spotNum}>{place}</span>
       </span>
-      <div className={s.pedestal}>
+      <div className={s.pedestal} data-art={!!art}>
+        {art && <img src={art} alt="" className={s.pedestalImg} />}
         <span className={s.spotName}>{entry?.name ?? '—'}</span>
         <span className={s.spotXp}>{entry ? `${entry.xp.toLocaleString()} XP` : ''}</span>
       </div>
@@ -185,20 +192,23 @@ export function ScopeSelect({ scope, schoolName, hasSchool, onChange }) {
 }
 
 // ── Table ────────────────────────────────────────────────────────────────────
-function metaOf(entry) {
-  return [entry.class_level, entry.location].filter(Boolean).join(' · ')
+// National: which school and where. School board: everyone shares a school,
+// so show class instead.
+function metaOf(entry, scope) {
+  const first = scope === 'school' ? entry.class_level : entry.school
+  return [first, entry.location].filter(Boolean).join(' · ')
 }
 
 function Level({ entry }) {
   return (
-    <span className={s.level}>
+    <span className={`${s.level} ${s.colLevel}`}>
       <LevelBadge tier={entry.level_tier} numeral={entry.level_numeral} />
       {entry.level}
     </span>
   )
 }
 
-function Row({ entry }) {
+function Row({ entry, scope }) {
   const place = entry.rank
   return (
     <div className={s.row} data-me={entry.is_me}>
@@ -209,13 +219,12 @@ function Row({ entry }) {
         <Avatar entry={entry} />
         <span style={{ minWidth: 0 }}>
           <p className={s.name}>{entry.name}{entry.is_me && <span className="sr-only"> (you)</span>}</p>
-          {metaOf(entry) && <p className={s.meta}>{metaOf(entry)}</p>}
+          {metaOf(entry, scope) && <p className={s.meta}>{metaOf(entry, scope)}</p>}
         </span>
       </span>
       <Level entry={entry} />
       <span className={s.num}>{entry.xp.toLocaleString()}</span>
       <span className={`${s.num} ${s.col5}`}>{entry.accuracy == null ? '—' : `${entry.accuracy}%`}</span>
-      <span className={`${s.num} ${s.col6}`}>{entry.questions.toLocaleString()}</span>
     </div>
   )
 }
@@ -249,7 +258,6 @@ function MeCard({ me, board, period }) {
         <Level entry={me} />
         <span className={s.num}>{me.xp.toLocaleString()}</span>
         <span className={`${s.num} ${s.col5}`}>{me.accuracy == null ? '—' : `${me.accuracy}%`}</span>
-        <span className={`${s.num} ${s.col6}`}>{me.questions.toLocaleString()}</span>
       </div>
     </div>
   )
@@ -274,17 +282,16 @@ function GuestCard() {
   )
 }
 
-export function Board({ board, me, isGuest, period, loading, error, fallback, onRetry, emptyText }) {
+export function Board({ board, me, isGuest, scope, period, loading, error, fallback, onRetry, emptyText }) {
   const meInList = board.some(e => e.is_me)
   return (
     <section className={s.board} aria-label="Rankings" aria-busy={loading}>
       <div className={s.cols} aria-hidden="true">
         <span style={{ textAlign: 'center' }}>#</span>
         <span>Student</span>
-        <span>Level</span>
+        <span className={s.colLevel}>Level</span>
         <span>XP</span>
         <span className={s.col5}>Avg. Score</span>
-        <span className={s.col6}>Questions</span>
       </div>
 
       {isGuest ? <GuestCard /> : me && <MeCard me={me} board={board} period={period} />}
@@ -311,11 +318,11 @@ export function Board({ board, me, isGuest, period, loading, error, fallback, on
         </div>
       ) : (
         <ol className={s.list}>
-          {board.map(entry => <li key={entry.student_id}><Row entry={entry} /></li>)}
+          {board.map(entry => <li key={entry.student_id}><Row entry={entry} scope={scope} /></li>)}
           {!meInList && me?.rank && (
             <>
               <li className={s.gap} aria-hidden="true">•••</li>
-              <li><Row entry={me} /></li>
+              <li><Row entry={me} scope={scope} /></li>
             </>
           )}
         </ol>
@@ -344,7 +351,7 @@ export function InviteBanner() {
   const [copied, setCopied] = useState(false)
   return (
     <button type="button" className={s.invite} onClick={() => shareInvite(() => { setCopied(true); setTimeout(() => setCopied(false), 2800) })}>
-      <Kids />
+      {INVITE_IMAGE ? <img src={INVITE_IMAGE} alt="" width={104} height={58} style={{ objectFit: 'contain', flexShrink: 0 }} /> : <Kids />}
       <span aria-live="polite">{copied ? 'Invite copied. Send it to your friends!' : 'Invite friends to climb the leaderboard together!'}</span>
       <span className={s.inviteArrow}><ArrowRight size={20} /></span>
     </button>

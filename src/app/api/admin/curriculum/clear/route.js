@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 const service = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -9,6 +10,9 @@ const service = () => createServiceClient(
 
 // GET — preview what will be deleted
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')
   if (!subjectId) return NextResponse.json({ error: 'subjectId required' }, { status: 400 })
@@ -34,6 +38,9 @@ export async function GET(request) {
 
 // DELETE — clear all topics + subtopics for a subject
 export async function DELETE(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

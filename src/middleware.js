@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server'
+import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/adminSession'
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl
+
+  // ── Admin API: one gate for every /api/admin/* route ──────────────────────
+  // Every admin endpoint uses the service-role key, so none may be reachable
+  // without a valid signed admin session. Guarding here means a new route can't
+  // ship unprotected by accident. /api/admin/auth is the login itself.
+  if (pathname.startsWith('/api/admin')) {
+    if (pathname === '/api/admin/auth') return NextResponse.next()
+    const token = request.cookies.get(ADMIN_COOKIE)?.value
+    if (await verifyAdminToken(token)) return NextResponse.next()
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   // ── Route classification ──────────────────────────────────────────────────
   // /student/* is intentionally guest-accessible — the layout handles the
@@ -9,6 +21,7 @@ export async function middleware(request) {
   // because middleware runs server-side and cannot read localStorage.
   //
   // /admin, /reviewer, /school are staff-only and DO require a real session.
+  // (The admin layout additionally verifies the signed admin cookie.)
   const requiresRealSession =
     pathname.startsWith('/admin') ||
     pathname.startsWith('/reviewer') ||
@@ -23,7 +36,6 @@ export async function middleware(request) {
   //   sb-<project-ref>-auth-token
   // On large tokens it chunks into:
   //   sb-<project-ref>-auth-token.0, .1, …
-  // The old v1 name 'sb-access-token' no longer exists in v2 projects.
   const hasSession = request.cookies.getAll().some(c =>
     c.name.startsWith('sb-') && c.name.includes('auth-token')
   )
@@ -45,5 +57,6 @@ export const config = {
     '/admin/:path*',
     '/reviewer/:path*',
     '/school/:path*',
+    '/api/admin/:path*',
   ],
 }

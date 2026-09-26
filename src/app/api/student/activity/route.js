@@ -1,11 +1,11 @@
-// src/app/api/student/activity/route.js — v2
+// src/app/api/student/activity/route.js — v3
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/student/activity?period=week|month
 //
 // Daily question counts + headline stats for the signed-in student.
 //
-//   week  (default) → Monday 00:00 → now, 7 buckets Mon–Sun
-//   month           → 1st of this month → now, one bucket per day so far
+//   week  (default) → Monday → today, 7 buckets Mon–Sun
+//   month           → 1st of this month → today, one bucket per day so far
 //
 // Response:
 // {
@@ -14,30 +14,18 @@
 //   stats:  { questions_answered, accuracy, time_spent_secs, streak_days, xp_earned }
 // }
 //
-// v2: honours `period` (v1 accepted it but always returned the week) and adds
-// time_spent_secs, summed from practice_sessions.duration_secs.
+// v3: reads student_daily_stats (≤ 31 rows) instead of every raw answer, and
+// uses Nigerian calendar days so buckets line up with the student's own day.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient }              from '@/lib/supabase/server'
-import { createClient as svcClient } from '@supabase/supabase-js'
-import { NextResponse }              from 'next/server'
-
-const db = () => svcClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { createClient }  from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { NextResponse }  from 'next/server'
+import { appDay, addDays, mondayOfDay, monthStartOfDay, startOfAppDay } from '@/lib/dates'
+import { effectiveStreak } from '@/lib/streak'
 
 const PERIODS    = new Set(['week', 'month'])
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const DAY_MS     = 86_400_000
-
-function rangeStartFor(period, now = new Date()) {
-  const start = new Date(now)
-  if (period === 'month') start.setDate(1)
-  else start.setDate(now.getDate() - ((now.getDay() + 6) % 7))   // back to Monday
-  start.setHours(0, 0, 0, 0)
-  return start
-}
 
 export async function GET(request) {
   try {
@@ -45,57 +33,48 @@ export async function GET(request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { searchParams } = new URL(request.url)
-    const requested = searchParams.get('period') ?? 'week'
+    const requested = new URL(request.url).searchParams.get('period') ?? 'week'
     const period    = PERIODS.has(requested) ? requested : 'week'
 
-    const service    = db()
-    const rangeEnd   = new Date()
-    const rangeStart = rangeStartFor(period, rangeEnd)
-    const from = rangeStart.toISOString()
-    const to   = rangeEnd.toISOString()
+    const today   = appDay()
+    const fromDay = period === 'month' ? monthStartOfDay(today) : mondayOfDay(today)
+    const lastDay = period === 'week' ? addDays(fromDay, 6) : today
 
-    const [attemptsRes, sessionsRes, profileRes] = await Promise.all([
-      service.from('question_attempts')
-        .select('created_at, is_correct')
+    const db = supabaseAdmin()
+    const [daysRes, sessionsRes, profileRes] = await Promise.all([
+      db.from('student_daily_stats')
+        .select('day, answered, correct')
         .eq('student_id', user.id)
-        .gte('created_at', from).lte('created_at', to),
-      service.from('practice_sessions')
+        .gte('day', fromDay).lte('day', today),
+      db.from('practice_sessions')
         .select('duration_secs')
         .eq('student_id', user.id)
-        .gte('created_at', from).lte('created_at', to),
-      service.from('profiles')
-        .select('total_points, streak_days')
+        .gte('created_at', startOfAppDay(fromDay).toISOString()),
+      db.from('profiles')
+        .select('total_points, streak_days, last_active_date')
         .eq('id', user.id)
         .single(),
     ])
+    if (daysRes.error) throw daysRes.error
 
-    // ── Buckets ──────────────────────────────────────────────────────────────
-    const bucketCount = period === 'week'
-      ? 7
-      : Math.floor((rangeEnd - rangeStart) / DAY_MS) + 1
-    const counts = new Array(bucketCount).fill(0)
-
+    const byDay = new Map((daysRes.data ?? []).map(d => [String(d.day).slice(0, 10), d]))
+    const days = []
     let answered = 0
     let correct  = 0
-    for (const a of attemptsRes.data ?? []) {
-      const idx = Math.floor((new Date(a.created_at) - rangeStart) / DAY_MS)
-      if (idx >= 0 && idx < bucketCount) counts[idx]++
-      answered++
-      if (a.is_correct) correct++
+    for (let day = fromDay, i = 0; day <= lastDay; day = addDays(day, 1), i++) {
+      const row = byDay.get(day)
+      const count = Number(row?.answered) || 0
+      answered += count
+      correct  += Number(row?.correct) || 0
+      days.push({
+        date:  day,
+        label: period === 'week' ? DAY_LABELS[i] : String(Number(day.slice(8, 10))),
+        count,
+      })
     }
 
-    const days = counts.map((count, i) => {
-      const d = new Date(rangeStart.getTime() + i * DAY_MS)
-      return {
-        date:  d.toISOString().slice(0, 10),
-        label: period === 'week' ? DAY_LABELS[i] : String(d.getDate()),
-        count,
-      }
-    })
-
-    // A missing practice_sessions table or column shouldn't take the whole
-    // response down — time spent just reads as zero.
+    // A missing practice_sessions column shouldn't take the response down —
+    // time spent just reads as zero.
     const timeSpentSecs = (sessionsRes.error ? [] : sessionsRes.data ?? [])
       .reduce((sum, s) => sum + (Number(s.duration_secs) || 0), 0)
 
@@ -106,13 +85,13 @@ export async function GET(request) {
         questions_answered: answered,
         accuracy:           answered > 0 ? Math.round((correct / answered) * 100) : 0,
         time_spent_secs:    timeSpentSecs,
-        streak_days:        profileRes.data?.streak_days  ?? 0,
+        streak_days:        effectiveStreak(profileRes.data, today),
         xp_earned:          profileRes.data?.total_points ?? 0,
       },
     }, { headers: { 'Cache-Control': 'private, max-age=120' } })
 
   } catch (err) {
-    console.error('[student/activity] unexpected error:', err)
+    console.error('[student/activity] error:', err?.message ?? err)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

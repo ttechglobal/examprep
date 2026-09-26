@@ -149,84 +149,118 @@ function Spinner() {
   return <div style={{ width:28, height:28, borderRadius:'50%', border:'3px solid rgba(255,255,255,.15)', borderTopColor:'#fff', animation:'spin .7s linear infinite', margin:'20px auto' }}/>
 }
 
+// ── Exams ─────────────────────────────────────────────────────────────────────
+const STEPS = 4
+const EXAMS = [
+  { v:'WAEC', label:'WAEC', desc:'West African Senior School Certificate' },
+  { v:'JAMB', label:'JAMB', desc:'UTME · University admission' },
+]
+
+// Exam logo slot. Drop the real logos at public/images/waec-logo.png and
+// public/images/jamb-logo.png (the same files the mock exam uses). Until a
+// file exists, a clean initials badge shows instead.
+const EXAM_COLORS = { WAEC: '#16A34A', JAMB: '#7C3AED' }
+function ExamLogo({ exam, size = 56 }) {
+  const [failed, setFailed] = useState(false)
+  const color = EXAM_COLORS[exam] ?? '#1264E5'
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:size * 0.28, flexShrink:0,
+      background:'#fff', display:'flex', alignItems:'center', justifyContent:'center',
+      overflow:'hidden', padding: failed ? 0 : size * 0.1,
+      boxShadow:'0 3px 0 rgba(0,0,0,.25)',
+    }}>
+      {failed
+        ? <span style={{ fontSize:size * 0.26, fontWeight:900, color, letterSpacing:'-.02em' }}>{exam}</span>
+        : <img src={`/images/${exam.toLowerCase()}-logo.png`} alt={`${exam} logo`}
+            onError={() => setFailed(true)}
+            style={{ width:'100%', height:'100%', objectFit:'contain' }}/>}
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function BattleSetupPage() {
   const router = useRouter()
 
+  // Flow: exam → subject → battle mode (random / topic) → match settings.
+  const [exam,      setExam]      = useState(null)
   const [subjects,  setSubjects]  = useState([])
   const [topics,    setTopics]    = useState([])
-  const [loadingS,  setLoadingS]  = useState(true)
+  const [loadingS,  setLoadingS]  = useState(false)
   const [loadingT,  setLoadingT]  = useState(false)
   const [subject,   setSubject]   = useState(null)
   const [qSet,      setQSet]      = useState(null)
   const [topic,     setTopic]     = useState(null)
   const [count,     setCount]     = useState(10)
-  const [timerOn,   setTimerOn]   = useState(false)
+  const [timerOn,   setTimerOn]   = useState(true)   // on by default — most students never found the toggle
   const [timerSec,  setTimerSec]  = useState(30)
-  const [exam,      setExam]      = useState('WAEC')
-  const [step,      setStep]      = useState('subject')
+  const [step,      setStep]      = useState('exam')
   const [xp,        setXp]        = useState(null)
 
-  // Load subjects — shared cache first (ep_subject_ids in localStorage), then API.
-  // Uses the same cache that practice/page.js writes, so if the student came from
-  // the practice page first, subjects are already cached and load instantly here
-  // with real UUIDs — no network call needed.
+  // Pre-select the profile's main exam, and load battle XP for the header.
   useEffect(() => {
-    const currentExam = getLocalExamType() || 'WAEC'
-    setExam(currentExam)
-    const localNames  = getLocalSubjects(currentExam)  // string[] from localProfile
+    setExam(getLocalExamType() || 'WAEC')
+    fetch('/api/student/battle/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.stats?.total_battle_xp != null) setXp(d.stats.total_battle_xp) })
+      .catch(() => {})
+  }, [])
 
-    if (!localNames?.length) { setLoadingS(false); return }
+  function chooseExam(v) {
+    if (v === exam) return
+    setExam(v)
+    setSubject(null); setQSet(null); setTopic(null); setTopics([])
+  }
 
-    // 1. Check shared localStorage cache first
-    const cached = readSubjectIdCache(currentExam)
+  // Load the chosen exam's subjects — shared cache first (ep_subject_ids in
+  // localStorage, also written by the practice page), then the API. Subject
+  // ids differ per exam, so the list always matches the exam picked above.
+  useEffect(() => {
+    if (!exam) return
+    let cancelled = false
+    const localNames = getLocalSubjects(exam)
+    if (!localNames?.length) { setSubjects([]); setSubject(null); setLoadingS(false); return }
+
+    const cached = readSubjectIdCache(exam)
     if (cached?.length) {
       const cachedNames = new Set(cached.map(s => s.name))
-      // Only use cache if it covers all the student's current subjects
       if (localNames.every(n => cachedNames.has(n))) {
-        setSubjects(cached)
-        setSubject(cached[0] ?? null)
+        const rows = localNames.map(n => cached.find(s => s.name === n)).filter(Boolean)
+        setSubjects(rows)
+        setSubject(prev => rows.find(r => r.name === prev?.name) ?? rows[0] ?? null)
         setLoadingS(false)
-        // Fetch battle stats in background — doesn't block subject display
-        fetch('/api/student/battle/stats')
-          .then(r => r.ok ? r.json() : null)
-          .then(d => { if (d?.stats?.total_battle_xp != null) setXp(d.stats.total_battle_xp) })
-          .catch(() => {})
         return
       }
     }
 
-    // 2. Cache miss — fetch real UUIDs from API, then cache for next time.
-    // Show name-only stubs while fetching so UI is never blank.
-    const stubs = localNames.map(n => ({ id: null, name: n }))
-    setSubjects(stubs)
-
-    Promise.all([
-      fetch(`/api/student/subjects?exam=${currentExam}&names=${encodeURIComponent(localNames.join(','))}`)
-        .then(r => r.ok ? r.json() : null),
-      fetch('/api/student/battle/stats')
-        .then(r => r.ok ? r.json() : null),
-    ]).then(([subjectData, statsData]) => {
-      if (Array.isArray(subjectData) && subjectData.length) {
-        const rows = subjectData.map(s => ({ id: s.id, name: s.name }))
-        writeSubjectIdCache(currentExam, rows)
+    // Cache miss — show name-only stubs while real ids load, so the UI is never blank.
+    setSubjects(localNames.map(n => ({ id: null, name: n })))
+    setSubject(null)
+    setLoadingS(true)
+    fetch(`/api/student/subjects?exam=${exam}&names=${encodeURIComponent(localNames.join(','))}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !Array.isArray(data) || !data.length) return
+        const rows = data.map(s => ({ id: s.id, name: s.name }))
+        writeSubjectIdCache(exam, rows)
         setSubjects(rows)
         setSubject(rows[0] ?? null)
-      }
-      if (statsData?.stats?.total_battle_xp != null) setXp(statsData.stats.total_battle_xp)
-    }).catch(() => {}).finally(() => setLoadingS(false))
-  }, [])
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingS(false) })
+    return () => { cancelled = true }
+  }, [exam])
 
-  // Load topics — fires whenever subject ID changes (pre-fetch so topics are
-  // ready before the user clicks Topic Drill). Matches practice page pattern.
-  // Cached in localStorage for 24h with stale-while-revalidate.
+  // Load topics for the chosen subject + exam (pre-fetched so Topic Drill is
+  // instant). Cached in localStorage for 24h with stale-while-revalidate.
   useEffect(() => {
-    if (!subject?.id) return
-    const exam     = getLocalExamType() || 'WAEC'
+    if (!subject?.id || !exam) return
     const cacheKey = `battle_topics_${subject.id}_${exam}`
     const TTL      = 24 * 60 * 60 * 1000
+    const url      = `/api/student/topics?subject_id=${subject.id}&exam=${exam}`
+    const save     = d => { try { localStorage.setItem(cacheKey, JSON.stringify({ topics: d, ts: Date.now() })) } catch {} }
 
-    // Serve from cache immediately if fresh
     try {
       const raw = localStorage.getItem(cacheKey)
       if (raw) {
@@ -234,68 +268,30 @@ export default function BattleSetupPage() {
         if (Array.isArray(cached) && cached.length && Date.now() - ts < TTL) {
           setTopics(cached)
           setLoadingT(false)
-          // Revalidate silently in background
-          fetch(`/api/student/topics?subject_id=${subject.id}&exam=${exam}`)
-            .then(r => r.ok ? r.json() : null)
-            .then(d => {
-              if (Array.isArray(d) && d.length) {
-                setTopics(d)
-                try { localStorage.setItem(cacheKey, JSON.stringify({ topics: d, ts: Date.now() })) } catch {}
-              }
-            }).catch(() => {})
+          fetch(url).then(r => r.ok ? r.json() : null)
+            .then(d => { if (Array.isArray(d) && d.length) { setTopics(d); save(d) } })
+            .catch(() => {})
           return
         }
       }
     } catch {}
 
-    // No valid cache — fetch fresh
     setLoadingT(true)
     setTopics([])
-    fetch(`/api/student/topics?subject_id=${subject.id}&exam=${exam}`)
+    fetch(url)
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (Array.isArray(d) && d.length) {
-          setTopics(d)
-          try { localStorage.setItem(cacheKey, JSON.stringify({ topics: d, ts: Date.now() })) } catch {}
-        }
-      })
-      .catch(() => {}).finally(() => setLoadingT(false))
-  }, [subject?.id])
+      .then(d => { if (Array.isArray(d) && d.length) { setTopics(d); save(d) } })
+      .catch(() => {})
+      .finally(() => setLoadingT(false))
+  }, [subject?.id, exam])
 
-  async function handleStart() {
-    // The subjects list is loaded once at mount using the profile's primary exam type.
-    // If the student switches exam in Step 3 (e.g. profile is WAEC but they pick JAMB),
-    // subject.id is the UUID for the wrong exam — the questions API would return nothing.
-    // Re-resolve the correct UUID for the chosen exam before writing battle_config.
-    let resolvedSubjectId = subject.id
-
-    // 1. Check the shared subject-ID cache first (same cache used by practice page)
-    const cached = readSubjectIdCache(exam)
-    if (cached?.length) {
-      const match = cached.find(s => s.name === subject.name)
-      if (match?.id) resolvedSubjectId = match.id
-    }
-
-    // 2. If cache missed (different exam from profile's primary, never cached),
-    //    do a single fast API call to get the right UUID.
-    if (resolvedSubjectId === subject.id && exam !== getLocalExamType()) {
-      try {
-        const res  = await fetch(`/api/student/subjects?exam=${exam}&names=${encodeURIComponent(subject.name)}`)
-        const rows = res.ok ? await res.json() : []
-        if (Array.isArray(rows) && rows.length) {
-          resolvedSubjectId = rows[0].id ?? subject.id
-          // Cache the result so the next battle is instant
-          writeSubjectIdCache(exam, rows.map(r => ({ id: r.id, name: r.name })))
-        }
-      } catch {
-        // Non-fatal: fall through with the original ID — session will surface an empty-questions error
-      }
-    }
-
+  function handleStart() {
+    // Exam is chosen first and subjects are loaded for that exam, so the
+    // subject id already belongs to the right exam — no re-resolving needed.
     const config = {
       opponent:'computer',
       exam,
-      subject_id: resolvedSubjectId, subject_name: subject.name,
+      subject_id: subject.id, subject_name: subject.name,
       questionSet: qSet,
       topic_id:   qSet === 'topic' ? topic?.id   : null,
       topic_name: qSet === 'topic' ? topic?.name : null,
@@ -305,20 +301,86 @@ export default function BattleSetupPage() {
     router.push('/student/battle/session')
   }
 
-  // ── STEP 1: SUBJECT SELECTION ──────────────────────────────────────────────
+  // ── STEP 1: EXAM SELECTION ─────────────────────────────────────────────────
+  if (step === 'exam') return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <style>{`.ecard{transition:transform .12s} .ecard:hover{transform:translateY(-3px)} .ecard:active{transform:translateY(2px)}`}</style>
+      <BattleBg/>
+      <GameNav onBack={() => router.push('/student/battle')} backLabel="Battle" title="Choose Exam" xp={xp}/>
+      <StepBar current={0} total={STEPS}/>
+
+      <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
+        <div style={{ maxWidth:860, margin:'0 auto', padding:'20px 24px 0' }}>
+          <Panel>
+            <SectionLabel>Which exam are you battling for?</SectionLabel>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
+              {EXAMS.map(({ v, label, desc }) => {
+                const sel = exam === v
+                const n   = getLocalSubjects(v).length
+                return (
+                  <button key={v} className="ecard"
+                    onClick={() => chooseExam(v)}
+                    style={{
+                      border:`2.5px solid ${sel ? GOLD : 'rgba(255,255,255,.12)'}`,
+                      borderRadius:20, padding:0, background:'none', cursor:'pointer', outline:'none',
+                      boxShadow: sel ? `0 6px 0 rgba(0,0,0,.3), 0 0 0 2px ${GOLD}44` : '0 5px 0 rgba(0,0,0,.2)',
+                    }}>
+                    <div style={{
+                      background: sel ? `linear-gradient(135deg,${NAVY},#1264E5)` : 'rgba(255,255,255,.08)',
+                      borderRadius:17, padding:'18px 16px', display:'flex', alignItems:'center', gap:14,
+                      position:'relative', overflow:'hidden', textAlign:'left',
+                    }}>
+                      <ExamLogo exam={v} size={60}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:18, fontWeight:900, color:'#fff', letterSpacing:'-.01em' }}>{label}</div>
+                        <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:3, lineHeight:1.35 }}>{desc}</div>
+                        <div style={{ fontSize:10, fontWeight:800, color: n ? '#FCD34D' : 'rgba(255,255,255,.4)', marginTop:6 }}>
+                          {n ? `${n} subject${n === 1 ? '' : 's'} on your profile` : 'No subjects added yet'}
+                        </div>
+                      </div>
+                      {sel && (
+                        <div style={{ position:'absolute', top:10, right:10, width:22, height:22, borderRadius:'50%', background:GOLD, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke={NAVY} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      <BottomCTA label="Continue →" onClick={() => setStep('subject')} disabled={!exam}/>
+    </div>
+  )
+
+  // ── STEP 2: SUBJECT SELECTION ──────────────────────────────────────────────
   if (step === 'subject') return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .scard{transition:transform .12s,box-shadow .12s} .scard:hover{transform:translateY(-3px)} .scard:active{transform:translateY(2px)}`}</style>
       <BattleBg/>
-      <GameNav onBack={() => router.push('/student/battle')} backLabel="Battle" title="Choose Subject" xp={xp}/>
-      <StepBar current={0} total={3}/>
+      <GameNav onBack={() => setStep('exam')} backLabel="Exam" title="Choose Subject" xp={xp}/>
+      <StepBar current={1} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
         <div style={{ maxWidth:860, margin:'0 auto', padding:'20px 24px 0' }}>
 
           <Panel>
-            <SectionLabel>Your Subjects</SectionLabel>
-            {loadingS ? <Spinner/> : (
+            <SectionLabel>Your {exam} Subjects</SectionLabel>
+            {loadingS ? <Spinner/> : subjects.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'22px 8px' }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>No {exam} subjects yet</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,.55)', marginTop:6, lineHeight:1.5 }}>
+                  Add your {exam} subjects on your profile, or go back and pick another exam.
+                </div>
+                <button onClick={() => router.push('/student/profile')}
+                  style={{ marginTop:14, border:'1.5px solid rgba(255,255,255,.25)', background:'rgba(255,255,255,.1)', color:'#fff', borderRadius:12, padding:'9px 16px', fontSize:12, fontWeight:800, fontFamily:'inherit', cursor:'pointer' }}>
+                  Go to profile
+                </button>
+              </div>
+            ) : (
               <div style={{
                 display:'grid',
                 gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))',
@@ -380,17 +442,17 @@ export default function BattleSetupPage() {
         </div>
       </div>
 
-      <BottomCTA label="Continue →" onClick={() => { setQSet(null); setTopic(null); setStep('missions') }} disabled={!subject}/>
+      <BottomCTA label="Continue →" onClick={() => { setQSet(null); setTopic(null); setStep('missions') }} disabled={!subject?.id}/>
     </div>
   )
 
-  // ── STEP 2: MISSION SELECTION ──────────────────────────────────────────────
+  // ── STEP 3: MISSION SELECTION ──────────────────────────────────────────────
   if (step === 'missions') return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .mcard{transition:transform .12s} .mcard:hover{transform:translateY(-2px)} .mcard:active{transform:translateY(1px)} .trow{transition:background .1s} .trow:hover{filter:brightness(1.06)}`}</style>
       <BattleBg/>
       <GameNav onBack={() => setStep('subject')} backLabel="Subjects" title="Pick Mission" xp={xp}/>
-      <StepBar current={1} total={3}/>
+      <StepBar current={2} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
         <div style={{ maxWidth:860, margin:'0 auto', padding:'20px 24px 0' }}>
@@ -401,7 +463,7 @@ export default function BattleSetupPage() {
               <span style={{ fontSize:24 }}>{getStyle(subject.name).icon}</span>
               <div>
                 <div style={{ fontSize:15, fontWeight:900, color:'#fff' }}>{subject.name}</div>
-                <div style={{ fontSize:11, color:'rgba(255,255,255,.65)' }}>Choose your battle mode</div>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,.65)' }}>{exam} · Choose your battle mode</div>
               </div>
             </div>
 
@@ -471,13 +533,13 @@ export default function BattleSetupPage() {
     </div>
   )
 
-  // ── STEP 3: CONFIG (Count + Timer + Match Preview) ─────────────────────────
+  // ── STEP 4: MATCH SETTINGS (count + timer) ─────────────────────────────────
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <BattleBg/>
       <GameNav onBack={() => setStep('missions')} backLabel="Mission" title="Match Settings" xp={xp}/>
-      <StepBar current={2} total={3}/>
+      <StepBar current={3} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
         <div style={{ maxWidth:860, margin:'0 auto', padding:'20px 24px 0', display:'flex', flexDirection:'column', gap:14 }}>
@@ -531,45 +593,16 @@ export default function BattleSetupPage() {
             )}
           </Panel>
 
-          {/* Choose Exam panel */}
-          <Panel>
-            <SectionLabel>Choose Exam</SectionLabel>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              {[
-                { v:'WAEC', icon:'📝', label:'WAEC',  desc:'West African Examinations' },
-                { v:'JAMB', icon:'🏫', label:'JAMB',  desc:'Unified Tertiary Admissions' },
-              ].map(({ v, icon, label, desc }) => {
-                const sel = exam === v
-                return (
-                  <button key={v}
-                    onClick={() => setExam(v)}
-                    style={{
-                      border:`2.5px solid ${sel ? GOLD : 'rgba(255,255,255,.12)'}`,
-                      borderRadius:16, padding:0, background:'none', cursor:'pointer', outline:'none',
-                      boxShadow: sel ? `0 5px 0 rgba(0,0,0,.3), 0 0 0 2px ${GOLD}44` : '0 4px 0 rgba(0,0,0,.18)',
-                      transition:'box-shadow .15s, border-color .15s',
-                    }}>
-                    <div style={{
-                      background: sel ? `linear-gradient(135deg,${GOLD},#FBBF24)` : 'rgba(255,255,255,.08)',
-                      borderRadius:13, padding:'16px 14px',
-                      display:'flex', flexDirection:'column', alignItems:'flex-start',
-                      position:'relative', overflow:'hidden',
-                    }}>
-                      {/* Sheen on selected */}
-                      {sel && <div style={{ position:'absolute', top:0, left:0, right:0, height:'40%', background:'linear-gradient(to bottom,rgba(255,255,255,.18),transparent)', pointerEvents:'none' }}/>}
-                      {/* Check badge */}
-                      {sel && (
-                        <div style={{ position:'absolute', top:8, right:8, width:20, height:20, borderRadius:'50%', background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', zIndex:5 }}>
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </div>
-                      )}
-                      <div style={{ fontSize:26, marginBottom:8, position:'relative', zIndex:1 }}>{icon}</div>
-                      <div style={{ fontSize:16, fontWeight:900, color: sel ? NAVY : '#fff', position:'relative', zIndex:1, letterSpacing:'-.01em' }}>{label}</div>
-                      <div style={{ fontSize:10, color: sel ? 'rgba(6,42,120,.65)' : 'rgba(255,255,255,.48)', marginTop:3, position:'relative', zIndex:1, lineHeight:1.3 }}>{desc}</div>
-                    </div>
-                  </button>
-                )
-              })}
+          {/* Match summary */}
+          <Panel style={{ padding:'14px 18px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <ExamLogo exam={exam} size={40}/>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:900, color:'#fff' }}>{exam} · {subject?.name}</div>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:2 }}>
+                  {qSet === 'topic' ? `Topic Drill · ${topic?.name ?? ''}` : 'Random Mix'} · vs Computer
+                </div>
+              </div>
             </div>
           </Panel>
 

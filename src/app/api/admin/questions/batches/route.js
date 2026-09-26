@@ -5,6 +5,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 const svc = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -12,6 +13,9 @@ const svc = () => createServiceClient(
 )
 
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

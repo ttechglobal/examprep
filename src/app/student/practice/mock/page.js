@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
+import { computeSessionXP } from '@/lib/xp'
 
 import { BLUE, CYAN, GREEN, RED, ORANGE, NAVY, PURPLE, pct, msToSecs } from '@/components/session/SessionUtils'
 import { LoadingScreen, ErrorScreen, EndDialog, SessionTimer } from '@/components/session/SessionPrimitives'
@@ -365,8 +366,7 @@ export default function MockPage() {
       : sessionSubjects.flatMap((_,i) => (subjectQs[i]??[]).map((q,j) => answerMaps[i]?.[j] ?? { question_id:q.id, topic_id:q.topic_id, subject_id:q.subject_id, topic_name:q.topic_name||'', subject_name:q.subject_name||'', isCorrect:false, is_correct:false, selectedIdx:null, time_taken_ms:0 }))
     const correctCount = results.filter(r => r.is_correct).length
     const payload = { session_id:sessionIdRef.current, exam:examType, mode:'mock', subject_name:examType==='WAEC'?(config?.activeSubject??'WAEC'):'JAMB Mock', results, duration_secs:durationSecs, questions_count:results.length, correct_count:correctCount }
-    const acc = results.length > 0 ? Math.round(correctCount/results.length*100) : 0
-    const localXP = Math.max(10, results.filter(r=>r.selectedIdx!=null).length*5 + correctCount*10 + (acc>=80?100:acc>=60?50:0))
+    const localXP = computeSessionXP('mock', results)
     saveSessionLocally(payload, localXP)
     setTotalPoints((currentXP||0)+localXP)
     showXPToast(localXP, 'Mock exam complete!')

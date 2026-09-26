@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/adminAuth'
 
 function svc() {
   return createServiceClient(
@@ -29,6 +30,9 @@ function slugify(str) {
 }
 
 export async function PATCH(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   let body
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })

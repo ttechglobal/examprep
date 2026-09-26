@@ -5,6 +5,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 const VALID_EXAMS = ['WAEC', 'JAMB', 'IGCSE']
 
@@ -14,6 +15,9 @@ const service = () => createServiceClient(
 )
 
 export async function GET() {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const db = service()
   const { data, error } = await db
     .from('subjects')
@@ -44,6 +48,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

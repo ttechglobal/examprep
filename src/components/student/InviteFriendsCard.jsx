@@ -7,7 +7,11 @@ import { useState } from 'react'
 const BLUE  = '#1264E5'
 const GREEN = '#22c55e'
 
-const inviteText = `🎯 I'm building my WAEC & JAMB knowledge on ExamPrep — one practice session at a time.\n\nEvery question earns XP. Every XP climbs the leaderboard. Come practice with me and let's see who comes out on top 👊\n\n👉 examprep.ng`
+// Where invites send people. Change this one value to update every invite.
+// TODO: replace with the correct sign-up URL.
+export const INVITE_URL = 'https://examprep.ng'
+
+const inviteText = `🎯 I'm building my WAEC & JAMB knowledge on ExamPrep — one practice session at a time.\n\nEvery question earns XP. Every XP climbs the leaderboard. Come practice with me and let's see who comes out on top 👊\n\n👉 ${INVITE_URL}`
 
 /**
  * Opens the native share sheet, or copies the invite to the clipboard where
@@ -16,7 +20,7 @@ const inviteText = `🎯 I'm building my WAEC & JAMB knowledge on ExamPrep — o
 export function shareInvite(onCopied) {
   if (typeof navigator === 'undefined') return
   if (navigator.share) {
-    navigator.share({ title: 'Practice with me on ExamPrep', text: inviteText, url: 'https://examprep.ng' }).catch(() => {})
+    navigator.share({ title: 'Practice with me on ExamPrep', text: inviteText, url: INVITE_URL }).catch(() => {})
   } else if (navigator.clipboard) {
     navigator.clipboard.writeText(inviteText).then(() => onCopied?.()).catch(() => {})
   }

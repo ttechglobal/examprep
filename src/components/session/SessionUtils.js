@@ -10,17 +10,8 @@ export const GOLD   = '#FFB800'
 export const ORANGE = '#FF6A00'
 export const PURPLE = '#7c3aed'
 
-export const LETTERS = ['A','B','C','D','E']
+export { LETTERS, normaliseOptions, checkCorrect } from '@/lib/answers'
 
 export function pct(a, b)    { return b > 0 ? Math.round((a / b) * 100) : 0 }
 export function msToSecs(ms) { return Math.round(ms / 1000) }
 
-export function normaliseOptions(raw) {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  return LETTERS.map(l => raw[l]).filter(v => v != null)
-}
-
-export function checkCorrect(options, idx, correctAnswer) {
-  return options[idx] === correctAnswer || LETTERS[idx] === correctAnswer || idx === correctAnswer
-}

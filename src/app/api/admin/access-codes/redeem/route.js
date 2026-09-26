@@ -6,6 +6,7 @@
 import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 function svc() {
   return svcClient(
@@ -15,6 +16,9 @@ function svc() {
 }
 
 export async function POST(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Login required to redeem a code' }, { status: 401 })
@@ -80,6 +84,9 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')?.trim().toUpperCase()
   if (!code) return NextResponse.json({ valid: false, error: 'No code provided' })

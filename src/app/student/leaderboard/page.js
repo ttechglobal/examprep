@@ -91,6 +91,7 @@ export default function LeaderboardPage() {
         board={board.leaderboard}
         me={board.me}
         isGuest={isGuest}
+        scope={scope}
         period={period}
         loading={!ready || board.loading}
         error={board.error}

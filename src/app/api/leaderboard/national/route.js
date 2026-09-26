@@ -11,15 +11,12 @@
 // Response: { scope, period, window, leaderboard, me, fallback }
 // Rows are built by lib/leaderboard/server.js.
 
-import { createClient }              from '@/lib/supabase/server'
-import { createClient as svcClient } from '@supabase/supabase-js'
-import { NextResponse }              from 'next/server'
+import { createClient }  from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { NextResponse }  from 'next/server'
 import { buildLeaderboard, parseBoardParams } from '@/lib/leaderboard/server'
 
-const db = () => svcClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+const db = supabaseAdmin
 
 export async function GET(request) {
   try {
@@ -32,7 +29,7 @@ export async function GET(request) {
       callerId = user?.id ?? null
     } catch { /* guest */ }
 
-    const result = await buildLeaderboard(db(), { ...params, callerId })
+    const result = await buildLeaderboard(db(), { ...params, callerId, cacheKey: 'national' })
 
     // A response containing `me` is personal and must never be shared by a CDN.
     const cache = callerId

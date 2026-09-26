@@ -277,11 +277,12 @@ export function SubjectsSheet({ profile, isGuest, onClose, onSaved, initialExam 
     }
 
     setLoadingSubjs(true)
-    fetch(`/api/admin/subjects`)
-      .then(r => r.json())
+    fetch(`/api/student/subjects?catalog=1&exam=${encodeURIComponent(currentExam)}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(d => {
-        const raw = Array.isArray(d) ? d : (d.subjects ?? [])
-        const filtered = raw.filter(s => s.exam_type === currentExam && s.is_active !== false)
+        const raw = Array.isArray(d) ? d : []
+        if (!raw.length) throw new Error('empty catalog')
+        const filtered = raw.filter(s => s.exam_type === currentExam)
         const seen = new Set()
         const names = []
         for (const s of filtered) {

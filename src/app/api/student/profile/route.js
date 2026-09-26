@@ -6,6 +6,7 @@ import { createClient }              from '@/lib/supabase/server'
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
 import { normalizePhone, phoneVariants } from '@/lib/auth/phone'
+import { effectiveStreak } from '@/lib/streak'
 
 const db = () => svcClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -24,7 +25,7 @@ const SELECT_COLS_SAFE = [
 ].join(', ')
 
 // Extended columns added by migration (may not exist yet).
-const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at, phone_number, student_school_name, parent_email'
+const SELECT_COLS_EXT = SELECT_COLS_SAFE + ', last_active_date, exam_types, subjects_waec, subjects_jamb, onboarded, plan, plan_expires_at, phone_number, student_school_name, parent_email'
 
 // Try extended select; fall back to safe if the DB rejects unknown columns.
 async function selectProfile(db, userId) {
@@ -61,7 +62,10 @@ export async function GET() {
 
   const { data, error } = await selectProfile(db(), user.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[student/profile] GET:', error.message)
+    return NextResponse.json({ error: 'Could not load profile' }, { status: 500 })
+  }
 
   // Normalise missing columns so clients always get the same shape
   const examType = data.exam_types?.[0] ?? data.exam_type ?? 'WAEC'
@@ -78,6 +82,8 @@ export async function GET() {
     phone_number:       data.phone_number       ?? null,
     student_school_name: data.student_school_name ?? null,
     parent_email:        data.parent_email        ?? null,
+    // Stored streaks go stale after a missed day; report the live value.
+    streak_days:         'last_active_date' in data ? effectiveStreak(data) : (data.streak_days ?? 0),
   }
   return NextResponse.json(normalised)
 }

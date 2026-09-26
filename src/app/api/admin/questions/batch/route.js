@@ -31,6 +31,9 @@ export async function POST(request) {
 }
 
 export async function GET() {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const db = service()
   const { data, error } = await db
     .from('upload_batches')

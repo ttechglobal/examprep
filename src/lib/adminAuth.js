@@ -1,25 +1,16 @@
 // src/lib/adminAuth.js
+// Route-level admin guard. Middleware already rejects unsigned /api/admin/*
+// requests; this is the second check inside each handler that calls it.
+//
+//   const authError = await requireAdmin(request)
+//   if (authError) return authError
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/adminSession'
 
-const COOKIE_NAME = 'admin_session'
-
-export async function requireAdmin(request) {
+export async function requireAdmin() {
   const cookieStore = await cookies()
-  const session = cookieStore.get(COOKIE_NAME)
-
-  // ── DEBUG LOGGING — remove once auth is working ──────────────────────────
-  const allCookies = cookieStore.getAll()
-  console.log('[adminAuth] cookie names present:', allCookies.map(c => c.name))
-  console.log('[adminAuth] admin_session value:', session?.value ?? 'NOT FOUND')
-  if (request?.url) {
-    console.log('[adminAuth] request url:', request.url)
-  }
-  // ─────────────────────────────────────────────────────────────────────────
-
-  if (!session?.value) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  return null
+  const token = cookieStore.get(ADMIN_COOKIE)?.value
+  if (await verifyAdminToken(token)) return null
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }

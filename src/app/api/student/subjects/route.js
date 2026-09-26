@@ -30,6 +30,22 @@ export async function GET(request) {
   const examParam = (url.searchParams.get('exam') ?? 'WAEC').toUpperCase()
   const namesParam = url.searchParams.get('names') // comma-separated subject names
 
+  // ── Path C: catalog — every active subject for an exam (profile editor) ────
+  // Public, identical for everyone, so it's CDN-cacheable. Replaces the profile
+  // sheet's old call to the admin-only /api/admin/subjects.
+  if (url.searchParams.get('catalog') === '1') {
+    const { data: rows, error } = await svc()
+      .from('subjects')
+      .select('id, name, slug, exam_type')
+      .eq('exam_type', examParam)
+      .eq('is_active', true)
+      .order('name')
+    if (error) return NextResponse.json({ error: 'Could not load subjects' }, { status: 500 })
+    return NextResponse.json(rows ?? [], {
+      headers: { 'Cache-Control': `public, s-maxage=${CACHE_SECS}, stale-while-revalidate=600` },
+    })
+  }
+
   // ── Path A: client sends subject names directly (local-first) ──────────────
   if (namesParam) {
     const names = namesParam.split(',').map(n => n.trim()).filter(Boolean)

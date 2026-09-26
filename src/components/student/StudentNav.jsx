@@ -28,7 +28,9 @@ const BOTTOM_TABS = [
   { id:'home',        label:'Home',        href:'/student/home',        icon:'🏠', color: BLUE   },
   { id:'practice',    label:'Practice',    href:'/student/practice',    icon:'✏️', color: ORANGE },
   { id:'leaderboard', label:'Ranks',       href:'/student/leaderboard', icon:'🏆', color: GOLD   },
-  { id:'progress',    label:'Progress',    href:'/student/progress',    icon:'📊', color: GREEN  },
+  // Profile replaced Progress: it holds more of what students need day to day,
+  // and links to detailed progress from its Activity card.
+  { id:'profile',     label:'Profile',     href:'/student/profile',     icon:'👤', color: BLUE   },
 ]
 
 // ─── RANK HELPERS ─────────────────────────────────────────────────────────────
@@ -336,7 +338,7 @@ function LearningToolsFAB({ dark }) {
 }
 
 // ─── MOBILE BOTTOM NAV ────────────────────────────────────────────────────────
-// 4 tabs: Home, Practice, Leaderboard, Progress
+// 4 tabs: Home, Practice, Leaderboard, Profile
 export function StudentBottomNav({ active = 'home', dark }) {
   return (
     <>

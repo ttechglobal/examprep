@@ -1,7 +1,9 @@
 // supabase/functions/send-notifications/index.ts
 //
 // Called by pg_cron three times daily with { slot: 'noon' | 'afternoon' | 'evening' }
-// Reads all active push subscriptions and sends Web Push to each one.
+// and by /api/admin/notifications for custom blasts. Callers must send
+//   Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+// Sends Web Push to every active subscription, 500 per invocation (see Batching).
 // Marks subscriptions inactive if the browser has unsubscribed (HTTP 410).
 //
 // Deploy: supabase functions deploy send-notifications
@@ -56,23 +58,45 @@ function pickMessage(slot: string) {
   return pool[seed % pool.length]
 }
 
+// ── Batching ──────────────────────────────────────────────────────────────────
+// Each invocation handles one page of subscribers, then hands the next page to
+// a fresh invocation of itself. That keeps every run well inside Edge Function
+// CPU/time limits (web-push encryption is CPU-heavy) and avoids Supabase's
+// 1,000-row response cap, which previously meant only the first 1,000
+// subscribers were ever notified.
+const PAGE_SIZE   = 500
+const CONCURRENCY = 50
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
+
+function authorized(req: Request): boolean {
+  // Only the server (service role key) may trigger a blast. Supabase's default
+  // JWT check alone would also accept the public anon key that ships in the app.
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const auth = req.headers.get('Authorization') ?? ''
+  return serviceKey.length > 0 && auth === `Bearer ${serviceKey}`
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  // Validate method
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
   }
+  if (!authorized(req)) {
+    return new Response('Unauthorized', { status: 401 })
+  }
 
   // Parse body — supports scheduled slots and custom admin blasts
-  let parsedBody: Record<string, string> = {}
+  let parsedBody: Record<string, any> = {}
   try {
     parsedBody = await req.json()
   } catch {
     return new Response('Bad request', { status: 400 })
   }
 
-  const isCustom = parsedBody.custom === true || (parsedBody as any).custom === 'true'
+  const isCustom = parsedBody.custom === true || parsedBody.custom === 'true'
   const slot     = parsedBody.slot ?? 'noon'
+  const offset   = Math.max(0, Number(parsedBody.offset) || 0)
 
   if (!isCustom && !['noon', 'afternoon', 'evening'].includes(slot)) {
     return new Response('Invalid slot', { status: 400 })
@@ -82,75 +106,78 @@ Deno.serve(async (req) => {
     return new Response('Custom blast requires title and body', { status: 400 })
   }
 
-  // Set up VAPID
   webpush.setVapidDetails(
     Deno.env.get('VAPID_SUBJECT')!,
     Deno.env.get('VAPID_PUBLIC_KEY')!,
     Deno.env.get('VAPID_PRIVATE_KEY')!,
   )
 
-  // Supabase service role client — bypasses RLS
   const db = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // Fetch all active subscriptions
+  // One page of active subscriptions, in a stable order.
   const { data: subs, error } = await db
     .from('push_subscriptions')
     .select('id, subscription')
     .eq('active', true)
+    .order('id')
+    .range(offset, offset + PAGE_SIZE - 1)
 
   if (error) {
     console.error('DB read error:', error.message)
     return new Response('DB error', { status: 500 })
   }
 
+  // Hand the next page to a new invocation before doing this page's work.
+  // (Stale subscriptions are marked inactive only after sending, so offsets
+  // stay stable for the pages that follow.)
+  if ((subs?.length ?? 0) === PAGE_SIZE) {
+    const next = fetch(req.url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization')! },
+      body:    JSON.stringify({ ...parsedBody, offset: offset + PAGE_SIZE }),
+    }).catch(err => console.error('next page trigger failed:', err?.message ?? err))
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(next)
+    else await next
+  }
+
   if (!subs || subs.length === 0) {
-    return new Response(JSON.stringify({ sent: 0 }), {
+    return new Response(JSON.stringify({ sent: 0, offset }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
 
   // Build payload — custom blast uses supplied fields, scheduled uses message pool
-  let payload: string
-  if (isCustom) {
-    payload = JSON.stringify({
-      title: parsedBody.title.trim(),
-      body:  parsedBody.body.trim(),
-      url:   parsedBody.url?.trim() || '/student/practice',
-      tag:   parsedBody.tag?.trim() || 'ep-custom',
-    })
-  } else {
-    const msg = pickMessage(slot)
-    payload = JSON.stringify({
-      title: msg.title,
-      body:  msg.body,
-      url:   '/student/practice',
-      tag:   `ep-${slot}`,
-    })
+  const payload = isCustom
+    ? JSON.stringify({
+        title: String(parsedBody.title).trim(),
+        body:  String(parsedBody.body).trim(),
+        url:   parsedBody.url?.trim() || '/student/practice',
+        tag:   parsedBody.tag?.trim() || 'ep-custom',
+      })
+    : (() => {
+        const msg = pickMessage(slot)
+        return JSON.stringify({ title: msg.title, body: msg.body, url: '/student/practice', tag: `ep-${slot}` })
+      })()
+
+  // Send in small concurrent batches.
+  const staleIds: string[] = []
+  for (let i = 0; i < subs.length; i += CONCURRENCY) {
+    await Promise.allSettled(
+      subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription }) => {
+        try {
+          await webpush.sendNotification(subscription, payload)
+        } catch (err: any) {
+          // 410 Gone / 404 = browser unsubscribed. Mark inactive so we stop sending.
+          if (err?.statusCode === 410 || err?.statusCode === 404) staleIds.push(id)
+          else console.warn(`Push failed for ${id}:`, err?.message ?? err)
+        }
+      })
+    )
   }
 
-  // Send to all subscriptions concurrently
-  const staleIds: string[] = []
-
-  await Promise.allSettled(
-    subs.map(async ({ id, subscription }) => {
-      try {
-        await webpush.sendNotification(subscription, payload)
-      } catch (err: any) {
-        // 410 Gone = browser unsubscribed. Mark inactive so we stop sending.
-        if (err?.statusCode === 410 || err?.statusCode === 404) {
-          staleIds.push(id)
-        } else {
-          // Log but don't crash — one bad subscription shouldn't block others
-          console.warn(`Push failed for ${id}:`, err?.message ?? err)
-        }
-      }
-    })
-  )
-
-  // Clean up stale subscriptions
   if (staleIds.length > 0) {
     await db
       .from('push_subscriptions')
@@ -159,10 +186,11 @@ Deno.serve(async (req) => {
   }
 
   const result = {
-    mode:  isCustom ? 'custom' : 'scheduled',
-    slot:  isCustom ? null : slot,
-    sent:  subs.length - staleIds.length,
-    stale: staleIds.length,
+    mode:   isCustom ? 'custom' : 'scheduled',
+    slot:   isCustom ? null : slot,
+    offset,
+    sent:   subs.length - staleIds.length,
+    stale:  staleIds.length,
   }
   console.log('send-notifications:', result)
 

@@ -600,6 +600,7 @@ export default function DailyChallengePage() {
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
+          slot:           ch.slot,
           question_id:    ch.question.id,
           selected_index: selectedIdx,
           subject_name:   ch.question.subject_name,

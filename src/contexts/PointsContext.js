@@ -5,7 +5,7 @@
 //
 // How it works:
 //   1. On mount, reads from localStorage (instant — no flash)
-//   2. Then reconciles with the DB (auth check → profiles.total_points)
+//   2. Then reconciles with the DB value the student layout already fetched
 //   3. Always uses Math.max(localStorage, DB) — earned XP never goes backwards
 //   4. After a practice session, the session page calls setTotalPoints(new_total)
 //      which immediately updates every component that calls usePoints()
@@ -21,7 +21,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 // ── localStorage key ──────────────────────────────────────────────────────────
 const LS_KEY = 'ep_total_xp'
@@ -45,6 +44,7 @@ const PointsContext = createContext({
   totalPoints:    0,
   setTotalPoints: (_val) => {},  // call with the new absolute total after a session save
   showXPToast:    (_xpEarned, _label) => {},  // show the earned-XP toast
+  reconcileServerPoints: (_serverTotal) => {}, // called by the student layout
 })
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -67,47 +67,25 @@ export function PointsProvider({ children }) {
     writeLS(safe)
   }, [])
 
-  // On mount: reconcile with DB so we never show a stale zero after a fresh login
-  useEffect(() => {
-    let cancelled = false
-    async function sync() {
-      try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || cancelled) return
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('total_points')
-          .eq('id', user.id)
-          .single()
-        if (cancelled) return
-        const dbVal = prof?.total_points ?? 0
-        if (dbVal > 0) {
-          // DB has XP — take the higher of local and DB (never go backwards)
-          _setTotal(prev => {
-            const best = Math.max(prev, dbVal)
-            writeLS(best)
-            return best
-          })
-        } else {
-          // DB is 0 — could be a brand new account OR a guest who just signed up
-          // but whose session queue hasn't flushed yet.
-          // Only reset to 0 if localStorage is also 0 — meaning they truly never
-          // earned any XP. If localStorage has XP from guest practice, keep it:
-          // flushSyncQueue will write it to DB shortly, then the next sync will
-          // read the correct DB value.
-          const localVal = readLS()
-          if (localVal === 0) {
-            writeLS(0)
-            _setTotal(0)
-          }
-          // else: localStorage has guest XP → keep showing it; DB will catch up
-        }
-      } catch { /* non-fatal — localStorage value is already showing */ }
+  // Reconcile with the server total. The student layout already fetches the
+  // profile (including total_points) once per app open and passes the value
+  // here, so this context makes no network calls of its own.
+  const reconcileServerPoints = useCallback((serverTotal) => {
+    const dbVal = Math.max(0, Number(serverTotal) || 0)
+    if (dbVal > 0) {
+      // Never go backwards: local XP may include sessions not yet synced.
+      _setTotal(prev => {
+        const best = Math.max(prev, dbVal)
+        writeLS(best)
+        return best
+      })
+    } else if (readLS() === 0) {
+      // Truly zero everywhere (new account). If local has guest XP, keep it —
+      // the sync queue will write it to the server shortly.
+      writeLS(0)
+      _setTotal(0)
     }
-    sync()
-    return () => { cancelled = true }
-  }, []) // run once on mount
+  }, [])
 
   // XP toast
   const showXPToast = useCallback((earned, label = 'Practice session done!') => {
@@ -117,7 +95,7 @@ export function PointsProvider({ children }) {
   }, [])
 
   return (
-    <PointsContext.Provider value={{ totalPoints, setTotalPoints, showXPToast }}>
+    <PointsContext.Provider value={{ totalPoints, setTotalPoints, showXPToast, reconcileServerPoints }}>
       {children}
       {toast && <XPToast key={toast.id} earned={toast.earned} label={toast.label} onDismiss={() => setToast(null)} />}
     </PointsContext.Provider>

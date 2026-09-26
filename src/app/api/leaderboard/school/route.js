@@ -10,15 +10,13 @@
 // Rows are built by lib/leaderboard/server.js.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient }              from '@/lib/supabase/server'
-import { createClient as svcClient } from '@supabase/supabase-js'
-import { NextResponse }              from 'next/server'
+import { createClient }     from '@/lib/supabase/server'
+import { supabaseAdmin }    from '@/lib/server/supabaseAdmin'
+import { schoolStudentIds } from '@/lib/server/paging'
+import { NextResponse }     from 'next/server'
 import { buildLeaderboard, parseBoardParams } from '@/lib/leaderboard/server'
 
-const db = () => svcClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+const db = supabaseAdmin
 
 export async function GET(request) {
   try {
@@ -40,25 +38,12 @@ export async function GET(request) {
     }
 
     // Active cohort members first; otherwise every student at the school.
-    const { data: activeCohort } = await service
-      .from('cohorts')
-      .select('id, name')
-      .eq('school_id', caller.school_id)
-      .eq('is_active', true)
-      .maybeSingle()
+    const { cohort: activeCohort, studentIds } = await schoolStudentIds(service, caller.school_id)
 
-    let studentIds
-    if (activeCohort) {
-      const { data: members } = await service
-        .from('cohort_members').select('student_id').eq('cohort_id', activeCohort.id)
-      studentIds = (members ?? []).map(m => m.student_id)
-    } else {
-      const { data: students } = await service
-        .from('profiles').select('id').eq('school_id', caller.school_id).eq('role', 'student')
-      studentIds = (students ?? []).map(s => s.id)
-    }
-
-    const result = await buildLeaderboard(service, { ...params, studentIds, callerId: user.id })
+    const result = await buildLeaderboard(service, {
+      ...params, studentIds, callerId: user.id,
+      cacheKey: `school:${caller.school_id}:${activeCohort?.id ?? 'all'}:${studentIds.length}`,
+    })
 
     return NextResponse.json(
       {

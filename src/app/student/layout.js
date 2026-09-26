@@ -183,6 +183,7 @@ function StudentLayoutInner({ children }) {
 
   // Fetch full profile once — share via context to every page
   const router   = useRouter()
+  const { reconcileServerPoints } = usePoints()
   const [profile, setProfile] = useState(null)
 
   // 'ready'    → render the app
@@ -293,6 +294,7 @@ function StudentLayoutInner({ children }) {
           }
           setProfile(normalised)
           cacheAuthProfile(normalised)
+          reconcileServerPoints(normalised.total_points)
           try { localStorage.setItem('ep_student_name', profileData.full_name || profileData.username || '') } catch {}
 
           // Flush any practice sessions saved while offline or as a guest.
@@ -308,7 +310,7 @@ function StudentLayoutInner({ children }) {
         endLaunchSplash()
       }
     })()
-  }, [router])
+  }, [router, reconcileServerPoints])
 
   // Name for topbar — from profile or localStorage cache
   const name = profile?.full_name || profile?.username ||

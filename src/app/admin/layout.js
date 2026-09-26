@@ -3,14 +3,13 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import AdminSidebar from '@/components/admin/AdminSidebar'
-
-const COOKIE_NAME = 'admin_session'
+import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/adminSession'
 
 export default async function AdminLayout({ children }) {
   const cookieStore = await cookies()
-  const session = cookieStore.get(COOKIE_NAME)
+  const token = cookieStore.get(ADMIN_COOKIE)?.value
 
-  if (!session?.value) {
+  if (!(await verifyAdminToken(token))) {
     redirect('/admin-login')
   }
 

@@ -7,11 +7,15 @@
 // never touch the client.
 
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 const EDGE_URL     = process.env.SUPABASE_EDGE_URL      // https://xxx.supabase.co/functions/v1/send-notifications
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function POST(req) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   try {
     const { title, body, url, tag } = await req.json()
 

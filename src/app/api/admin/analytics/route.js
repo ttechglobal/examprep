@@ -4,6 +4,7 @@
 
 import { createClient as svcClient } from '@supabase/supabase-js'
 import { NextResponse }              from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 function svc() {
   return svcClient(
@@ -70,6 +71,9 @@ function bucketByMonth(rows, dateField) {
 }
 
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { searchParams } = new URL(request.url)
   const periodParam = searchParams.get('period') ?? '30d'
   const periodMap   = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 }

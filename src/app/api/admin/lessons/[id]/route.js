@@ -8,6 +8,7 @@
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { buildGeneratedQuestionsPrompt } from '@/lib/prerequisitePrompt'
+import { requireAdmin } from '@/lib/adminAuth'
 
 function db() {
   return createServiceClient(
@@ -18,6 +19,9 @@ function db() {
 
 // ── GET: fetch subtopic + lesson content for the editor ──────────────────────
 export async function GET(request, { params }) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { id: subtopicId } = await params
 
   const svc = db()
@@ -55,6 +59,9 @@ export async function GET(request, { params }) {
 
 // ── POST: save lesson content ────────────────────────────────────────────────
 export async function POST(request, { params }) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { id: subtopicId } = await params
   const { raw_content } = await request.json()
   if (!raw_content) return NextResponse.json({ error: 'raw_content required' }, { status: 400 })
@@ -88,6 +95,9 @@ export async function POST(request, { params }) {
 
 // ── PATCH: change lesson status + auto-generate questions on publish ──────────
 export async function PATCH(request, { params }) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { id: subtopicId } = await params
   const { action } = await request.json()
 

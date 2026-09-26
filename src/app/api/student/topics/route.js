@@ -1,71 +1,60 @@
-// src/app/api/student/topics/route.js
+// src/app/api/student/topics/route.js — v2
 // GET /api/student/topics?subject_id=<uuid>&exam=WAEC
-// Returns topics for a subject, with question counts, for topic practice mode.
+// Topics for a subject that have at least one active question for this exam,
+// with question counts — used by topic practice, battle setup and progress.
+//
+// v2: counts come from topic_question_counts() (a GROUP BY in Postgres). v1
+// downloaded every question's topic_id, which Supabase caps at 1,000 rows —
+// big subjects lost topics. The response is the same for every student, so
+// it's cached at the CDN.
 
-import { createClient as svcClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { NextResponse }  from 'next/server'
 
-const db = () => svcClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const EXAMS   = new Set(['WAEC', 'JAMB', 'IGCSE'])
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const subjectId = searchParams.get('subject_id')
-    const exam      = searchParams.get('exam') ?? 'WAEC'
+    const examParam = (searchParams.get('exam') ?? 'WAEC').toUpperCase()
+    const exam      = EXAMS.has(examParam) ? examParam : 'WAEC'
 
-    if (!subjectId) return NextResponse.json({ error: 'subject_id required' }, { status: 400 })
+    if (!subjectId || !UUID_RE.test(subjectId)) {
+      return NextResponse.json({ error: 'subject_id required' }, { status: 400 })
+    }
 
-    const service = db()
-
-    // Run both queries in parallel — topics + question counts arrive together.
-    // Previously sequential: query 2 waited for query 1 to finish first.
-    const [topicsResult, allQCountsResult] = await Promise.all([
-      service
-        .from('topics')
+    const db = supabaseAdmin()
+    const [topicsRes, countsRes] = await Promise.all([
+      db.from('topics')
         .select('id, name, order_index, exam_type')
         .eq('subject_id', subjectId)
         .order('order_index', { ascending: true }),
-      service
-        .from('questions')
-        .select('topic_id')
-        .eq('subject_id', subjectId)   // filter at subject level — topic IDs unknown yet
-        .eq('is_active', true),
+      db.rpc('topic_question_counts', { p_subject_id: subjectId, p_exam: exam }),
     ])
-
-    if (topicsResult.error) return NextResponse.json({ error: topicsResult.error.message }, { status: 500 })
-
-    const topicList = topicsResult.data ?? []
-    if (!topicList.length) return NextResponse.json([])
-
-    // Filter by exam type (JS-side, no extra query)
-    const filtered = topicList.filter(t =>
-      !t.exam_type || t.exam_type === exam || t.exam_type === 'BOTH'
-    )
-
-    const qCounts = allQCountsResult.data
+    if (topicsRes.error) throw topicsRes.error
+    if (countsRes.error) throw countsRes.error
 
     const countMap = {}
-    ;(qCounts ?? []).forEach(q => {
-      countMap[q.topic_id] = (countMap[q.topic_id] ?? 0) + 1
-    })
+    for (const c of countsRes.data ?? []) countMap[c.topic_id] = Number(c.question_count) || 0
 
-    return NextResponse.json(
-      filtered
-        .filter(t => (countMap[t.id] ?? 0) > 0)  // only topics that have questions
-        .map(t => ({
-          id:             t.id,
-          name:           t.name,
-          order_index:    t.order_index,
-          exam_type:      t.exam_type,
-          question_count: countMap[t.id] ?? 0,
-        })),
-      { headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300' } }
-    )
+    const topics = (topicsRes.data ?? [])
+      .filter(t => !t.exam_type || t.exam_type === exam || t.exam_type === 'BOTH')
+      .filter(t => (countMap[t.id] ?? 0) > 0)
+      .map(t => ({
+        id:             t.id,
+        name:           t.name,
+        order_index:    t.order_index,
+        exam_type:      t.exam_type,
+        question_count: countMap[t.id],
+      }))
+
+    return NextResponse.json(topics, {
+      headers: { 'Cache-Control': 'public, max-age=120, s-maxage=600, stale-while-revalidate=3600' },
+    })
   } catch (err) {
-    console.error('[student/topics]', err)
+    console.error('[student/topics]', err?.message ?? err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

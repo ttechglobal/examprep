@@ -10,12 +10,19 @@
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { ADMIN_COOKIE, ADMIN_SESSION_TTL, createAdminToken } from '@/lib/adminSession'
+import { timingSafeEqual, createHash } from 'crypto'
 
-const COOKIE_NAME = 'admin_session'
-const COOKIE_MAX_AGE = 60 * 60 * 8 // 8 hours
+// Compare hashes so the comparison is constant-time regardless of input length.
+function passwordMatches(given, expected) {
+  const a = createHash('sha256').update(String(given ?? '')).digest()
+  const b = createHash('sha256').update(String(expected)).digest()
+  return timingSafeEqual(a, b)
+}
 
 export async function POST(request) {
-  const { password } = await request.json()
+  let password
+  try { ({ password } = await request.json()) } catch { password = null }
 
   const adminPassword = process.env.ADMIN_PASSWORD
   if (!adminPassword) {
@@ -25,22 +32,22 @@ export async function POST(request) {
     )
   }
 
-  if (password !== adminPassword) {
+  if (!passwordMatches(password, adminPassword)) {
     // Small delay to slow brute-force attempts
     await new Promise(r => setTimeout(r, 500))
     return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
   }
 
-  // Set a signed session cookie
-  // Value is a simple timestamp token — the layout checks for its presence
-  const sessionToken = `admin_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  // Signed, expiring token — verified by middleware, the admin layout and
+  // requireAdmin(). It cannot be forged without the server secret.
+  const sessionToken = await createAdminToken()
 
   const cookieStore = await cookies()
-  cookieStore.set(COOKIE_NAME, sessionToken, {
+  cookieStore.set(ADMIN_COOKIE, sessionToken, {
     httpOnly: true,
     secure:   process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge:   COOKIE_MAX_AGE,
+    maxAge:   ADMIN_SESSION_TTL,
     path:     '/',  // must be '/' so cookie is sent to /api/admin/* routes too
   })
 
@@ -49,6 +56,6 @@ export async function POST(request) {
 
 export async function DELETE() {
   const cookieStore = await cookies()
-  cookieStore.delete(COOKIE_NAME)
+  cookieStore.delete(ADMIN_COOKIE)
   return NextResponse.json({ success: true })
 }

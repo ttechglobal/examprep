@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/adminAuth'
 
 function svc() {
   return createServiceClient(
@@ -21,6 +22,9 @@ function svc() {
 }
 
 export async function GET(request) {
+  const adminError = await requireAdmin()
+  if (adminError) return adminError
+
   const { searchParams } = new URL(request.url)
   const subjectName = searchParams.get('subjectName')
   const topicName   = searchParams.get('topicName')
