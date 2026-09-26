@@ -17,7 +17,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { hasSeenIntro, markIntroSeen, continueAsGuest, destinationAfterAuth } from '@/lib/auth/client'
+import { hasSeenIntro, markIntroSeen, continueAsGuest, destinationAfterAuth, isAccountSession } from '@/lib/auth/client'
 import IntroSlides from '@/components/onboarding/IntroSlides'
 import AuthPanel from '@/components/onboarding/AuthPanel'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -40,7 +40,8 @@ function Onboarding() {
       let session = null
       try { ({ data: { session } } = await createClient().auth.getSession()) } catch {}
       if (cancelled) return
-      if (session?.user) {
+      // A battle-guest login (1v1 invite) isn't an account: they still sign up here.
+      if (isAccountSession(session)) {
         router.replace(await destinationAfterAuth({ from, join }))
         return
       }

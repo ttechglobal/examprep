@@ -25,6 +25,10 @@ const CYAN = '#18B7F2'
 
 const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/learn/world', '/student/battle']
 
+// A battle guest (anonymous login from a 1v1 invite, no guest profile on this
+// device) may only use the 1v1 screens. Anywhere else they start at /onboarding.
+const BATTLE_GUEST_AREA = '/student/battle/1v1'
+
 // ── Shared profile context — fetched once in layout, available to all pages ───
 export const StudentUserContext = createContext(null)
 export function useStudentUser() { return useContext(StudentUserContext) }
@@ -218,14 +222,22 @@ function StudentLayoutInner({ children }) {
         const { data: { session } } = await supabase.auth.getSession()
         const user = session?.user ?? null
 
-        if (!user) {
+        // No account. A battle-guest login is not an account either: the rest
+        // of the app treats it exactly like signed out.
+        if (!user || user.is_anonymous) {
           try { localStorage.removeItem('ep_profile_cache') } catch {}
           let g = null
           try { g = JSON.parse(localStorage.getItem('ep_guest') || 'null') } catch {}
 
-          // No account and no guest profile: this is a fresh install or a
-          // signed-out device. Everyone starts at the welcome / sign-up screen.
+          // No guest profile either: a fresh install or a signed-out device.
+          // Everyone starts at the welcome / sign-up screen, except a battle
+          // guest who is in the middle of a 1v1.
           if (!g || g.migrated_to) {
+            if (user?.is_anonymous && window.location.pathname.startsWith(BATTLE_GUEST_AREA)) {
+              setProfile({ isGuest: true, battleGuestOnly: true, full_name: user.user_metadata?.display_name ?? null })
+              setGate('ready')
+              return
+            }
             router.replace('/onboarding')
             return
           }
@@ -311,6 +323,11 @@ function StudentLayoutInner({ children }) {
       }
     })()
   }, [router, reconcileServerPoints])
+
+  // A battle guest who leaves the 1v1 screens goes to sign up (or continue as a guest).
+  useEffect(() => {
+    if (profile?.battleGuestOnly && !pathname.startsWith(BATTLE_GUEST_AREA)) router.replace('/onboarding')
+  }, [profile, pathname, router])
 
   // Name for topbar — from profile or localStorage cache
   const name = profile?.full_name || profile?.username ||

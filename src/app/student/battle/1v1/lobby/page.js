@@ -38,16 +38,16 @@ export default function PvpLobbyPage() {
   useEffect(() => {
     if (!matchId) return
     const goToMatch = () => { if (!leaving.current) router.replace(`/student/battle/1v1/match?m=${matchId}`) }
-    const stop = watchMatch(matchId, (event, payload) => {
+    const watcher = watchMatch(matchId, (event, payload) => {
       if (event === 'joined') return goToMatch()
       if (event === 'error') return setError(payload.error)
       if (event === 'state') {
-        offset.current = new Date(payload.server_now).getTime() - Date.now()
+        offset.current = payload.clockOffset
         setState(payload)
         if (payload.match.status === 'in_progress') goToMatch()
       }
     })
-    return stop
+    return watcher.stop
   }, [matchId, router])
 
   const code = state?.match?.code

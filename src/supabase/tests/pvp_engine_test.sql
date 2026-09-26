@@ -144,12 +144,19 @@ do $$ declare m pvp_matches; begin
   assert m.status = 'finished' and m.result = 'host', 'host wins: ' || m.status || ' ' || coalesce(m.result,'-');
   assert m.host_points > m.guest_points;
   assert (select count(*) from realtime.log where event='finished') = 1;
-  assert (select count(*) from question_attempts where session_id = 'pvp-' || m.id) = 8, 'attempts recorded: ' || (select count(*) from question_attempts where session_id = 'pvp-' || m.id);
+  -- host answered 4 rounds; the guest login's answers stay out of question_attempts
+  assert (select count(*) from question_attempts where session_id = 'pvp-' || m.id) = 4, 'attempts recorded: ' || (select count(*) from question_attempts where session_id = 'pvp-' || m.id);
+  assert not exists (select 1 from question_attempts where session_id = 'pvp-' || m.id and student_id = m.guest_id), 'no guest attempts';
+  assert m.guest_is_anonymous and not m.host_is_anonymous, 'guest login flagged';
   assert (select recent_form from pvp_stats where student_id = m.host_id) = 'W';
   assert (select recent_form from pvp_stats where student_id = m.guest_id) = 'L';
 end $$;
-select (select total_points from profiles where id=(select h from t_ids)) - :xp_h as host_xp_gain,
-       (select total_points from profiles where id=(select g from t_ids)) - :xp_g as guest_xp_gain;
+select set_config('t.host_gain',  ((select total_points from profiles where id=(select h from t_ids)) - :xp_h)::text, false),
+       set_config('t.guest_gain', ((select total_points from profiles where id=(select g from t_ids)) - :xp_g)::text, false) \gset
+do $$ begin
+  assert current_setting('t.host_gain')::int = 60, 'host XP: 4 correct x 10 + 20 win, got ' || current_setting('t.host_gain');
+  assert current_setting('t.guest_gain')::int = 0, 'guest login earns no XP, got ' || current_setting('t.guest_gain');
+end $$;
 select event, count(*) from realtime.log group by 1 order by 1;
 
 -- ── 6. rematch: new match, only the opponent may join, old match untouched ─
@@ -159,6 +166,11 @@ do $$ declare r jsonb; begin
   r := pvp_rematch((select id from t_match where k='m1'));
   assert r ->> 'ok' = 'true', 'guest can request a rematch: ' || r::text;
   insert into t_match values ('m2', (r->>'match_id')::uuid, r->>'code');
+  assert r ->> 'joined' = 'false';
+  r := pvp_rematch((select id from t_match where k='m1'));
+  assert r ->> 'match_id' = (select id::text from t_match where k='m2'), 'asking twice returns the same rematch';
+  r := pvp_state((select id from t_match where k='m1')) -> 'rematch';
+  assert r ->> 'mine' = 'true' and r ->> 'status' = 'waiting', 'requester sees their rematch: ' || coalesce(r::text, 'null');
 end $$;
 reset role;
 select pg_temp.act((select x from t_ids));
@@ -168,14 +180,18 @@ reset role;
 select pg_temp.act((select h from t_ids));
 set role authenticated;
 do $$ declare r jsonb; begin
-  r := pvp_join((select code from t_match where k='m2'));
-  assert r ->> 'ok' = 'true', 'invited host joins rematch';
+  r := pvp_state((select id from t_match where k='m1')) -> 'rematch';
+  assert r ->> 'mine' = 'false' and r ->> 'code' = (select code from t_match where k='m2'), 'opponent sees the rematch offer';
+  -- pressing Rematch too accepts the existing offer instead of opening a second match
+  r := pvp_rematch((select id from t_match where k='m1'));
+  assert r ->> 'ok' = 'true' and r ->> 'joined' = 'true' and r ->> 'match_id' = (select id::text from t_match where k='m2'), 'invited host joins rematch: ' || r::text;
   r := pvp_state((select id from t_match where k='m2'));
   assert r ->> 'me' = 'guest' and r -> 'host' ->> 'name' = 'Ada', 'rematch keeps guest name';
 end $$;
 reset role;
 do $$ begin
   assert (select status from pvp_matches where id = (select id from t_match where k='m1')) = 'finished', 'original untouched';
+  assert (select count(*) from pvp_matches where rematch_of = (select id from t_match where k='m1')) = 1, 'one rematch only';
   assert exists (select 1 from realtime.log where event = 'rematch' and topic = 'pvp:' || (select id from t_match where k='m1')), 'rematch signalled on old channel';
 end $$;
 
@@ -244,4 +260,83 @@ do $$ begin
   assert (select status from pvp_matches where id = (select id from t_match where k='m4')) = 'abandoned', 'dead match abandoned';
   assert (select count(*) from pvp_stats where student_id = (select x from t_ids)) = 0, 'abandoned match changes no stats';
 end $$;
+-- ── 11. guest signs up: their battles move onto the new account ─────────
+create temp table t_new as select id from profiles order by id offset 30 limit 1;
+grant select on t_new to authenticated;
+select set_config('t.xp_new', coalesce((select total_points from profiles where id = (select id from t_new)), 0)::text, false) \gset
+select pg_temp.act((select id from t_new));
+set role authenticated;
+do $$ begin
+  begin perform merge_battle_guest((select g from t_ids), (select id from t_new)); assert false, 'merge must be server-only';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ declare r jsonb; n uuid := (select id from t_new); g uuid := (select g from t_ids); begin
+  r := merge_battle_guest(g, n);
+  -- m1: lost with 3 correct = 30; m2: won by forfeit, 0 answered = 20
+  assert r = '{"matches": 2, "xp": 50}'::jsonb, 'merge result: ' || r::text;
+  assert (select count(*) from question_attempts where student_id = n and session_id = 'pvp-' || (select id from t_match where k='m1')) = 4, 'guest answers become attempts';
+  assert (select count(*) from question_attempts qa
+          where qa.student_id = n and qa.session_id = 'pvp-' || (select id from t_match where k='m1')
+            and qa.created_at in (select answered_at from pvp_answers
+                                  where match_id = (select id from t_match where k='m1') and player_id = n)) = 4,
+         'attempts dated when answered';
+  assert (select guest_id from pvp_matches where id = (select id from t_match where k='m1')) = n, 'match reassigned';
+  assert (select winner_id from pvp_matches where id = (select id from t_match where k='m2')) = n, 'win reassigned';
+  assert not exists (select 1 from pvp_matches where g in (host_id, guest_id)), 'no match left on the guest login';
+  assert (select played || recent_form from pvp_stats where student_id = n) = '2WL', 'stats merged';
+  assert not exists (select 1 from pvp_stats where student_id = g), 'guest stats removed';
+  assert merge_battle_guest(g, n) = '{"matches": 0, "xp": 0}'::jsonb, 'second claim is a no-op';
+end $$;
+do $$ begin
+  assert (select total_points from profiles where id = (select id from t_new)) - current_setting('t.xp_new')::int = 50, 'XP credited once';
+end $$;
+
+-- ── 12. opponent away: the player who stayed can claim the win ──────────
+select pg_temp.act((select x from t_ids));
+set role authenticated;
+do $$ declare r jsonb; begin r := pvp_create('WAEC','11111111-1111-1111-1111-111111111111',null,5,10); insert into t_match values ('m5',(r->>'match_id')::uuid, r->>'code'); end $$;
+reset role;
+select pg_temp.act((select h from t_ids));
+set role authenticated;
+do $$ begin assert pvp_join((select code from t_match where k='m5')) ->> 'ok' = 'true'; end $$;
+reset role;
+do $$ declare m uuid := (select id from t_match where k='m5'); i int; begin
+  for i in 0..2 loop
+    perform pg_temp.age_round(m, 4);                 -- 1s into round i
+    perform pg_temp.act((select x from t_ids));
+    execute 'set local role authenticated';
+    if i = 0 then assert pvp_answer(m, 0, 1) ->> 'ok' = 'true'; end if;
+    if i = 1 then
+      assert pvp_state(m) ->> 'opponent_away' = 'false', 'not away after 1 round';
+      assert pvp_claim_win(m) ->> 'error' = 'PVP_NOT_ALLOWED', 'too early to claim';
+    end if;
+    execute 'reset role';
+    perform pg_temp.age_round(m, 15);                -- past the 10s + 2s deadline
+    perform pg_temp.act((select x from t_ids));
+    execute 'set local role authenticated';
+    perform pvp_tick(m);
+    execute 'reset role';
+  end loop;
+end $$;
+select pg_temp.act((select h from t_ids));
+set role authenticated;
+do $$ declare m uuid := (select id from t_match where k='m5'); begin
+  assert pvp_state(m) ->> 'opponent_away' = 'false', 'the absent player is never offered the win';
+  assert pvp_claim_win(m) ->> 'error' = 'PVP_NOT_ALLOWED';
+end $$;
+reset role;
+select pg_temp.act((select x from t_ids));
+set role authenticated;
+do $$ declare m uuid := (select id from t_match where k='m5'); begin
+  assert pvp_state(m) ->> 'opponent_away' = 'true', 'away after 3 missed rounds';
+  assert pvp_claim_win(m) ->> 'ok' = 'true';
+  assert pvp_claim_win(m) ->> 'error' = 'PVP_NOT_IN_PROGRESS', 'claim once';
+end $$;
+reset role;
+do $$ declare m pvp_matches; begin
+  select * into m from pvp_matches where id = (select id from t_match where k='m5');
+  assert m.status = 'finished' and m.finish_reason = 'opponent_away' and m.winner_id = (select x from t_ids), 'claimed win recorded';
+end $$;
+
 select 'ALL PVP ENGINE TESTS PASSED' as result;

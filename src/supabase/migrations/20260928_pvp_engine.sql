@@ -109,7 +109,7 @@ create table if not exists public.pvp_matches (
   guest_ms         integer not null default 0,
   result           text check (result in ('host', 'guest', 'draw')),
   winner_id        uuid,
-  finish_reason    text,                      -- completed | forfeit
+  finish_reason    text,                      -- completed | forfeit | opponent_away
   rematch_of       uuid references public.pvp_matches(id) on delete set null,
   expires_at       timestamptz not null,
   created_at       timestamptz not null default now(),
@@ -119,6 +119,12 @@ create table if not exists public.pvp_matches (
 );
 
 -- A code is unique only among battles still open.
+-- Guest logins (Supabase anonymous sign-in) can play via an invite link.
+-- Their results stay in the pvp_* tables only — no XP, attempts or
+-- leaderboard rows — until they create an account (merge_battle_guest).
+alter table public.pvp_matches add column if not exists host_is_anonymous  boolean not null default false;
+alter table public.pvp_matches add column if not exists guest_is_anonymous boolean not null default false;
+
 create unique index if not exists pvp_matches_open_code_key
   on public.pvp_matches (code) where status in ('waiting', 'in_progress');
 create index if not exists pvp_matches_live_idx
@@ -318,18 +324,22 @@ begin
   from public.pvp_answers a
   join public.questions q on q.id = m.question_ids[a.q_index + 1]
   join public.profiles pr on pr.id = a.player_id
-  where a.match_id = p_match and a.is_correct is not null;
+  where a.match_id = p_match and a.is_correct is not null
+    and not (a.player_id = m.host_id  and m.host_is_anonymous)
+    and not (a.player_id = m.guest_id and m.guest_is_anonymous);
 
   for p in
-    select pl.id, pl.role,
+    select pl.id, pl.role, pl.anon,
            (select count(*) from public.pvp_answers a
              where a.match_id = p_match and a.player_id = pl.id and a.is_correct) as correct
-    from (values (m.host_id, 'host'), (m.guest_id, 'guest')) as pl(id, role)
+    from (values (m.host_id, 'host', m.host_is_anonymous), (m.guest_id, 'guest', m.guest_is_anonymous)) as pl(id, role, anon)
     where pl.id is not null
   loop
     v_char := case when v_result = 'draw' then 'D' when v_result = p.role then 'W' else 'L' end;
     v_xp   := p.correct * 10 + case v_char when 'W' then 20 when 'D' then 10 else 0 end;
-    perform public.credit_student_activity(p.id, v_xp);
+    if not p.anon then
+      perform public.credit_student_activity(p.id, v_xp);
+    end if;
 
     insert into public.pvp_stats as s (student_id, played, won, drawn, lost, recent_form, last_match_at)
     values (p.id, 1, (v_char = 'W')::int, (v_char = 'D')::int, (v_char = 'L')::int, v_char, now())
@@ -496,10 +506,10 @@ begin
     v_code := public.pvp_new_code();
     begin
       insert into public.pvp_matches
-        (code, host_id, invited_id, host_name, exam, subject_id, subject_name, topic_id, topic_name,
+        (code, host_id, host_is_anonymous, invited_id, host_name, exam, subject_id, subject_name, topic_id, topic_name,
          question_ids, question_count, timer_secs, rematch_of, expires_at)
       values
-        (v_code, v_uid, v_invited, coalesce(
+        (v_code, v_uid, public.pvp_is_anonymous(), v_invited, coalesce(
            case when p_rematch_of is not null then case when v_uid = old.host_id then old.host_name else old.guest_name end end,
            public.pvp_first_name(v_uid), 'Player'),
          p_exam, p_subject_id, v_subject, p_topic_id, v_topic,
@@ -588,8 +598,9 @@ begin
 
   -- 3-2-1 countdown, then round 1.
   update public.pvp_matches
-  set guest_id         = v_uid,
-      guest_name       = v_name,
+  set guest_id           = v_uid,
+      guest_is_anonymous = public.pvp_is_anonymous(),
+      guest_name         = v_name,
       status           = 'in_progress',
       started_at       = now(),
       current_index    = 0,
@@ -711,12 +722,81 @@ end
 $$;
 
 -- ── Rematch (a brand-new match; earlier results are never touched) ─────────
+-- If the opponent already asked for a rematch of this match, pressing Rematch
+-- accepts theirs instead of opening a second one. Returns joined = true when
+-- the new match has started.
 create or replace function public.pvp_rematch(p_match uuid)
 returns jsonb
-language sql
+language plpgsql
 security definer
 set search_path = public
-as $$ select public.pvp_create(null, null, null, null, null, p_match) $$;
+as $$
+declare
+  v_uid uuid := auth.uid();
+  r     public.pvp_matches;
+  v_res jsonb;
+begin
+  -- Both players pressing Rematch at once must end up in one match.
+  perform pg_advisory_xact_lock(hashtext('pvp_rematch:' || p_match::text));
+
+  select * into r from public.pvp_matches
+  where rematch_of = p_match and status in ('waiting', 'in_progress')
+  order by created_at desc limit 1;
+
+  if found then
+    if r.status = 'waiting' and r.invited_id = v_uid then
+      v_res := public.pvp_join(r.code);
+      return case when v_res ->> 'ok' = 'true' then v_res || jsonb_build_object('code', r.code, 'joined', true) else v_res end;
+    end if;
+    if public.pvp_role(r, v_uid) is not null then
+      return jsonb_build_object('ok', true, 'match_id', r.id, 'code', r.code, 'joined', r.status = 'in_progress');
+    end if;
+  end if;
+
+  v_res := public.pvp_create(null, null, null, null, null, p_match);
+  return case when v_res ->> 'ok' = 'true' then v_res || jsonb_build_object('joined', false) else v_res end;
+end
+$$;
+
+-- ── Opponent away: claim the win ────────────────────────────────────────────
+-- A dropped phone can't freeze a match (rounds time out), but the player who
+-- stayed shouldn't sit through every remaining timer. If the opponent missed
+-- the last 3 rounds (and hasn't answered the current one) while you answered
+-- at least one of them, you may end the match as a win.
+create or replace function public.pvp_opponent_away(m public.pvp_matches, p_user uuid)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select m.status = 'in_progress' and m.rounds_closed >= 3
+     and not exists (select 1 from public.pvp_answers a
+                     where a.match_id = m.id and a.q_index >= m.rounds_closed - 3
+                       and a.player_id = case when p_user = m.host_id then m.guest_id else m.host_id end)
+     and exists (select 1 from public.pvp_answers a
+                 where a.match_id = m.id and a.player_id = p_user
+                   and a.q_index >= m.rounds_closed - 3 and a.q_index < m.rounds_closed)
+$$;
+
+create or replace function public.pvp_claim_win(p_match uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  m     public.pvp_matches;
+begin
+  select * into m from public.pvp_matches where id = p_match for update;
+  if not found or public.pvp_role(m, v_uid) is null then return public.pvp_err('PVP_NOT_A_PLAYER'); end if;
+  if m.status <> 'in_progress'                      then return public.pvp_err('PVP_NOT_IN_PROGRESS'); end if;
+  if not public.pvp_opponent_away(m, v_uid)         then return public.pvp_err('PVP_NOT_ALLOWED'); end if;
+
+  perform public.pvp_finish(p_match, 'opponent_away', case when v_uid = m.host_id then m.guest_id else m.host_id end);
+  return jsonb_build_object('ok', true);
+end
+$$;
 
 -- ── State: everything a phone needs to draw the screen ─────────────────────
 -- Used on open, on reconnect and as the polling fallback. Never includes the
@@ -769,6 +849,13 @@ begin
     'host',  jsonb_build_object('name', m.host_name,  'points', m.host_points),
     'guest', jsonb_build_object('name', m.guest_name, 'points', m.guest_points),
     'current', v_cur,
+    'opponent_away', public.pvp_opponent_away(m, v_uid),
+    -- The latest rematch of this match, so the results screen can offer
+    -- "Accept rematch" or follow the requester in (Realtime or not).
+    'rematch', (select jsonb_build_object('match_id', r.id, 'code', r.code, 'status', r.status,
+                                          'mine', r.host_id = v_uid)
+                from public.pvp_matches r where r.rematch_of = m.id
+                order by r.created_at desc limit 1),
     -- Closed rounds, with answers and explanations (for the reveal and review).
     'rounds', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -846,6 +933,79 @@ begin
 end
 $$;
 
+-- ── Guest → account: move a guest's battles onto their new account ─────────
+-- Called by the server (/api/pvp/claim-guest) after a battle guest signs up or
+-- signs in, once it has verified the guest login really belongs to them.
+-- Their finished matches become normal history: answers → question_attempts
+-- (dated when answered, so weekly boards and streak days are right), XP added
+-- with the same formula as pvp_finish, and 1v1 stats merged.
+create or replace function public.merge_battle_guest(p_anon uuid, p_new uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r         record;
+  v_xp      integer := 0;
+  v_matches integer := 0;
+  v_correct integer;
+begin
+  if p_anon is null or p_new is null or p_anon = p_new then
+    return jsonb_build_object('matches', 0, 'xp', 0);
+  end if;
+  -- Two claims for the same guest at once must not credit XP twice.
+  perform pg_advisory_xact_lock(hashtext('merge_battle_guest:' || p_anon::text));
+
+  for r in
+    select * from public.pvp_matches
+    where status = 'finished'
+      and ((host_id = p_anon and host_is_anonymous) or (guest_id = p_anon and guest_is_anonymous))
+  loop
+    insert into public.question_attempts
+      (student_id, question_id, is_correct, context, topic_id, subject_id, subject_name, exam_type, session_id, created_at)
+    select p_new, q.id, coalesce(a.is_correct, false), 'pvp', q.topic_id, q.subject_id,
+           r.subject_name, r.exam, 'pvp-' || r.id::text, a.answered_at
+    from public.pvp_answers a
+    join public.questions q on q.id = r.question_ids[a.q_index + 1]
+    where a.match_id = r.id and a.player_id = p_anon and a.is_correct is not null;
+
+    select count(*) into v_correct from public.pvp_answers
+    where match_id = r.id and player_id = p_anon and is_correct;
+
+    v_xp := v_xp + v_correct * 10 + case
+      when r.result = 'draw' then 10
+      when (r.result = 'host' and r.host_id = p_anon) or (r.result = 'guest' and r.guest_id = p_anon) then 20
+      else 0 end;
+    v_matches := v_matches + 1;
+  end loop;
+
+  update public.pvp_answers set player_id = p_new where player_id = p_anon;
+  update public.pvp_matches set host_id  = p_new, host_is_anonymous  = false where host_id  = p_anon;
+  update public.pvp_matches set guest_id = p_new, guest_is_anonymous = false where guest_id = p_anon;
+  update public.pvp_matches set winner_id  = p_new where winner_id  = p_anon;
+  update public.pvp_matches set invited_id = p_new where invited_id = p_anon;
+
+  insert into public.pvp_stats as s (student_id, played, won, drawn, lost, recent_form, last_match_at)
+  select p_new, played, won, drawn, lost, recent_form, last_match_at
+  from public.pvp_stats where student_id = p_anon
+  on conflict (student_id) do update set
+    played        = s.played + excluded.played,
+    won           = s.won    + excluded.won,
+    drawn         = s.drawn  + excluded.drawn,
+    lost          = s.lost   + excluded.lost,
+    recent_form   = left(excluded.recent_form || s.recent_form, 10),
+    last_match_at = greatest(s.last_match_at, excluded.last_match_at);
+  delete from public.pvp_stats where student_id = p_anon;
+
+  if v_xp > 0 then
+    perform public.credit_student_activity(p_new, v_xp);
+  end if;
+
+  return jsonb_build_object('matches', v_matches, 'xp', v_xp);
+end
+$$;
+
 -- ── Privileges ───────────────────────────────────────────────────────────────
 -- Game actions are called from the phone with the player's own login, so they
 -- are granted to `authenticated` (guest logins included); each one checks
@@ -856,13 +1016,13 @@ declare
   r record;
   v_public   text[] := array['pvp_preview'];
   v_players  text[] := array['pvp_create', 'pvp_join', 'pvp_answer', 'pvp_tick', 'pvp_leave',
-                             'pvp_rematch', 'pvp_state', 'pvp_my_stats'];
+                             'pvp_rematch', 'pvp_claim_win', 'pvp_state', 'pvp_my_stats'];
 begin
   for r in
     select p.oid::regprocedure as sig, p.proname
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and (p.proname like 'pvp\_%' or p.proname in ('app_setting', 'credit_student_activity'))
+      and (p.proname like 'pvp\_%' or p.proname in ('app_setting', 'credit_student_activity', 'merge_battle_guest'))
   loop
     execute format('revoke execute on function %s from public', r.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then

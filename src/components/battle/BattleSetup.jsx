@@ -56,7 +56,7 @@ function BattleBg() {
 }
 
 // ── Nav bar ───────────────────────────────────────────────────────────────────
-function GameNav({ onBack, backLabel, title, xp }) {
+function GameNav({ onBack, backLabel, title }) {
   return (
     <div style={{
       flexShrink:0, zIndex:100,
@@ -66,9 +66,10 @@ function GameNav({ onBack, backLabel, title, xp }) {
       boxShadow:'0 4px 20px rgba(0,0,0,.3)',
       paddingTop:'env(safe-area-inset-top)',
     }}>
-      <div style={{ maxWidth:860, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 24px 11px' }}>
+      {/* 1fr | title | 1fr keeps the title centred whatever the back label's width */}
+      <div style={{ maxWidth:860, margin:'0 auto', display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', gap:12, padding:'12px 24px 11px' }}>
         <button onClick={onBack} style={{
-          display:'flex', alignItems:'center', gap:6,
+          justifySelf:'start', display:'flex', alignItems:'center', gap:6,
           background:'rgba(255,255,255,.13)', border:'1.5px solid rgba(255,255,255,.22)',
           borderRadius:10, padding:'7px 14px', color:'#fff', fontSize:12, fontWeight:800,
           cursor:'pointer', fontFamily:'inherit',
@@ -79,10 +80,6 @@ function GameNav({ onBack, backLabel, title, xp }) {
           {backLabel}
         </button>
         <div style={{ fontSize:15, fontWeight:900, color:'#fff', letterSpacing:'-.02em' }}>{title}</div>
-        {xp != null
-          ? <div style={{ background:'rgba(255,184,0,.15)', border:'1.5px solid rgba(255,184,0,.3)', borderRadius:10, padding:'6px 12px', fontSize:11, fontWeight:900, color:'#FCD34D', display:'flex', alignItems:'center', gap:4 }}>⚡ {xp.toLocaleString()}</div>
-          : <div style={{ width:72 }}/>
-        }
       </div>
     </div>
   )
@@ -169,18 +166,20 @@ const EXAMS = [
 // public/images/jamb-logo.png (the same files the mock exam uses). Until a
 // file exists, a clean initials badge shows instead.
 const EXAM_COLORS = { WAEC: '#16A34A', JAMB: '#7C3AED' }
+// A parent can resize it from CSS by setting --exam-logo (e.g. 112px).
 function ExamLogo({ exam, size = 56 }) {
   const [failed, setFailed] = useState(false)
   const color = EXAM_COLORS[exam] ?? '#1264E5'
+  const px = `var(--exam-logo, ${size}px)`
   return (
     <div style={{
-      width:size, height:size, borderRadius:size * 0.28, flexShrink:0,
+      width:px, height:px, borderRadius:`calc(${px} * .28)`, flexShrink:0,
       background:'#fff', display:'flex', alignItems:'center', justifyContent:'center',
-      overflow:'hidden', padding: failed ? 0 : size * 0.1,
+      overflow:'hidden', padding: failed ? 0 : `calc(${px} * .1)`, boxSizing:'border-box',
       boxShadow:'0 3px 0 rgba(0,0,0,.25)',
     }}>
       {failed
-        ? <span style={{ fontSize:size * 0.26, fontWeight:900, color, letterSpacing:'-.02em' }}>{exam}</span>
+        ? <span style={{ fontSize:`calc(${px} * .26)`, fontWeight:900, color, letterSpacing:'-.02em' }}>{exam}</span>
         : <img src={`/images/${exam.toLowerCase()}-logo.png`} alt={`${exam} logo`}
             onError={() => setFailed(true)}
             style={{ width:'100%', height:'100%', objectFit:'contain' }}/>}
@@ -209,17 +208,12 @@ export default function BattleSetup({ opponent = 'computer' }) {
   const [timerOn,   setTimerOn]   = useState(true)   // on by default — most students never found the toggle
   const [timerSec,  setTimerSec]  = useState(30)
   const [step,      setStep]      = useState('exam')
-  const [xp,        setXp]        = useState(null)
   const [creating,  setCreating]  = useState(false)
   const [pvpError,  setPvpError]  = useState(null)
 
-  // Pre-select the profile's main exam, and load battle XP for the header.
+  // Pre-select the profile's main exam.
   useEffect(() => {
     setExam(getLocalExamType() || 'WAEC')
-    fetch('/api/student/battle/stats')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.stats?.total_battle_xp != null) setXp(d.stats.total_battle_xp) })
-      .catch(() => {})
   }, [])
 
   function chooseExam(v) {
@@ -334,16 +328,37 @@ export default function BattleSetup({ opponent = 'computer' }) {
   // ── STEP 1: EXAM SELECTION ─────────────────────────────────────────────────
   if (step === 'exam') return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-      <style>{`.ecard{transition:transform .12s} .ecard:hover{transform:translateY(-3px)} .ecard:active{transform:translateY(2px)}`}</style>
+      <style>{`
+        .ecard { transition: transform .12s }
+        .ecard:hover { transform: translateY(-3px) }
+        .ecard:active { transform: translateY(2px) }
+        .egrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px }
+        .ecard-in { --exam-logo: 60px; border-radius: 17px; padding: 18px 16px; display: flex; align-items: center; gap: 14px;
+                    position: relative; overflow: hidden; text-align: left }
+        .ecard-text  { flex: 1; min-width: 0 }
+        .ecard-title { font-size: 18px; font-weight: 900; color: #fff; letter-spacing: -.01em }
+        .ecard-desc  { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 3px; line-height: 1.35 }
+        .ecard-count { font-size: 10px; font-weight: 800; margin-top: 6px }
+        /* Desktop: two big cards, logo on top */
+        @media (min-width: 768px) {
+          .egrid { grid-template-columns: 1fr 1fr; gap: 20px }
+          .ecard-in { --exam-logo: 112px; flex-direction: column; justify-content: center; text-align: center;
+                      gap: 18px; padding: 36px 28px 32px; min-height: 320px }
+          .ecard-text  { flex: none }
+          .ecard-title { font-size: 28px }
+          .ecard-desc  { font-size: 14px; margin-top: 8px; line-height: 1.5 }
+          .ecard-count { font-size: 13px; margin-top: 12px }
+        }
+      `}</style>
       <BattleBg/>
-      <GameNav onBack={() => router.push(hubPath)} backLabel={vsFriend ? '1v1' : 'Battle'} title="Choose Exam" xp={xp}/>
+      <GameNav onBack={() => router.push(hubPath)} backLabel={vsFriend ? '1v1' : 'Battle'} title="Choose Exam"/>
       <StepBar current={0} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
         <div style={{ maxWidth:860, margin:'0 auto', padding:'20px 24px 0' }}>
           <Panel>
             <SectionLabel>Which exam are you battling for?</SectionLabel>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
+            <div className="egrid">
               {EXAMS.map(({ v, label, desc }) => {
                 const sel = exam === v
                 const n   = getLocalSubjects(v).length
@@ -355,16 +370,12 @@ export default function BattleSetup({ opponent = 'computer' }) {
                       borderRadius:20, padding:0, background:'none', cursor:'pointer', outline:'none',
                       boxShadow: sel ? `0 6px 0 rgba(0,0,0,.3), 0 0 0 2px ${GOLD}44` : '0 5px 0 rgba(0,0,0,.2)',
                     }}>
-                    <div style={{
-                      background: sel ? `linear-gradient(135deg,${NAVY},#1264E5)` : 'rgba(255,255,255,.08)',
-                      borderRadius:17, padding:'18px 16px', display:'flex', alignItems:'center', gap:14,
-                      position:'relative', overflow:'hidden', textAlign:'left',
-                    }}>
-                      <ExamLogo exam={v} size={60}/>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:18, fontWeight:900, color:'#fff', letterSpacing:'-.01em' }}>{label}</div>
-                        <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:3, lineHeight:1.35 }}>{desc}</div>
-                        <div style={{ fontSize:10, fontWeight:800, color: n ? '#FCD34D' : 'rgba(255,255,255,.4)', marginTop:6 }}>
+                    <div className="ecard-in" style={{ background: sel ? `linear-gradient(135deg,${NAVY},#1264E5)` : 'rgba(255,255,255,.08)' }}>
+                      <ExamLogo exam={v}/>
+                      <div className="ecard-text">
+                        <div className="ecard-title">{label}</div>
+                        <div className="ecard-desc">{desc}</div>
+                        <div className="ecard-count" style={{ color: n ? '#FCD34D' : 'rgba(255,255,255,.4)' }}>
                           {n ? `${n} subject${n === 1 ? '' : 's'} on your profile` : 'No subjects added yet'}
                         </div>
                       </div>
@@ -391,7 +402,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .scard{transition:transform .12s,box-shadow .12s} .scard:hover{transform:translateY(-3px)} .scard:active{transform:translateY(2px)}`}</style>
       <BattleBg/>
-      <GameNav onBack={() => setStep('exam')} backLabel="Exam" title="Choose Subject" xp={xp}/>
+      <GameNav onBack={() => setStep('exam')} backLabel="Exam" title="Choose Subject"/>
       <StepBar current={1} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
@@ -481,7 +492,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .mcard{transition:transform .12s} .mcard:hover{transform:translateY(-2px)} .mcard:active{transform:translateY(1px)} .trow{transition:background .1s} .trow:hover{filter:brightness(1.06)}`}</style>
       <BattleBg/>
-      <GameNav onBack={() => setStep('subject')} backLabel="Subjects" title="Pick Mission" xp={xp}/>
+      <GameNav onBack={() => setStep('subject')} backLabel="Subjects" title="Pick Mission"/>
       <StepBar current={2} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>
@@ -568,7 +579,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
     <div style={{ position:'fixed', inset:0, zIndex:1000, display:'flex', flexDirection:'column', overflow:'hidden' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <BattleBg/>
-      <GameNav onBack={() => setStep('missions')} backLabel="Mission" title="Match Settings" xp={xp}/>
+      <GameNav onBack={() => setStep('missions')} backLabel="Mission" title="Match Settings"/>
       <StepBar current={3} total={STEPS}/>
 
       <div style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', position:'relative', zIndex:5, paddingBottom:120 }}>

@@ -200,26 +200,26 @@ export default function BattlePage() {
               </div>
             </div>
 
-            {/* ── BATTLE MODE CARD ── */}
-            <ModeCard
-              onClick={() => router.push('/student/battle/setup')}
-              imageSrc="/images/battle/battle-pvc.png"
-              title="Player vs Computer"
-              desc="Test your skills against the computer. Answer questions faster and smarter than the AI to earn XP."
-              arrowBg="#FF6B00"
-              accentColor="#FF8C00"
-            />
+            {/* ── BATTLE MODES — stacked on phones, side by side on desktop ── */}
+            <ModeGrid>
+              <ModeCard
+                onClick={() => router.push('/student/battle/setup')}
+                imageSrc="/images/battle/battle-pvc.png"
+                title="Player vs Computer"
+                desc="Test your skills against the computer. Answer questions faster and smarter than the AI to earn XP."
+                arrowBg="#FF6B00"
+                accentColor="#FF8C00"
+              />
 
-            <div style={{ height: 16 }}/>
-
-            <ModeCard
-              imageSrc="/images/battle/battle-pvp.png"
-              title="Player vs Player"
-              desc="Challenge a friend with a code or QR, answer the same questions, and see who comes out on top."
-              arrowBg="#7C3AED"
-              accentColor="#A78BFA"
-              comingSoon
-            />
+              <ModeCard
+                imageSrc="/images/battle/battle-pvp.png"
+                title="Player vs Player"
+                desc="Challenge a friend with a code or QR, answer the same questions, and see who comes out on top."
+                arrowBg="#7C3AED"
+                accentColor="#A78BFA"
+                comingSoon
+              />
+            </ModeGrid>
           </div>
 
           {/* ── SPACER pushes footer to bottom ── */}
@@ -244,11 +244,10 @@ export default function BattlePage() {
   )
 }
 
-// ── Mode Card — stacked on mobile (image top, text below), horizontal on desktop
-// comingSoon: greyed out, not clickable, "Coming soon" badge.
-function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor, comingSoon = false }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const cls = comingSoon ? 'mc-card mc-soon' : 'mc-card'
+// ── Mode cards ────────────────────────────────────────────────────────────────
+// Phones: stacked, image on top. Tablet: one per row, image beside the text.
+// Desktop (≥900px): side by side, image on top.
+function ModeGrid({ children }) {
   return (
     <>
       <style>{`
@@ -289,74 +288,91 @@ function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor, coming
           padding: 18px 18px 20px;
           gap: 14px;
         }
-        @media (min-width: 640px) {
+        .mc-grid { display: grid; gap: 16px; }
+        /* Tablet: one card per row, image beside the text */
+        @media (min-width: 640px) and (max-width: 899px) {
           .mc-card { flex-direction: row; min-height: 160px; }
           .mc-img-wrap { width: 220px; min-width: 220px; aspect-ratio: unset; align-self: stretch; }
           .mc-body { flex: 1; padding: 24px 20px 24px 26px; }
           .mc-fade { background: linear-gradient(to right, transparent 50%, rgba(8,4,20,.92) 100%); }
         }
+        /* Desktop: the modes side by side, image on top */
+        @media (min-width: 900px) {
+          .mc-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+          .mc-img-wrap { aspect-ratio: 16 / 8; }
+          .mc-body { flex: 1; padding: 22px 24px 24px; }
+        }
       `}</style>
+      <div className="mc-grid">{children}</div>
+    </>
+  )
+}
 
-      <div
-        className={cls}
-        style={{ '--mc-accent': `${accentColor}55` }}
-        onClick={comingSoon ? undefined : onClick}
-        role={comingSoon ? undefined : 'button'}
-        aria-disabled={comingSoon || undefined}
-        tabIndex={comingSoon ? -1 : 0}
-        onKeyDown={comingSoon ? undefined : e => { if (e.key === 'Enter' || e.key === ' ') onClick?.() }}
-      >
-        {/* Image — or built-in artwork until the image file exists */}
-        <div className="mc-img-wrap">
-          {imageSrc && !imgFailed
-            ? <Image src={imageSrc} alt={title} fill onError={() => setImgFailed(true)}
-                style={{ objectFit: 'cover', objectPosition: 'center top' }}/>
-            : <VsArt accent={accentColor}/>}
-          <div className="mc-fade"/>
+// comingSoon: greyed out, not clickable, "Coming soon" badge.
+// imageSrc: artwork in /public; VsArt shows until the file exists.
+function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor, comingSoon = false }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const cls = comingSoon ? 'mc-card mc-soon' : 'mc-card'
+  return (
+    <div
+      className={cls}
+      style={{ '--mc-accent': `${accentColor}55` }}
+      onClick={comingSoon ? undefined : onClick}
+      role={comingSoon ? undefined : 'button'}
+      aria-disabled={comingSoon || undefined}
+      tabIndex={comingSoon ? -1 : 0}
+      onKeyDown={comingSoon ? undefined : e => { if (e.key === 'Enter' || e.key === ' ') onClick?.() }}
+    >
+      {/* Image — or built-in artwork until the image file exists */}
+      <div className="mc-img-wrap">
+        {imageSrc && !imgFailed
+          ? <Image src={imageSrc} alt={title} fill onError={() => setImgFailed(true)}
+              style={{ objectFit: 'cover', objectPosition: 'center top' }}/>
+          : <VsArt accent={accentColor}/>}
+        <div className="mc-fade"/>
+      </div>
+
+      {/* Text + CTA */}
+      <div className="mc-body">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            background: comingSoon ? 'rgba(255,255,255,.1)' : `${accentColor}22`,
+            border: `1px solid ${comingSoon ? 'rgba(255,255,255,.25)' : `${accentColor}55`}`,
+            borderRadius: 999, padding: '3px 10px',
+            fontSize: 9, fontWeight: 900,
+            color: comingSoon ? 'rgba(255,255,255,.8)' : accentColor,
+            textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 9,
+          }}>
+            {comingSoon
+              ? <>🔒 Coming soon</>
+              : <><span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, display: 'inline-block' }}/> Available Now</>}
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: comingSoon ? 'rgba(255,255,255,.75)' : '#fff', lineHeight: 1.15, marginBottom: 6, letterSpacing: '-.02em' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: 13, color: comingSoon ? 'rgba(255,255,255,.42)' : 'rgba(255,255,255,.55)', lineHeight: 1.55 }}>
+            {desc}
+          </div>
         </div>
 
-        {/* Text + CTA */}
-        <div className="mc-body">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: comingSoon ? 'rgba(255,255,255,.1)' : `${accentColor}22`,
-              border: `1px solid ${comingSoon ? 'rgba(255,255,255,.25)' : `${accentColor}55`}`,
-              borderRadius: 999, padding: '3px 10px',
-              fontSize: 9, fontWeight: 900,
-              color: comingSoon ? 'rgba(255,255,255,.8)' : accentColor,
-              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 9,
-            }}>
-              {comingSoon
-                ? <>🔒 Coming soon</>
-                : <><span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, display: 'inline-block' }}/> Available Now</>}
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: comingSoon ? 'rgba(255,255,255,.75)' : '#fff', lineHeight: 1.15, marginBottom: 6, letterSpacing: '-.02em' }}>
-              {title}
-            </div>
-            <div style={{ fontSize: 13, color: comingSoon ? 'rgba(255,255,255,.42)' : 'rgba(255,255,255,.55)', lineHeight: 1.55 }}>
-              {desc}
-            </div>
+        {/* Arrow CTA */}
+        <div className="mc-cta" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <div style={{
+            width: 50, height: 50, borderRadius: '50%', background: arrowBg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 5px 0 rgba(0,0,0,.4), 0 8px 20px ${arrowBg}60`,
+          }}>
+            {comingSoon
+              ? <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="4" y="9" width="12" height="8" rx="2" stroke="#fff" strokeWidth="2"/><path d="M7 9V6.5a3 3 0 016 0V9" stroke="#fff" strokeWidth="2"/></svg>
+              : <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M11 5l5 5-5 5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           </div>
-
-          {/* Arrow CTA */}
-          <div className="mc-cta" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-            <div style={{
-              width: 50, height: 50, borderRadius: '50%', background: arrowBg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 5px 0 rgba(0,0,0,.4), 0 8px 20px ${arrowBg}60`,
-            }}>
-              {comingSoon
-                ? <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="4" y="9" width="12" height="8" rx="2" stroke="#fff" strokeWidth="2"/><path d="M7 9V6.5a3 3 0 016 0V9" stroke="#fff" strokeWidth="2"/></svg>
-                : <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M11 5l5 5-5 5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </div>
-            <div style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-              {comingSoon ? 'Soon' : 'Play'}
-            </div>
+          <div style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+            {comingSoon ? 'Soon' : 'Play'}
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

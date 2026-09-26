@@ -94,7 +94,10 @@ Test it at `/student/battle/1v1`. Launch = enable that button in `app/student/ba
 2. Run migrations in order: `20260926_scale_hardening.sql` → `20260927_battle_recent_form.sql` → `20260928_pvp_engine.sql`.
 3. Supabase → Database → Extensions → enable **pg_cron**, then re-run the last block of `20260928_pvp_engine.sql`
    (schedules the 5-minute clean-up).
-4. Simultaneous battles default to 5:
+4. Supabase → Authentication → Sign In / Providers → turn on **Allow anonymous sign-ins**. Friends without an
+   account play on a guest login from the invite link. If it's off, the challenge page says so and offers sign-in.
+   (Before launch, add Turnstile CAPTCHA to Auth — it covers anonymous sign-ins too.)
+5. Simultaneous battles default to 5:
    `update app_settings set value = '5' where key = 'pvp_max_live_matches';`
 
 ## What's built
@@ -102,11 +105,44 @@ Test it at `/student/battle/1v1`. Launch = enable that button in `app/student/ba
 |---|---|
 | 1. Engine (tables, SQL functions, Realtime policy, sweep, tests in `supabase/tests/`) | Done |
 | 2. 1v1 hub, create (shared setup screens), waiting room (code, WhatsApp, share, QR, expiry, cancel), `/b/<code>` challenge page with link preview | Done |
-| 3. Live match screen (rounds, reveal, results, review, reconnect) | Next — `/student/battle/1v1/match` is a placeholder |
-| 4. Guests via link, rematch UI, share result | Planned |
+| Guests via link: accept with just a first name, sign-up card after the match, results kept on sign-up | Done |
+| 3. Live match screen: countdown, shared server timer, lock in / change answer, "opponent answered", reveal with both picks and points, results, review, rematch, leave, claim win when the opponent is away, reconnect | Done |
+| 4. Share result card | Planned |
+
+## How a match plays
+- Pick an answer, then **Lock in**. You can change it (tap another, then **Change**) until time is up or both have
+  locked in. A pick that wasn't locked in when time runs out is sent anyway (the server allows 2 s of grace).
+- 10 points per correct answer + up to 5 for speed. Ties go to the faster total time on correct answers.
+- After each question both phones show the answer, who picked what and the points; the next one starts 3 s later.
+- **Reconnect:** closing the app or losing signal doesn't stop the match; reopening the link picks it up where it is,
+  with your locked answer kept. Answers made while offline are retried until time is up.
+- **Leave** (Menu → Leave match) ends the match as a loss for the leaver.
+- **Opponent away:** if your friend misses 3 questions in a row while you answer, you can **Claim win**.
+- **Rematch:** either player asks; the other sees "X wants a rematch!" and accepts. Pressing Rematch when the other
+  has already asked accepts theirs. Both phones move into the new match; the old one is never changed.
+
+## Guests (no account)
+- `/b/<code>` asks for a first name, signs in anonymously and joins. A guest can join battles and request a rematch,
+  but can't create a battle (`PVP_ACCOUNT_REQUIRED`).
+- A guest's answers stay in the `pvp_*` tables only: no XP, no `question_attempts`, nothing on leaderboards.
+- The rest of the app treats a guest login as signed out. Outside `/student/battle/1v1/*` a guest goes to /onboarding.
+- After the match: "Create an account to save your progress". Sign-up or sign-in (from anywhere) sends the guest
+  token to `/api/student/battle/claim-guest`, which verifies it, runs `merge_battle_guest` (answers → attempts dated
+  when played, XP with the normal formula, 1v1 form merged) and deletes the guest login.
 
 ## Files
 - Engine: `supabase/migrations/20260928_pvp_engine.sql`
 - Client helper: `lib/pvp/client.js` (all engine calls, messages, invite text, Realtime + polling), `lib/pvp/constants.js`
-- Screens: `app/student/battle/1v1/*`, `app/b/[code]/page.js`, `components/battle/{BattleSetup,ChallengeClient,PvpNotice,RecentForm}.jsx`
+- Live match: `lib/pvp/useMatch.js` (follows the match, server clock, wake-ups, answer queue), `lib/pvp/results.js`,
+  `components/battle/pvp/MatchResults.jsx`
+- Shared battle look (vs Computer and 1v1): `components/battle/arena/*` — header, question card, answer tiles, timer,
+  countdown, results hero, score strip, review
+- Screens: `app/student/battle/1v1/*`, `app/b/[code]/page.js`, `components/battle/{BattleSetup,ChallengeClient,GuestUpgradeCard,PvpNotice,RecentForm}.jsx`
+- Guest claim: `app/api/student/battle/claim-guest/route.js`, `lib/auth/client.js` (`signUp` / `signIn`)
 - Design: the "1v1 Battle Design" doc
+
+### Engine additions (re-run `20260928_pvp_engine.sql`, safe to repeat)
+- `pvp_state` now includes `opponent_away` and `rematch` (the latest rematch offer of that match).
+- `pvp_rematch` accepts an existing offer instead of opening a second match (locked, so a double press is safe).
+- `pvp_claim_win(match)`: allowed when the opponent missed the last 3 questions and hasn't answered the current one,
+  and you answered at least one of those 3. Finishes with `finish_reason = 'opponent_away'`.

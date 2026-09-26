@@ -8,6 +8,7 @@
 //   signIn({ method, phone, email, password })  → { ok, error, field }
 //   signOut()                                    → clears device state
 //   continueAsGuest()                            → starts a device-only profile
+//   isAccountSession(session)                    → true for a real (non-guest) login
 //   destinationAfterAuth({ from, join })         → where to send the user next
 //
 // localStorage keys owned here:
@@ -98,6 +99,35 @@ function validateCredentials({ method, phone, email, password }) {
   return null
 }
 
+// ── Battle guests ─────────────────────────────────────────────────────────────
+// Someone who accepts a 1v1 invite without an account plays on a Supabase
+// anonymous login. That login is NOT an account: only the 1v1 screens use it.
+// When they sign up or sign in, their finished battles (answers, XP, form)
+// move onto the account — the server checks the guest token proves ownership.
+
+/** True for a real account session; false for none or a battle-guest login. */
+export function isAccountSession(session) {
+  return !!session?.user && !session.user.is_anonymous
+}
+
+async function battleGuestToken() {
+  try {
+    const { data: { session } } = await createClient().auth.getSession()
+    return session?.user?.is_anonymous ? session.access_token : null
+  } catch { return null }
+}
+
+async function claimBattleGuest(guestToken) {
+  if (!guestToken) return
+  try {
+    await fetch('/api/student/battle/claim-guest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_token: guestToken }),
+    })
+  } catch {}   // best effort: the account works either way
+}
+
 function flushPracticeQueue() {
   import('@/lib/localSessionSync').then(({ syncOnLogin }) => syncOnLogin()).catch(() => {})
 }
@@ -106,6 +136,7 @@ function flushPracticeQueue() {
 export async function signUp({ method, phone, email, password }) {
   const invalid = validateCredentials({ method, phone, email, password })
   if (invalid) return { ok: false, ...invalid }
+  const guestToken = await battleGuestToken()   // read before the new login replaces it
 
   let res, data
   try {
@@ -130,6 +161,7 @@ export async function signUp({ method, phone, email, password }) {
     const { data: { user } } = await createClient().auth.getUser()
     write(GUEST_KEY, { ...g, migrated_to: user?.id ?? true })
   }
+  await claimBattleGuest(guestToken)
   flushPracticeQueue()
   markIntroSeen()
   return { ok: true }
@@ -141,9 +173,11 @@ export async function signIn({ method, phone, email, password }) {
   if (invalid) return { ok: false, ...invalid }
 
   const loginEmail = method === 'phone' ? phoneToAuthEmail(phone) : email.trim().toLowerCase()
+  const guestToken = await battleGuestToken()
   const { error } = await createClient().auth.signInWithPassword({ email: loginEmail, password })
   if (error) return { ok: false, error: signInErrorMessage(method, error) }
 
+  await claimBattleGuest(guestToken)
   flushPracticeQueue()
   markIntroSeen()
   return { ok: true }

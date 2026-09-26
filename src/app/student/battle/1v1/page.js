@@ -55,63 +55,61 @@ export default function PvpHubPage() {
             </div>
           </div>
 
+          {/* Create — needs an account (a guest can still join a friend's battle) */}
           {isGuest ? (
             <Panel>
-              <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>Sign in to battle friends</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>Sign in to create battles</div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', marginTop: 6, lineHeight: 1.5 }}>
-                1v1 battles need an account so your wins, XP and form are saved.
+                You can join a friend's battle without an account. To start your own and keep your wins, XP and form, sign in.
               </div>
               <Cta gold onClick={() => router.push('/onboarding?mode=signin&from=/student/battle/1v1')} style={{ marginTop: 14 }}>
                 Sign in or create an account
               </Cta>
             </Panel>
           ) : (
-            <>
-              {/* Create */}
-              <Panel>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ fontSize: 34 }}>⚔️</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Create a battle</div>
-                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', marginTop: 3 }}>Pick the subject and timer, then share your code.</div>
-                  </div>
+            <Panel>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ fontSize: 34 }}>⚔️</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Create a battle</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', marginTop: 3 }}>Pick the subject and timer, then share your code.</div>
                 </div>
-                <Cta gold onClick={() => router.push('/student/battle/1v1/create')} style={{ marginTop: 14 }}>Create battle</Cta>
-              </Panel>
+              </div>
+              <Cta gold onClick={() => router.push('/student/battle/1v1/create')} style={{ marginTop: 14 }}>Create battle</Cta>
+            </Panel>
+          )}
 
-              {/* Join */}
-              <Panel>
-                <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Join with a code</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', marginTop: 3 }}>Enter the 4-character code your friend sent you.</div>
-                <form onSubmit={e => { e.preventDefault(); if (codeOk) router.push(`/b/${code}`) }}
-                  style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                  <input
-                    value={code}
-                    onChange={e => setCode(e.target.value.toUpperCase().replace(NOT_CODE_CHAR, '').slice(0, 4))}
-                    inputMode="text" autoCapitalize="characters" autoComplete="off" spellCheck={false}
-                    placeholder="K7Q2" aria-label="Battle code"
-                    style={{ flex: 1, minWidth: 0, textAlign: 'center', letterSpacing: '.35em', fontSize: 24, fontWeight: 900, padding: '12px 10px', borderRadius: 14, border: '2px solid rgba(255,255,255,.2)', background: 'rgba(255,255,255,.08)', color: '#fff', fontFamily: 'inherit', outline: 'none', textTransform: 'uppercase' }}
-                  />
-                  <button type="submit" disabled={!codeOk}
-                    style={{ padding: '0 20px', borderRadius: 14, border: 'none', background: codeOk ? '#1264E5' : 'rgba(255,255,255,.12)', color: codeOk ? '#fff' : 'rgba(255,255,255,.35)', fontSize: 15, fontWeight: 900, fontFamily: 'inherit', cursor: codeOk ? 'pointer' : 'not-allowed', boxShadow: codeOk ? '0 4px 0 #062A78' : 'none' }}>
-                    Join
-                  </button>
-                </form>
-              </Panel>
+          {/* Join */}
+          <Panel>
+            <div style={{ fontSize: 17, fontWeight: 900, color: '#fff' }}>Join with a code</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', marginTop: 3 }}>Enter the 4-character code your friend sent you.</div>
+            <form onSubmit={e => { e.preventDefault(); if (codeOk) router.push(`/b/${code}`) }}
+              style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase().replace(NOT_CODE_CHAR, '').slice(0, 4))}
+                inputMode="text" autoCapitalize="characters" autoComplete="off" spellCheck={false}
+                placeholder="K7Q2" aria-label="Battle code"
+                style={{ flex: 1, minWidth: 0, textAlign: 'center', letterSpacing: '.35em', fontSize: 24, fontWeight: 900, padding: '12px 10px', borderRadius: 14, border: '2px solid rgba(255,255,255,.2)', background: 'rgba(255,255,255,.08)', color: '#fff', fontFamily: 'inherit', outline: 'none', textTransform: 'uppercase' }}
+              />
+              <button type="submit" disabled={!codeOk}
+                style={{ padding: '0 20px', borderRadius: 14, border: 'none', background: codeOk ? '#1264E5' : 'rgba(255,255,255,.12)', color: codeOk ? '#fff' : 'rgba(255,255,255,.35)', fontSize: 15, fontWeight: 900, fontFamily: 'inherit', cursor: codeOk ? 'pointer' : 'not-allowed', boxShadow: codeOk ? '0 4px 0 #062A78' : 'none' }}>
+                Join
+              </button>
+            </form>
+          </Panel>
 
-              {stats && (
-                <RecentForm
-                  title="Your form vs friends"
-                  form={stats.recent_form}
-                  played={stats.played}
-                  totals={[
-                    { l: 'Played', v: stats.played, c: '#fff'    },
-                    { l: 'Won',    v: stats.won,    c: '#4ADE80' },
-                    { l: 'Lost',   v: stats.lost,   c: '#F87171' },
-                  ]}
-                />
-              )}
-            </>
+          {stats && (
+            <RecentForm
+              title="Your form vs friends"
+              form={stats.recent_form}
+              played={stats.played}
+              totals={[
+                { l: 'Played', v: stats.played, c: '#fff'    },
+                { l: 'Won',    v: stats.won,    c: '#4ADE80' },
+                { l: 'Lost',   v: stats.lost,   c: '#F87171' },
+              ]}
+            />
           )}
         </div>
       </div>
