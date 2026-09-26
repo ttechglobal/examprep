@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePoints } from '@/contexts/PointsContext'
-import { createComputerOpponent, readLocalBattleStats, saveLocalBattleStats } from '@/lib/battleAI'
+import { createComputerOpponent, readLocalBattleStats, recordLocalBattleResult } from '@/lib/battleAI'
 import { computeSessionXP } from '@/lib/xp'
 import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
 import { MathText } from '@/lib/mathRenderer'
@@ -890,14 +890,11 @@ export default function BattleSessionPage() {
     }, 0)
     const outcome = finalS > finalC ? 'win' : finalS < finalC ? 'loss' : 'draw'
     const xp      = computeSessionXP('battle', answersLog.current, { outcome })
-    saveSessionLocally({ session_id:sessionId.current, exam:config?.examType||'WAEC', mode:'battle', session_type:'battle', opponent:'computer', opponent_score:finalC, battle_outcome:outcome, subject_name:config?.subject_name??'Mixed', results:answersLog.current, questions_count:questions.length, correct_count:correct }, xp)
+    saveSessionLocally({ session_id:sessionId.current, exam:config?.exam||'WAEC', mode:'battle', session_type:'battle', opponent:'computer', opponent_score:finalC, battle_outcome:outcome, subject_name:config?.subject_name??'Mixed', results:answersLog.current, questions_count:questions.length, correct_count:correct }, xp)
     setTotalPoints((currentXP||0) + xp)
     showXPToast(xp, 'Battle done!')
-    const local = readLocalBattleStats()
-    const newWins = (local.battles_won||0) + (outcome==='win'?1:0)
-    saveLocalBattleStats({ battles_played:(local.battles_played||0)+1, battles_won:newWins, battles_drawn:(local.battles_drawn||0)+(outcome==='draw'?1:0), battles_lost:(local.battles_lost||0)+(outcome==='loss'?1:0), total_battle_xp:(local.total_battle_xp||0)+xp, last_battle_at:new Date().toISOString(), ai_difficulty:newWins>=8?'hard':newWins>=3?'medium':'easy' })
-    flushSyncQueue().catch(()=>{})
-    fetch('/api/student/battle/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({outcome,xp_awarded:xp})}).catch(()=>{})
+    recordLocalBattleResult({ outcome, xp })
+    fetch('/api/student/battle/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({outcome,xp_awarded:xp,session_id:sessionId.current})}).catch(()=>{})
     setSaveData({ finalS, finalC, xp, outcome })
     setPhase('results')
   }

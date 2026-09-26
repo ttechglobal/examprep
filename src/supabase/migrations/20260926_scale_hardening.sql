@@ -513,10 +513,20 @@ as $$
   limit least(greatest(p_pool, 1), 400)
 $$;
 
--- ── 7d. Battle vs computer: one atomic update per finished match ────────────
+-- ── 7d. Battle vs computer: one atomic, idempotent update per finished match ─
 -- Replaces read-then-write in the API (two tabs could lose a result).
+-- Keeps the last 10 results (recent_form, newest first) for the W/D/L strip.
 -- Computer difficulty: 3+ wins → medium, 8+ → hard (as before).
-create or replace function public.record_battle_result(p_student uuid, p_outcome text, p_xp integer)
+alter table public.battle_stats add column if not exists recent_form     text not null default '';
+alter table public.battle_stats add column if not exists last_session_id text;
+drop function if exists public.record_battle_result(uuid, text, integer);
+
+create or replace function public.record_battle_result(
+  p_student    uuid,
+  p_outcome    text,
+  p_xp         integer,
+  p_session_id text default null
+)
 returns void
 language sql
 security definer
@@ -524,10 +534,12 @@ set search_path = public
 as $$
   insert into public.battle_stats as b
     (student_id, battles_played, battles_won, battles_drawn, battles_lost,
-     ai_difficulty, total_battle_xp, last_battle_at, updated_at)
+     ai_difficulty, total_battle_xp, recent_form, last_session_id, last_battle_at, updated_at)
   values (p_student, 1,
           (p_outcome = 'win')::int, (p_outcome = 'draw')::int, (p_outcome = 'loss')::int,
-          'easy', greatest(p_xp, 0), now(), now())
+          'easy', greatest(p_xp, 0),
+          case p_outcome when 'win' then 'W' when 'draw' then 'D' else 'L' end,
+          p_session_id, now(), now())
   on conflict (student_id) do update set
     battles_played  = b.battles_played + 1,
     battles_won     = b.battles_won   + (p_outcome = 'win')::int,
@@ -538,8 +550,13 @@ as $$
                         when b.battles_won + (p_outcome = 'win')::int >= 3 then 'medium'
                         else 'easy' end,
     total_battle_xp = coalesce(b.total_battle_xp, 0) + greatest(p_xp, 0),
+    recent_form     = left(case p_outcome when 'win' then 'W' when 'draw' then 'D' else 'L' end
+                           || coalesce(b.recent_form, ''), 10),
+    last_session_id = p_session_id,
     last_battle_at  = now(),
     updated_at      = now()
+  -- A retry of the same match changes nothing.
+  where p_session_id is null or b.last_session_id is distinct from p_session_id
 $$;
 
 -- ── 8. Daily challenge: one row per student per day per slot ────────────────
@@ -603,16 +620,17 @@ as $$
 $$;
 
 -- ── 9a. Profile columns only the server may change ──────────────────────────
--- Requests made with the public anon key (role anon/authenticated) can still
--- edit their own profile where RLS allows, but these columns snap back to
--- their old values. The server (service_role) is unaffected.
+-- A student's own login (role anon/authenticated, e.g. a direct update with
+-- the public key) may edit their profile where RLS allows, but these columns
+-- snap back to their old values. Our own database functions run as their
+-- owner (security definer), so current_user is not anon/authenticated there
+-- and they can award XP and streaks. The server (service_role) is unaffected.
 create or replace function public.tg_protect_profile_columns()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 declare
-  v_role      text := coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'role';
   v_old       jsonb := to_jsonb(old);
   v_patch     jsonb := '{}'::jsonb;
   k           text;
@@ -620,7 +638,7 @@ declare
                               'school_id', 'school_name', 'plan', 'plan_expires_at',
                               'access_expires_at'];
 begin
-  if v_role in ('anon', 'authenticated') then
+  if current_user in ('anon', 'authenticated') then
     foreach k in array v_protected loop
       if v_old ? k then
         v_patch := v_patch || jsonb_build_object(k, v_old -> k);

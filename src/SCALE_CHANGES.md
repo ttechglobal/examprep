@@ -81,3 +81,32 @@ Goes with `supabase/migrations/20260926_scale_hardening.sql`.
 
 Not covered here: a full `next build` with your real `package.json`/env, and a browser pass. Please run both on a
 preview deployment before promoting.
+
+---
+
+# 1v1 battles (in development) — 26 Sep 2026
+
+Hidden until launch: the battle hub shows Player vs Player as "Coming soon" with the button disabled.
+Test it at `/student/battle/1v1`. Launch = enable that button in `app/student/battle/page.js`.
+
+## Deploy
+1. `npm install qrcode` (the waiting room draws its QR code with it).
+2. Run migrations in order: `20260926_scale_hardening.sql` → `20260927_battle_recent_form.sql` → `20260928_pvp_engine.sql`.
+3. Supabase → Database → Extensions → enable **pg_cron**, then re-run the last block of `20260928_pvp_engine.sql`
+   (schedules the 5-minute clean-up).
+4. Simultaneous battles default to 5:
+   `update app_settings set value = '5' where key = 'pvp_max_live_matches';`
+
+## What's built
+| Phase | Status |
+|---|---|
+| 1. Engine (tables, SQL functions, Realtime policy, sweep, tests in `supabase/tests/`) | Done |
+| 2. 1v1 hub, create (shared setup screens), waiting room (code, WhatsApp, share, QR, expiry, cancel), `/b/<code>` challenge page with link preview | Done |
+| 3. Live match screen (rounds, reveal, results, review, reconnect) | Next — `/student/battle/1v1/match` is a placeholder |
+| 4. Guests via link, rematch UI, share result | Planned |
+
+## Files
+- Engine: `supabase/migrations/20260928_pvp_engine.sql`
+- Client helper: `lib/pvp/client.js` (all engine calls, messages, invite text, Realtime + polling), `lib/pvp/constants.js`
+- Screens: `app/student/battle/1v1/*`, `app/b/[code]/page.js`, `components/battle/{BattleSetup,ChallengeClient,PvpNotice,RecentForm}.jsx`
+- Design: the "1v1 Battle Design" doc

@@ -51,6 +51,44 @@ export function saveLocalBattleStats(patch) {
   } catch { return patch }
 }
 
+// ── Recent form ──────────────────────────────────────────────────────────────
+// The last FORM_LENGTH results as a string, newest first: "WWLDW".
+// Same shape as battle_stats.recent_form on the server.
+export const FORM_LENGTH = 10
+const FORM_CHAR = { win: 'W', draw: 'D', loss: 'L' }
+
+export function pushForm(form, outcome) {
+  const c = FORM_CHAR[outcome]
+  return c ? (c + (form ?? '')).slice(0, FORM_LENGTH) : (form ?? '')
+}
+
+/** Record one finished match on this device (guests and offline included). */
+export function recordLocalBattleResult({ outcome, xp }) {
+  const cur  = readLocalBattleStats()
+  const wins = (cur.battles_won || 0) + (outcome === 'win' ? 1 : 0)
+  return saveLocalBattleStats({
+    battles_played:  (cur.battles_played || 0) + 1,
+    battles_won:     wins,
+    battles_drawn:   (cur.battles_drawn || 0) + (outcome === 'draw' ? 1 : 0),
+    battles_lost:    (cur.battles_lost  || 0) + (outcome === 'loss' ? 1 : 0),
+    total_battle_xp: (cur.total_battle_xp || 0) + (xp || 0),
+    ai_difficulty:   computeDifficulty(wins),
+    recent_form:     pushForm(cur.recent_form, outcome),
+    last_battle_at:  new Date().toISOString(),
+  })
+}
+
+/**
+ * The record to show: the server's (follows the student across devices) unless
+ * this device has a newer match the server hasn't received yet (e.g. offline).
+ */
+export function pickBattleStats(local, server) {
+  if (!server) return local
+  if (!local?.last_battle_at) return server
+  if (!server.last_battle_at) return local
+  return new Date(local.last_battle_at) > new Date(server.last_battle_at) ? local : server
+}
+
 function defaultStats() {
-  return { battles_played: 0, battles_won: 0, battles_drawn: 0, battles_lost: 0, ai_difficulty: 'easy', total_battle_xp: 0, last_battle_at: null }
+  return { battles_played: 0, battles_won: 0, battles_drawn: 0, battles_lost: 0, ai_difficulty: 'easy', total_battle_xp: 0, recent_form: '', last_battle_at: null }
 }

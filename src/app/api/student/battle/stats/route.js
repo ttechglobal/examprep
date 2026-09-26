@@ -1,16 +1,19 @@
 // src/app/api/student/battle/stats/route.js — v2
 // GET  → the signed-in student's battle record (defaults for guests)
-// POST → record one finished match vs the computer: { outcome, xp_awarded }
+// POST → record one finished match vs the computer: { outcome, xp_awarded, session_id }
 //
 // v2: POST validates input and updates the record in one atomic statement
 // (record_battle_result). XP for the match itself is awarded by the session
 // save, which re-checks the answers; this only keeps battle stats.
+// v3: keeps recent_form (last 10 results, newest first) and ignores retries
+// of the same match (session_id).
 import { createClient }  from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { BATTLE_OUTCOMES } from '@/lib/xp'
 import { NextResponse }  from 'next/server'
 
-const defaults = () => ({ battles_played:0, battles_won:0, battles_drawn:0, battles_lost:0, ai_difficulty:'easy', total_battle_xp:0, last_battle_at:null })
+const defaults = () => ({ battles_played:0, battles_won:0, battles_drawn:0, battles_lost:0, ai_difficulty:'easy', total_battle_xp:0, recent_form:'', last_battle_at:null })
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
 
 // A 50-question battle with a win is the most a single match can earn.
 const MAX_MATCH_XP = 50 * 10 + 20
@@ -26,7 +29,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ stats: defaults() })
     const { data } = await supabaseAdmin()
       .from('battle_stats')
-      .select('battles_played, battles_won, battles_drawn, battles_lost, ai_difficulty, total_battle_xp, last_battle_at')
+      .select('battles_played, battles_won, battles_drawn, battles_lost, ai_difficulty, total_battle_xp, recent_form, last_battle_at')
       .eq('student_id', user.id).maybeSingle()
     return NextResponse.json({ stats: data ?? defaults() })
   } catch { return NextResponse.json({ stats: defaults() }) }
@@ -44,8 +47,10 @@ export async function POST(req) {
     }
     const xp = Math.min(Math.max(Math.round(Number(body.xp_awarded) || 0), 0), MAX_MATCH_XP)
 
+    const sessionId = typeof body.session_id === 'string' && SESSION_ID_RE.test(body.session_id) ? body.session_id : null
+
     const { error } = await supabaseAdmin().rpc('record_battle_result', {
-      p_student: user.id, p_outcome: body.outcome, p_xp: xp,
+      p_student: user.id, p_outcome: body.outcome, p_xp: xp, p_session_id: sessionId,
     })
     if (error) throw error
     return NextResponse.json({ ok: true })

@@ -1,8 +1,14 @@
 'use client'
 // src/app/student/battle/page.js
+// Battle hub: the student's recent form, then the battle modes.
+//
+// v2: recent form strip (last 10 results, W/D/L) replaces the plain stats row;
+// Player vs Player shows as "Coming soon" (not clickable). The 1v1 build lives
+// at /student/battle/1v1 and is not linked from anywhere yet.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { readLocalBattleStats } from '@/lib/battleAI'
+import { readLocalBattleStats, pickBattleStats } from '@/lib/battleAI'
+import RecentForm from '@/components/battle/RecentForm'
 import Image from 'next/image'
 
 const GOLD = '#FFB800'
@@ -11,11 +17,14 @@ export default function BattlePage() {
   const router = useRouter()
   const [stats, setStats] = useState(null)
 
+  // Device record first (instant, works offline and for guests), then the
+  // server's — whichever has the more recent match wins.
   useEffect(() => {
-    setStats(readLocalBattleStats())
+    const local = readLocalBattleStats()
+    setStats(local)
     fetch('/api/student/battle/stats')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.stats) setStats(d.stats) })
+      .then(d => { if (d?.stats) setStats(pickBattleStats(local, d.stats)) })
       .catch(() => {})
   }, [])
 
@@ -146,6 +155,19 @@ export default function BattlePage() {
             </div>
           </div>
 
+          {/* ── RECENT FORM ── */}
+          {stats && (
+            <RecentForm
+              form={stats.recent_form}
+              played={stats.battles_played}
+              totals={[
+                { l: 'Played',    v: stats.battles_played ?? 0,                         c: '#fff'    },
+                { l: 'Won',       v: stats.battles_won ?? 0,                            c: '#4ADE80' },
+                { l: 'Battle XP', v: (stats.total_battle_xp || 0).toLocaleString(),     c: '#FFB800' },
+              ]}
+            />
+          )}
+
           {/* ── BOTTOM PANEL ── */}
           <div style={{
             background: 'rgba(12,20,90,.75)',
@@ -186,32 +208,18 @@ export default function BattlePage() {
               desc="Test your skills against the computer. Answer questions faster and smarter than the AI to earn XP."
               arrowBg="#FF6B00"
               accentColor="#FF8C00"
-              active
             />
 
-            {/* Stats row (only when played before) */}
-            {stats && stats.battles_played > 0 && (
-              <div style={{
-                marginTop: 20,
-                display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10,
-              }}>
-                {[
-                  { l: 'Played', v: stats.battles_played ?? 0,                  c: '#fff'    },
-                  { l: 'Won',    v: stats.battles_won ?? 0,                      c: '#4ADE80' },
-                  { l: 'XP',    v: (stats.total_battle_xp||0).toLocaleString(), c: GOLD      },
-                ].map(({ l, v, c }) => (
-                  <div key={l} style={{
-                    textAlign: 'center',
-                    background: 'rgba(255,255,255,.07)',
-                    border: '1px solid rgba(255,255,255,.1)',
-                    borderRadius: 14, padding: '12px 6px',
-                  }}>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: c, lineHeight: 1 }}>{v}</div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.38)', textTransform: 'uppercase', letterSpacing: '.09em', marginTop: 4 }}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ height: 16 }}/>
+
+            <ModeCard
+              imageSrc="/images/battle/battle-pvp.png"
+              title="Player vs Player"
+              desc="Challenge a friend with a code or QR, answer the same questions, and see who comes out on top."
+              arrowBg="#7C3AED"
+              accentColor="#A78BFA"
+              comingSoon
+            />
           </div>
 
           {/* ── SPACER pushes footer to bottom ── */}
@@ -237,7 +245,10 @@ export default function BattlePage() {
 }
 
 // ── Mode Card — stacked on mobile (image top, text below), horizontal on desktop
-function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor }) {
+// comingSoon: greyed out, not clickable, "Coming soon" badge.
+function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor, comingSoon = false }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const cls = comingSoon ? 'mc-card mc-soon' : 'mc-card'
   return (
     <>
       <style>{`
@@ -245,7 +256,7 @@ function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor }) {
           border-radius: 22px;
           overflow: hidden;
           position: relative;
-          border: 2px solid ${accentColor}55;
+          border: 2px solid var(--mc-accent);
           box-shadow: 0 8px 0 rgba(0,0,0,.35), 0 14px 40px rgba(0,0,0,.28);
           cursor: pointer;
           transition: transform .13s, box-shadow .13s, filter .13s;
@@ -253,108 +264,112 @@ function ModeCard({ onClick, imageSrc, title, desc, arrowBg, accentColor }) {
           display: flex;
           flex-direction: column;
         }
-        .mc-card:hover {
+        .mc-card:not(.mc-soon):hover {
           transform: translateY(-4px);
           box-shadow: 0 12px 0 rgba(0,0,0,.3), 0 22px 48px rgba(0,0,0,.3);
           filter: brightness(1.06);
         }
-        .mc-card:active {
+        .mc-card:not(.mc-soon):active {
           transform: translateY(2px);
           box-shadow: 0 3px 0 rgba(0,0,0,.3), 0 6px 12px rgba(0,0,0,.22);
           filter: brightness(.94);
         }
-        /* Mobile: image fills top at 16:7 ratio */
+        .mc-soon { cursor: not-allowed; box-shadow: 0 5px 0 rgba(0,0,0,.3); }
+        .mc-soon .mc-img-wrap, .mc-soon .mc-cta { filter: grayscale(1) opacity(.55); }
         .mc-img-wrap {
           position: relative;
           width: 100%;
           aspect-ratio: 16 / 7;
           flex-shrink: 0;
         }
+        .mc-fade { position:absolute; inset:0; background: linear-gradient(to bottom, transparent 50%, rgba(8,4,20,.92) 100%); }
         .mc-body {
           display: flex;
           align-items: center;
           padding: 18px 18px 20px;
           gap: 14px;
         }
-        /* Desktop ≥640px: horizontal layout */
         @media (min-width: 640px) {
           .mc-card { flex-direction: row; min-height: 160px; }
           .mc-img-wrap { width: 220px; min-width: 220px; aspect-ratio: unset; align-self: stretch; }
           .mc-body { flex: 1; padding: 24px 20px 24px 26px; }
+          .mc-fade { background: linear-gradient(to right, transparent 50%, rgba(8,4,20,.92) 100%); }
         }
       `}</style>
 
-      <div className="mc-card" onClick={onClick}>
-
-        {/* Image */}
-        {imageSrc && (
-          <div className="mc-img-wrap">
-            <Image
-              src={imageSrc}
-              alt={title}
-              fill
-              style={{ objectFit: 'cover', objectPosition: 'center top' }}
-            />
-            {/* Fade: bottom on mobile, right on desktop */}
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(to bottom, transparent 50%, rgba(8,4,20,.92) 100%)',
-            }}/>
-            <style>{`@media (min-width: 640px) { .mc-img-wrap > div:last-child { background: linear-gradient(to right, transparent 50%, rgba(8,4,20,.92) 100%) !important; } }`}</style>
-          </div>
-        )}
+      <div
+        className={cls}
+        style={{ '--mc-accent': `${accentColor}55` }}
+        onClick={comingSoon ? undefined : onClick}
+        role={comingSoon ? undefined : 'button'}
+        aria-disabled={comingSoon || undefined}
+        tabIndex={comingSoon ? -1 : 0}
+        onKeyDown={comingSoon ? undefined : e => { if (e.key === 'Enter' || e.key === ' ') onClick?.() }}
+      >
+        {/* Image — or built-in artwork until the image file exists */}
+        <div className="mc-img-wrap">
+          {imageSrc && !imgFailed
+            ? <Image src={imageSrc} alt={title} fill onError={() => setImgFailed(true)}
+                style={{ objectFit: 'cover', objectPosition: 'center top' }}/>
+            : <VsArt accent={accentColor}/>}
+          <div className="mc-fade"/>
+        </div>
 
         {/* Text + CTA */}
         <div className="mc-body">
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: `${accentColor}22`,
-              border: `1px solid ${accentColor}55`,
-              borderRadius: 999,
-              padding: '3px 10px',
+              background: comingSoon ? 'rgba(255,255,255,.1)' : `${accentColor}22`,
+              border: `1px solid ${comingSoon ? 'rgba(255,255,255,.25)' : `${accentColor}55`}`,
+              borderRadius: 999, padding: '3px 10px',
               fontSize: 9, fontWeight: 900,
-              color: accentColor,
-              textTransform: 'uppercase', letterSpacing: '.08em',
-              marginBottom: 9,
+              color: comingSoon ? 'rgba(255,255,255,.8)' : accentColor,
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 9,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, display: 'inline-block' }}/>
-              Available Now
+              {comingSoon
+                ? <>🔒 Coming soon</>
+                : <><span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, display: 'inline-block' }}/> Available Now</>}
             </div>
-            <div style={{
-              fontSize: 20, fontWeight: 900, color: '#fff',
-              lineHeight: 1.15, marginBottom: 6,
-              letterSpacing: '-.02em',
-            }}>
+            <div style={{ fontSize: 20, fontWeight: 900, color: comingSoon ? 'rgba(255,255,255,.75)' : '#fff', lineHeight: 1.15, marginBottom: 6, letterSpacing: '-.02em' }}>
               {title}
             </div>
-            <div style={{
-              fontSize: 13, color: 'rgba(255,255,255,.55)',
-              lineHeight: 1.55,
-            }}>
+            <div style={{ fontSize: 13, color: comingSoon ? 'rgba(255,255,255,.42)' : 'rgba(255,255,255,.55)', lineHeight: 1.55 }}>
               {desc}
             </div>
           </div>
 
           {/* Arrow CTA */}
-          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <div className="mc-cta" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
             <div style={{
-              width: 50, height: 50, borderRadius: '50%',
-              background: arrowBg,
+              width: 50, height: 50, borderRadius: '50%', background: arrowBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: `0 5px 0 rgba(0,0,0,.4), 0 8px 20px ${arrowBg}60`,
             }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M4 10h12M11 5l5 5-5 5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              {comingSoon
+                ? <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="4" y="9" width="12" height="8" rx="2" stroke="#fff" strokeWidth="2"/><path d="M7 9V6.5a3 3 0 016 0V9" stroke="#fff" strokeWidth="2"/></svg>
+                : <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M11 5l5 5-5 5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             </div>
             <div style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-              Play
+              {comingSoon ? 'Soon' : 'Play'}
             </div>
           </div>
         </div>
-
       </div>
     </>
+  )
+}
+
+// Placeholder artwork (two players, VS) used until a mode image is added.
+function VsArt({ accent }) {
+  return (
+    <div aria-hidden="true" style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18,
+      background: `radial-gradient(circle at 30% 40%, ${accent}55, transparent 60%), radial-gradient(circle at 70% 60%, #1264E555, transparent 60%), #140B3A`,
+    }}>
+      <span style={{ fontSize: 44 }}>🧑🏾‍🎓</span>
+      <span style={{ fontSize: 26, fontWeight: 900, color: GOLD, textShadow: '0 2px 10px rgba(0,0,0,.5)' }}>VS</span>
+      <span style={{ fontSize: 44 }}>🧑🏽‍🎓</span>
+    </div>
   )
 }
