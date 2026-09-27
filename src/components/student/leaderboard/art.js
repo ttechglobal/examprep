@@ -15,11 +15,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const PODIUM_IMAGES = {
-  1: null,
-  2: null,
-  3: null,
+  1: '/images/leaderboard/podium-1.png',
+  2: '/images/leaderboard/podium-2.png',
+  3: '/images/leaderboard/podium-3.png',
 }
 
 export const AVATAR_RIM_OFFSET = { 1: 0, 2: 0, 3: 0 }
 
-export const INVITE_IMAGE = null
+export const INVITE_IMAGE = '/images/leaderboard/invite-friends.png'
