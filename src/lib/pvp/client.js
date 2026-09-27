@@ -11,18 +11,43 @@
 //   inviteLink(code)             → https://<site>/b/K7Q2
 //   inviteText(details)          → the WhatsApp / share message
 //   watchMatch(matchId, onEvent) → Realtime signals + polling fallback; returns { stop, refresh }
+//
+// v2: requests give up after 8 s, match reads after 4 s (reported as PVP_OFFLINE, so callers retry).
+//     A request with no time limit could hang on mobile data and stop
+//     watchMatch polling for good. watchMatch now reports repeated server
+//     errors as an 'error' instead of polling in silence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@/lib/supabase/client'
 export { PVP_CODE_RE, PVP_CODE_CHARS, PVP_TIMER_OPTIONS } from '@/lib/pvp/constants'
 
+const REQUEST_TIMEOUT_MS = 8000
+const READ_TIMEOUT_MS    = 4000   // watchMatch reads repeat every few seconds; a slower reply is stale
+const SERVER_ERROR_LIMIT = 3      // consecutive failed reads before the screen is told
+const TIMED_OUT = Symbol('timed out')
+
 let client = null
 function db() { return (client ??= createClient()) }
 
-/** Call a pvp_* SQL function. Network/permission failures become { ok:false }. */
-export async function pvpCall(fn, args = {}) {
+/**
+ * Call a pvp_* SQL function. Always resolves to an object:
+ *   no reply in time (8 s by default), or no network → { ok:false, error:'PVP_OFFLINE' }
+ *     (safe to resend: pvp_answer and pvp_join treat a resend as a no-op)
+ *   the database raised an error → { ok:false, error:'PVP_SERVER' }
+ */
+export async function pvpCall(fn, args = {}, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  const abort = new AbortController()
+  let timer
+  const timeout = new Promise(resolve => {
+    timer = setTimeout(() => { abort.abort(); resolve(TIMED_OUT) }, timeoutMs)
+  })
   try {
-    const { data, error } = await db().rpc(fn, args)
+    const res = await Promise.race([db().rpc(fn, args).abortSignal(abort.signal), timeout])
+    if (res === TIMED_OUT) {
+      console.warn(`[pvp] ${fn}: no reply in ${timeoutMs / 1000}s`)
+      return { ok: false, error: 'PVP_OFFLINE' }
+    }
+    const { data, error } = res
     if (error) {
       const offline = /fetch|network/i.test(error.message)
       ;(offline ? console.warn : console.error)(`[pvp] ${fn}:`, error.message)
@@ -31,6 +56,8 @@ export async function pvpCall(fn, args = {}) {
     return data ?? { ok: false, error: 'PVP_SERVER' }
   } catch {
     return { ok: false, error: 'PVP_OFFLINE' }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -77,7 +104,9 @@ export function inviteText({ hostName, exam, subject, count, timer, code }) {
  * onEvent(event, payload):
  *   'state'       a fresh pvp_state; payload.clockOffset = server time − this
  *                 phone's time in ms (from the quickest round trip seen)
- *   'error'       { ok:false, error } — a real problem (not a player, gone)
+ *   'error'       { ok:false, error } — a real problem (not a player, gone), or
+ *                 PVP_SERVER after 3 failed reads in a row. Polling carries on,
+ *                 so the next good 'state' means the problem has cleared.
  *   'connection'  { online } when the phone loses or regains the server
  *   plus each Broadcast event by name ('joined', 'answered', 'reveal', …).
  *
@@ -95,6 +124,7 @@ export function watchMatch(matchId, onEvent, { pollMs = 3000, livePollMs = 12000
   let latest = 0            // server_now of the newest state shown
   let bestRtt = Infinity
   let clockOffset = 0
+  let serverErrors = 0      // failed reads in a row
   const supabase = db()
 
   ;(async () => {
@@ -127,13 +157,14 @@ export function watchMatch(matchId, onEvent, { pollMs = 3000, livePollMs = 12000
     inFlight = true
     clearTimeout(timer)
     const sent = Date.now()
-    const state = await pvpCall(tick ? 'pvp_tick' : 'pvp_state', { p_match: matchId })
+    const state = await pvpCall(tick ? 'pvp_tick' : 'pvp_state', { p_match: matchId }, { timeoutMs: READ_TIMEOUT_MS })
     const received = Date.now()
     inFlight = false
     if (stopped) return
 
     if (state?.ok) {
       setOnline(true)
+      serverErrors = 0
       const serverNow = Date.parse(state.server_now)
       if (received - sent < bestRtt) {
         bestRtt = received - sent
@@ -146,7 +177,10 @@ export function watchMatch(matchId, onEvent, { pollMs = 3000, livePollMs = 12000
       }
     } else if (state?.error === 'PVP_OFFLINE') {
       setOnline(false)
-    } else if (state?.error && state.error !== 'PVP_SERVER') {
+    } else if (state?.error === 'PVP_SERVER') {
+      setOnline(true)
+      if (++serverErrors >= SERVER_ERROR_LIMIT) onEvent('error', state)
+    } else if (state?.error) {
       onEvent('error', state)
     }
 

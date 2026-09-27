@@ -41,7 +41,7 @@ const FEATURES = [
   {
     icon: '🧭',
     title: 'Personalized study paths',
-    desc: 'A short diagnostic finds each student\'s weak areas. ExamPrep builds a prioritised study plan around them automatically.',
+    desc: 'ExamPrep tracks every answer to find each student\'s weak areas, then serves practice on their weakest topics first.',
   },
   {
     icon: '📈',

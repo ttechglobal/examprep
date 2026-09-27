@@ -46,8 +46,3 @@ export const QUESTION_FORMAT = {
   FILL_BLANK:  'fill_blank',
 }
 
-export const QUESTION_CONTEXT = {
-  DIAGNOSTIC: 'diagnostic',
-  PRACTICE:   'practice',
-  EXAM:       'exam',
-}

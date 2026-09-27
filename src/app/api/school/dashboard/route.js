@@ -129,7 +129,7 @@ export async function GET() {
         }
       })
 
-    // ── Topic diagnostic + weekly engagement ─────────────────────────────────
+    // ── Topic breakdown + weekly engagement ──────────────────────────────────
     const subjectTopics = groupTopicsBySubject(stats30.topics, 'subjectName')
 
     // Oldest week first, labelled by its first day (as before).

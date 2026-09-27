@@ -6,6 +6,9 @@
 // - Preview how it looks on a phone
 // - Send to all subscribed users
 // - Save new templates to localStorage (no DB table needed)
+//
+// v2: the result shows delivered and failed separately (it used to count
+//     failed pushes as sent), with the first failure's reason.
 
 import { useState, useEffect } from 'react'
 
@@ -177,7 +180,7 @@ export default function AdminNotificationsPage() {
 
   // Send state
   const [sending, setSending] = useState(false)
-  const [result,  setResult]  = useState(null)   // { ok, sent, stale } | { error }
+  const [result,  setResult]  = useState(null)   // { ok, delivered, failed, stale, more_pages, first_error } | { error }
 
   // Save template state
   const [savingTpl,   setSavingTpl]   = useState(false)
@@ -512,10 +515,17 @@ export default function AdminNotificationsPage() {
                 border: result.ok ? '1px solid rgba(255,255,255,.2)' : '1px solid #fecaca',
               }}>
                 {result.ok ? (
-                  <p style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                    ✅ Sent to {result.sent ?? '?'} device{result.sent !== 1 ? 's' : ''}
-                    {result.stale > 0 ? ` · ${result.stale} stale removed` : ''}
-                  </p>
+                  <>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                      {result.failed > 0 ? '⚠️' : '✅'} Delivered to {result.delivered} device{result.delivered !== 1 ? 's' : ''}
+                      {result.failed > 0 ? ` · ${result.failed} failed` : ''}
+                      {result.stale > 0 ? ` · ${result.stale} no longer subscribed (removed)` : ''}
+                      {result.more_pages ? ' · more devices are being sent to in the background' : ''}
+                    </p>
+                    {result.first_error && (
+                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', marginTop: 4 }}>First failure: {result.first_error}</p>
+                    )}
+                  </>
                 ) : (
                   <p style={{ fontSize: 12, fontWeight: 700, color: RED }}>
                     ❌ {result.error ?? 'Failed to send'}

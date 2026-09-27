@@ -15,6 +15,9 @@
 //   Guest users → localStorage via setLocalProfile()
 //
 // ?setup=1 walks new students through name → exams & subjects, then home.
+//
+// v6: the Notifications row shows whether this device is actually saved for
+//     notifications (usePushSubscription status), not just the browser permission.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
@@ -38,7 +41,7 @@ import {
 import { useProfileActivity } from '@/components/student/profile/useProfileActivity'
 import { getPlanStatus, goalsOf, activeExamsOf } from '@/components/student/profile/profileModel'
 
-const NOTIFICATION_LABEL = { granted: 'On', denied: 'Blocked', default: 'Off', unsupported: 'Not available' }
+const NOTIFICATION_LABEL = { checking: '…', on: 'On', off: 'Off', blocked: 'Blocked', failed: 'Needs attention', unsupported: 'Not available', unavailable: 'Not available' }
 
 export default function ProfilePage() {
   const router              = useRouter()
@@ -47,7 +50,7 @@ export default function ProfilePage() {
   const { totalPoints: xp } = usePoints()
   const layoutProfile       = useStudentUser()
   const updateLayoutProfile = useUpdateStudentProfile()
-  const { permission, subscribe } = usePushSubscription()
+  const notifications = usePushSubscription()
 
   // ── Profile = full server row ← layout profile ← this page's saves ─────────
   const [remote,  setRemote]  = useState(null)
@@ -104,9 +107,6 @@ export default function ProfilePage() {
     router.replace('/onboarding?mode=signin')
   }
 
-  const notificationState = typeof window !== 'undefined' && !('Notification' in window)
-    ? 'unsupported'
-    : permission
 
   if (!profile) return <ProfileSkeleton />
 
@@ -175,7 +175,7 @@ export default function ProfilePage() {
           <ActivityCard period={period} onPeriodChange={setPeriod} stats={activity.stats} loading={activity.loading} />
           <SettingsCard
             dark={dark}
-            notifications={NOTIFICATION_LABEL[notificationState] ?? 'Off'}
+            notifications={NOTIFICATION_LABEL[notifications.status]}
             onAppearance={toggle}
             onNotifications={() => setSheet({ type: 'notifications' })}
             onLanguage={() => setSheet({ type: 'language' })}
@@ -202,7 +202,7 @@ export default function ProfilePage() {
         <ParentsSheet profile={profile} isGuest={isGuest} onClose={closeSheet} onSaved={patchProfile} />
       )}
       {sheet?.type === 'notifications' && (
-        <NotificationsSheet state={notificationState} onEnable={subscribe} onClose={closeSheet} />
+        <NotificationsSheet status={notifications.status} onEnable={notifications.enable} onRetry={notifications.retry} onClose={closeSheet} />
       )}
       {sheet?.type === 'language' && <LanguageSheet onClose={closeSheet} />}
       {sheet?.type === 'account' && (

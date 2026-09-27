@@ -191,7 +191,7 @@ export function ProgressBar({ pct = 0, fillColor, height = 5, className = '' }) 
 }
 
 // ── ScoreRing ─────────────────────────────────────────────────────────────────
-// Animated SVG score ring. Consistent across diagnostic results, progress page, etc.
+// Animated SVG score ring. Consistent across results screens, the progress page, etc.
 // r=52 → circ≈326.7  |  r=40 → circ≈251.3  |  r=30 → circ≈188.5
 const CIRC = { 52: 326.73, 40: 251.33, 30: 188.50 }
 

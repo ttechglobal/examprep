@@ -1,18 +1,25 @@
 // supabase/functions/send-notifications/index.ts
 //
 // Called by pg_cron three times daily with { slot: 'noon' | 'afternoon' | 'evening' }
-// and by /api/admin/notifications for custom blasts. Callers must send
-//   Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+// and by /api/admin/notifications for custom blasts. Callers must send a
+// Supabase secret key (sb_secret_…) in the `apikey` header.
 // Sends Web Push to every active subscription, 500 per invocation (see Batching).
-// Marks subscriptions inactive if the browser has unsubscribed (HTTP 410).
+// Marks subscriptions inactive if the browser has unsubscribed (HTTP 404/410).
+// Response: { delivered, failed, stale, more_pages, first_error }. Only pushes the
+// browser's push service accepted count as delivered.
 //
-// Deploy: supabase functions deploy send-notifications
+// Deploy (the caller's key isn't a JWT, so the gateway must not check for one):
+//   supabase functions deploy send-notifications --no-verify-jwt
 // Secrets needed (set via CLI or dashboard):
-//   VAPID_PUBLIC_KEY
-//   VAPID_PRIVATE_KEY
+//   VAPID_PUBLIC_KEY     (same value as NEXT_PUBLIC_VAPID_PUBLIC_KEY in Vercel)
+//   VAPID_PRIVATE_KEY    (generated together with the public key)
 //   VAPID_SUBJECT        (e.g. "mailto:hello@examprep.app")
-//   SUPABASE_URL         (auto-set by Supabase)
-//   SUPABASE_SERVICE_ROLE_KEY (auto-set by Supabase)
+//   SUPABASE_URL, SUPABASE_SECRET_KEYS (set by Supabase)
+//
+// v2 (Sep 2026): moved from the legacy service_role JWT (Authorization: Bearer)
+//   to Supabase secret keys (apikey header, SUPABASE_SECRET_KEYS), so the legacy
+//   keys can be switched off. "sent" used to count every non-404/410 failure as
+//   sent; failures are now reported separately.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush          from 'npm:web-push@3'
@@ -69,18 +76,48 @@ const CONCURRENCY = 50
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
 
+// ── Keys ──────────────────────────────────────────────────────────────────────
+// SUPABASE_SECRET_KEYS is a JSON object of this project's secret keys by name.
+// Only a caller holding one of them (the app's server, pg_cron) may trigger a
+// blast; the publishable key that ships in the app must not.
+function secretKeys(): Record<string, string> {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')
+    return Object.fromEntries(Object.entries(keys).filter(([, v]) => typeof v === 'string' && v.length > 0)) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+function sameText(a: string, b: string): boolean {
+  // Compare in constant time so the key can't be guessed byte by byte from timing.
+  const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b)
+  let diff = x.length ^ y.length
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0)
+  return diff === 0
+}
+
 function authorized(req: Request): boolean {
-  // Only the server (service role key) may trigger a blast. Supabase's default
-  // JWT check alone would also accept the public anon key that ships in the app.
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  const auth = req.headers.get('Authorization') ?? ''
-  return serviceKey.length > 0 && auth === `Bearer ${serviceKey}`
+  const given = req.headers.get('apikey') ?? ''
+  return given.length > 0 && Object.values(secretKeys()).some(k => sameText(given, k))
+}
+
+// The key this function reads the database with: the one named "default",
+// else any secret key of the project.
+function databaseKey(): string | undefined {
+  const keys = secretKeys()
+  return keys.default ?? Object.values(keys)[0]
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
+  }
+  const dbKey = databaseKey()
+  if (!dbKey) {
+    console.error('send-notifications: SUPABASE_SECRET_KEYS is empty — create a secret key in Settings → API Keys')
+    return new Response('Server not configured', { status: 500 })
   }
   if (!authorized(req)) {
     return new Response('Unauthorized', { status: 401 })
@@ -112,10 +149,9 @@ Deno.serve(async (req) => {
     Deno.env.get('VAPID_PRIVATE_KEY')!,
   )
 
-  const db = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  )
+  const db = createClient(Deno.env.get('SUPABASE_URL')!, dbKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 
   // One page of active subscriptions, in a stable order.
   const { data: subs, error } = await db
@@ -133,10 +169,11 @@ Deno.serve(async (req) => {
   // Hand the next page to a new invocation before doing this page's work.
   // (Stale subscriptions are marked inactive only after sending, so offsets
   // stay stable for the pages that follow.)
-  if ((subs?.length ?? 0) === PAGE_SIZE) {
+  const morePages = (subs?.length ?? 0) === PAGE_SIZE
+  if (morePages) {
     const next = fetch(req.url, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization')! },
+      headers: { 'Content-Type': 'application/json', 'apikey': req.headers.get('apikey')! },
       body:    JSON.stringify({ ...parsedBody, offset: offset + PAGE_SIZE }),
     }).catch(err => console.error('next page trigger failed:', err?.message ?? err))
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(next)
@@ -144,7 +181,7 @@ Deno.serve(async (req) => {
   }
 
   if (!subs || subs.length === 0) {
-    return new Response(JSON.stringify({ sent: 0, offset }), {
+    return new Response(JSON.stringify({ delivered: 0, failed: 0, stale: 0, more_pages: false, offset }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -164,15 +201,22 @@ Deno.serve(async (req) => {
 
   // Send in small concurrent batches.
   const staleIds: string[] = []
+  let delivered = 0, failed = 0
+  let firstError: string | null = null
   for (let i = 0; i < subs.length; i += CONCURRENCY) {
     await Promise.allSettled(
       subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription }) => {
         try {
           await webpush.sendNotification(subscription, payload)
+          delivered++
         } catch (err: any) {
           // 410 Gone / 404 = browser unsubscribed. Mark inactive so we stop sending.
-          if (err?.statusCode === 410 || err?.statusCode === 404) staleIds.push(id)
-          else console.warn(`Push failed for ${id}:`, err?.message ?? err)
+          if (err?.statusCode === 410 || err?.statusCode === 404) { staleIds.push(id); return }
+          // Anything else is a real failure — e.g. 403 when the VAPID keys don't
+          // match the ones the phone subscribed with.
+          failed++
+          firstError ??= `${err?.statusCode ?? 'no status'} ${String(err?.body ?? err?.message ?? err).slice(0, 160)}`
+          console.warn(`Push failed for ${id}:`, err?.statusCode, err?.message ?? err)
         }
       })
     )
@@ -186,11 +230,14 @@ Deno.serve(async (req) => {
   }
 
   const result = {
-    mode:   isCustom ? 'custom' : 'scheduled',
-    slot:   isCustom ? null : slot,
+    mode:        isCustom ? 'custom' : 'scheduled',
+    slot:        isCustom ? null : slot,
     offset,
-    sent:   subs.length - staleIds.length,
-    stale:  staleIds.length,
+    delivered,
+    failed,
+    stale:       staleIds.length,
+    more_pages:  morePages,       // later pages are sent by further invocations
+    first_error: firstError,
   }
   console.log('send-notifications:', result)
 

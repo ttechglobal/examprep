@@ -10,6 +10,12 @@
 // closing the app and coming back, or losing signal for a while, picks the
 // match up where it is. Results, review, rematch and the guest sign-up card
 // follow at the end.
+//
+// v2: when the timer reaches 0 the tiles and the lock button lock. A locked
+//     answer always stands; a pick that was never locked is still sent. (A
+//     tapped-but-unconfirmed pick used to replace the locked answer, and
+//     answers could still be changed in the server's hidden 2 s grace.)
+//     A banner says so when a round is stuck past its deadline.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -55,6 +61,7 @@ function Match({ matchId }) {
 
   const [isGuest,   setIsGuest]   = useState(false)   // playing from an invite link, no account
   const [selection, setSelection] = useState(null)    // { q, idx } picked but maybe not locked in
+  const [timeUpQ,   setTimeUpQ]   = useState(null)    // q_index whose timer reached 0 on this phone
   const [popKey,    setPopKey]    = useState(0)
   const [menuOpen,  setMenuOpen]  = useState(false)
   const [view,      setView]      = useState('results')
@@ -188,9 +195,12 @@ function Match({ matchId }) {
 
   // ── Arena: question or reveal ─────────────────────────────────────────────
   const live      = phase === 'question'
+  const timeUp    = live && timeUpQ === current.q_index
   const shown     = live ? current : last
   const options   = normaliseOptions(shown?.options).map(optionText)
-  const selected  = live ? (selection?.q === current.q_index ? selection.idx : lockedIdx) : last?.mine?.choice ?? null
+  const picked    = live && selection?.q === current.q_index ? selection.idx : lockedIdx
+  // Once time is up the locked answer is the one that counts, so show it.
+  const selected  = live ? (timeUp && lockedIdx !== null ? lockedIdx : picked) : last?.mine?.choice ?? null
   const endsAt    = live ? Date.parse(m.round_started_at) + m.timer_secs * 1000 - clockOffset : null
   const dots      = side => rounds.filter(r => r[side]?.correct).length
 
@@ -198,9 +208,11 @@ function Match({ matchId }) {
     setSelection({ q: current.q_index, idx })
     setPopKey(k => k + 1)
   }
-  // Time's up with a pick that wasn't locked in: send it (the server allows a short grace).
+  // Time's up: a locked answer stands. A pick that was never locked in is sent
+  // now (the server's 2 s grace covers the trip).
   function onTimeUp() {
-    if (selected !== null && selected !== lockedIdx) match.answer(selected)
+    setTimeUpQ(current.q_index)
+    if (lockedIdx === null && selected !== null) match.answer(selected)
   }
 
   return (
@@ -226,7 +238,7 @@ function Match({ matchId }) {
           float={float}
         />
 
-        {!match.online && <OfflineBanner/>}
+        {!match.online ? <OfflineBanner/> : match.stalled && <StalledBanner/>}
 
         <div ref={canvasRef} style={{ flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', overscrollBehavior:'contain', position:'relative', zIndex:5, padding:'20px 20px 0', display:'flex', flexDirection:'column', alignItems:'center' }}>
           <div key={`${phase}-${qIndex}`} style={{ width:'100%', maxWidth:860, display:'flex', flexDirection:'column', gap:14, animation:'slidein .3s ease' }}>
@@ -247,6 +259,7 @@ function Match({ matchId }) {
               reveal={live ? null : { correctIdx: last.correct_index, theirsIdx: last.theirs?.choice ?? null }}
               opponent={opponentBadge(oppName)}
               onSelect={select}
+              disabled={timeUp}
               popKey={popKey}
             />
 
@@ -256,7 +269,7 @@ function Match({ matchId }) {
 
         <Dock>
           {live
-            ? <QuestionDock selected={selected} lockedIdx={lockedIdx} oppName={oppName}
+            ? <QuestionDock selected={selected} lockedIdx={lockedIdx} oppName={oppName} timeUp={timeUp}
                 opponentAnswered={current.opponent_answered} onLock={() => match.answer(selected)}/>
             : <RevealDock round={last} oppName={oppName}
                 nextIn={m.status === 'in_progress' ? Math.max(0, Math.ceil((Date.parse(m.round_started_at) - serverNow) / 1000)) : null}/>}
@@ -300,17 +313,19 @@ function Dock({ children }) {
 
 const dockBtn = { display:'flex', alignItems:'center', gap:8, padding:'13px clamp(20px,4vw,32px)', borderRadius:999, border:'none', fontSize:15, fontWeight:900, fontFamily:'inherit', flexShrink:0, minHeight:48 }
 
-function QuestionDock({ selected, lockedIdx, oppName, opponentAnswered, onLock }) {
+function QuestionDock({ selected, lockedIdx, oppName, opponentAnswered, timeUp, onLock }) {
   const isLocked = lockedIdx !== null && selected === lockedIdx
-  const title = selected === null ? 'Pick an answer'
+  const title = timeUp ? (lockedIdx !== null ? `Your answer: ${LETTERS[lockedIdx]}` : 'No answer')
+    : selected === null ? 'Pick an answer'
     : isLocked ? `Locked in: ${LETTERS[lockedIdx]}`
     : lockedIdx !== null ? `Change to ${LETTERS[selected]}?`
     : `Your pick: ${LETTERS[selected]}`
-  const sub = isLocked
+  const sub = timeUp ? 'Revealing the answer…'
+    : isLocked
     ? (opponentAnswered ? 'Both answered, revealing…' : `Waiting for ${oppName}. You can still change it.`)
     : opponentAnswered ? `${oppName} has answered` : 'Lock it in before time runs out'
-  const label = isLocked ? 'Locked ✓' : lockedIdx !== null && selected !== null ? 'Change' : 'Lock in'
-  const disabled = selected === null || isLocked
+  const label = timeUp ? "Time's up" : isLocked ? 'Locked ✓' : lockedIdx !== null && selected !== null ? 'Change' : 'Lock in'
+  const disabled = timeUp || selected === null || isLocked
   return (
     <>
       <div style={{ flex:1, minWidth:0 }} aria-live="polite">
@@ -318,7 +333,7 @@ function QuestionDock({ selected, lockedIdx, oppName, opponentAnswered, onLock }
         <div style={{ fontSize:12, fontWeight:700, color:'#6B7280', marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{sub}</div>
       </div>
       <button onClick={onLock} disabled={disabled}
-        style={{ ...dockBtn, background: disabled ? (isLocked ? '#16A34A' : '#CBD5E1') : NAVY2, color:'#fff', cursor: disabled ? 'default' : 'pointer', boxShadow: disabled ? 'none' : '0 5px 0 #031548,0 7px 18px rgba(26,36,104,.35)' }}>
+        style={{ ...dockBtn, background: disabled ? (isLocked && !timeUp ? '#16A34A' : '#CBD5E1') : NAVY2, color:'#fff', cursor: disabled ? 'default' : 'pointer', boxShadow: disabled ? 'none' : '0 5px 0 #031548,0 7px 18px rgba(26,36,104,.35)' }}>
         {label}
       </button>
     </>
@@ -385,6 +400,19 @@ function OfflineBanner() {
   return (
     <div role="status" style={{ position:'relative', zIndex:30, background:'#FEF3C7', color:'#92400E', fontSize:13, fontWeight:800, textAlign:'center', padding:'8px 12px', borderBottom:'1px solid rgba(146,64,14,.2)' }}>
       Reconnecting… your answers will be sent when you're back online.
+    </div>
+  )
+}
+
+function StalledBanner() {
+  const router = useRouter()
+  return (
+    <div role="alert" style={{ position:'relative', zIndex:30, background:'#FEE2E2', color:'#991B1B', fontSize:13, fontWeight:800, textAlign:'center', padding:'8px 12px', borderBottom:'1px solid rgba(153,27,27,.2)', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
+      <span>Something went wrong on our side. We're still trying to finish this round.</span>
+      <button onClick={() => router.push(HUB)}
+        style={{ padding:'8px 12px', minHeight:44, borderRadius:10, border:'1.5px solid rgba(153,27,27,.35)', background:'#fff', color:'#991B1B', fontSize:13, fontWeight:900, fontFamily:'inherit', cursor:'pointer' }}>
+        Back to 1v1
+      </button>
     </div>
   )
 }

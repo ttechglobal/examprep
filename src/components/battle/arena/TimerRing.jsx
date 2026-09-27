@@ -2,26 +2,32 @@
 // src/components/battle/arena/TimerRing.jsx
 // Small countdown ring for the question card. Counts down to `endsAt`
 // (Date.now()-style time); vs Computer passes mount time + secs, 1v1 passes
-// the server's round end converted to this phone's clock. Calls onTimeUp once.
+// the server's round end converted to this phone's clock. Calls onTimeUp once
+// per endsAt.
+//
+// v2: onTimeUp is read from a ref. It used to be an effect dependency, so a
+//     parent passing a new function each render restarted the countdown and
+//     fired onTimeUp again on every render after time was up.
 import { useState, useEffect, useRef } from 'react'
 import { NAVY, GOLD, GREEN, RED } from './theme'
 
 export default function TimerRing({ secs, endsAt, onTimeUp }) {
   const [rem, setRem] = useState(() => Math.max(0, (endsAt - Date.now()) / 1000))
-  const fired = useRef(false)
+  const onTimeUpRef = useRef(onTimeUp)
+  useEffect(() => { onTimeUpRef.current = onTimeUp })
 
   useEffect(() => {
-    fired.current = false
+    let fired = false
     const tick = () => {
       const left = Math.max(0, (endsAt - Date.now()) / 1000)
       setRem(left)
-      if (left <= 0 && !fired.current) { fired.current = true; onTimeUp?.() }
+      if (left <= 0 && !fired) { fired = true; onTimeUpRef.current?.() }
       return left
     }
     if (tick() <= 0) return
     const id = setInterval(() => { if (tick() <= 0) clearInterval(id) }, 100)
     return () => clearInterval(id)
-  }, [endsAt, onTimeUp])
+  }, [endsAt])
 
   const pct  = Math.min(1, rem / secs)
   const r    = 13, circ = 2 * Math.PI * r

@@ -8,8 +8,13 @@
 // extended by hand. Uses Web Crypto so the same code runs in middleware (Edge)
 // and in Node route handlers / server components.
 //
-// Secret: ADMIN_SESSION_SECRET if set, otherwise SUPABASE_SERVICE_ROLE_KEY
-// (already a server-only secret). Rotating either one logs every admin out.
+// Secret: ADMIN_SESSION_SECRET (at least 32 random characters). Changing it
+// logs every admin out.
+//
+// v2: no longer falls back to SUPABASE_SERVICE_ROLE_KEY. A database key must
+//     not double as the admin-login secret: when the service key leaked, anyone
+//     holding it could have signed their own admin cookie. Without
+//     ADMIN_SESSION_SECRET, admin login is refused (logged), never weakened.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ADMIN_COOKIE      = 'admin_session'
@@ -18,9 +23,13 @@ export const ADMIN_SESSION_TTL = 60 * 60 * 8 // seconds (8 hours)
 const VERSION = 'v1'
 const enc = new TextEncoder()
 
+const MIN_SECRET_LENGTH = 32
+
 function secret() {
-  const s = process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!s) throw new Error('ADMIN_SESSION_SECRET (or SUPABASE_SERVICE_ROLE_KEY) must be set')
+  const s = process.env.ADMIN_SESSION_SECRET
+  if (!s || s.length < MIN_SECRET_LENGTH) {
+    throw new Error(`ADMIN_SESSION_SECRET must be set to at least ${MIN_SECRET_LENGTH} random characters`)
+  }
   return s
 }
 

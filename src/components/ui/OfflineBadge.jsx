@@ -3,7 +3,7 @@
 // Shows a subtle badge when the app is serving questions from offline cache.
 // Also shows a network status dot in the nav when offline.
 //
-// Usage — in practice/diagnostic session:
+// Usage — in a practice session:
 //   import OfflineBadge from '@/components/ui/OfflineBadge'
 //   {source === 'cache' && <OfflineBadge />}
 

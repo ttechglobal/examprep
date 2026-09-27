@@ -15,6 +15,10 @@
 // Email is sent via the Supabase Edge Function "send-parent-report" if
 // PARENT_REPORT_EDGE_FUNCTION_URL is set. Otherwise returns the data
 // so the caller can handle sending (e.g. via Resend/SendGrid directly).
+//
+// v2: calls the edge function with the Supabase secret key in the `apikey`
+//     header (secret keys aren't JWTs, so not as `Authorization: Bearer`). The
+//     send-parent-report function must accept it that way (see PUSH_AND_KEYS.md).
 
 import { createClient }    from '@/lib/supabase/server'
 import { supabaseAdmin }   from '@/lib/server/supabaseAdmin'
@@ -173,7 +177,7 @@ export async function POST(request) {
       try {
         await fetch(edgeFnUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+          headers: { 'Content-Type': 'application/json', 'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY },
           body: JSON.stringify({
             to:      profile.parent_email,
             subject: `${String(profile.full_name ?? 'Your child').replace(/[\r\n]/g, ' ')}'s weekly ExamPrep report`,

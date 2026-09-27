@@ -2,6 +2,9 @@
 // POST — validates the admin password and sets a secure session cookie.
 // DELETE — clears the admin session cookie (logout).
 //
+// v2: a clear 500 when ADMIN_SESSION_SECRET is missing (the service key is no
+//     longer used as a fallback signing secret).
+//
 // Set ADMIN_PASSWORD in your .env.local:
 //   ADMIN_PASSWORD=your-strong-password-here
 //
@@ -40,7 +43,13 @@ export async function POST(request) {
 
   // Signed, expiring token — verified by middleware, the admin layout and
   // requireAdmin(). It cannot be forged without the server secret.
-  const sessionToken = await createAdminToken()
+  let sessionToken
+  try {
+    sessionToken = await createAdminToken()
+  } catch (e) {
+    console.error('[admin/auth]', e.message)
+    return NextResponse.json({ error: 'ADMIN_SESSION_SECRET env variable not set (32+ characters)' }, { status: 500 })
+  }
 
   const cookieStore = await cookies()
   cookieStore.set(ADMIN_COOKIE, sessionToken, {

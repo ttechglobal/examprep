@@ -5,6 +5,8 @@
 // 'joined', or the next poll), both go to the match screen.
 //
 // QR codes use the `qrcode` package (npm install qrcode).
+//
+// v2: an error shown here (e.g. repeated server errors) clears on the next good read.
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -44,6 +46,7 @@ export default function PvpLobbyPage() {
       if (event === 'state') {
         offset.current = payload.clockOffset
         setState(payload)
+        setError(null)          // a server error has cleared
         if (payload.match.status === 'in_progress') goToMatch()
       }
     })

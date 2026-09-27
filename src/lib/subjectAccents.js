@@ -1,7 +1,7 @@
 // src/lib/subjectAccents.js
 // ─────────────────────────────────────────────────────────────────────────────
 // SINGLE SOURCE OF TRUTH for all subject colours.
-// Used by: practice page, session page, dashboard, progress, diagnostic results.
+// Used by: practice page, session page, dashboard, progress.
 //
 // RULE: all hex values go in inline style="" — NEVER as dynamic Tailwind classes.
 // RULE: always check isDark and use the correct variant.

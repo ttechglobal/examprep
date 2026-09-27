@@ -3,7 +3,7 @@
 **Read this before changing any code.** It applies to every contributor, human or AI, in every chat and every session.
 If a request conflicts with this document, say so before writing code.
 
-Last updated: 26 Sep 2026 · Owner: tech lead
+Last updated: 26 Sep 2026 (migrations: check types, not just existence) · Owner: tech lead
 
 ---
 
@@ -87,6 +87,29 @@ That's how we ended up with three different XP formulas and two answer checkers.
    - New functions: `security definer`, `set search_path = public`, explicit casts on returned columns, and
      `revoke execute … from public, anon, authenticated` unless the browser genuinely needs to call it.
    - Test the migration against a local Postgres before shipping, and run it twice.
+   - **Check what's there, not just whether it's there.** `add column if not exists`, `create table if not exists`
+     and `create index if not exists` silently skip an object that already exists, *even if it's the wrong shape*.
+     When a migration relies on an existing column, table or constraint, it must check the **type** (and, where it
+     matters, nullability, defaults and check constraints) and then either convert it or stop with a clear error.
+     Never assume. Use `information_schema.columns` / `pg_constraint` in a `do $$ … $$` block, e.g.:
+
+     ```sql
+     do $$ begin
+       if (select data_type from information_schema.columns
+           where table_schema = 'public' and table_name = 'question_attempts' and column_name = 'session_id')
+          is distinct from 'text' then
+         raise exception 'question_attempts.session_id must be text — convert it first';
+       end if;
+     end $$;
+     ```
+
+     *Why:* on 26 Sep 2026 `question_attempts.session_id` turned out to be `uuid` on live. 20260926 had
+     "added" it as `text`, but the add was skipped because the column existed. Every practice session save and
+     every 1v1 match finish failed for weeks, and 1v1 matches froze on their last question
+     (fixed in `20260929_fix_attempts_session_id.sql`).
+   - **Test against the live shape.** Before shipping a migration, compare the tables it touches with live
+     (columns, types, constraints, triggers), and build the local test database from that, not from what the
+     migrations say should exist.
 9. **No "maybe the column exists" code.** If the code needs a column, the migration adds it. Don't write fallback
    selects for old schemas.
 
@@ -163,6 +186,7 @@ student picked; the server decides if it was right, how much XP it's worth, and 
 | Copy-pasted helpers with small differences | Behaviour drifts between screens | One shared module |
 | New public functions left executable by `anon` | Callable by anyone with the app's public key | `revoke execute` in the migration |
 | CSS classes shared across screens by accident | Styles vanish on the other screen | Component-local styles |
+| `… if not exists` trusted to mean "it's right" | A wrong-typed column is silently kept; writes fail later, far from the cause | Check the type in the migration; convert or fail loudly |
 
 ---
 
@@ -216,7 +240,7 @@ A change is done when:
 - [ ] It was run: API calls tested, and the UI checked at 390 px
 - [ ] Edge cases checked: guest, offline, empty data, large data, wrong user
 - [ ] Nothing is left behind: no dead code, debug logs, duplicate helpers or commented-out blocks
-- [ ] Migrations are idempotent, tested, and come with deploy order notes
+- [ ] Migrations are idempotent, check the types of what they rely on, are tested, and come with deploy order notes
 - [ ] File headers and the release changelog are updated
 - [ ] Behaviour changes are listed for the owner in plain words
 

@@ -293,7 +293,7 @@ export default function CoreTopicsPage() {
         <h1 className="text-2xl font-black text-gray-900">Core Topics</h1>
         <p className="text-sm text-gray-500 mt-1">
           Topics ranked by how often they appear in past exam papers.
-          Mark the most frequent ones as Core — they get priority in diagnostics and automatically seed every student's study plan.
+          Mark the most frequent ones as Core.
         </p>
       </div>
 
@@ -310,7 +310,7 @@ export default function CoreTopicsPage() {
             {
               icon: '🔄',
               title: 'Toggle to mark Core',
-              desc: 'Flip the switch. Core topics are immediately prioritised in diagnostics. Students also get them auto-added to their study plan on first login.',
+              desc: 'Flip the switch to mark a topic as Core. Your list is saved straight away.',
             },
             {
               icon: '🔢',

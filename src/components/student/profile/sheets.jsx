@@ -911,15 +911,19 @@ export function AccountSheet({ profile, isGuest, onClose, onLinked, onEditInfo, 
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
-// Reflects the browser's real permission; the browser owns turning it off.
-export function NotificationsSheet({ state, onEnable, onClose }) {
+// Reflects whether this device can really receive notifications (see
+// hooks/usePushSubscription.js): "on" means the browser allowed it AND the
+// device is saved on our server. The browser owns turning it off.
+// v2: v1 showed "on" from the browser permission alone, even when saving the
+//     device had failed.
+export function NotificationsSheet({ status, onEnable, onRetry, onClose }) {
   const [busy, setBusy]     = useState(false)
   const [failed, setFailed] = useState(false)
 
-  async function enable() {
+  async function run(action) {
     setBusy(true)
     setFailed(false)
-    const ok = await onEnable().catch(() => false)
+    const ok = await action().catch(() => false)
     setBusy(false)
     if (ok) onClose()
     else setFailed(true)
@@ -929,7 +933,11 @@ export function NotificationsSheet({ state, onEnable, onClose }) {
     <Sheet title="Notifications" onClose={onClose}>
       <p style={P}>We send a daily practice reminder and let you know when your streak is at risk.</p>
 
-      {state === 'granted' && (
+      {status === 'checking' && (
+        <p style={P}>Checking this device…</p>
+      )}
+
+      {status === 'on' && (
         <>
           <Note tone="ok">Notifications are on for this device.</Note>
           <p style={P}>To turn them off, open your browser or phone settings, find ExamPrep, and switch notifications off.</p>
@@ -937,14 +945,23 @@ export function NotificationsSheet({ state, onEnable, onClose }) {
         </>
       )}
 
-      {state === 'default' && (
+      {status === 'off' && (
         <>
-          {failed && <Note tone="warn">Notifications weren’t turned on. If your browser asked, choose Allow.</Note>}
-          <SaveButton onClick={enable} saving={busy} label="Turn on notifications" />
+          {failed && <Note tone="warn">Notifications weren’t turned on. When your browser asks, choose Allow.</Note>}
+          <p style={P}>Your browser will ask for permission. Choose <strong>Allow</strong>.</p>
+          <SaveButton onClick={() => run(onEnable)} saving={busy} label="Turn on notifications" />
         </>
       )}
 
-      {state === 'denied' && (
+      {status === 'failed' && (
+        <>
+          <Note tone="warn">Notifications are allowed, but we couldn’t finish setting up this device.</Note>
+          <p style={P}>Check your connection and try again.</p>
+          <SaveButton onClick={() => run(onRetry)} saving={busy} label="Try again" />
+        </>
+      )}
+
+      {status === 'blocked' && (
         <>
           <Note tone="warn">Notifications are blocked for this site.</Note>
           <p style={P}>Open your browser’s site settings for ExamPrep, allow notifications, then come back to this page.</p>
@@ -952,10 +969,18 @@ export function NotificationsSheet({ state, onEnable, onClose }) {
         </>
       )}
 
-      {state === 'unsupported' && (
+      {status === 'unsupported' && (
         <>
           <Note tone="warn">This browser doesn’t support notifications.</Note>
-          <p style={P}>Install ExamPrep to your home screen, or open it in Chrome, to get reminders.</p>
+          <p style={P}>On iPhone, add ExamPrep to your Home Screen and open it from there. On Android, use Chrome.</p>
+          <SaveButton onClick={onClose} label="Done" />
+        </>
+      )}
+
+      {status === 'unavailable' && (
+        <>
+          <Note tone="warn">Notifications aren’t available right now.</Note>
+          <p style={P}>We’re working on it. Please check back later.</p>
           <SaveButton onClick={onClose} label="Done" />
         </>
       )}

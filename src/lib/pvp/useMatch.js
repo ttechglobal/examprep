@@ -14,14 +14,33 @@
 //
 // phase: 'connecting' | 'waiting' | 'countdown' | 'question' | 'reveal'
 //        | 'finished' | 'ended' (cancelled/expired) | 'abandoned'
+//
+// v2: offline and server errors are no longer treated alike. An answer is
+//     resent for as long as the phone is offline, but only twice after a
+//     server error; then the "locked in" mark is taken back so the screen
+//     shows what the server really has. `error` clears on the next good read.
+//     An overdue round is re-checked every second, not every 250 ms, and
+//     `stalled` turns on when a round is 5 s past its deadline without
+//     moving. (A server error on the last round used to leave both phones
+//     "Locked in" forever, calling the server several times a second.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { pvpCall, watchMatch } from '@/lib/pvp/client'
 
-const REVEAL_HOLD_MS = 2500      // last question's answer stays up this long
-const MIN_WAKE_MS    = 250       // never re-poll faster than this
-const RETRYABLE      = ['PVP_OFFLINE', 'PVP_SERVER']
+const REVEAL_HOLD_MS      = 2500  // last question's answer stays up this long
+const MIN_WAKE_MS         = 250   // never re-poll faster than this
+const OVERDUE_RETRY_MS    = 1000  // the deadline passed but the round is still open
+const ANSWER_SERVER_TRIES = 3    // sends of one answer that may hit a server error
+const STALL_MS            = 5000  // this long past a deadline with no change = stalled
+
+// Offline: always worth another try (the round's deadline ends it anyway).
+// Server error: a couple more tries, in case it was a blip (counted on the answer).
+function shouldResend(error, answer) {
+  if (error === 'PVP_OFFLINE') return true
+  if (error === 'PVP_SERVER') return (answer.serverErrors = (answer.serverErrors ?? 0) + 1) < ANSWER_SERVER_TRIES
+  return false
+}
 
 export function derivePhase(state, holding) {
   if (!state) return 'connecting'
@@ -51,7 +70,7 @@ export function useMatch(matchId) {
     setState(null); setError(null); setLocked(null); setHoldUntil(0)
     sawLive.current = false
     const w = watchMatch(matchId, (event, payload) => {
-      if (event === 'state')           { offset.current = payload.clockOffset; setState(payload) }
+      if (event === 'state')           { offset.current = payload.clockOffset; setState(payload); setError(null) }
       else if (event === 'error')      setError(payload.error)
       else if (event === 'connection') setOnline(payload.online)
     }, { pollMs: 1500 })
@@ -68,13 +87,25 @@ export function useMatch(matchId) {
   }, [])
   const serverNow = now + offset.current
 
+  // ── Stalled: the server's next moment passed and nothing moved ──────────
+  // Whatever the cause (server errors, the sweep not running), this is what
+  // the player sees, so it's what the screen reports.
+  const matchRow = state?.match
+  const nextMoment = matchRow?.status === 'in_progress'
+    ? Date.parse(state.current ? matchRow.round_deadline : matchRow.round_started_at)
+    : null
+  const stalled = nextMoment !== null && serverNow > nextMoment + STALL_MS
+
   // ── Wake at the server's next moment ────────────────────────────────────
   useEffect(() => {
     const m = state?.match
     if (!m || m.status !== 'in_progress') return
     const live = !!state.current
     const at = Date.parse(live ? m.round_deadline : m.round_started_at) + (live ? 300 : 80)
-    const delay = Math.max(MIN_WAKE_MS, at - (Date.now() + offset.current))
+    const wait = at - (Date.now() + offset.current)
+    // Still open after its deadline: our tick didn't close it (clock skew or a
+    // server error). Check again, but don't hammer the server.
+    const delay = live && wait <= 0 ? OVERDUE_RETRY_MS : Math.max(MIN_WAKE_MS, wait)
     const t = setTimeout(() => refresh({ tick: live }), delay)
     return () => clearTimeout(t)
   }, [state, refresh])
@@ -103,13 +134,16 @@ export function useMatch(matchId) {
       const res = await pvpCall('pvp_answer', { p_match: matchId, p_q_index: a.q, p_choice: a.idx })
       if (res.ok) {
         if (res.round_closed) refresh()
-      } else if (RETRYABLE.includes(res.error)) {
+      } else if (shouldResend(res.error, a)) {
         if (!qState.pending) qState.pending = a          // nothing newer: try again shortly
         qState.busy = false
         setTimeout(flush, 1000)
         return
       } else {
-        refresh()                                          // time up / round moved on
+        // Not saved (time up, round moved on, or the server keeps failing):
+        // stop showing it as locked in, unless a newer pick is on its way.
+        setLocked(l => (l === a ? null : l))
+        refresh()
       }
     }
     qState.busy = false
@@ -143,6 +177,7 @@ export function useMatch(matchId) {
     clockOffset: offset.current,
     lockedIdx,
     online,
+    stalled,
     error,
     answer,
     refresh,

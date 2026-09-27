@@ -147,7 +147,7 @@ export function computeTopicKnowledgeScores(rawRows) {
 
 /**
  * Compare two time windows (e.g. "this week" vs "2 weeks ago", or
- * "diagnostic" vs "now") and produce student-facing deltas.
+ * "first week" vs "now") and produce student-facing deltas.
  *
  * @param {object} beforeScores  topicId -> { score, signalCount } (earlier window)
  * @param {object} afterScores   topicId -> { score, signalCount } (current window)
