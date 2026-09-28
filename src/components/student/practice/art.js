@@ -31,3 +31,8 @@ export const MOCK_CARD = {
   image:    '/images/practice/mock-card.webp',
   fallback: 'linear-gradient(135deg, #4A1FC4 0%, #6331E6 55%, #7F4BF5 100%)',
 }
+
+// SETUP_MASCOT
+//   The student with the lightbulb beside "How do you want to practice?" in
+//   the setup sheet. Transparent background, ~400×400 px (shown ≤ 150 px).
+export const SETUP_MASCOT = '/images/practice/setup-mascot.webp'

@@ -3,21 +3,6 @@
 
 const A = { 'aria-hidden': true, focusable: 'false' }
 
-export const ChevronLeft = ({ size = 18 }) => (
-  <svg {...A} width={size} height={size} viewBox="0 0 16 16" fill="none">
-    <path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-export const ChevronRight = ({ size = 18 }) => (
-  <svg {...A} width={size} height={size} viewBox="0 0 16 16" fill="none">
-    <path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-export const ChevronDown = ({ size = 14 }) => (
-  <svg {...A} width={size} height={size} viewBox="0 0 16 16" fill="none">
-    <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
 export const ArrowRight = ({ size = 16 }) => (
   <svg {...A} width={size} height={size} viewBox="0 0 16 16" fill="none">
     <path d="M2.5 8h10M9 4.5L12.5 8 9 11.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

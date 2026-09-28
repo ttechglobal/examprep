@@ -1,0 +1,39 @@
+/* src/components/ui/PlayfulTitle.module.css */
+
+.title {
+  margin: 0;
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  color: var(--text-prim);
+}
+
+.lead {
+  display: inline-block;
+  font-size: 0.78em;
+  transform: rotate(-1.5deg);
+  transform-origin: left bottom;
+}
+
+.accent {
+  display: inline-block;
+  position: relative;
+  color: #1264e5;
+  transform: rotate(-1deg) translateY(1px);
+  transform-origin: left bottom;
+}
+
+:global(.dark) .accent { color: #5b95ff; }
+
+/* The three little gold strokes after the accent word. */
+.spark {
+  position: absolute;
+  top: 0.08em;
+  right: -0.62em;
+  width: 0.5em;
+  height: 0.5em;
+  color: #ffb800;
+}
+
+.stacked .lead { display: block; font-size: 0.82em; }
+.stacked .accent { display: inline-block; }

@@ -40,9 +40,10 @@ export const NAV = [
 
 const BOTTOM_TABS = ['home', 'practice', 'battle', 'leaderboard', 'profile']
 
-// No Flashcards button on the Battle hub (it would cover the mode cards) or
-// on the flashcards screens themselves.
-const NO_FAB_PATHS = ['/student/battle', '/student/learn/flashcards']
+// No Flashcards button where it would cover content (the Battle hub's mode
+// cards, the leaderboard's pinned "your rank" row) or on the flashcards
+// screens themselves.
+const NO_FAB_PATHS = ['/student/battle', '/student/leaderboard', '/student/learn/flashcards']
 
 // ─── DESKTOP SIDEBAR ──────────────────────────────────────────────────────────
 function SidebarLink({ item, on, dark }) {

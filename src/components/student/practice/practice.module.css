@@ -98,14 +98,10 @@
 }
 
 .title {
-  margin: 8px 0 0;
-  font-size: clamp(38px, 11vw, 46px);
-  font-weight: 800;
-  line-height: 1.02;
-  letter-spacing: -0.035em;
+  margin-top: 8px;
+  font-size: clamp(46px, 13.5vw, 56px);   /* PlayfulTitle scales the lead down */
 }
 
-.titleAccent { color: var(--p-blue); }
 .titleWide   { display: none; }
 .titleNarrow { display: block; }
 
@@ -148,7 +144,7 @@
   .heroArt { left: auto; width: var(--art-w); }
   .heroText { max-width: calc(100% - var(--art-w) + 40px); }
   .tags { display: flex; gap: 8px; flex-wrap: wrap; }
-  .title { margin-top: 18px; font-size: clamp(34px, 3.6vw, 48px); }
+  .title { margin-top: 16px; font-size: clamp(40px, 4.3vw, 60px); }
   .titleWide   { display: block; }
   .titleNarrow { display: none; }
   .sub { font-size: 18px; margin-top: 12px; }
@@ -220,11 +216,10 @@
   color: var(--p-muted);
 }
 
-.seeAllNarrow { display: inline-flex; }
+.headActions { display: inline-flex; align-items: center; gap: 18px; }
 .toggleWide   { display: none; }
 
 @media (min-width: 768px) {
-  .seeAllNarrow { display: none; }
   .toggleWide   { display: inline-flex; }
   .modes { gap: 14px; }
   .modes[data-hidden] { display: none; }

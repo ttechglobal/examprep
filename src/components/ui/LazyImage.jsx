@@ -12,12 +12,17 @@
 // replace an image in place — give the new version a new name (or bump ?v=).
 //
 // Props: src, alt ('' for decoration), className, style (positioning),
-//        eager (true only for artwork that must start loading immediately).
+//        eager (true only for artwork that must start loading immediately),
+//        onLoaded (called once the image shows, for parents whose fallback
+//        must step aside, e.g. a gradient pedestal under transparent art).
+//
+// v2: onLoaded.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-export default function LazyImage({ src, alt = '', className, style, eager = false }) {
+export default function LazyImage({ src, alt = '', className, style, eager = false, onLoaded }) {
   const [state, setState] = useState('loading')   // loading | loaded | failed
+  useEffect(() => { if (state === 'loaded') onLoaded?.() }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!src || state === 'failed') return null
 
   return (

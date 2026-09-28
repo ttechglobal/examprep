@@ -62,6 +62,7 @@ Small changes still follow the steps. They're just quicker.
 | App opening offline, cached code and images | `public/sw.js` | Pages network-first with a saved copy; `/_next/static`, `/images`, `/icons` cache-first. Never cache `/api/*` or admin/school pages |
 | Decorative images | `components/ui/LazyImage.jsx` | The page renders complete without the image; images load lazily and fade in |
 | A student's week / month activity | `hooks/useStudentActivity.js` | Home, Practice and Profile read it. Don't recompute activity per screen |
+| A student's subjects for one exam, with ids | `hooks/useExamSubjects.js` | The exam decides the subjects: never reuse one exam's subject ids for the other |
 | Recent practice sessions | `hooks/useRecentSessions.js` + `GET /api/student/sessions` | Device history first, server merged by `session_id` |
 | Illustrated action cards, week chart card | `components/ui/ArtCard.jsx`, `components/student/WeekActivityCard.jsx` | Shared by Home and Practice; don't copy them per page |
 | "No connection" vs a real error | `lib/network.js` (`isConnectionProblem`) | Say "You're offline" and offer Try again, never "Failed to fetch" |

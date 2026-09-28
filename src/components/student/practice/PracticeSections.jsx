@@ -12,6 +12,7 @@ import Link from 'next/link'
 import LazyImage from '@/components/ui/LazyImage'
 import ArtCard, { ArtCardRow } from '@/components/ui/ArtCard'
 import SubjectIcon from '@/components/ui/SubjectIcon'
+import PlayfulTitle from '@/components/ui/PlayfulTitle'
 import { getSubjectAccent } from '@/lib/subjectAccents'
 import { appDay, addDays } from '@/lib/dates'
 import { HERO_IMAGE, TOPIC_CARD, MOCK_CARD } from './art'
@@ -35,10 +36,8 @@ export function PracticeHero({ name }) {
           <span className={s.tag}>📘 Practice</span>
           <span className={s.tag}>🧩 Master Topics</span>
         </div>
-        <h1 className={s.title}>
-          <span className={s.titleNarrow}>Let&apos;s<br /><span className={s.titleAccent}>practice!</span></span>
-          <span className={s.titleWide}>{name}, <span className={s.titleAccent}>let&apos;s practice!</span></span>
-        </h1>
+        <PlayfulTitle className={`${s.title} ${s.titleNarrow}`} stacked lead="Let's" accent="practice!" />
+        <PlayfulTitle className={`${s.title} ${s.titleWide}`} lead={`${name},`} accent="let's practice!" />
         <p className={s.sub}>Choose a mode, pick a topic, and keep improving. 🎯</p>
       </div>
     </section>
@@ -68,8 +67,8 @@ export function PrimaryModes({ onTopic, onMock }) {
 }
 
 // ── More practice modes ──────────────────────────────────────────────────────
-// Wide screens can hide the row (remembered on this device); phones get a
-// "See all" that opens the full mode picker instead.
+// "See all" opens the full mode picker (Speed Round lives only there). Wide
+// screens can also hide the row (remembered on this device).
 const MORE_MODES = [
   { key: 'quick5', title: 'Quick 5',         short: '5 random questions fast',           desc: '5 random questions for a fast challenge.',  tone: '#F59E0B', icon: <BoltIcon /> },
   { key: 'custom', title: 'Custom Practice', short: 'Choose exam, subject & number',     desc: 'Choose exam, subject, number of questions.', tone: '#7C3AED', icon: <ShuffleIcon /> },
@@ -91,13 +90,15 @@ export function MoreModes({ onPick, onSeeAll }) {
     <section aria-label="More practice modes">
       <div className={s.sectionHead}>
         <h2 className={s.sectionTitle}>More Practice Modes</h2>
-        <button type="button" className={cx(s.headLink, s.seeAllNarrow)} onClick={onSeeAll}>See all →</button>
-        <button type="button" className={cx(s.headLink, s.toggleWide)} onClick={toggle} aria-expanded={!hidden}>
-          {hidden ? 'Show modes' : 'Hide modes'}
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: hidden ? 'rotate(180deg)' : 'none' }}>
-            <path d="M3 9l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <span className={s.headActions}>
+          <button type="button" className={s.headLink} onClick={onSeeAll}>See all →</button>
+          <button type="button" className={cx(s.headLink, s.toggleWide)} onClick={toggle} aria-expanded={!hidden}>
+            {hidden ? 'Show modes' : 'Hide modes'}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: hidden ? 'rotate(180deg)' : 'none' }}>
+              <path d="M3 9l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </span>
       </div>
       {/* Hidden only on wide screens: phones always show the three tiles. */}
       <div className={s.modes} data-hidden={hidden || undefined}>

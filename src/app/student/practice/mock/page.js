@@ -1,6 +1,12 @@
 'use client'
 // src/app/student/practice/mock/page.js
-// WAEC: 1 subject, 50q, 60min | JAMB: 4 subjects (user-selected), 40q each, 2hrs
+// WAEC: 1 subject, 50q, 60min | JAMB: 2–4 subjects (user-selected), 40q each, 2hrs
+//
+// v2: always starts at "Choose your exam" (it used to skip straight to the
+//     exam the Practice page was showing). Subjects come from the profile per
+//     exam (hooks/useExamSubjects) instead of a list handed over in
+//     sessionStorage('mock_config'), so their ids always match the exam.
+//     Setup screens: components/student/mock/MockSetupScreens.jsx.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,167 +15,20 @@ import { usePoints } from '@/contexts/PointsContext'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 import { computeSessionXP } from '@/lib/xp'
 
-import { BLUE, CYAN, GREEN, RED, ORANGE, NAVY, PURPLE, pct, msToSecs } from '@/components/session/SessionUtils'
-import { LoadingScreen, ErrorScreen, EndDialog, SessionTimer } from '@/components/session/SessionPrimitives'
+import { BLUE, GREEN, RED, ORANGE, PURPLE, pct, msToSecs } from '@/components/session/SessionUtils'
+import { ErrorScreen, EndDialog, SessionTimer } from '@/components/session/SessionPrimitives'
 import { Calculator } from '@/components/session/Calculator'
 import { QuestionCard } from '@/components/session/QuestionCard'
 import { ReviewSession } from '@/components/session/ReviewSession'
 import SessionResults from '@/components/student/SessionResults'
+import { ExamChooser, MockSetup, MOCK_RULES } from '@/components/student/mock/MockSetupScreens'
+import { useStudentUser } from '@/app/student/layout'
+import { useExamSubjects } from '@/hooks/useExamSubjects'
 
-const WAEC_COUNT = 50
-const WAEC_MINS  = 60
-const JAMB_COUNT = 40
-const JAMB_MINS  = 120
-
-// ─── DARK-SAFE MODAL BACKGROUND ──────────────────────────────────────────────
-// Header bars use the page canvas so they blend with it. (--bg-card is solid
-// in dark mode now too; this used to be a workaround for it being see-through.)
-const MODAL_BG = 'var(--bg-base)'
-
-// ─── EXAM TYPE PICKER ─────────────────────────────────────────────────────────
-function ExamPicker({ onPick, onBack }) {
-  return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column' }}>
-      <style>{`*{box-sizing:border-box}`}</style>
-      <div style={{ background:MODAL_BG, borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', height:52 }}>
-          <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', color:'var(--text-tert)', fontSize:13, fontWeight:700, padding:0 }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Back
-          </button>
-          <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>Mock Exam</div>
-          <div style={{ width:48 }}/>
-        </div>
-      </div>
-      <div style={{ flex:1, padding:'28px 20px 40px', maxWidth:460, margin:'0 auto', width:'100%' }}>
-        <div style={{ fontSize:22, fontWeight:900, color:'var(--text-prim)', marginBottom:6 }}>Choose your exam</div>
-        <div style={{ fontSize:13, color:'var(--text-tert)', marginBottom:24 }}>Select the exam you want to simulate.</div>
-        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          {[
-            { exam:'WAEC', logo:'/images/waec-logo.png',  color:GREEN,  desc:`1 subject · ${WAEC_COUNT} questions · ${WAEC_MINS} minutes` },
-            { exam:'JAMB', logo:'/images/jamb-logo.png',  color:PURPLE, desc:`Up to 4 subjects · ${JAMB_COUNT} questions each · ${JAMB_MINS} minutes` },
-          ].map(({ exam, logo, color, desc }) => (
-            <button key={exam} onClick={() => onPick(exam)}
-              style={{ display:'flex', alignItems:'center', gap:16, padding:'20px', borderRadius:20, border:`2px solid var(--border)`, background:'var(--bg-card)', cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'border-color .15s, box-shadow .15s' }}>
-              {/* Logo tile */}
-              <div style={{ width:56, height:56, borderRadius:16, background:`${color}10`, border:`1.5px solid ${color}30`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, overflow:'hidden', padding:6 }}>
-                <img
-                  src={logo}
-                  alt={exam}
-                  style={{ width:'100%', height:'100%', objectFit:'contain' }}
-                  onError={e => {
-                    // fallback to initials if logo not found yet
-                    e.currentTarget.style.display = 'none'
-                    e.currentTarget.parentElement.innerHTML = `<span style="font-size:18px;font-weight:900;color:${color}">${exam}</span>`
-                  }}
-                />
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', marginBottom:3, letterSpacing:'-.01em' }}>{exam}</div>
-                <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.4 }}>{desc}</div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── SETUP SCREEN ─────────────────────────────────────────────────────────────
-function MockSetup({ examType, allSubjects, onStart, onBack }) {
-  const isJAMB = examType === 'JAMB'
-
-  // WAEC: single radio pick
-  const [waecPicked, setWaecPicked] = useState(allSubjects[0] ?? null)
-
-  // JAMB: multi-select up to 4
-  const [jambPicked, setJambPicked] = useState(allSubjects.slice(0, 4))
-
-  function toggleJamb(s) {
-    setJambPicked(prev => {
-      const has = prev.some(x => x.id === s.id)
-      if (has) return prev.filter(x => x.id !== s.id)
-      if (prev.length >= 4) return prev  // cap at 4
-      return [...prev, s]
-    })
-  }
-
-  const canStart = isJAMB ? jambPicked.length >= 2 : !!waecPicked
-  const total    = isJAMB ? jambPicked.length * JAMB_COUNT : WAEC_COUNT
-  const mins     = isJAMB ? JAMB_MINS : WAEC_MINS
-
-  return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg-base)', display:'flex', flexDirection:'column' }}>
-      <style>{`*{box-sizing:border-box}`}</style>
-      <div style={{ background:MODAL_BG, borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', height:52 }}>
-          <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', color:'var(--text-tert)', fontSize:13, fontWeight:700, padding:0 }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Back
-          </button>
-          <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>{examType} Mock Setup</div>
-          <div style={{ width:48 }}/>
-        </div>
-      </div>
-
-      <div style={{ flex:1, padding:'24px 20px 40px', maxWidth:460, margin:'0 auto', width:'100%' }}>
-        {/* Info banner */}
-        <div style={{ borderRadius:18, background:`linear-gradient(135deg,${NAVY} 0%,#0d2466 60%,#1347b0 100%)`, padding:'20px', marginBottom:20, position:'relative', overflow:'hidden' }}>
-          <div style={{ position:'absolute', top:-20, right:-20, width:100, height:100, borderRadius:'50%', background:'rgba(255,255,255,.04)' }}/>
-          <div style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,.5)', marginBottom:2, textTransform:'uppercase', letterSpacing:'.08em' }}>{examType} Mock</div>
-          <div style={{ fontSize:18, fontWeight:900, color:'#fff', marginBottom:10 }}>{total} questions · {mins} min</div>
-          {['Timer runs continuously — no pauses', 'No hints or explanations during exam', 'Full review with explanations after'].map((r, i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:7, marginTop:5 }}>
-              <div style={{ width:4, height:4, borderRadius:'50%', background:CYAN, flexShrink:0 }}/>
-              <span style={{ fontSize:11, color:'rgba(255,255,255,.65)' }}>{r}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Subject selection */}
-        <div style={{ background:'var(--bg-card)', borderRadius:18, border:'1px solid var(--border)', padding:'16px', marginBottom:16 }}>
-          <div style={{ fontSize:13, fontWeight:900, color:'var(--text-prim)', marginBottom:4 }}>
-            {isJAMB ? 'Select your subjects (2–4)' : 'Choose a subject'}
-          </div>
-          {isJAMB && <div style={{ fontSize:11, color:'var(--text-tert)', marginBottom:12 }}>Select the subjects for this mock session.</div>}
-          {!isJAMB && <div style={{ height:8 }}/>}
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {allSubjects.map(s => {
-              const isSelected = isJAMB ? jambPicked.some(x => x.id === s.id) : waecPicked?.id === s.id
-              const isDisabled = isJAMB && !isSelected && jambPicked.length >= 4
-              return (
-                <button key={s.id ?? s.name}
-                  onClick={() => isJAMB ? (!isDisabled && toggleJamb(s)) : setWaecPicked(s)}
-                  disabled={isDisabled}
-                  style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, border:`2px solid ${isSelected?BLUE:'var(--border)'}`, background:isSelected?`${BLUE}10`:'transparent', cursor:isDisabled?'default':'pointer', fontFamily:'inherit', textAlign:'left', opacity:isDisabled?.4:1 }}>
-                  {/* Radio / checkbox indicator */}
-                  <div style={{ width:18, height:18, borderRadius:isJAMB?4:'50%', border:`2px solid ${isSelected?BLUE:'var(--border)'}`, background:isSelected?BLUE:'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    {isSelected && <span style={{ fontSize:10, color:'#fff', fontWeight:900, lineHeight:1 }}>{isJAMB?'✓':'●'}</span>}
-                  </div>
-                  <span style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', flex:1 }}>{s.name}</span>
-                  {isJAMB && isSelected && <span style={{ fontSize:10, color:BLUE, fontWeight:700 }}>{JAMB_COUNT}q</span>}
-                </button>
-              )
-            })}
-          </div>
-          {isJAMB && jambPicked.length < 2 && (
-            <div style={{ marginTop:10, padding:'9px 12px', borderRadius:10, background:`${RED}08`, border:`1px solid ${RED}30`, fontSize:12, color:RED }}>
-              Select at least 2 subjects to start.
-            </div>
-          )}
-        </div>
-
-        <button onClick={() => canStart && onStart(isJAMB ? jambPicked : waecPicked)}
-          disabled={!canStart}
-          style={{ width:'100%', padding:'15px', borderRadius:14, border:'none', cursor:canStart?'pointer':'default', background:canStart?PURPLE:'var(--bg-subtle)', color:canStart?'#fff':'var(--text-tert)', fontSize:15, fontWeight:900, fontFamily:'inherit', boxShadow:canStart?`0 5px 0 #3b0764`:'none', opacity:canStart?1:.5 }}>
-          Begin {examType} Mock →
-        </button>
-      </div>
-    </div>
-  )
-}
+const WAEC_COUNT = MOCK_RULES.WAEC.count
+const WAEC_MINS  = MOCK_RULES.WAEC.mins
+const JAMB_COUNT = MOCK_RULES.JAMB.perSubject
+const JAMB_MINS  = MOCK_RULES.JAMB.mins
 
 // ─── CBT QUESTION GRID ────────────────────────────────────────────────────────
 function QuestionGrid({ total, current, answerMap, onJump, compact = false }) {
@@ -221,9 +80,10 @@ export default function MockPage() {
   const { dark } = useTheme()
   const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
 
-  const [phase,     setPhase]    = useState('loading')
+  const profile = useStudentUser()
+  const [phase,     setPhase]    = useState('pick-exam')
   const [examType,  setExamType] = useState(null)
-  const [allSubjects, setAllSubjects] = useState([])  // all subjects from profile
+  const examSubjects = useExamSubjects(profile, examType ?? 'WAEC')
   const [sessionSubjects, setSessionSubjects] = useState([]) // user-selected for this session
   const [errMsg,    setErrMsg]   = useState('')
   const [config,    setConfig]   = useState(null)
@@ -252,25 +112,6 @@ export default function MockPage() {
     if (qColRef.current) qColRef.current.scrollTop = 0
   }, [qIndex, activeTab])
 
-  // ── Load subjects from sessionStorage ────────────────────────────────────
-  useEffect(() => {
-    let cfg
-    try { cfg = JSON.parse(sessionStorage.getItem('mock_config') || '{}') }
-    catch { cfg = {} }
-    if (!cfg.subjects?.length) { setErrMsg('No subjects found. Go back and try again.'); setPhase('error'); return }
-    setAllSubjects(cfg.subjects)
-    setConfig(cfg)
-    // If the practice page already knew the exam type (written since the JAMB-UUID fix),
-    // skip the exam-picker entirely so WAEC subjects are never used for a JAMB session
-    // and vice versa.  Fall back to 'pick-exam' only for stale configs that lack examType.
-    if (cfg.examType === 'WAEC' || cfg.examType === 'JAMB') {
-      setExamType(cfg.examType)
-      setPhase('setup')
-    } else {
-      setPhase('pick-exam')
-    }
-  }, [])
-
   // ── Fetch one non-WAEC subject (JAMB) ────────────────────────────────────
   // examType is captured from state at call time — do NOT hardcode 'JAMB' here.
   const fetchSubjectQuestions = useCallback(async (idx, subList, resolvedExam) => {
@@ -290,32 +131,8 @@ export default function MockPage() {
 
   // ── Start ─────────────────────────────────────────────────────────────────
   async function handleStart(picked) {
-    // picked = single subject (WAEC) or array of subjects (JAMB)
-    // subject objects carry {id, name} but the IDs may have been resolved for a
-    // different exam on the practice page.  Re-resolve IDs here for the exam the
-    // student actually chose so WAEC UUIDs are never used for a JAMB session.
-    let subList = Array.isArray(picked) ? picked : [picked]
-
-    if (examType !== 'WAEC') {
-      // Re-resolve subject IDs for the chosen exam from the canonical subjects API.
-      // This is a single fast query (≤4 names) and ensures the UUIDs match examType.
-      try {
-        const names = subList.map(s => s.name)
-        const res = await fetch(`/api/student/subjects?exam=${examType}&names=${encodeURIComponent(names.join(','))}`)
-        if (res.ok) {
-          const rows = await res.json()
-          if (Array.isArray(rows) && rows.length) {
-            // Merge resolved IDs back, preserving original order
-            const idMap = {}
-            rows.forEach(r => { idMap[r.name] = r.id })
-            subList = subList.map(s => ({ ...s, id: idMap[s.name] ?? s.id }))
-          }
-        }
-      } catch {
-        // Non-fatal: fall through with whatever IDs we have
-      }
-    }
-
+    // picked: the subjects chosen on the setup screen, ids already for examType.
+    const subList = picked
     setSessionSubjects(subList)
     setPhase('session')
     startTimeRef.current = Date.now()
@@ -389,10 +206,9 @@ export default function MockPage() {
   const jambBreakdown = !isWAEC ? sessionSubjects.map((s,i)=>({ name:s.name, correct:(subjectQs[i]??[]).filter((_,j)=>answerMaps[i]?.[j]?.isCorrect).length, total:(subjectQs[i]??[]).length })) : []
 
   // ── Phase routing ─────────────────────────────────────────────────────────
-  if (phase==='loading')   return <LoadingScreen message="Setting up your mock exam…"/>
   if (phase==='error')     return <ErrorScreen message={errMsg} onBack={()=>router.push('/student/practice')}/>
-  if (phase==='pick-exam') return <ExamPicker onPick={e=>{setExamType(e);setPhase('setup')}} onBack={()=>router.push('/student/practice')}/>
-  if (phase==='setup')     return <MockSetup examType={examType} allSubjects={allSubjects} onStart={handleStart} onBack={()=>setPhase('pick-exam')}/>
+  if (phase==='pick-exam') return <ExamChooser onPick={e=>{setExamType(e);setPhase('setup')}} onBack={()=>router.push('/student/practice')}/>
+  if (phase==='setup')     return <MockSetup exam={examType} subjects={examSubjects.subjects} loading={examSubjects.loading} hasAny={examSubjects.hasAny} dark={dark} onStart={handleStart} onBack={()=>setPhase('pick-exam')}/>
   if (phase==='review')    return <ReviewSession
     questions={allQuestions}
     answers={allAnswers}

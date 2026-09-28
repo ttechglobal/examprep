@@ -1,12 +1,20 @@
 'use client'
-// src/app/student/leaderboard/page.js — v5
+// src/app/student/leaderboard/page.js — v6
 // ─────────────────────────────────────────────────────────────────────────────
-// Weekly Champions carousel, period tabs, National / School picker, and the
-// rankings table with the student's own row pinned on top.
+// Leaderboard: National | My School, the time period, last week's champions
+// and the rankings table.
 //
-// Data: /api/leaderboard/{national|school} (see lib/leaderboard/server.js).
-// Signed-in students get `me` back with their true rank even outside the top
-// 20. Guests see the national board and a sign-up prompt in their row.
+// Data: /api/leaderboard/{national|school} (lib/leaderboard/server.js) through
+// useBoard (cached on the device, refreshed in the background) and
+// useChampions. Signed-in students get `me` back with their true rank even
+// outside the top 20. Guests see the national board and a sign-up row.
+//
+// Layout (leaderboard.module.css): desktop has the title on the left and the
+// scope + period controls on the right, above the champions; phones put the
+// period tabs under the champions.
+//
+// v6: new design. Scope is a two-button toggle; the champions hero shows last
+//     week only (older weeks: the Hall of Champions page).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useMemo, useState } from 'react'
@@ -15,12 +23,12 @@ import { useStudentUser, useUpdateStudentProfile } from '@/app/student/layout'
 import JoinSchool from '@/components/student/JoinSchool'
 import { Sheet } from '@/components/student/profile/sheets'
 import {
-  ChampionsHero, PeriodTabs, ScopeSelect, Board, InviteBanner, styles as s,
+  ChampionsHero, PeriodTabs, ScopeToggle, Board, InviteBanner, styles as s,
 } from '@/components/student/leaderboard/LeaderboardSections'
 import { useBoard, useChampions } from '@/components/student/leaderboard/useLeaderboard'
 import { periodWindow, formatWindow } from '@/lib/leaderboard/periods'
 
-const CHAMPION_WEEKS = 4   // how far back the champions carousel goes
+const CHAMPIONS_WEEKS_AGO = 1   // the champions are last week's, a finished week
 
 export default function LeaderboardPage() {
   const router  = useRouter()
@@ -35,17 +43,17 @@ export default function LeaderboardPage() {
   const schoolId  = linked?.school_id ?? profile?.school_id ?? null
   const hasSchool = !isGuest && !!schoolId
 
-  const [scope,    setScope]    = useState('national')
-  const [period,   setPeriod]   = useState('week')
-  const [weeksAgo, setWeeksAgo] = useState(1)
-  const [joining,  setJoining]  = useState(false)
+  const [scope,   setScope]   = useState('national')
+  const [period,  setPeriod]  = useState('week')
+  const [joining, setJoining] = useState(false)
 
   const board     = useBoard({ scope, period, userId, ready, enabled: scope !== 'school' || hasSchool })
-  const champions = useChampions(weeksAgo, ready)
+  const champions = useChampions(CHAMPIONS_WEEKS_AGO, ready)
   const schoolName = board.school_name ?? linked?.school_name ?? profile?.school_name ?? null
 
-  const dateLabel = useMemo(() => formatWindow(periodWindow('week', { weeksAgo })), [weeksAgo])
+  const dateLabel = useMemo(() => formatWindow(periodWindow('week', { weeksAgo: CHAMPIONS_WEEKS_AGO })), [])
 
+  // 'join': "My School" without a linked school.
   const onScope = useCallback(value => {
     if (value !== 'join') return setScope(value)
     if (isGuest) router.push('/onboarding?mode=signup')
@@ -59,33 +67,24 @@ export default function LeaderboardPage() {
     setScope('school')
   }
 
-  const scopePicker = (
-    <ScopeSelect scope={scope} schoolName={schoolName} hasSchool={hasSchool} onChange={onScope} />
-  )
-
   return (
     <div className={s.page}>
-      <header className={s.header}>
+      <header className={s.head}>
         <h1 className={s.title}>Leaderboard</h1>
         <p className={s.subtitle}>
           {scope === 'school' && schoolName ? `Compete with students at ${schoolName}` : 'Compete with students across Nigeria'}
         </p>
-        {scopePicker}
       </header>
 
-      <ChampionsHero
-        weeksAgo={weeksAgo}
-        maxWeeksAgo={CHAMPION_WEEKS}
-        onChange={w => setWeeksAgo(Math.min(Math.max(w, 1), CHAMPION_WEEKS))}
-        dateLabel={dateLabel}
-        entries={champions.entries}
-        loading={!ready || champions.loading}
-      />
-
-      <div className={s.toolbar}>
-        <PeriodTabs period={period} onChange={setPeriod} />
-        {scopePicker}
+      <div className={s.scopeArea}>
+        <ScopeToggle scope={scope} hasSchool={hasSchool} onChange={onScope} />
       </div>
+
+      <div className={s.periodArea}>
+        <PeriodTabs period={period} onChange={setPeriod} />
+      </div>
+
+      <ChampionsHero dateLabel={dateLabel} entries={champions.entries} loading={!ready || champions.loading} />
 
       <Board
         board={board.leaderboard}

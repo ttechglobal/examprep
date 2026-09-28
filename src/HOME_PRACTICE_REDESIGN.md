@@ -1,4 +1,4 @@
-# Home + Practice redesign, Battle tab, offline app — 27–28 Sep 2026
+# Home, Practice, practice setup + mock, Leaderboard redesign; Battle tab; offline app — 27–28 Sep 2026
 
 ## Why
 
@@ -13,8 +13,13 @@
    Sizes and rules are in the `art.js` files.
    - `public/images/home/`: `hero-student.webp`, `practice-card.webp`, `battle-card.webp`
      (`components/student/home/art.js`)
-   - `public/images/practice/`: `hero-student.webp`, `topic-card.webp`, `mock-card.webp`
+   - `public/images/practice/`: `hero-student.webp`, `topic-card.webp`, `mock-card.webp`,
+     `setup-mascot.webp` (the student beside "How do you want to practice?")
      (`components/student/practice/art.js`)
+   - `public/images/mock/`: `waec-card.webp`, `jamb-card.webp` ("Choose your exam" cards),
+     `waec-header.webp`, `jamb-header.webp` (setup banners) (`components/student/mock/art.js`)
+   - `public/images/leaderboard/`: `champions-bg.webp` (new: Weekly Champions background); the existing
+     `podium-1/2/3.png` and `invite-friends.png` keep their names (`components/student/leaderboard/art.js`)
 2. **Service worker**: replace `public/sw.js` with the new one (v5). It keeps your push and
    notification-click code unchanged and adds the offline caching. There is no separate offline file.
 3. **Image cache headers**: add to `next.config`:
@@ -50,6 +55,26 @@
 | Session saving | Topic sessions now send `topic_name` (the server already stored it, the page never sent it). Local history keeps each session's time and topic; its date is the real day instead of "Today" forever | `app/student/practice/session/page.js`, `lib/localSessionSync.js` |
 | Removed | Battle card on Practice (Battle has a tab); `SessionHistory.jsx` (replaced; its server refresh never ran because of an undefined `MAX_LOCAL`); `BattleEntryCard.jsx` (no longer used) | |
 
+### Practice setup + mock exam (28 Sep)
+| Area | Change | Files |
+|---|---|---|
+| Mode picker | "How do you want to practice?" (playful title) with all six modes. Opened by "See all" on every screen size; Back from any mode's first screen returns here, × closes; the phone's Back button closes the sheet | `components/student/practice/PracticeSetupSheet.jsx` (v3), `setupSheet.module.css`, `app/student/practice/page.js` (v17) |
+| Screens per mode | Topic: exam + subject → topic. Custom: exam + subject → questions, Study/Practice, timer (**2 screens, no summary**). Quick 5: exam + subject. Speed Round: exam + subject + questions + seconds. Mock → exam chooser. Battle → Battle | same |
+| Speed | Everything has a default and the last subject is pre-picked: Quick 5 and Speed Round start in 1 tap after choosing the mode, Custom in 2. The Start button is docked at the bottom | same |
+| Subjects per exam | The exam switch (WAEC / JAMB) sits above the subjects and loads that exam's subjects with that exam's ids. Before, the page resolved ids for one exam and reused them for the other | `hooks/useExamSubjects.js` (new) |
+| Mock exam | Always starts at "Choose your exam" (it used to jump straight into the Practice page's exam). WAEC: 1 subject; JAMB: 2–4, with Use of English + 3 picked by default. Artwork slots with gradient fallbacks | `app/student/practice/mock/page.js` (v2), `components/student/mock/*` |
+| Playful title | Baloo 2, slight tilt, gold strokes; used on "Let's practice!" and the mode picker | `components/ui/PlayfulTitle.jsx`, `lib/fonts.js` |
+
+### Leaderboard (28 Sep)
+| Area | Change | Files |
+|---|---|---|
+| Layout | New design. Desktop: title left, National / My School and the period tabs right, then Weekly Champions and the table (rank, student, level, XP, avg. score). Phones: title, toggle, champions, tabs, table (rank, student, XP) | `app/student/leaderboard/page.js` (v6), `components/student/leaderboard/*` (v2) |
+| National / My School | Two-button toggle (was a dropdown). My School without a school: sign-up for guests, the "Connect your school" sheet for students | same |
+| Weekly Champions | Last week's podium only; the arrows and dots for older weeks are gone (the Hall of Champions page has them). "View all champions" link added on phones too. New background image slot | same |
+| Your row | Highlighted in the list with a "You" tag. Outside the top 20, it sticks to the bottom of the board (above the phone's nav) with how far you are from the top 10. Guests get a sign-up row at the end. Before, a card was pinned above the table and the row repeated at the bottom | same |
+| Images | Podium and invite art now sit on their CSS fallbacks: a missing, slow or offline image used to leave an empty pedestal. `LazyImage` gained `onLoaded` for this | `components/ui/LazyImage.jsx` (v2) |
+| Flashcards button | Hidden on the leaderboard, where it would cover your pinned row | `components/student/StudentNav.jsx` |
+
 ### Navigation, Battle, offline
 | Area | Change | Files |
 |---|---|---|
@@ -64,7 +89,13 @@
 
 - Bottom nav has 5 tabs; "Ranks" is now "Leaderboard". Battle keeps the nav on screen.
 - Practice no longer shows the Battle card, the "Edit subjects" / "Goals" chips, or Speed Round on the page
-  (Speed Round is still in the "See all" picker).
+  (Speed Round is in the "See all" picker).
+- Custom Practice has no summary screen: Start is on the second screen. Timer options are No timer / 5 / 10 /
+  20 / 30 min; question counts 5 / 10 / 20 / 30 / 50 (default 10).
+- Mock Exam always asks WAEC or JAMB first.
+- Leaderboard: no week-by-week arrows on the champions (use "View all champions"); no dropdown for the scope.
+- Custom Practice is still one subject per session. The mockup shows several; the question feed can take
+  several subject names, so this is a small follow-up if wanted.
 - Recent Sessions shows 3 sessions and no longer lists battles.
 - Week chart and streak can show higher numbers than before for students on more than one device.
 - A streak no longer shows 0 in the morning before practising; it drops only after a missed day.
@@ -76,13 +107,19 @@
 - `next build` (Next 15, React 19) passes.
 - Chromium at 390, 1100, 1366 and 1536 px, light and dark, with artwork and with every image blocked:
   Home, Practice, Battle hub.
-- Practice flows: Study Practice opens the picker on Custom; Topic card opens it on Topic; Mock card goes to
-  the mock exam.
+- Practice setup, at 390 px and 1440 px, light and dark: every screen of every mode, the mock chooser and
+  both mock setups. Starting Quick 5, Speed Round and Custom (JAMB, Study, 20 questions, 10 min) writes the
+  expected config with the JAMB subject id; Back from the session returns to Practice; `?mode=mock` opens
+  the chooser; JAMB mock can begin with its defaults.
 - Offline with the server switched off (real network failure for page and worker): Practice reloads in
   ~1.6 s with its images from the phone; Leaderboard (never visited) and Battle tabs open; launching at "/"
   opens the app home; unsaved and admin pages show the offline page.
 - Found and fixed in testing: responses the worker didn't keep (e.g. a missing icon) held connections open
   and stalled its install.
+
+- Leaderboard, at 390, 1100 and 1536 px, light and dark, with mocked API data: top-of-board student, a
+  student ranked 47th (row sticks above the phone nav / at the foot of the desktop board), guest (sign-up
+  row; My School → sign-up), signed-in student without a school (My School → connect sheet), missing artwork.
 
 ## Not verified
 
