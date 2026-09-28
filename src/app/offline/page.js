@@ -1,6 +1,9 @@
 // src/app/offline/page.js
-// Shown by the service worker when navigation fails and no cache is available.
-// This should almost never be seen — the SW caches navigation pages.
+// Shown by the service worker (public/sw.js) when a page is opened offline
+// that isn't saved on the phone yet. The main student pages are saved, so
+// "Back to home" works offline.
+//
+// v2: the old text promised downloaded practice questions, which don't exist yet.
 
 export default function OfflinePage() {
   return (
@@ -12,8 +15,8 @@ export default function OfflinePage() {
         <div>
           <h1 className="text-xl font-black text-primary mb-2">You're offline</h1>
           <p className="text-secondary text-sm leading-relaxed">
-            No internet connection right now. Your downloaded practice questions are still available
-            — go back to the dashboard to keep studying.
+            This page isn&apos;t saved on your phone yet. The main pages of the app still work,
+            so go back home and carry on. Questions need internet to load.
           </p>
         </div>
         <a

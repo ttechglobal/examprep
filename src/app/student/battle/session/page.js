@@ -3,6 +3,9 @@
 // Battle vs the computer: countdown, questions, reveal, results and review.
 // The look (header, tiles, question card, review) is shared with 1v1 and lives
 // in components/battle/arena.
+//
+// v2: when questions can't load because there's no connection, the error
+//     screen says "You're offline" with Try again, not "Failed to fetch".
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePoints } from '@/contexts/PointsContext'
@@ -10,6 +13,7 @@ import { createComputerOpponent, readLocalBattleStats, recordLocalBattleResult }
 import { computeSessionXP } from '@/lib/xp'
 import { saveSessionLocally } from '@/lib/localSessionSync'
 import { normaliseOptions, checkCorrect } from '@/lib/answers'
+import { isConnectionProblem } from '@/lib/network'
 import BattleBg from '@/components/battle/arena/BattleBg'
 import VSHeader from '@/components/battle/arena/VSHeader'
 import Countdown from '@/components/battle/arena/Countdown'
@@ -446,13 +450,19 @@ export default function BattleSessionPage() {
       </div>
     </div>
   )
-  if (phase==='error') return (
-    <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16, padding:24 }}>
-      <BattleBg/>
-      <div style={{ fontSize:18, fontWeight:900, color:NAVY2, textAlign:'center', position:'relative', zIndex:5 }}>{errMsg}</div>
-      <button onClick={() => router.push('/student/battle')} style={{ padding:'12px 24px', borderRadius:12, background:NAVY2, color:'#fff', border:'none', cursor:'pointer', fontWeight:800, fontFamily:'inherit', position:'relative', zIndex:5, boxShadow:'0 4px 0 #031548' }}>Back to Battle</button>
-    </div>
-  )
+  if (phase==='error') {
+    const offline = isConnectionProblem(errMsg)
+    return (
+      <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:14, padding:24 }}>
+        <BattleBg/>
+        {offline && <div style={{ fontSize:40, position:'relative', zIndex:5 }}>📶</div>}
+        <div style={{ fontSize:18, fontWeight:900, color:NAVY2, textAlign:'center', position:'relative', zIndex:5 }}>{offline ? 'You\'re offline' : errMsg}</div>
+        {offline && <div style={{ fontSize:14, fontWeight:600, color:NAVY2, opacity:.75, textAlign:'center', maxWidth:300, lineHeight:1.5, position:'relative', zIndex:5 }}>Battle questions load from the internet. Connect to Wi-Fi or data, then try again.</div>}
+        {offline && <button onClick={() => window.location.reload()} style={{ padding:'12px 24px', borderRadius:12, background:GOLD, color:NAVY2, border:'none', cursor:'pointer', fontWeight:900, fontFamily:'inherit', position:'relative', zIndex:5, boxShadow:'0 4px 0 #b37f00' }}>Try again</button>}
+        <button onClick={() => router.push('/student/battle')} style={{ padding:'12px 24px', borderRadius:12, background:NAVY2, color:'#fff', border:'none', cursor:'pointer', fontWeight:800, fontFamily:'inherit', position:'relative', zIndex:5, boxShadow:'0 4px 0 #031548' }}>Back to Battle</button>
+      </div>
+    )
+  }
   if (phase==='countdown') return <Countdown endsAt={countdownEndsAt.current} onDone={() => { setPhase('battle'); startQuestionTimer() }}/>
   if (phase==='results') return (
     <BattleResults

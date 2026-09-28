@@ -1,43 +1,22 @@
 'use client'
-// src/components/ServiceWorkerRegistration.jsx
-// Registers the service worker silently on client mount.
-// Drop this into the root layout so it runs on every page.
+// src/components/ServiceWorkerRegistration.jsx — v2
+// Registers the service worker (production only) from the root layout, so it
+// runs on every page. The worker (public/sw.js) saves
+// the student pages, code and images on the phone so the app opens offline.
 //
-// Usage — in src/app/layout.js:
-//   import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
-//   ...
-//   <body>
-//     <ServiceWorkerRegistration />
-//     {children}
-//   </body>
+// v2: asks the browser to keep that saved data (navigator.storage.persist), so
+//     Android doesn't clear it when space runs low; debug logging removed.
 
 import { useEffect } from 'react'
 
 export default function ServiceWorkerRegistration() {
   useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      'serviceWorker' in navigator &&
-      process.env.NODE_ENV === 'production'
-    ) {
-      navigator.serviceWorker
-        .register('/sw.js', { scope: '/' })
-        .then(reg => {
-          console.log('[SW] registered, scope:', reg.scope)
+    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production') return
 
-          // Check for updates periodically
-          reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing
-            newWorker?.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content available — optionally notify the user
-                console.log('[SW] update available')
-              }
-            })
-          })
-        })
-        .catch(err => console.warn('[SW] registration failed:', err))
-    }
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then(() => navigator.storage?.persist?.())
+      .catch(err => console.warn('[sw] registration failed:', err))
   }, [])
 
   return null

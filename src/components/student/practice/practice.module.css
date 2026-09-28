@@ -1,0 +1,417 @@
+/* src/components/student/practice/practice.module.css
+   Practice page. One markup for every width:
+     • phones: single column (hero, Topic + Mock cards, more modes as three
+       tiles, recent sessions, practice streak)
+     • ≥768px: wide greeting; ≥1200px: mode tiles with the icon beside the text
+     • ≥1100px: recent sessions and the streak card side by side
+   The big cards (components/ui/ArtCard) and the streak card
+   (components/student/WeekActivityCard) bring their own styles.
+   Dark mode swaps the local tokens under the app's .dark class. */
+
+.page {
+  --p-ink: var(--text-prim);
+  --p-ink-2: var(--text-sec);
+  --p-muted: var(--text-tert);
+  --p-blue: #1264e5;
+  --p-surface: var(--bg-card);
+  --p-line: var(--border);
+  --p-track: #e8edf7;
+  --p-shadow: 0 1px 2px rgba(16, 40, 100, 0.04), 0 6px 20px rgba(16, 40, 100, 0.06);
+
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: var(--p-ink);
+}
+
+:global(.dark) .page {
+  --p-blue: #5b95ff;
+  --p-track: rgba(255, 255, 255, 0.08);
+  --p-shadow: none;
+}
+
+.panel {
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  border-radius: 20px;
+  box-shadow: var(--p-shadow);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+.headLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--p-blue);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  min-height: 236px;
+  padding: 4px 0 18px;
+}
+
+.heroText {
+  position: relative;
+  z-index: 1;
+  max-width: 48%;
+}
+
+.tags { display: none; }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--p-surface);
+  border: 1px solid var(--p-line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-ink-2);
+}
+
+.title {
+  margin: 8px 0 0;
+  font-size: clamp(38px, 11vw, 46px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.titleAccent { color: var(--p-blue); }
+.titleWide   { display: none; }
+.titleNarrow { display: block; }
+
+.sub {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--p-ink-2);
+}
+
+/* Phones: the picture spans the width behind the text (keep its top-left
+   empty); wider: it sits on the right. */
+.heroArt {
+  position: absolute;
+  left: -6px;
+  right: -10px;
+  bottom: -16px;          /* tucks behind the top of the cards */
+  height: 190px;
+  pointer-events: none;
+}
+
+.heroArt img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: right bottom;
+}
+
+.sparkle {
+  position: absolute;
+  color: #ffb800;
+  line-height: 1;
+}
+.sparkle1 { top: 6%;  left: 52%; font-size: 18px; }
+.sparkle2 { top: 30%; right: 2%; font-size: 14px; }
+
+@media (min-width: 768px) {
+  .hero { --art-w: clamp(300px, 46%, 560px); min-height: 190px; padding: 0 0 26px; }
+  .heroArt { left: auto; width: var(--art-w); }
+  .heroText { max-width: calc(100% - var(--art-w) + 40px); }
+  .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .title { margin-top: 18px; font-size: clamp(34px, 3.6vw, 48px); }
+  .titleWide   { display: block; }
+  .titleNarrow { display: none; }
+  .sub { font-size: 18px; margin-top: 12px; }
+  .heroArt { right: 0; bottom: -18px; height: 250px; }
+}
+
+/* ── More practice modes ──────────────────────────────────────────────────── */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 12px 14px;
+  border: 1px solid var(--p-line);
+  border-radius: 18px;
+  background: var(--p-surface);
+  box-shadow: var(--p-shadow);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.mode:hover  { transform: translateY(-2px); }
+.mode:active { transform: translateY(1px); }
+.mode:focus-visible { outline: 3px solid var(--p-blue); outline-offset: 2px; }
+
+.modeIcon {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+}
+
+.modeTitle {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.modeDesc {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--p-muted);
+}
+.modeDescWide { display: none; }
+
+.chevron {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  color: var(--p-muted);
+}
+
+.seeAllNarrow { display: inline-flex; }
+.toggleWide   { display: none; }
+
+@media (min-width: 768px) {
+  .seeAllNarrow { display: none; }
+  .toggleWide   { display: inline-flex; }
+  .modes { gap: 14px; }
+  .modes[data-hidden] { display: none; }
+  .modeDescNarrow { display: none; }
+  .modeDescWide { display: block; }
+}
+
+/* Icon beside the text once each tile has room (~300px). */
+@media (min-width: 1200px) {
+  .mode {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 44px 16px 16px;
+  }
+  .modeIcon { width: 64px; height: 64px; }
+  .modeTitle { font-size: 17px; }
+  .modeDesc { font-size: 14px; }
+  .chevron { top: 50%; right: 16px; transform: translateY(-50%); }
+}
+
+/* ── Bottom: recent sessions + streak ─────────────────────────────────────── */
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+@media (min-width: 1100px) {
+  .bottom {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+    gap: 20px;
+    align-items: start;
+  }
+}
+
+.sessions { container-type: inline-size; }
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon who meter"
+    "icon who counts";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 14px 16px;
+}
+.row + .row { border-top: 1px solid var(--p-line); }
+
+.subjectIcon {
+  grid-area: icon;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.who { grid-area: who; min-width: 0; }
+
+.subject {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topic {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--p-muted);
+}
+
+.counts {
+  grid-area: counts;
+  justify-self: end;
+  font-size: 12px;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+.meter {
+  grid-area: meter;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.track {
+  width: 80px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--p-track);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--score);
+}
+
+.pct {
+  min-width: 38px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--score);
+}
+
+.when {
+  display: none;
+  font-size: 12px;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+
+@container (min-width: 600px) {
+  .row {
+    grid-template-columns: 44px minmax(0, 1fr) auto auto 110px;
+    grid-template-areas: "icon who counts meter when";
+    column-gap: 18px;
+    padding: 16px 20px;
+  }
+  .counts { justify-self: start; font-size: 13px; }
+  .topic { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track { width: 90px; }
+  .when { display: block; grid-area: when; text-align: right; }
+}
+
+.empty {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--p-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.emptyTitle { margin: 8px 0 2px; font-size: 15px; font-weight: 800; color: var(--p-ink); }
+
+.skeleton {
+  height: 72px;
+  background: var(--bg-subtle);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.skeleton + .skeleton { border-top: 1px solid var(--p-line); }
+
+@keyframes pulse { 50% { opacity: 0.55; } }
+
+/* ── No subjects yet ──────────────────────────────────────────────────────── */
+.setup {
+  padding: 32px 24px;
+  text-align: center;
+}
+.setupTitle { margin: 12px 0 6px; font-size: 17px; font-weight: 800; }
+.setupText  { margin: 0 auto 18px; max-width: 320px; font-size: 14px; line-height: 1.55; color: var(--p-muted); }
+.setupCta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 24px;
+  border-radius: 14px;
+  background: #1264e5;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 4px 0 #0a3fa0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode { transition: none; }
+  .skeleton { animation: none; }
+}

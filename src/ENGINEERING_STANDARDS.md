@@ -3,7 +3,7 @@
 **Read this before changing any code.** It applies to every contributor, human or AI, in every chat and every session.
 If a request conflicts with this document, say so before writing code.
 
-Last updated: 26 Sep 2026 (migrations: check types, not just existence) · Owner: tech lead
+Last updated: 28 Sep 2026 (one service worker, shared cards, recent sessions) · Owner: tech lead
 
 ---
 
@@ -59,6 +59,12 @@ Small changes still follow the steps. They're just quicker.
 | School data access | `lib/server/schoolStats.js` (`requireSchoolAdmin`, aggregates) | All school endpoints go through it |
 | Admin session | `lib/adminSession.js`, enforced in `middleware.js` | Every `/api/admin/*` route is gated automatically |
 | Offline and guest practice | `lib/localSessionSync.js` | Save locally first, sync in the background, idempotent by `session_id` |
+| App opening offline, cached code and images | `public/sw.js` | Pages network-first with a saved copy; `/_next/static`, `/images`, `/icons` cache-first. Never cache `/api/*` or admin/school pages |
+| Decorative images | `components/ui/LazyImage.jsx` | The page renders complete without the image; images load lazily and fade in |
+| A student's week / month activity | `hooks/useStudentActivity.js` | Home, Practice and Profile read it. Don't recompute activity per screen |
+| Recent practice sessions | `hooks/useRecentSessions.js` + `GET /api/student/sessions` | Device history first, server merged by `session_id` |
+| Illustrated action cards, week chart card | `components/ui/ArtCard.jsx`, `components/student/WeekActivityCard.jsx` | Shared by Home and Practice; don't copy them per page |
+| "No connection" vs a real error | `lib/network.js` (`isConnectionProblem`) | Say "You're offline" and offer Try again, never "Failed to fetch" |
 | Database schema, functions, policies | `supabase/migrations/*.sql` | The only way the schema changes. No hand edits in the dashboard |
 
 **Before creating a new helper, search for an existing one.** Two versions of the same logic will drift apart.
@@ -144,6 +150,11 @@ student picked; the server decides if it was right, how much XP it's worth, and 
 - **No duplicate fetching.** The profile, XP and subject ids are already loaded or cached. Read them from context
   or `lib/localProfile` before calling an API.
 - **Everything works for guests and offline**, or shows a clear message when it can't.
+- **Service worker responses are always used or cancelled** (`body.cancel()`). An unread response keeps its
+  connection busy; enough of them stall the worker's install.
+- **Images never block a screen.** Reserve their space, paint a fallback (gradient or colour) and load them lazily.
+  Files in `/images` and `/icons` are cached for a year and by the service worker, so **never replace an image in
+  place**: publish it under a new name (`practice-card-v2.webp`) and update the reference.
 - **Shared UI rules:**
   - Primary actions (Next, Submit, Continue) are visible without scrolling, docked at the bottom on mobile.
   - A new step or question starts at the top of the screen.

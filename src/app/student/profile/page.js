@@ -38,7 +38,7 @@ import {
   InfoSheet, SubjectsSheet, GoalsSheet, PlansSheet, CareerSheet, ParentsSheet,
   LanguageSheet, AccountSheet, NotificationsSheet,
 } from '@/components/student/profile/sheets'
-import { useProfileActivity } from '@/components/student/profile/useProfileActivity'
+import { useStudentActivity } from '@/hooks/useStudentActivity'
 import { getPlanStatus, goalsOf, activeExamsOf } from '@/components/student/profile/profileModel'
 
 const NOTIFICATION_LABEL = { checking: '…', on: 'On', off: 'Off', blocked: 'Blocked', failed: 'Needs attention', unsupported: 'Not available', unavailable: 'Not available' }
@@ -100,7 +100,7 @@ export default function ProfilePage() {
 
   // ── Activity ──────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState('week')
-  const activity = useProfileActivity(period, { isGuest, ready: !!profile })
+  const activity = useStudentActivity(period, { userId: profile?.id, isGuest, ready: !!profile })
 
   async function logout() {
     await signOut()

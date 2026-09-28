@@ -1,0 +1,123 @@
+/* src/components/student/StudentNav.module.css
+   Phone bottom nav (5 tabs) and the Flashcards button above it.
+   Dark mode swaps the local tokens under the app's .dark class. */
+
+.bottomNav {
+  --nav-surface: rgba(255, 255, 255, 0.97);
+  --nav-line: rgba(6, 42, 120, 0.08);
+  --nav-idle: #6b7a99;
+  --nav-on: #1264e5;
+  --nav-on-bg: rgba(18, 100, 229, 0.1);
+
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: calc(68px + env(safe-area-inset-bottom));
+  padding: 6px 6px env(safe-area-inset-bottom);
+  background: var(--nav-surface);
+  border-top: 1px solid var(--nav-line);
+  box-shadow: 0 -4px 20px rgba(6, 42, 120, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+:global(.dark) .bottomNav {
+  --nav-surface: rgba(10, 13, 28, 0.97);
+  --nav-line: rgba(255, 255, 255, 0.08);
+  --nav-idle: rgba(255, 255, 255, 0.5);
+  --nav-on: #5b95ff;
+  --nav-on-bg: rgba(91, 149, 255, 0.14);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 16px;
+  color: var(--nav-idle);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tabOn {
+  color: var(--nav-on);
+  background: var(--nav-on-bg);
+}
+
+.tabIcon { display: flex; }
+
+.tabLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.tabOn .tabLabel { font-weight: 800; }
+
+/* ── Flashcards button ────────────────────────────────────────────────────── */
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(68px + env(safe-area-inset-bottom) + 14px);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 18px 0 8px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #8b5cf6 0%, #6d28d9 100%);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 4px 0 #4c1d95, 0 10px 22px rgba(109, 40, 217, 0.38);
+  transition: padding 0.2s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #4c1d95, 0 4px 10px rgba(109, 40, 217, 0.3);
+}
+
+.fabIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fabLabel {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100px;
+  transition: max-width 0.2s ease, opacity 0.15s ease;
+}
+
+.fabCompact { padding: 0 8px; gap: 0; }
+.fabCompact .fabLabel { max-width: 0; opacity: 0; }
+
+@media (min-width: 1024px) {
+  .bottomNav, .fab { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab, .fabLabel, .tab { transition: none; }
+}

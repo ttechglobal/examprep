@@ -1,0 +1,154 @@
+/* src/components/ui/ArtCard.module.css
+   Big illustrated action cards (Home: Practice / Battle; Practice: Topic /
+   Mock). The row is a size container: cards stack, then sit side by side once
+   the row is ≥700px wide, and grow into their tall layout. */
+
+.row {
+  position: relative;
+  z-index: 1;              /* above a hero character that overlaps the cards */
+  container-type: inline-size;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+
+@container (min-width: 700px) {
+  .grid { grid-template-columns: 1fr 1fr; gap: 14px; }
+}
+
+.card {
+  --card-tall: 280px;      /* height side by side; a page can set it */
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: clamp(156px, 26cqi, 210px);   /* wider stacked cards get taller */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  overflow: hidden;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  isolation: isolate;
+  box-shadow: 0 10px 24px rgba(30, 20, 90, 0.18);
+  transition: transform 0.13s ease, box-shadow 0.13s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.card:hover  { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(30, 20, 90, 0.24); }
+.card:active { transform: translateY(1px);  box-shadow: 0 4px 12px rgba(30, 20, 90, 0.2); }
+.card:focus-visible { outline: 3px solid #ffc928; outline-offset: 3px; }
+
+.art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+}
+
+/* Keeps the text readable wherever the artwork is busy. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(10, 6, 40, 0.28) 0%, rgba(10, 6, 40, 0.1) 45%, transparent 70%);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 64%;
+  padding: 16px 18px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Icon in its own white tile (Practice design). */
+.chipBoxed { padding: 3px 12px 3px 3px; background: rgba(8, 10, 60, 0.3); }
+.chipIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: var(--cta-ink, #1d4ed8);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ctaGold {
+  background: linear-gradient(180deg, #ffd23f 0%, #ffb800 100%);
+  color: #1d1400;
+  box-shadow: 0 4px 0 #c98700, 0 8px 16px rgba(0, 0, 0, 0.18);
+}
+
+.ctaWhite {
+  background: #fff;
+  color: var(--cta-ink, #1d4ed8);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.14), 0 8px 16px rgba(0, 0, 0, 0.16);
+}
+
+@container (min-width: 700px) {
+  .card { min-height: var(--card-tall); align-items: flex-start; }
+  .body { max-width: 60%; min-height: var(--card-tall); padding: 22px; gap: 10px; }
+  .chip { font-size: 11px; padding: 6px 12px; }
+  .chipBoxed { padding: 4px 14px 4px 4px; }
+  .chipIcon { width: 30px; height: 30px; border-radius: 10px; }
+  .title { font-size: clamp(24px, 3.2cqi, 32px); }
+  .desc { font-size: 14px; }
+  .cta { margin-top: auto; padding: 12px 20px; font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: none; }
+}

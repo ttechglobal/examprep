@@ -1,0 +1,352 @@
+/* src/components/student/home/home.module.css
+   Student home. One set of markup for every width:
+     • phones / narrow: a single column, in reading order (see `order` below)
+     • ≥1300px: main column + 300px side column (This Week, Leaderboard)
+   The mode cards (components/ui/ArtCard) and the week card
+   (components/student/WeekActivityCard) bring their own styles.
+   Dark mode swaps the local tokens under the app's .dark class. */
+
+.page {
+  --h-ink: var(--text-prim);
+  --h-ink-2: var(--text-sec);
+  --h-muted: var(--text-tert);
+  --h-blue: #1264e5;
+  --h-orange: #ff6a00;
+  --h-surface: var(--bg-card);
+  --h-line: var(--border);
+  --h-me-bg: #eef4ff;
+  --h-shadow: 0 1px 2px rgba(16, 40, 100, 0.04), 0 6px 20px rgba(16, 40, 100, 0.06);
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--h-ink);
+}
+
+:global(.dark) .page {
+  --h-blue: #5b95ff;
+  --h-me-bg: rgba(91, 149, 255, 0.12);
+  --h-shadow: none;
+}
+
+/* Columns only exist on wide screens; below that their children join the
+   page's single column and `order` sets the reading order. */
+.main,
+.side { display: contents; }
+
+.hero    { order: 1; }
+.modesWrap { order: 2; }
+.guest   { order: 3; }
+.week    { order: 4; }
+.targets { order: 5; }
+.board   { order: 6; }
+
+@media (min-width: 1300px) {
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 22px;
+    align-items: start;
+  }
+  .main,
+  .side { display: flex; flex-direction: column; }
+  .main { gap: 22px; }
+  .side { gap: 18px; }
+}
+
+/* ── Panels (shared card surface) ─────────────────────────────────────────── */
+.panel {
+  background: var(--h-surface);
+  border: 1px solid var(--h-line);
+  border-radius: 20px;
+  box-shadow: var(--h-shadow);
+  padding: 18px 18px 16px;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--h-ink);
+  margin: 0;
+}
+
+.panelLink {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--h-blue);
+  text-decoration: none;
+  padding: 6px 0;          /* taller tap area without moving the text */
+  white-space: nowrap;
+}
+
+.caps {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--h-muted);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  min-height: 150px;
+  padding: 6px 150px 10px 2px;
+}
+
+.greetKicker {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--h-ink-2);
+  margin: 0 0 2px;
+}
+
+.greetTitle {
+  margin: 0;
+  font-size: clamp(34px, 10vw, 42px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  color: var(--h-ink);
+  overflow-wrap: anywhere;
+}
+
+.greetAccent { color: var(--h-blue); }
+.greetWide   { display: none; }
+
+.greetSub {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--h-ink-2);
+  max-width: 230px;
+}
+
+.heroArt {
+  position: absolute;
+  right: -6px;
+  bottom: -18px;          /* tucks behind the top of the first card */
+  width: 158px;
+  height: 174px;
+  pointer-events: none;
+}
+
+.heroArt img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+.sparkle {
+  position: absolute;
+  color: #ffb800;
+  line-height: 1;
+  pointer-events: none;
+}
+.sparkle1 { top: 18%; left: -2%;  font-size: 20px; }
+.sparkle2 { top: 4%;  right: 4%;  font-size: 16px; }
+.sparkle3 { top: 46%; right: -4%; font-size: 12px; opacity: 0.8; }
+
+@media (min-width: 768px) {
+  .hero { min-height: 150px; padding: 16px 280px 12px 4px; }
+  .greetKicker, .greetNarrow { display: none; }
+  .greetWide { display: inline; }
+  .greetTitle { font-size: clamp(36px, 4.2vw, 46px); }
+  .greetSub { max-width: none; font-size: 17px; margin-top: 12px; }
+  .heroArt { right: 40px; bottom: -22px; width: 210px; height: 220px; }
+}
+
+/* ── Mode cards: components/ui/ArtCard. The wrapper only places them. ───── */
+.modesWrap { position: relative; z-index: 1; }   /* above the hero character */
+
+/* ── Exam Targets ─────────────────────────────────────────────────────────── */
+.targets { display: flex; flex-direction: column; gap: 10px; }
+.targets .panelHead { margin-bottom: 0; }
+
+.goalRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.goal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px;
+  min-width: 0;
+}
+
+.goalIcon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(18, 100, 229, 0.1);
+  color: var(--h-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goalValue {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--h-ink);
+  overflow-wrap: anywhere;
+}
+
+.jambScore {
+  margin-left: auto;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--h-blue);
+  letter-spacing: -0.02em;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--h-ink-2);
+  background: color-mix(in srgb, var(--chip) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip) 24%, transparent);
+}
+.chip b { color: var(--chip); font-weight: 800; }
+
+.emptyTargets {
+  border: 1.5px dashed rgba(255, 106, 0, 0.3);
+  background: rgba(255, 106, 0, 0.04);
+  text-align: center;
+  box-shadow: none;
+}
+
+.emptyTitle { margin: 6px 0 4px; font-size: 14px; font-weight: 800; }
+.emptyText  { margin: 0 0 14px; font-size: 13px; color: var(--h-muted); line-height: 1.55; }
+
+.smallCta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: var(--h-blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+/* ── Leaderboard ──────────────────────────────────────────────────────────── */
+.board .panelHead { margin-bottom: 2px; }
+.boardSub { margin-bottom: 12px; }
+
+.rows { display: flex; flex-direction: column; gap: 4px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-radius: 12px;
+}
+.rowMe { background: var(--h-me-bg); }
+
+.place {
+  width: 24px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--h-muted);
+}
+.medal { font-size: 18px; }
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rowName {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--h-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowMe .rowName { color: var(--h-blue); font-weight: 800; }
+
+.rowXp {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--h-muted);
+}
+.rowMe .rowXp { color: var(--h-blue); font-weight: 800; }
+
+.skeletonRow {
+  height: 46px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.boardEmpty {
+  padding: 16px 0 10px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--h-muted);
+}
+
+@keyframes pulse { 50% { opacity: 0.55; } }
+
+/* ── Guest nudge ──────────────────────────────────────────────────────────── */
+.guest {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: rgba(18, 100, 229, 0.06);
+  border-color: rgba(18, 100, 229, 0.16);
+  box-shadow: none;
+}
+.guestTitle { margin: 0 0 3px; font-size: 14px; font-weight: 800; }
+.guestText  { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--h-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonRow { animation: none; }
+}

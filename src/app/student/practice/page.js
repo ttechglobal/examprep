@@ -1,757 +1,43 @@
 'use client'
-// src/app/student/practice/page.js — v15
+// src/app/student/practice/page.js — v16
 // ─────────────────────────────────────────────────────────────────────────────
-// Local-first: works for both guest and authenticated users.
-// Profile is read from StudentUserContext (set by layout — already handles
-// both Supabase auth AND ep_guest localStorage).
-// No direct Supabase calls. No hard redirects for guests.
+// Practice: pick a way to practise, see recent sessions and this week's streak.
+// Local-first: works for guests and signed-in students. The profile comes from
+// the layout (useStudentUser); subjects resolve from the device cache first.
+//
+//   Hero · Topic Practice + Mock Exam cards · More Practice Modes (Quick 5,
+//   Custom, Study) · Recent Sessions · Practice Streak
+// Sections: components/student/practice/. The mode + subject picker is
+// components/student/practice/PracticeSetupSheet.jsx.
+//
+// v16: new design. The Battle card left this page (Battle has its own tab).
+//      Recent Sessions shows topic, score bar and time (hooks/useRecentSessions);
+//      the streak card is shared with Home. "Study Practice" opens Custom with
+//      Study mode chosen. Speed Round stays in the sheet only.
 // ─────────────────────────────────────────────────────────────────────────────
-// Modes: Topic Practice | Custom Practice | Quick 5 | Mock Exam
-// Speed Round is temporarily hidden (planned for theory questions relaunch)
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Baloo_2 } from 'next/font/google'
 import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
-import { getLocalExamType, getLocalSubjects, readSubjectIdCache, writeSubjectIdCache } from '@/lib/localProfile'
+import { readSubjectIdCache, writeSubjectIdCache } from '@/lib/localProfile'
+import { appDay } from '@/lib/dates'
+import { useStudentActivity } from '@/hooks/useStudentActivity'
+import { useRecentSessions } from '@/hooks/useRecentSessions'
+import WeekActivityCard from '@/components/student/WeekActivityCard'
+import PracticeSetupSheet from '@/components/student/practice/PracticeSetupSheet'
+import { PracticeHero, PrimaryModes, MoreModes, RecentSessions, NoSubjects } from '@/components/student/practice/PracticeSections'
+import s from '@/components/student/practice/practice.module.css'
 
-const baloo = Baloo_2({ subsets: ['latin'], weight: ['800'], display: 'swap' })
-// import DailyChallenge from '@/components/student/DailyChallenge' // hidden — coming back as a harder challenge format
-import SessionHistory from '@/components/student/SessionHistory'
-import Link from 'next/link'
-import BattleEntryCard from '@/components/battle/BattleEntryCard'
-
-// readSubjectIdCache / writeSubjectIdCache are imported from @/lib/localProfile.
-// They live there so practice, battle setup, and any future page share one cache.
-
-const NAVY   = '#062A78'
-const BLUE   = '#1264E5'
-const CYAN   = '#18B7F2'
-const GOLD   = '#FFB800'
-const ORANGE = '#FF6A00'
-const GREEN  = '#22c55e'
-const PURPLE = '#7C3AED'
-
-const ACCENT = {
-  'Chemistry':'#9b7ae0','Physics':'#18B7F2','Biology':'#4ade80',
-  'Mathematics':'#FFB800','Further Mathematics':'#FFB800',
-  'English Language':'#a78bfa','Use of English':'#a78bfa',
-  'Economics':'#fcd34d','Government':'#f87171','Geography':'#34d399',
-  'Literature in English':'#f9a8d4','Agricultural Science':'#86efac',
-  'Commerce':'#818cf8','Accounting':'#fde68a','default':'#9b7ae0',
-}
-const SUBJ_ICON = {
-  'Chemistry':'⚗️','Physics':'⚡','Biology':'🧬','Mathematics':'📐',
-  'Further Mathematics':'📐','English Language':'📖','Use of English':'📖',
-  'Economics':'📊','Government':'🏛️','Geography':'🌍',
-  'Literature in English':'📚','Agricultural Science':'🌱',
-  'Commerce':'💼','Accounting':'🧮','default':'📝',
-}
-const getAccent = n => ACCENT[n] ?? ACCENT.default
-const getIcon   = n => SUBJ_ICON[n] ?? SUBJ_ICON.default
-
-const LAST_SUBJECT_KEY = 'exl_last_practice_subject'
-function saveLastSubject(s) {
-  try { if (s?.id) sessionStorage.setItem(LAST_SUBJECT_KEY, JSON.stringify({ id: s.id, name: s.name })) } catch {}
-}
-function loadLastSubject() {
-  try { const r = sessionStorage.getItem(LAST_SUBJECT_KEY); return r ? JSON.parse(r) : null } catch { return null }
-}
-function pickDefault(subjects, exam) {
-  if (!subjects.length) return null
-  const saved = loadLastSubject()
-  if (saved) { const m = subjects.find(s => s.id === saved.id); if (m) return m }
-  if (exam === 'JAMB') { const u = subjects.find(s => /english/i.test(s.name)); if (u) return u }
-  if (exam === 'WAEC') { const e = subjects.find(s => s.name === 'English Language'); if (e) return e }
-  return subjects[0]
-}
-
-
-// ─── UI ATOMS ─────────────────────────────────────────────────────────────────
-
-function Card({ children, style = {} }) {
-  return (
-    <div style={{ background: 'var(--bg-card)', borderRadius: 20, border: '1px solid var(--border)', overflow: 'hidden', ...style }}>
-      {children}
-    </div>
-  )
-}
-
-function SecLabel({ children, right }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-      <span style={{ fontSize: 17, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.025em' }}>{children}</span>
-      {right}
-    </div>
-  )
-}
-
-
-// ─── HERO ─────────────────────────────────────────────────────────────────────
-const PRACTICE_GREETINGS = [
-  { em: 'time to practise!',  sub: 'Pick a mode and get going.', subIcon: '📚' },
-  { em: 'keep it up!',        sub: 'Consistency wins exams.',    subIcon: '🔥' },
-  { em: 'let\'s drill it!',   sub: 'Every rep counts.',          subIcon: '⚡' },
-  { em: 'lock in today!',     sub: 'Your best score is ahead.',  subIcon: '🎯' },
-  { em: 'grind time!',        sub: 'Hard work pays off.',        subIcon: '💪' },
-]
-
-function HeroBanner({ name }) {
-  const g = PRACTICE_GREETINGS[Math.floor(Date.now() / 86400000) % PRACTICE_GREETINGS.length]
-  const displayName = name || 'Student'
-
-  return (
-    <div>
-      <style>{`
-        .practice-mascot { position: absolute; right: -8px; top: 6px; width: 165px; pointer-events: none; z-index: 3; }
-        @media (min-width: 768px) { .practice-mascot { top: -18px; width: 200px; right: -10px; } }
-      `}</style>
-      <div style={{ position: 'relative', minHeight: 130, paddingRight: 175, paddingLeft: 6 }}>
-
-        {/* Mascot */}
-        <div className="practice-mascot">
-          <img
-            src="/images/zara_studybuddy.png"
-            alt=""
-            style={{ width: '100%', display: 'block', objectFit: 'contain', objectPosition: 'bottom', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,.2))' }}
-            onError={e => { e.currentTarget.style.display = 'none' }}
-          />
-        </div>
-
-        {/* Greeting */}
-        <div style={{ paddingTop: 14, position: 'relative', zIndex: 2 }}>
-          <div className={baloo.className} style={{
-            fontSize: 'clamp(22px, 4.5vw, 34px)',
-            fontWeight: 800,
-            lineHeight: 1.1,
-            marginBottom: 8,
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 5px',
-          }}>
-            <span style={{ fontSize: 'clamp(14px, 2.5vw, 20px)', color: GOLD, marginRight: 2, display: 'inline-block', transform: 'rotate(-15deg) scale(1.1)' }}>✦</span>
-            <span style={{ color: 'var(--text-prim)', display: 'inline-block', transform: 'rotate(-1.5deg) skewX(-3deg)', transformOrigin: 'bottom left' }}>{displayName},</span>
-            <span style={{ color: BLUE, display: 'inline-block', transform: 'rotate(1deg) skewX(2deg) scaleY(1.04)', transformOrigin: 'bottom left' }}>{g.em}</span>
-            <span style={{ fontSize: 'clamp(12px, 2vw, 16px)', color: GOLD, marginLeft: 2, display: 'inline-block', transform: 'rotate(20deg) scale(1.15)' }}>✦</span>
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-tert)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span>{g.sub}</span>
-            <span>{g.subIcon}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-// ─── PRIMARY MODE CARDS ────────────────────────────────────────────────────────
-// Battle / Study / Mock — the three things students should see first
-
-function BattlePrimaryCard({ onClick }) {
-  return (
-    <div onClick={() => onClick('battle')} style={{ cursor: 'pointer' }}>
-      <BattleEntryCard />
-    </div>
-  )
-}
-
-function StudyCard({ onClick }) {
-  return (
-    <PrimaryCard
-      onClick={() => onClick('custom')}
-      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h14M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
-      iconBg="linear-gradient(135deg,#059669,#047857)"
-      iconShadow="rgba(5,150,105,.4)"
-      tag="Study"
-      title="Practise with answers"
-      desc="Work through questions with explanations as you go. Best for active learning."
-      cta="Start Study"
-      ctaColor={GREEN}
-    />
-  )
-}
-
-function TopicCard({ onClick }) {
-  return (
-    <PrimaryCard
-      onClick={() => onClick('topic')}
-      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h12M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
-      iconBg="linear-gradient(135deg,#0891b2,#0e7490)"
-      iconShadow="rgba(8,145,178,.4)"
-      tag="Topic Practice"
-      title="Drill a specific topic"
-      desc="Pick a subject and topic, then practise only questions from that topic. Great for targeted revision."
-      cta="Choose Topic"
-      ctaColor="#0891b2"
-    />
-  )
-}
-
-function MockCard({ onClick }) {
-  return (
-    <PrimaryCard
-      onClick={() => onClick()}
-      icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
-      iconBg="linear-gradient(135deg,#7C3AED,#4c1d95)"
-      iconShadow="rgba(124,58,237,.4)"
-      tag="Mock Exam"
-      title="Full exam simulation"
-      desc="Timed, no peeking. Exactly how the real exam feels. +200 XP."
-      cta="Start Mock"
-      ctaColor={PURPLE}
-    />
-  )
-}
-
-function PrimaryCard({ onClick, icon, iconBg, iconShadow, tag, title, desc, cta, ctaColor }) {
-  const [hov, setHov] = useState(false)
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        borderRadius:20, border:`1.5px solid ${hov ? ctaColor+'44' : 'var(--border)'}`,
-        background:'var(--bg-card)', cursor:'pointer', padding:'18px 18px',
-        display:'flex', flexDirection:'column', gap:12,
-        boxShadow: hov ? `0 6px 24px ${ctaColor}1a` : '0 2px 10px rgba(6,42,120,.05)',
-        transform: hov ? 'translateY(-2px)' : 'none',
-        transition:'all .15s',
-      }}
-    >
-      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-        <div style={{ width:44, height:44, borderRadius:14, background:iconBg, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 4px 14px ${iconShadow}`, flexShrink:0 }}>
-          {icon}
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:ctaColor, marginBottom:2 }}>{tag}</div>
-          <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', lineHeight:1.2 }}>{title}</div>
-        </div>
-      </div>
-      <div style={{ fontSize:12, color:'var(--text-tert)', lineHeight:1.6, fontWeight:500 }}>{desc}</div>
-      <div style={{ display:'inline-flex', alignItems:'center', gap:7, alignSelf:'flex-start', background:`${ctaColor}12`, border:`1.5px solid ${ctaColor}30`, borderRadius:999, padding:'8px 16px', boxShadow:`0 2px 0 ${ctaColor}20` }}>
-        <span style={{ fontSize:12, fontWeight:800, color:ctaColor }}>{cta}</span>
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke={ctaColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </div>
-    </div>
-  )
-}
-
-
-// ─── SECONDARY MODES (expandable) ─────────────────────────────────────────────
-function SecondaryModes({ onStart }) {
-  const [open, setOpen] = useState(false)
-
-  const SECONDARY = [
-    { key:'custom', icon:'📖', label:'Study Practice',  desc:'Practise with instant explanations', color:GREEN  },
-    { key:'quick5', icon:'⚡', label:'Quick 5',          desc:'5 random questions fast',            color:GREEN  },
-    { key:'timed',  icon:'⏱', label:'Speed Round',      desc:'Beat the clock',                     color:ORANGE },
-  ]
-
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 0', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', width:'100%' }}
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform .2s', flexShrink:0 }}>
-          <path d="M2 5l5 5 5-5" stroke="var(--text-tert)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        <span style={{ fontSize:12, fontWeight:700, color:'var(--text-tert)' }}>
-          {open ? 'Hide other modes' : 'See more practice modes'}
-        </span>
-      </button>
-
-      {open && (
-        <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:6 }}>
-          {SECONDARY.map(m => (
-            <div key={m.key} onClick={() => onStart(m.key)}
-              style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderRadius:16, border:'1px solid var(--border)', background:'var(--bg-card)', cursor:'pointer' }}>
-              <div style={{ width:36, height:36, borderRadius:11, background:`${m.color}14`, border:`1.5px solid ${m.color}28`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>{m.icon}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:800, color:'var(--text-prim)' }}>{m.label}</div>
-                <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:1 }}>{m.desc}</div>
-              </div>
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ opacity:.3, flexShrink:0 }}>
-                <path d="M4 2l6 5-6 5" stroke="var(--text-prim)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-// ─── PRACTICE MODE CARDS (legacy — kept for PracticeSetupSheet compatibility) ──
-const MODES = [
-  {
-    key: 'topic',
-    iconBg: `linear-gradient(135deg,#0891b2,#0e7490)`,
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h10M4 14h12M4 18h8" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>,
-    label: 'Topic Practice',
-    desc: 'Drill a specific topic',
-    body: 'Choose a subject and topic, then practise only questions from that topic. Great for targeted revision.',
-    xp: '+XP', color: '#0891b2',
-  },
-  {
-    key: 'custom',
-    iconBg: `linear-gradient(135deg,${BLUE},#0a4fc8)`,
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#fff" strokeWidth="2" /><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>,
-    label: 'Custom Practice',
-    desc: 'Pick subject, count & mode',
-    body: 'Customise exactly how you want to practise — subject, questions, time, and style.',
-    xp: '+XP', color: BLUE,
-  },
-  {
-    key: 'quick5',
-    iconBg: `linear-gradient(135deg,${GREEN},#16a34a)`,
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 13.5H12L11 22L19.5 10.5H12L13 2Z" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-    label: 'Quick 5',
-    desc: '5 random questions',
-    body: 'Fast, no fuss. Five random questions from your subjects to keep you sharp.',
-    xp: '+50 XP', color: GREEN,
-  },
-  {
-    key: 'mock',
-    iconBg: `linear-gradient(135deg,${PURPLE},#4c1d95)`,
-    icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2" stroke="#fff" strokeWidth="2" /><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>,
-    label: 'Mock Exam',
-    desc: 'Full exam simulation',
-    body: 'Simulate a real WAEC or JAMB exam. Full length, timed, no peeking at answers.',
-    xp: '+200 XP', color: PURPLE,
-  },
-]
-
-
-// ─── NO SUBJECTS PROMPT ───────────────────────────────────────────────────────
-function NoSubjectsPrompt({ isGuest }) {
-  return (
-    <Card style={{ padding: '32px 24px', textAlign: 'center' }}>
-      <div style={{ fontSize: 40, marginBottom: 14 }}>📚</div>
-      <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-prim)', marginBottom: 8 }}>
-        Set up your subjects first
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--text-tert)', lineHeight: 1.6, marginBottom: 20, maxWidth: 280, margin: '0 auto 20px' }}>
-        {isGuest
-          ? 'Go to your profile to pick the subjects you want to practise. Your choices are saved on this device.'
-          : 'Head to your profile to choose your exam subjects so we can show you the right practice questions.'}
-      </div>
-      <Link href="/student/profile" style={{ textDecoration: 'none' }}>
-        <div style={{ display: 'inline-block', padding: '12px 28px', borderRadius: 14, background: BLUE, color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: `0 4px 0 #0a3fa0,0 6px 20px ${BLUE}40` }}>
-          Go to Profile →
-        </div>
-      </Link>
-    </Card>
-  )
-}
-
-
-// ─── PRACTICE SETUP SHEET ─────────────────────────────────────────────────────
-export function PracticeSetupSheet({ subjects, loadingSubjects, initialMode = 'custom', onClose, onStart, onMockExam, exam, onExamChange }) {
-  const [mode,        setMode]       = useState(initialMode)
-  const [step,        setStep]       = useState(1)
-
-  const [subject,     setSubject]    = useState(() => pickDefault(subjects, exam))
-  const [count,       setCount]      = useState(20)
-  const [useTimer,    setUseTimer]   = useState(false)
-  const [timeMin,     setTimeMin]    = useState(30)
-  const [sessionType, setSessionType]= useState('practice')
-
-  const [q5Subject,   setQ5Subject]  = useState(() => pickDefault(subjects, exam))
-  const [spSubject,   setSpSubject]  = useState(() => pickDefault(subjects, exam))
-  const [spCount,     setSpCount]    = useState(20)
-  const [spTime,      setSpTime]     = useState(30)
-
-  const [tpSubject,   setTpSubject]  = useState(() => pickDefault(subjects, exam))
-  const [tpTopics,    setTpTopics]   = useState([])
-  const [tpTopic,     setTpTopic]    = useState(null)
-  const [loadingTopics, setLoadingTopics] = useState(false)
-
-  useEffect(() => {
-    const def = pickDefault(subjects, exam)
-    setSubject(def); setQ5Subject(def); setSpSubject(def); setTpSubject(def)
-  }, [subjects, exam])
-
-  useEffect(() => {
-    if (mode !== 'topic' || !tpSubject?.id) return
-    setTpTopics([]); setTpTopic(null); setLoadingTopics(true)
-    fetch(`/api/student/topics?subject_id=${tpSubject.id}&exam=${exam}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { setTpTopics(Array.isArray(d) ? d : []); setLoadingTopics(false) })
-      .catch(() => setLoadingTopics(false))
-  }, [tpSubject?.id, mode, exam])
-
-  function go() {
-    if (mode === 'mock') { onMockExam?.(); return }
-    if (mode === 'topic') {
-      const s = tpSubject || subjects[0]
-      if (!s || !tpTopic) return
-      saveLastSubject(s)
-      const cfg = { subjects: [s.name], subject_id: s.id, examType: exam, count: 20, mode: 'practice', sessionType: 'practice', topic_id: tpTopic.id, topicName: tpTopic.name }
-      sessionStorage.setItem('practice_config', JSON.stringify(cfg))
-      onStart?.(cfg); return
-    }
-    if (mode === 'quick5') {
-      const s = q5Subject || subjects[0]
-      if (!s) return
-      saveLastSubject(s)
-      const cfg = { subjects: [s.name], subject_id: s.id, examType: exam, count: 5, mode: 'quick5', sessionType: 'practice', answerMode: 'instant' }
-      sessionStorage.setItem('practice_config', JSON.stringify(cfg))
-      onStart?.(cfg); return
-    }
-    if (mode === 'timed') {
-      const s = spSubject || subjects[0]
-      if (!s) return
-      saveLastSubject(s)
-      const cfg = { subjects: [s.name], subject_id: s.id, examType: exam, count: spCount, mode: 'timed', sessionType: 'practice', speedSecs: spTime }
-      sessionStorage.setItem('practice_config', JSON.stringify(cfg))
-      onStart?.(cfg); return
-    }
-    if (!subject) return
-    saveLastSubject(subject)
-    const cfg = {
-      subjects: [subject.name], subject_id: subject.id, examType: exam,
-      count, mode: 'practice', sessionType,
-      durationSecs: useTimer ? timeMin * 60 : null,
-    }
-    sessionStorage.setItem('practice_config', JSON.stringify(cfg))
-    onStart?.(cfg)
-  }
-
-  function nextStep() {
-    if (mode === 'mock') { onMockExam?.(); return }
-    if (mode === 'quick5' || mode === 'timed') { go(); return }
-    if (mode === 'topic') {
-      if (step === 1) { setStep(2); return }
-      go(); return
-    }
-    if (step === 1) { setStep(2); return }
-    go()
-  }
-
-  function prevStep() { if (step > 1) setStep(s => s - 1) }
-
-  const isCustom    = mode === 'custom'
-  const isTopic     = mode === 'topic'
-  const totalSteps  = (isCustom || isTopic) ? 2 : 1
-  // Require a resolved subject ID (not just a stub with id:null) before allowing
-  // Start. Stubs appear for ~100ms while /api/student/subjects resolves IDs in
-  // the background. Without this check a null subject_id is written to
-  // practice_config, the session page drops it, and the questions API falls back
-  // to name-based resolution which may hit the wrong subject row.
-  const hasId = (s) => !!(s?.id)
-  const canNext     = mode === 'mock' ? true
-    : mode === 'quick5' ? hasId(q5Subject)
-    : mode === 'timed'  ? hasId(spSubject)
-    : mode === 'topic'  ? (step === 1 ? hasId(tpSubject) : !!tpTopic)
-    : step === 1 ? hasId(subject) : true
-
-  const modeAccent  = { topic: '#0891b2', custom: BLUE, quick5: GREEN, timed: ORANGE, mock: PURPLE }[mode] ?? BLUE
-  const modeShadow  = { topic: '#065f7a', custom: '#0a3fa0', quick5: '#166534', timed: '#b84200', mock: '#3b0764' }[mode] ?? '#0a3fa0'
-
-  // Show "Loading…" if subject IDs haven't resolved yet (stubs have id:null)
-  const subjectLoading = loadingSubjects || (
-    mode !== 'mock' && step === 1 && (
-      (mode === 'quick5' && q5Subject && !q5Subject.id) ||
-      (mode === 'timed'  && spSubject && !spSubject.id) ||
-      (mode === 'topic'  && tpSubject && !tpSubject.id) ||
-      (mode !== 'quick5' && mode !== 'timed' && mode !== 'topic' && subject && !subject.id)
-    )
-  )
-  const btnLabel = subjectLoading && mode !== 'mock' && step === 1
-    ? 'Loading subjects…'
-    : mode === 'mock'   ? '📝 Start Mock Exam'
-    : mode === 'quick5' ? '⚡ Start Quick 5'
-    : mode === 'timed'  ? '⏱ Start Speed Round'
-    : mode === 'topic'  ? (step === 1 ? 'Choose Topic →' : '📚 Start Topic Practice')
-    : step === 1 ? 'Continue →' : `🚀 Start ${sessionType === 'study' ? 'Study' : 'Practice'} Session`
-
-  return (
-    <>
-      <style>{`
-        @keyframes sheet-up { from { transform: translateY(100%) } to { transform: translateY(0) } }
-        @keyframes sheet-in { from { opacity: 0; transform: scale(.97) translateY(8px) } to { opacity: 1; transform: scale(1) translateY(0) } }
-        @keyframes spin { to { transform: rotate(360deg) } }
-        .ps-backdrop { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.7); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end }
-        .ps-sheet { width: 100%; max-width: 560px; background: var(--bg-card); border-radius: 28px 28px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; max-height: 88vh; box-shadow: 0 -20px 60px rgba(0,0,0,.4); animation: sheet-up .3s cubic-bezier(.22,.61,.36,1) }
-        .ps-cta { padding: 14px 22px; padding-bottom: max(96px,calc(env(safe-area-inset-bottom, 0px) + 80px)); border-top: 1px solid var(--border); background: var(--bg-card) }
-        @media (min-width: 768px) {
-          .ps-backdrop { justify-content: center; align-items: center }
-          .ps-sheet { border-radius: 24px; border: 1px solid var(--border); max-height: 86vh; animation: sheet-in .25s ease }
-          .ps-cta { padding: 14px 22px !important; padding-bottom: 18px !important }
-        }
-      `}</style>
-      <div className="ps-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-        <div className="ps-sheet">
-          {/* Handle */}
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--border-strong)' }} />
-          </div>
-
-          {/* Header */}
-          <div style={{ padding: '16px 22px 14px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border)' }}>
-            {step > 1 && (
-              <button onClick={prevStep} style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-            )}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-prim)', letterSpacing: '-.02em' }}>
-                {step === 1 ? 'How do you want to practise?' : 'Configure your session'}
-              </div>
-              {isCustom && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                  {Array.from({ length: totalSteps }, (_, i) => (
-                    <div key={i} style={{ height: 4, borderRadius: 999, transition: 'all .25s', background: i < step ? modeAccent : 'var(--border)', width: i === step - 1 ? 24 : i < step ? 16 : 10 }} />
-                  ))}
-                </div>
-              )}
-            </div>
-            <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--bg-subtle)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: 'var(--text-tert)', fontFamily: 'inherit', flexShrink: 0 }}>×</button>
-          </div>
-
-          {/* Body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 22px' }}>
-
-            {/* ── STEP 1 ── */}
-            {step === 1 && (<>
-              {/* Mode selector — compact horizontal chip row so subject/exam is immediately visible */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.1em' }}>Mode</div>
-                <style>{`.ms-chip-row::-webkit-scrollbar{display:none}`}</style>
-                <div className="ms-chip-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none', paddingBottom: 4 }}>
-                  {[
-                    { key: 'topic',  emoji: '📋', label: 'Topic Practice',  color: '#0891b2' },
-                    { key: 'custom', emoji: '🎛️', label: 'Custom Practice', color: BLUE     },
-                    { key: 'quick5', emoji: '⚡', label: 'Quick 5',          color: GREEN    },
-                    { key: 'timed',  emoji: '⏱️', label: 'Speed Round',     color: ORANGE   },
-                    { key: 'mock',   emoji: '📝', label: 'Mock Exam',        color: PURPLE   },
-                  ].map(m => {
-                    const on = mode === m.key
-                    return (
-                      <button key={m.key} onClick={() => setMode(m.key)}
-                        style={{ flexShrink: 0, scrollSnapAlign: 'start', display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 999, border: `2px solid ${on ? m.color : 'var(--border)'}`, background: on ? `${m.color}12` : 'var(--bg-subtle)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: 16 }}>{m.emoji}</span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: on ? m.color : 'var(--text-sec)' }}>{m.label}</span>
-                        {on && <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill={m.color} /><path d="M4 7l2 2 4-4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /></svg>}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Subject + Exam (all non-mock modes) */}
-              {mode !== 'mock' && (<>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.1em' }}>Exam · Subject</div>
-
-                {/* Exam toggle */}
-                <div style={{ display: 'inline-flex', background: 'var(--bg-subtle)', borderRadius: 11, padding: 3, border: '1px solid var(--border)', marginBottom: 12 }}>
-                  {['WAEC', 'JAMB'].map(e => (
-                    <button key={e} onClick={() => onExamChange(e)}
-                      style={{ padding: '7px 22px', borderRadius: 8, fontSize: 13, fontWeight: 800, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: exam === e ? BLUE : 'transparent', color: exam === e ? '#fff' : 'var(--text-tert)', boxShadow: exam === e ? `0 2px 8px ${BLUE}50` : 'none', transition: 'all .15s' }}>{e}</button>
-                  ))}
-                </div>
-
-                {/* Subject grid */}
-                {loadingSubjects ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0' }}>
-                    <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${BLUE}`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
-                    <span style={{ fontSize: 13, color: 'var(--text-tert)' }}>Loading subjects…</span>
-                  </div>
-                ) : !subjects.length ? (
-                  <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 13, color: 'var(--text-tert)' }}>
-                    No {exam} subjects set up yet. Go to Profile to add subjects.
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 8 }}>
-                    {subjects.map(sub => {
-                      const a = getAccent(sub.name)
-                      const currentSubj = mode === 'quick5' ? q5Subject : mode === 'timed' ? spSubject : mode === 'topic' ? tpSubject : subject
-                      // Use name as key when IDs haven't resolved yet (stubs have id:null).
-                      // Compare by name too when both are stubs, so only one shows as selected.
-                      const on = sub.id
-                        ? currentSubj?.id === sub.id
-                        : currentSubj?.name === sub.name
-                      return (
-                        <button key={sub.id ?? sub.name} onClick={() => {
-                          if (mode === 'quick5') setQ5Subject(sub)
-                          else if (mode === 'timed') setSpSubject(sub)
-                          else if (mode === 'topic') setTpSubject(sub)
-                          else setSubject(sub)
-                        }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', background: on ? `${a}12` : 'var(--bg-subtle)', border: `2px solid ${on ? a : 'var(--border)'}`, transition: 'all .12s', textAlign: 'left' }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 10, background: `${a}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{getIcon(sub.name)}</div>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: on ? a : 'var(--text-prim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.name}</span>
-                          {on && <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill={a} /><path d="M4 7l2 2 4-4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /></svg>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Speed round config */}
-                {mode === 'timed' && (<>
-                  <div style={{ marginTop: 20 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.1em' }}>Questions</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-                      {[10, 20, 30, 40].map(n => (
-                        <button key={n} onClick={() => setSpCount(n)}
-                          style={{ padding: '12px 0', borderRadius: 12, fontSize: 15, fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', background: spCount === n ? ORANGE : 'var(--bg-subtle)', color: spCount === n ? '#fff' : 'var(--text-sec)', border: `2px solid ${spCount === n ? ORANGE : 'var(--border)'}`, transition: 'all .12s' }}>{n}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.1em' }}>Time per question</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 6 }}>
-                      {[10, 20, 30, 60, 90, 120].map(s => (
-                        <button key={s} onClick={() => setSpTime(s)}
-                          style={{ padding: '11px 0', borderRadius: 11, fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', background: spTime === s ? ORANGE : 'var(--bg-subtle)', color: spTime === s ? '#fff' : 'var(--text-sec)', border: `2px solid ${spTime === s ? ORANGE : 'var(--border)'}`, transition: 'all .12s' }}>{s}s</button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 8 }}>
-                      {spTime}s per question · {spCount} questions = ~{Math.round(spTime * spCount / 60)} min total
-                    </div>
-                  </div>
-                </>)}
-              </>)}
-            </>)}
-
-            {/* ── STEP 2: Custom config ── */}
-            {step === 2 && isCustom && (<>
-              <div style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.1em' }}>Number of questions</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
-                  {[10, 20, 30, 40, 50].map(n => (
-                    <button key={n} onClick={() => setCount(n)}
-                      style={{ padding: '13px 0', borderRadius: 12, fontSize: 15, fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', background: count === n ? BLUE : 'var(--bg-subtle)', color: count === n ? '#fff' : 'var(--text-sec)', border: `2px solid ${count === n ? BLUE : 'var(--border)'}`, transition: 'all .12s', boxShadow: count === n ? `0 4px 12px ${BLUE}40` : 'none' }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.1em' }}>Session type</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  {[
-                    { key: 'study',    emoji: '📖', label: 'Study Mode',    desc: 'See the answer & explanation right away. Great for learning.' },
-                    { key: 'practice', emoji: '📝', label: 'Practice Mode', desc: 'Submit first, review all answers at the end. Builds exam focus.' },
-                  ].map(t => {
-                    const on = sessionType === t.key
-                    return (
-                      <button key={t.key} onClick={() => setSessionType(t.key)}
-                        style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px', borderRadius: 16, border: `2px solid ${on ? BLUE : 'var(--border)'}`, background: on ? `${BLUE}08` : 'var(--bg-subtle)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', transition: 'all .14s' }}>
-                        <span style={{ fontSize: 22 }}>{t.emoji}</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 900, color: on ? BLUE : 'var(--text-prim)', marginBottom: 3 }}>{t.label}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-tert)', lineHeight: 1.4 }}>{t.desc}</div>
-                        </div>
-                        {on && <div style={{ marginTop: 'auto', width: 18, height: 18, borderRadius: '50%', background: BLUE, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 22 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: useTimer ? 10 : 0 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)' }}>Add a time limit</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tert)', marginTop: 2 }}>Optional — applies to the whole session</div>
-                  </div>
-                  <button onClick={() => setUseTimer(t => !t)}
-                    style={{ width: 44, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', background: useTimer ? BLUE : 'var(--border)', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', top: 3, left: useTimer ? 20 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,.2)' }} />
-                  </button>
-                </div>
-                {useTimer && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
-                    {[10, 15, 20, 30, 45].map(m => (
-                      <button key={m} onClick={() => setTimeMin(m)}
-                        style={{ padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', background: timeMin === m ? BLUE : 'var(--bg-subtle)', color: timeMin === m ? '#fff' : 'var(--text-sec)', border: `2px solid ${timeMin === m ? BLUE : 'var(--border)'}`, transition: 'all .12s' }}>{m}m</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ padding: '14px 16px', borderRadius: 16, background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
-                {[
-                  ['Subject', subject?.name ?? '—'],
-                  ['Exam', exam],
-                  ['Questions', String(count)],
-                  ['Session', sessionType === 'study' ? 'Study (instant feedback)' : 'Practice (review at end)'],
-                  ...(useTimer ? [['Time limit', `${timeMin} minutes`]] : []),
-                ].map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0' }}>
-                    <span style={{ color: 'var(--text-tert)', fontWeight: 600 }}>{k}</span>
-                    <span style={{ color: 'var(--text-prim)', fontWeight: 800 }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </>)}
-
-            {/* ── STEP 2: Topic picker ── */}
-            {step === 2 && isTopic && (<>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-                  {tpSubject?.name} — Pick a topic
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-tert)', marginBottom: 14 }}>
-                  Choose the topic you want to drill. Questions will be drawn only from that topic.
-                </div>
-                {loadingTopics ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 0' }}>
-                    <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid #0891b2`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
-                    <span style={{ fontSize: 13, color: 'var(--text-tert)' }}>Loading topics…</span>
-                  </div>
-                ) : tpTopics.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 13, color: 'var(--text-tert)' }}>
-                    No topics found for this subject yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {tpTopics.map(topic => {
-                      const on = tpTopic?.id === topic.id
-                      return (
-                        <button key={topic.id} onClick={() => setTpTopic(topic)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: `2px solid ${on ? '#0891b2' : 'var(--border)'}`, background: on ? '#0891b210' : 'var(--bg-subtle)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', transition: 'all .14s' }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 10, background: on ? '#0891b220' : 'var(--bg-card)', border: `1.5px solid ${on ? '#0891b240' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span style={{ fontSize: 13, fontWeight: 900, color: on ? '#0891b2' : 'var(--text-tert)' }}>{topic.order_index ?? '·'}</span>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: on ? '#0891b2' : 'var(--text-prim)', lineHeight: 1.3 }}>{topic.name}</div>
-                            {topic.question_count > 0 && <div style={{ fontSize: 10, color: 'var(--text-tert)', marginTop: 2 }}>{topic.question_count} questions</div>}
-                          </div>
-                          {on && <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </>)}
-          </div>
-
-          {/* CTA */}
-          <div className="ps-cta">
-            <button onClick={nextStep} disabled={!canNext}
-              style={{ width: '100%', padding: '15px 0', borderRadius: 14, border: 'none', cursor: canNext ? 'pointer' : 'not-allowed', background: canNext ? modeAccent : 'var(--border)', color: '#fff', fontSize: 15, fontWeight: 900, fontFamily: 'inherit', letterSpacing: '-.01em', boxShadow: canNext ? `0 5px 0 ${modeShadow},0 8px 24px ${modeAccent}40` : 'none', transition: 'all .12s', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.13),transparent)', backgroundSize: '200% 100%', animation: 'shimmer 2.5s infinite', pointerEvents: 'none' }} />
-              {btnLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
+const RECENT_LIMIT = 3
+const cap = str => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '')
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function PracticePage() {
   const router       = useRouter()
   const { dark }     = useTheme()
+  const { totalPoints: xp } = usePoints()
   const searchParams = useSearchParams()
   const subjectCache = useRef({})
 
@@ -759,13 +45,17 @@ export default function PracticePage() {
   const profile  = useStudentUser()
   const isGuest  = !!profile?.isGuest
   const isReady  = profile !== null  // layout has finished its auth check
+  const userId   = profile?.id ?? null
+
+  const activity = useStudentActivity('week', { userId, isGuest, ready: isReady })
+  const recent   = useRecentSessions(RECENT_LIMIT, { userId, isGuest, ready: isReady })
 
   // Derive exam type from profile
   const [exam,            setExam]            = useState('WAEC')
   const [subjects,        setSubjects]        = useState([])
   const [loadingSubjects, setLoadingSubjects] = useState(false)
-  const [showSheet,       setShowSheet]       = useState(false)
-  const [sheetMode,       setSheetMode]       = useState('custom')
+  // Open setup sheet: { mode, sessionType } or null
+  const [sheet,           setSheet]           = useState(null)
 
   // Initialise exam + subjects from profile — local-first.
   // Profile already carries subject names from layout (no extra network call).
@@ -854,21 +144,20 @@ export default function PracticePage() {
     loadSubjects(e, profile)
   }
 
-  function openSheet(mode = 'custom') {
-    setSheetMode(mode)
-    setShowSheet(true)
+  function openSheet(mode = 'custom', sessionType = 'practice') {
+    setSheet({ mode, sessionType })
   }
 
   function handleStart(config) {
     sessionStorage.setItem('practice_config', JSON.stringify(config))
-    setShowSheet(false)
+    setSheet(null)
     router.push('/student/practice/session')
   }
 
   // Handle URL params (e.g. ?modal=1 or ?mode=quick5)
   useEffect(() => {
     if (!isReady) return
-    if (searchParams?.get('modal') === '1') setShowSheet(true)
+    if (searchParams?.get('modal') === '1') openSheet('custom')
   }, [searchParams, isReady])
 
   useEffect(() => {
@@ -876,86 +165,72 @@ export default function PracticePage() {
     const m = searchParams?.get('mode')
     if (m) {
       const map = { speed: 'timed', mock: 'mock', custom: 'custom', quick5: 'quick5' }
-      if (map[m]) { setSheetMode(map[m]); setShowSheet(true) }
+      if (map[m]) openSheet(map[m])
     }
   }, [searchParams, isReady])
 
-  // Loading — wait for layout to resolve profile
-  if (!isReady) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', border: `3px solid var(--border)`, borderTopColor: BLUE, animation: 'spin .7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    </div>
-  )
+  function startMock() {
+    sessionStorage.setItem('mock_config', JSON.stringify({ subjects, examType: exam }))
+    router.push('/student/practice/mock')
+  }
+
+  if (!isReady) return <PracticeSkeleton />
 
   const hasSubjects = subjects.length > 0
+  const name = cap(profile.full_name?.split(' ')[0] || profile.username || 'Student')
 
   return (
-    <>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg) } }
-        * { box-sizing: border-box }
-      `}</style>
+    <div className={s.page}>
+      <PracticeHero name={name} />
 
-      {/* Quick links */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        <Link href="/student/profile" style={{ textDecoration: 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--text-tert)' }}>
-            📚 Edit subjects
-          </div>
-        </Link>
-        <Link href="/student/profile" style={{ textDecoration: 'none' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 999, border: `1px solid ${GOLD}35`, background: `${GOLD}10`, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: GOLD }}>
-            🎯 Goals
-          </div>
-        </Link>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <HeroBanner name={profile?.full_name?.split(' ')[0] ?? profile?.username ?? ''} />
-
-        {!hasSubjects && !loadingSubjects ? (
-          <NoSubjectsPrompt isGuest={isGuest} />
-        ) : (
-          <>
-            {/* ── Primary mode: Battle ── */}
-            <BattlePrimaryCard onClick={(mode) => {
-              if (mode === 'battle') { router.push('/student/battle'); return }
-              openSheet(mode)
-            }} />
-
-            {/* ── Primary modes: Topic Practice + Mock side by side ── */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <TopicCard onClick={openSheet} />
-              <MockCard onClick={() => {
-                sessionStorage.setItem('mock_config', JSON.stringify({ subjects, examType: exam }))
-                router.push('/student/practice/mock')
-              }} />
+      {!hasSubjects && !loadingSubjects ? (
+        <NoSubjects isGuest={isGuest} />
+      ) : (
+        <>
+          <PrimaryModes onTopic={() => openSheet('topic')} onMock={startMock} />
+          <MoreModes
+            onPick={key => (key === 'study' ? openSheet('custom', 'study') : openSheet(key))}
+            onSeeAll={() => openSheet('custom')}
+          />
+          <div className={s.bottom}>
+            <RecentSessions sessions={recent.sessions} loading={recent.loading} dark={dark} />
+            <div className={s.streak}>
+              <WeekActivityCard
+                title="Practice Streak" link={{ href: '/student/progress', label: 'This Week' }}
+                days={activity.days} today={appDay()}
+                questions={activity.stats.questions} questionsLabel="Questions This Week"
+                streak={activity.stats.streak} xp={xp || 0}
+              />
             </div>
+          </div>
+        </>
+      )}
 
-            {/* ── Divider + secondary modes ── */}
-            <div style={{ height:1, background:'var(--border)', margin:'2px 0' }}/>
-            <SecondaryModes onStart={openSheet} />
-
-            {/* ── Session history ── */}
-            <div style={{ height:1, background:'var(--border)', margin:'2px 0' }}/>
-            <SessionHistory />
-          </>
-        )}
-      </div>
-
-      {showSheet && (
+      {sheet && (
         <PracticeSetupSheet
           subjects={subjects}
           loadingSubjects={loadingSubjects}
-          initialMode={sheetMode}
+          initialMode={sheet.mode}
+          initialSessionType={sheet.sessionType}
           exam={exam}
           onExamChange={handleExamChange}
-          onClose={() => setShowSheet(false)}
+          onClose={() => setSheet(null)}
           onStart={handleStart}
-          onMockExam={() => { setShowSheet(false); sessionStorage.setItem('mock_config', JSON.stringify({ subjects, examType: exam })); router.push('/student/practice/mock') }}
+          onMockExam={() => { setSheet(null); startMock() }}
         />
       )}
-    </>
+    </div>
+  )
+}
+
+function PracticeSkeleton() {
+  const block = height => ({ height, borderRadius: 20, background: 'var(--bg-card)', border: '1px solid var(--border)' })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} aria-busy="true">
+      <div style={{ height: 200 }} />
+      <div style={block(156)} />
+      <div style={block(156)} />
+      <div style={block(120)} />
+    </div>
   )
 }

@@ -1,71 +1,210 @@
-// public/sw.js — ExamPrep A1 Service Worker v4
+// public/sw.js — ExamPrep A1 Service Worker v5
 // Notifications are server-driven (pg_cron → Edge Function → Web Push).
-// This SW caches the app shell, receives push events and handles clicks.
+// This worker saves the app on the phone so it opens offline, receives push
+// events and handles notification clicks.
 //
+// Caching
+//   • Pages (student app, onboarding, /offline): network first, so students
+//     get the latest version online; the saved copy opens when the network is
+//     missing or slow (no answer in 4 s). The main pages, and the code they
+//     load, are saved at install, so they open offline before the first visit.
+//   • /_next/static (content-hashed code), /images and /icons: saved on first
+//     use and served from the phone after that, so each file downloads once.
+//     Never replace a file in /images or /icons in place: use a new name.
+//   • Never cached: /api/*, other sites (Supabase), admin / reviewer / school
+//     pages. Questions, scores and battles stay live.
+//   • Bump VERSION to throw every cache away.
+//
+// v5 (28 Sep 2026)
+//   • Offline app: code, images and the main student pages are saved (v4 only
+//     saved two pages, without the code they need, so they didn't run offline).
+//   • Offline fallback: saved copy of the page asked for → app home for a
+//     launch at "/" → the /offline page → a built-in offline message.
+//   • Old caches are cleaned up by name prefix, so only this worker's own
+//     caches are ever touched.
+//   • Every response it doesn't keep is cancelled, and install downloads run a
+//     few at a time: unread responses held connections open and could stall
+//     the install (found in testing with a missing icon).
 // v4 (September 2026)
-//   • Offline fallback fixed. `caches.match('/') || …` always returned the
-//     cached landing page, because a Promise is always truthy. Offline launches
-//     now get the page they asked for, else the app home, never the marketing page.
-//   • Each shell file is cached on its own, so one failure doesn't drop them all.
-//   • Caches the launch-splash images and app icons; notifications use the
-//     proper icon and a monochrome badge.
+//   • Offline fallback fixed (`caches.match('/') || …` was always truthy).
+//   • Launch-splash images and app icons cached; notifications use the proper
+//     icon and a monochrome badge.
 
-const CACHE_NAME = 'ep-shell-v4'
-const APP_HOME   = '/student/home'
-const SHELL_URLS = [
-  APP_HOME,
-  '/onboarding',
-  '/icons/launch-splash.webp',
-  '/icons/launch-mark.webp',
-  '/icons/icon-192.png',
-  '/icons/badge-96.png',
+const VERSION  = 'v5'
+const CACHES = {
+  pages:  `ep-pages-${VERSION}`,
+  code:   `ep-code-${VERSION}`,
+  images: `ep-images-${VERSION}`,
+}
+const LIMITS   = { pages: 40, code: 400, images: 250 }
+const OUR_CACHE = /^ep-/                     // every cache this worker has ever made
+
+const APP_HOME = '/student/home'
+const PRECACHE_PAGES = [
+  APP_HOME, '/student/practice', '/student/battle', '/student/leaderboard',
+  '/student/profile', '/student/learn', '/student/learn/flashcards', '/student/progress',
+  '/onboarding', '/offline',
 ]
+const PRECACHE_IMAGES = [
+  '/icons/launch-splash.webp', '/icons/launch-mark.webp', '/icons/icon-192.png', '/icons/badge-96.png',
+]
+const CACHEABLE_PAGE     = /^\/(student|onboarding|offline)(\/|$)/
+const NETWORK_TIMEOUT_MS = 4000
+
 const NOTIFY_ICON  = '/icons/icon-192.png'
 const NOTIFY_BADGE = '/icons/badge-96.png'   // Android uses only its alpha channel
 
 // ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   self.skipWaiting()
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache =>
-      Promise.allSettled(SHELL_URLS.map(url => cache.add(url)))
-    )
-  )
+  event.waitUntil(precacheImages().then(precachePages).catch(() => {}))
 })
+
+// Pages are saved one at a time, each with the scripts and styles it loads, so
+// one failure doesn't drop the rest and the phone's few connections aren't
+// flooded. Every response is either saved or cancelled: an unread body keeps
+// its connection busy and can stall the whole install.
+async function precachePages() {
+  const pages = await caches.open(CACHES.pages)
+  const code  = await caches.open(CACHES.code)
+  for (const path of PRECACHE_PAGES) {
+    try {
+      const res = await fetch(path, { credentials: 'same-origin' })
+      if (!isSavablePage(res)) { discard(res); continue }
+      const html = await res.clone().text()
+      await pages.put(path, res)
+      const assets = [...new Set(html.match(/\/_next\/static\/[^"'\s)\\]+/g) ?? [])]
+      await inBatches(assets, 4, async url => {
+        if (await code.match(url)) return
+        const asset = await fetch(url)
+        if (asset.ok) await code.put(url, asset)
+        else discard(asset)
+      })
+    } catch { /* offline or failed: the page is saved on its next visit */ }
+  }
+}
+
+async function precacheImages() {
+  const images = await caches.open(CACHES.images)
+  await inBatches(PRECACHE_IMAGES, 4, async url => {
+    const res = await fetch(url)
+    if (res.ok) await images.put(url, res)
+    else discard(res)
+  })
+}
+
+async function inBatches(items, size, task) {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.allSettled(items.slice(i, i + size).map(task))
+  }
+}
+
+function discard(res) {
+  res?.body?.cancel().catch(() => {})
+}
 
 // ── Activate ──────────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
+  const current = new Set(Object.values(CACHES))
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys.filter(k => OUR_CACHE.test(k) && !current.has(k)).map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   )
 })
 
-// ── Fetch: network-first for page loads, cached fallback when offline ────────
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return
-  const url = new URL(event.request.url)
+  const { request } = event
+  if (request.method !== 'GET') return
+  const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
-  if (event.request.mode !== 'navigate')   return
 
-  event.respondWith(
-    fetch(event.request).catch(async () => {
-      const cached = await caches.match(event.request)
-      if (cached) return cached
-      const home = await caches.match(APP_HOME)
-      if (home) return home
-      return new Response(
-        '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-        '<body style="margin:0;height:100vh;display:grid;place-items:center;background:#062A78;color:#fff;font-family:system-ui;text-align:center;padding:24px">' +
-        '<div><h1 style="font-size:20px">You\'re offline</h1><p style="opacity:.8">Connect to the internet and open ExamPrep again.</p></div>',
-        { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
-    })
-  )
+  if (request.mode === 'navigate') {
+    event.respondWith(CACHEABLE_PAGE.test(url.pathname) ? savedPage(event) : livePage(request))
+    return
+  }
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(cacheFirst(request, CACHES.code, LIMITS.code))
+    return
+  }
+  if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/icons/')) {
+    event.respondWith(cacheFirst(request, CACHES.images, LIMITS.images))
+  }
+  // Anything else (API calls, in-app page data, other files) goes to the network
+  // untouched. Offline, a failed in-app navigation falls back to a full page
+  // load, which the navigate branch answers from the cache.
 })
+
+function isSavablePage(res) {
+  return res.ok && !res.redirected && (res.headers.get('content-type') ?? '').includes('text/html')
+}
+
+// Student pages: latest when the network answers in time, saved copy otherwise.
+async function savedPage(event) {
+  const { request } = event
+  const cache = await caches.open(CACHES.pages)
+  const key   = new URL(request.url).pathname          // ?query doesn't change the page
+
+  const network = fetch(request).then(async res => {
+    if (isSavablePage(res)) {
+      await cache.put(key, res.clone())
+      await trim(CACHES.pages, LIMITS.pages)
+    }
+    return res
+  })
+  event.waitUntil(network.catch(() => {}))            // keep refreshing the saved copy
+
+  const timeout = new Promise(resolve => setTimeout(resolve, NETWORK_TIMEOUT_MS, null))
+  const fast = await Promise.race([network.catch(() => null), timeout])
+  if (fast) return fast
+
+  const saved = await cache.match(key)
+  if (saved) {
+    network.then(discard, () => {})                  // the page never reads this one
+    return saved
+  }
+  try { return await network } catch { return offlineFallback(key) }
+}
+
+// Every other page (landing, admin, school…) is never saved.
+async function livePage(request) {
+  try { return await fetch(request) } catch { return offlineFallback(new URL(request.url).pathname) }
+}
+
+async function offlineFallback(path) {
+  // An installed app launching at "/" offline goes straight to the app.
+  if (path === '/' && await caches.match(APP_HOME)) return Response.redirect(APP_HOME, 302)
+  const offlinePage = await caches.match('/offline')
+  if (offlinePage) return offlinePage
+  return new Response(
+    '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<body style="margin:0;height:100vh;display:grid;place-items:center;background:#062A78;color:#fff;font-family:system-ui;text-align:center;padding:24px">' +
+    '<div><h1 style="font-size:20px">You\'re offline</h1><p style="opacity:.8">Connect to the internet and open ExamPrep again.</p></div>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  )
+}
+
+async function cacheFirst(request, cacheName, limit) {
+  const cache = await caches.open(cacheName)
+  const saved = await cache.match(request, { ignoreVary: true })
+  if (saved) return saved
+  const res = await fetch(request)
+  if (res.ok) {                                        // a failed response must not stick
+    await cache.put(request, res.clone())
+    trim(cacheName, limit)
+  }
+  return res
+}
+
+// Oldest entries go first once a cache passes its limit.
+async function trim(cacheName, limit) {
+  const cache = await caches.open(cacheName)
+  const keys  = await cache.keys()
+  await Promise.all(keys.slice(0, Math.max(0, keys.length - limit)).map(key => cache.delete(key)))
+}
 
 // ── Push: receive server-sent notification ────────────────────────────────────
 // Payload shape: { title, body, url, tag }

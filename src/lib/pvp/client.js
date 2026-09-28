@@ -16,6 +16,8 @@
 //     A request with no time limit could hang on mobile data and stop
 //     watchMatch polling for good. watchMatch now reports repeated server
 //     errors as an 'error' instead of polling in silence.
+// v3: with no connection at all, pvpCall answers PVP_OFFLINE straight away
+//     (no 8 s wait), and the offline message says battles need internet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@/lib/supabase/client'
@@ -36,6 +38,8 @@ function db() { return (client ??= createClient()) }
  *   the database raised an error → { ok:false, error:'PVP_SERVER' }
  */
 export async function pvpCall(fn, args = {}, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  // No connection at all: say so now instead of after the timeout.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, error: 'PVP_OFFLINE' }
   const abort = new AbortController()
   let timer
   const timeout = new Promise(resolve => {
@@ -77,7 +81,7 @@ const MESSAGES = {
   PVP_NOT_IN_PROGRESS:      'This battle isn\'t running.',
   PVP_NOT_ALLOWED:          'That isn\'t possible for this battle.',
   PVP_TIME_UP:              'Time\'s up for that question.',
-  PVP_OFFLINE:              'You\'re offline. Check your connection and try again.',
+  PVP_OFFLINE:              'Battles with friends happen live, so they need internet. Connect to Wi-Fi or data, then tap Try again.',
   PVP_SERVER:               'Something went wrong on our side. Please try again.',
 }
 export function pvpMessage(code) {

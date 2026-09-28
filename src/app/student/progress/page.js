@@ -22,7 +22,7 @@ import {
   getSubjectTrend,
   backfillTopicNames,
 } from '@/lib/localMastery'
-import { readLocalSessions } from '@/components/student/SessionHistory'
+import { readHistory } from '@/lib/localSessionSync'
 import Link from 'next/link'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -741,7 +741,7 @@ export default function ProgressPage() {
 
   // ── Local stats ────────────────────────────────────────────────────────────
   const activity = isReady ? readWeeklyActivity() : [0,0,0,0,0,0,0]
-  const sessions = isReady ? readLocalSessions()  : []
+  const sessions = isReady ? readHistory()  : []
   const { questions=0, accuracy=0 } = isReady ? deriveStats(sessions) : {}
 
   const activeColor = activeSubj ? getColor(activeSubj.subject_name) : BLUE

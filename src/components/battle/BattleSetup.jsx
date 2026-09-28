@@ -660,7 +660,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
         onClick={vsFriend ? handleCreate : handleStart}
         disabled={creating}
         gold/>
-      <PvpNotice error={pvpError} onClose={() => setPvpError(null)} onRetry={pvpError === 'PVP_FULL' ? () => { setPvpError(null); handleCreate() } : undefined}/>
+      <PvpNotice error={pvpError} onClose={() => setPvpError(null)} onRetry={pvpError === 'PVP_FULL' || pvpError === 'PVP_OFFLINE' ? () => { setPvpError(null); handleCreate() } : undefined}/>
     </div>
   )
 }

@@ -21,9 +21,16 @@
 //
 //   // Then attempt server sync (non-blocking):
 //   flushSyncQueue()
+//
+// v2: activity days and the streak use the Nigerian calendar day (lib/dates.js)
+//     instead of the phone's timezone, so they match the server's days; the
+//     local streak survives until a whole day is missed, like the server's.
+//     History entries keep their time (`at`) and topic, and `date` is the real
+//     day ("24 Sep"), not "Today" forever.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { updateLocalMastery } from '@/lib/localMastery'
+import { appDay, addDays, mondayOfDay } from '@/lib/dates'
 
 const HISTORY_KEY  = 'ep_session_history'
 const ACTIVITY_KEY = 'ep_activity'
@@ -36,15 +43,6 @@ const MAX_QUEUE    = 100
 const SYNC_ENDPOINT = '/api/student/questions/session/save'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Returns 'YYYY-MM-DD' in the device's local timezone — never UTC.
-// toISOString() is UTC and causes wrong-day bugs for evening sessions.
-function localDateStr(date = new Date()) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
 
 function safeRead(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
@@ -66,13 +64,14 @@ function normaliseSession(raw) {
   const pct     = count > 0 ? Math.round((correct / count) * 100) : 0
   const secs    = raw.duration_secs ?? raw.time ?? 0
   const timeStr = secs > 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : secs ? `${secs}s` : null
+  const at      = raw.created_at ?? new Date().toISOString()
   return {
     id:      raw.session_id ?? raw.id ?? null,
     subject: raw.subject_name ?? raw.subject ?? 'Mixed',
+    topic:   raw.topic_name ?? null,
     mode:    raw.mode ?? 'practice',
-    date:    raw.created_at
-      ? new Date(raw.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-      : 'Today',
+    at,
+    date:    new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' }),
     count, correct, pct, timeStr,
     synced:  raw.synced ?? false,
   }
@@ -102,13 +101,11 @@ export function readHistory() {
  */
 export function recordActivity(questionCount = 1) {
   try {
-    const today   = localDateStr()
+    const today   = appDay()
     const data    = safeRead(ACTIVITY_KEY, {})
     data[today]   = (data[today] || 0) + questionCount
     // Prune entries older than 30 days
-    const cutoff  = new Date()
-    cutoff.setDate(cutoff.getDate() - 30)
-    const cutStr  = localDateStr(cutoff)
+    const cutStr  = addDays(today, -30)
     for (const k of Object.keys(data)) {
       if (k < cutStr) delete data[k]
     }
@@ -119,17 +116,8 @@ export function recordActivity(questionCount = 1) {
 export function readWeeklyActivity() {
   try {
     const data   = safeRead(ACTIVITY_KEY, {})
-    const counts = [0, 0, 0, 0, 0, 0, 0]
-    const today  = new Date()
-    const monday = new Date(today)
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-    monday.setHours(0, 0, 0, 0)
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday)
-      d.setDate(monday.getDate() + i)
-      counts[i] = data[localDateStr(d)] || 0
-    }
-    return counts
+    const monday = mondayOfDay(appDay())
+    return [0, 1, 2, 3, 4, 5, 6].map(i => data[addDays(monday, i)] || 0)
   } catch { return [0, 0, 0, 0, 0, 0, 0] }
 }
 
@@ -137,23 +125,16 @@ export function readWeeklyActivity() {
 
 /**
  * Compute and persist the local streak from ep_activity.
- * Streak = consecutive calendar days ending today where questions were answered.
+ * Streak = consecutive days with answers, ending today or yesterday (the same
+ * rule as lib/streak.js: it only breaks after a whole day is missed).
  */
 export function computeAndSaveStreak() {
   try {
     const activity = safeRead(ACTIVITY_KEY, {})
-    const today    = localDateStr()
+    const today    = appDay()
     let streak = 0
-    const cursor = new Date()
-    while (true) {
-      const key = localDateStr(cursor)
-      if (activity[key] && activity[key] > 0) {
-        streak++
-        cursor.setDate(cursor.getDate() - 1)
-      } else {
-        break
-      }
-    }
+    const start = activity[today] > 0 ? today : addDays(today, -1)
+    for (let day = start; activity[day] > 0; day = addDays(day, -1)) streak++
     safeWrite(STREAK_KEY, { days: streak, lastDate: today })
     return streak
   } catch { return 0 }
@@ -165,7 +146,7 @@ export function computeAndSaveStreak() {
 export function readLocalStreak() {
   try {
     const cached = safeRead(STREAK_KEY, null)
-    const today  = localDateStr()
+    const today  = appDay()
     if (cached && cached.lastDate === today) return cached.days ?? 0
     return computeAndSaveStreak()
   } catch { return 0 }

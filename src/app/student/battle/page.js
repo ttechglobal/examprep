@@ -5,6 +5,10 @@
 // v2: recent form strip (last 10 results, W/D/L) replaces the plain stats row;
 // Player vs Player shows as "Coming soon" (not clickable). The 1v1 build lives
 // at /student/battle/1v1 and is not linked from anywhere yet.
+//
+// v3: Battle is a main tab now, so the hub sits inside the app shell: on
+// phones it fills the screen above the bottom nav, on desktop it's a panel
+// beside the sidebar. The Back button is gone (the nav replaces it).
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { readLocalBattleStats, pickBattleStats } from '@/lib/battleAI'
@@ -29,11 +33,21 @@ export default function BattlePage() {
   }, [])
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
+    <div className="bh-root">
+      <style>{`
+        /* Phones: full screen, but stops above the bottom nav and covers the top bar. */
+        .bh-root {
+          position: fixed; top: 0; left: 0; right: 0;
+          bottom: calc(68px + env(safe-area-inset-bottom));
+          z-index: 60;
+          display: flex; flex-direction: column; overflow: hidden;
+          background: #16237a;   /* shows until the background image arrives */
+        }
+        /* Desktop: a panel in the main column, beside the sidebar. */
+        @media (min-width: 1024px) {
+          .bh-root { position: relative; inset: auto; z-index: auto; min-height: calc(100dvh - 150px); border-radius: 24px; }
+        }
+      `}</style>
 
       {/* ── BACKGROUND IMAGE ── */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
@@ -67,34 +81,11 @@ export default function BattlePage() {
           boxSizing: 'border-box',
         }}>
 
-          {/* ── Back button ── */}
-          <div style={{ paddingTop: 20, paddingBottom: 0 }}>
-            <button
-              onClick={() => router.push('/student/practice')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                background: 'rgba(255,255,255,.14)',
-                border: '1px solid rgba(255,255,255,.26)',
-                borderRadius: 999, padding: '7px 16px 7px 11px',
-                color: '#fff', fontSize: 13, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <path d="M13 4l-6 6 6 6" stroke="#fff" strokeWidth="2.2"
-                  strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Back
-            </button>
-          </div>
-
           {/* ── HERO SECTION ── */}
           <div style={{
             display: 'flex', alignItems: 'center',
             gap: 0,
-            paddingTop: 20, paddingBottom: 28,
+            paddingTop: 28, paddingBottom: 28,
           }}>
             {/* Left — text */}
             <div style={{ flex: 1, paddingRight: 16 }}>

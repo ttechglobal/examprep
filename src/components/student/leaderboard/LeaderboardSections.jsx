@@ -12,31 +12,14 @@ import {
 } from './icons'
 import { shareInvite } from '@/components/student/InviteFriendsCard'
 import { PODIUM_IMAGES, AVATAR_RIM_OFFSET, INVITE_IMAGE } from './art'
+import { avatarLook } from '@/lib/leaderboard/avatar'
 
 // ── Avatars ──────────────────────────────────────────────────────────────────
-// No profile photos yet: a stable tint per student from their id.
-const TINTS = [
-  ['#E0EAFF', '#1D4ED8'], ['#FDE7D6', '#C2410C'], ['#DCFCE7', '#15803D'],
-  ['#F3E8FF', '#7E22CE'], ['#FFE4E6', '#BE123C'], ['#E0F2FE', '#0369A1'],
-]
-function tintFor(id = '') {
-  let h = 0
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0
-  return TINTS[h % TINTS.length]
-}
-
 export function Avatar({ entry }) {
-  if (entry.is_me) {
-    return (
-      <span className={s.avatar} style={{ background: 'linear-gradient(145deg,#0a2470,#1264e5)', color: '#FFB800', fontSize: '0.92em' }} aria-hidden="true">
-        {(entry.name || 'ME').slice(0, 2).toUpperCase()}
-      </span>
-    )
-  }
-  const [bg, fg] = tintFor(entry.student_id)
+  const look = avatarLook(entry)
   return (
-    <span className={s.avatar} style={{ background: bg, color: fg }} aria-hidden="true">
-      {(entry.name || 'S').charAt(0).toUpperCase()}
+    <span className={s.avatar} style={{ background: look.background, color: look.color, fontSize: entry.is_me ? '0.92em' : undefined }} aria-hidden="true">
+      {look.text}
     </span>
   )
 }

@@ -1,7 +1,8 @@
 'use client'
 // src/components/battle/PvpNotice.jsx
 // Friendly overlay for 1v1 problems, with Zara. PVP_FULL gets its own copy
-// and a "Play the computer" way out; other errors show pvpMessage().
+// and a "Play the computer" way out; PVP_OFFLINE gets an offline title;
+// other errors show pvpMessage().
 import { useRouter } from 'next/navigation'
 import Zara from '@/components/onboarding/Zara'
 import { pvpMessage } from '@/lib/pvp/client'
@@ -11,7 +12,8 @@ const NAVY = '#12195A', GOLD = '#FFB800', GOLD2 = '#CC8F00'
 export default function PvpNotice({ error, onClose, onRetry }) {
   const router = useRouter()
   if (!error) return null
-  const full = error === 'PVP_FULL'
+  const full    = error === 'PVP_FULL'
+  const offline = error === 'PVP_OFFLINE'
 
   return (
     <div role="dialog" aria-modal="true" onClick={onClose}
@@ -20,7 +22,7 @@ export default function PvpNotice({ error, onClose, onRetry }) {
         style={{ width: '100%', maxWidth: 400, background: '#fff', borderRadius: 24, padding: '24px 22px 20px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,.45)' }}>
         <Zara size={96} style={{ margin: '0 auto' }}/>
         <div style={{ fontSize: 19, fontWeight: 900, color: NAVY, marginTop: 10, letterSpacing: '-.01em' }}>
-          {full ? 'The battle arena is packed!' : 'Hmm, that didn\'t work'}
+          {full ? 'The battle arena is packed!' : offline ? 'You\'re offline' : 'Hmm, that didn\'t work'}
         </div>
         <div style={{ fontSize: 14, color: '#4B5563', marginTop: 8, lineHeight: 1.55 }}>
           {full

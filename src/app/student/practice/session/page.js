@@ -2,6 +2,9 @@
 // src/app/student/practice/session/page.js
 // Orchestrates a practice session: loads questions, manages phase/state,
 // renders the right screen. All UI components live in @/components/session/.
+//
+// v2: the saved session carries topic_name (the server already stored it, the
+//     page never sent it), so Recent Sessions can show "Topic: …".
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -184,6 +187,7 @@ export default function PracticeSessionPage() {
       exam:            config?.examType    || 'WAEC',
       mode:            config?.mode        || 'practice',
       subject_name:    config?.subjects?.[0] ?? 'Mixed',
+      topic_name:      config?.topicName ?? null,
       results,
       duration_secs:   durationSecs,
       questions_count: results.length,

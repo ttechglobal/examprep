@@ -10,6 +10,11 @@ export function appDay(date = new Date()) {
   return new Date(new Date(date).getTime() + APP_UTC_OFFSET_MS).toISOString().slice(0, 10)
 }
 
+/** Hour of the day (0–23) in Nigeria, e.g. for "Good morning". */
+export function appHour(date = new Date()) {
+  return new Date(new Date(date).getTime() + APP_UTC_OFFSET_MS).getUTCHours()
+}
+
 /** 'YYYY-MM-DD' shifted by `n` days (negative = earlier). */
 export function addDays(day, n) {
   const d = new Date(`${day}T00:00:00Z`)

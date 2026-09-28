@@ -1,9 +1,13 @@
 'use client'
 // src/components/session/SessionPrimitives.jsx
 // Small stateless/stateful building blocks used across all session types.
+//
+// v2: ErrorScreen tells a lost connection apart from a real error ("You're
+//     offline" + Try again) instead of showing "Failed to fetch".
 
 import { useState, useEffect } from 'react'
 import { BLUE, CYAN, GREEN, RED, ORANGE } from './SessionUtils'
+import { isConnectionProblem } from '@/lib/network'
 
 // ─── LOADING ──────────────────────────────────────────────────────────────────
 export function LoadingScreen({ message = 'Loading questions…' }) {
@@ -18,13 +22,21 @@ export function LoadingScreen({ message = 'Loading questions…' }) {
 
 // ─── ERROR ────────────────────────────────────────────────────────────────────
 export function ErrorScreen({ message, onBack }) {
+  const offline = isConnectionProblem(message)
   return (
     <div style={{ minHeight:'100dvh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, padding:24, background:'var(--bg-base)' }}>
       <style>{`*{box-sizing:border-box}`}</style>
-      <div style={{ fontSize:44 }}>😕</div>
-      <div style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', textAlign:'center' }}>Something went wrong</div>
-      <div style={{ fontSize:14, color:'var(--text-tert)', textAlign:'center', maxWidth:320, lineHeight:1.6 }}>{message}</div>
-      <button onClick={onBack} style={{ padding:'12px 28px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:15, fontWeight:800, fontFamily:'inherit' }}>← Back to Practice</button>
+      <div style={{ fontSize:44 }}>{offline ? '📶' : '😕'}</div>
+      <div style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', textAlign:'center' }}>{offline ? 'You\'re offline' : 'Something went wrong'}</div>
+      <div style={{ fontSize:14, color:'var(--text-tert)', textAlign:'center', maxWidth:320, lineHeight:1.6 }}>
+        {offline ? 'Questions load from the internet. Connect to Wi-Fi or data, then try again.' : message}
+      </div>
+      {offline && (
+        <button onClick={() => window.location.reload()} style={{ padding:'12px 28px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:15, fontWeight:800, fontFamily:'inherit' }}>Try again</button>
+      )}
+      <button onClick={onBack} style={offline
+        ? { padding:'10px 20px', border:'none', background:'none', cursor:'pointer', color:'var(--text-sec)', fontSize:14, fontWeight:700, fontFamily:'inherit' }
+        : { padding:'12px 28px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:15, fontWeight:800, fontFamily:'inherit' }}>← Back to Practice</button>
     </div>
   )
 }

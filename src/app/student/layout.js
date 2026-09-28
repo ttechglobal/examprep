@@ -1,5 +1,12 @@
 'use client'
 // src/app/student/layout.js
+// Student app shell: loads the profile once (shared via useStudentUser), and
+// wraps every page in the sidebar (desktop) or top bar + bottom nav (phones).
+//
+// v2: Battle is a main tab, so /student/battle keeps the shell (only its
+//     setup, match and 1v1 screens are full screen). Phone top bar follows the
+//     new design (brand on Home and Practice). Rank names come from lib/ranks.js instead of
+//     a local copy of the tables.
 
 import { useState, useEffect, useLayoutEffect, useCallback, createContext, useContext } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -16,6 +23,7 @@ import ProfileSetupGate from '@/components/student/ProfileSetupGate'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { endLaunchSplash } from '@/lib/launchSplash'
 import { hasLocalIdentity } from '@/lib/auth/client'
+import { getRankProgress } from '@/lib/ranks'
 
 const NAVY = '#062A78'
 const BLUE = '#1264E5'
@@ -23,7 +31,13 @@ const GOLD = '#FFB800'
 const ORANGE = '#FF6A00'
 const CYAN = '#18B7F2'
 
-const SHELL_EXCLUDED = ['/student/practice/session', '/student/practice/mock', '/student/learn/world', '/student/battle']
+// Full-screen screens with no sidebar / bottom nav. The Battle hub itself
+// (/student/battle) keeps the nav, since Battle is a main tab; only the
+// setup, the match and the 1v1 screens take over the screen.
+const SHELL_EXCLUDED = [
+  '/student/practice/session', '/student/practice/mock', '/student/learn/world',
+  '/student/battle/setup', '/student/battle/session', '/student/battle/1v1',
+]
 
 // A battle guest (anonymous login from a 1v1 invite, no guest profile on this
 // device) may only use the 1v1 screens. Anywhere else they start at /onboarding.
@@ -42,28 +56,6 @@ function useActiveNav() {
   const pathname = usePathname()
   const match = [...NAV].reverse().find(item => pathname.startsWith(item.href))
   return match ?? NAV[0]
-}
-
-// ── Rank helpers ──────────────────────────────────────────────────────────────
-const _RANK_XP = (() => {
-  const t = [0]
-  for (let i = 1; i < 10; i++) t.push(t[t.length-1] + 200 + i * 20)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 500 + i * 50)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 1200 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 2500 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 3800 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 5500 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 7500 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 9500 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 12000 + i * 100)
-  for (let i = 0; i < 10; i++) t.push(t[t.length-1] + 15000 + i * 100)
-  return t
-})()
-const _RANK_NAMES = ['Newcomer','Beginner','Learner','Explorer','Starter','Rookie','Apprentice','Trainee','Challenger','Initiate','Solver','Thinker','Problem Solver','Quick Mind','Sharp Mind','Brainiac','Strategist','Tactician','Scholar','Achiever','Specialist','Expert','Ace','Mastermind','Genius','Elite','Prodigy','Virtuoso','Grand Solver','Master Solver','Elite Mind','Mastermind','Top Scholar','Brain Master','Logic Master','Knowledge Master','Question Master','Challenge Master','Exam Master','Learning Master','Rising Star','Star Scholar','Academic Star','Brain Champion','Knowledge Champion','Quiz Champion','Challenge Champion','Exam Champion','Learning Champion','Grand Champion','Legend','Rising Legend','Scholar Legend','Brain Legend','Knowledge Legend','Master Legend','Exam Legend','Learning Legend','Grand Legend','Legendary Mind','Mythic Learner','Mythic Solver','Mythic Scholar','Mythic Mind','Mythic Master','Mythic Genius','Mythic Champion','Mythic Strategist','Mythic Legend','Mythic Grandmaster','Royal Scholar','Crowned Scholar','Scholar King','Scholar Elite','Knowledge Royalty','Brain Royalty','Grand Scholar','Supreme Scholar','Royal Grandmaster','Crown Master','Cosmic Learner','Cosmic Solver','Cosmic Scholar','Cosmic Mind','Cosmic Master','Infinity Scholar','Infinity Master','Eternal Scholar','Ultimate Mind','Ultimate Master','Grandmaster','Supreme Grandmaster','Legendary Grandmaster','Master of Masters','Immortal Scholar','Transcendent Mind','Apex Scholar','Apex Master','Ultimate Scholar','The EXL Legend']
-function getRankFromXp(xp) {
-  let r = 1
-  for (let i = _RANK_XP.length - 1; i >= 0; i--) { if (xp >= _RANK_XP[i]) { r = i + 1; break } }
-  return Math.min(r, 100)
 }
 
 // ── Background ────────────────────────────────────────────────────────────────
@@ -97,8 +89,7 @@ function AppBackground({ dark }) {
 function DesktopTopbar({ name }) {
   const { dark, toggle }    = useTheme()
   const { totalPoints: xp } = usePoints()
-  const rank     = getRankFromXp(xp || 0)
-  const rankName = _RANK_NAMES[rank - 1] ?? 'Newcomer'
+  const rankName = getRankProgress(xp || 0).name
   const initials = (name || 'EX').slice(0, 2).toUpperCase()
 
   return (
@@ -141,36 +132,41 @@ function DesktopTopbar({ name }) {
   )
 }
 
+const BRAND_TOPBAR = new Set(['home', 'practice'])
+
 // ── Mobile Topbar ─────────────────────────────────────────────────────────────
-function MobileTopbar({ pageTitle }) {
+// Home and Practice show the brand (their greeting is the page's heading);
+// every other tab shows its own name. Profile is a bottom tab, so it has no
+// button here.
+function MobileTopbar({ activeId, pageTitle }) {
   const { dark, toggle }    = useTheme()
   const { totalPoints: xp } = usePoints()
+  const showBrand = BRAND_TOPBAR.has(activeId)
 
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ width:30, height:30, borderRadius:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-          <span style={{ fontSize:11, fontWeight:900, color:GOLD }}>EX</span>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+        <div style={{ width:showBrand?38:30, height:showBrand?38:30, borderRadius:showBrand?11:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <span style={{ fontSize:showBrand?14:11, fontWeight:900, color:GOLD }}>EX</span>
         </div>
-        <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>{pageTitle}</span>
+        {showBrand ? (
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', lineHeight:1.05 }}>ExamPrep</div>
+            <div style={{ fontSize:11, fontWeight:600, color:'var(--text-tert)', marginTop:2 }}>EXL Learning World</div>
+          </div>
+        ) : (
+          <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>{pageTitle}</span>
+        )}
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.1)' }}>
-          <span style={{ fontSize:13 }}>⚡</span>
-          <span suppressHydrationWarning style={{ fontSize:12, fontWeight:900, color:GOLD }}>{(xp||0).toLocaleString()}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.12)', border:`1px solid ${GOLD}33` }}>
+          <span style={{ fontSize:14 }}>⚡</span>
+          <span suppressHydrationWarning style={{ fontSize:13, fontWeight:900, color:dark?GOLD:'#D98E00' }}>{(xp||0).toLocaleString()} XP</span>
         </div>
-        <Link href="/student/profile" style={{ textDecoration:'none' }}>
-          <div style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
-              <circle cx="11" cy="8" r="4" stroke="var(--text-tert)" strokeWidth="1.7"/>
-              <path d="M3 20c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="var(--text-tert)" strokeWidth="1.7" strokeLinecap="round"/>
-            </svg>
-          </div>
-        </Link>
-        <button onClick={toggle} style={{ width:32, height:32, borderRadius:10, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+        <button onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} style={{ width:40, height:40, borderRadius:12, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
           {dark
-            ? <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            ? <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
+            : <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           }
         </button>
       </div>
@@ -371,9 +367,10 @@ function StudentLayoutInner({ children }) {
       </div>
 
       {/* ── MOBILE — Tailwind hides this on desktop ── */}
-      {/* paddingBottom:88 = 68px nav + 20px breathing room; FAB sits above nav */}
-      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:88, position:'relative', zIndex:1 }}>
-        <MobileTopbar pageTitle={active.label} />
+      {/* Bottom padding clears the 68px nav and the Flashcards button above it,
+          so the end of every page can scroll into view. */}
+      <div className="lg:hidden" style={{ minHeight:'100dvh', paddingBottom:'calc(140px + env(safe-area-inset-bottom))', position:'relative', zIndex:1 }}>
+        <MobileTopbar activeId={active.id} pageTitle={active.label} />
         <div style={{ padding:'12px 16px 0' }}>
           <Suspense fallback={null}>{children}</Suspense>
         </div>
@@ -381,7 +378,7 @@ function StudentLayoutInner({ children }) {
 
       {/* ── BOTTOM NAV — outside all stacking contexts so position:fixed works ── */}
       <div className="lg:hidden">
-        <StudentBottomNav active={active.id} dark={dark} />
+        <StudentBottomNav active={active.id} />
       </div>
 
       {/* ── NOTIFICATION PERMISSION BANNER — position:fixed, zIndex 8888 ── */}
