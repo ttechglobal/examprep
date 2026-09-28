@@ -1,4 +1,4 @@
-# Home, Practice, practice setup + mock, Leaderboard redesign; Battle tab; offline app — 27–28 Sep 2026
+# Home, Practice, practice setup + mock, Leaderboard, practice session redesign; Battle tab; offline app — 27–28 Sep 2026
 
 ## Why
 
@@ -20,6 +20,8 @@
      `waec-header.webp`, `jamb-header.webp` (setup banners) (`components/student/mock/art.js`)
    - `public/images/leaderboard/`: `champions-bg.webp` (new: Weekly Champions background); the existing
      `podium-1/2/3.png` and `invite-friends.png` keep their names (`components/student/leaderboard/art.js`)
+   - `public/images/session/`: `correct-answer.webp` (corner art on the Correct Answer card),
+     `summary-trophy.webp` (the summary's trophy; 🏆 until it's there) (`components/session/art.js`)
 2. **Service worker**: replace `public/sw.js` with the new one (v5). It keeps your push and
    notification-click code unchanged and adds the offline caching. There is no separate offline file.
 3. **Image cache headers**: add to `next.config`:
@@ -75,6 +77,19 @@
 | Images | Podium and invite art now sit on their CSS fallbacks: a missing, slow or offline image used to leave an empty pedestal. `LazyImage` gained `onLoaded` for this | `components/ui/LazyImage.jsx` (v2) |
 | Flashcards button | Hidden on the leaderboard, where it would cover your pinned row | `components/student/StudentNav.jsx` |
 
+### Practice session, explanation, summary, review, mock exam (28 Sep)
+| Area | Change | Files |
+|---|---|---|
+| Session screen | One shared screen for practice, study, review, mock and the demo. Desktop: question panel (legend + grid) \| question \| explanation (study and review). Phones: the question with Previous / Next docked; "4 of 50 ▾" opens the question grid. Top bar: End, subject, clock (countdown when timed, time spent otherwise), calculator, progress | `components/session/SessionFrame.jsx` (new), `session.module.css` (new), `icons.jsx` (new) |
+| Question card | Only the question now: topic, year, report flag, hint, options. Study mode: "Not quite, try again!" after a first wrong pick, then the answer; the feedback scrolls into view on phones | `components/session/QuestionCard.jsx` (v2), `FlagSheet.jsx` (moved out, unchanged) |
+| Explanation | Correct Answer card first, then the working (intro, formula, diagram, steps), "Why the other options are wrong" (each wrong option's text and reason, yours first), study tip. Phones: "See the explanation" opens it full screen with ‹ › between questions in review and "Got it" | `components/session/ExplanationBlock.jsx` (v2) |
+| Summary | New page for practice and mock: score, Correct / Incorrect / Skipped / Time, performance by topic (weakest first) and, for JAMB, by subject; Try Again, Review Answers, Back to Practice. Practice's Try Again retries the same questions in place (works offline) | `components/session/SessionSummary.jsx`, `summary.module.css` (new; replace `components/student/SessionResults.jsx`, which is deleted) |
+| Review | Same screen as the session: graded grid (correct / wrong / skipped), your answer against the right one, explanation beside it (desktop) or behind "See the explanation" | `components/session/ReviewSession.jsx` (v2) |
+| Practice page | Rebuilt on the above. "Skipped" = left without an answer. Timers read answers from a ref, so time-up saves the latest picks | `app/student/practice/session/page.js` (v3) |
+| Mock exam | Rebuilt on the above; WAEC and JAMB share one path (a list of subject sections). JAMB: subject tabs with counts, "Next subject" at the end of a subject, the subject breakdown is inside the summary | `app/student/practice/mock/page.js` (v3) |
+| Demo | `/demo` practice uses the same session screen under the demo banner; its results page is unchanged | `app/demo/page.js` |
+| Battle review | Explanation in the new layout, kept light to match the battle screens | `components/battle/arena/BattleReview.jsx` |
+
 ### Navigation, Battle, offline
 | Area | Change | Files |
 |---|---|---|
@@ -94,6 +109,11 @@
   20 / 30 min; question counts 5 / 10 / 20 / 30 / 50 (default 10).
 - Mock Exam always asks WAEC or JAMB first.
 - Leaderboard: no week-by-week arrows on the champions (use "View all champions"); no dropdown for the scope.
+- Sessions: questions are numbered in a grid (desktop panel, phone sheet) and can be answered in any order;
+  the last question's button is Submit (JAMB mock: "Next subject" until every subject is done).
+- Practice summary "Try Again" repeats the same questions; it used to open the setup sheet.
+- No Bookmark button in the session: the mockup shows one but there is nothing behind it yet (no saved-questions
+  list). Small follow-up if wanted.
 - Custom Practice is still one subject per session. The mockup shows several; the question feed can take
   several subject names, so this is a small follow-up if wanted.
 - Recent Sessions shows 3 sessions and no longer lists battles.
@@ -121,12 +141,22 @@
   student ranked 47th (row sticks above the phone nav / at the foot of the desktop board), guest (sign-up
   row; My School → sign-up), signed-in student without a school (My School → connect sheet), missing artwork.
 
+- Sessions, at 390 and 1440 px, light and dark, with the questions API mocked from the demo bank: practice
+  (answer, skip, grid, submit, summary, review, explanation sheet with ‹ ›), study (wrong then right,
+  explanation beside / full screen), JAMB mock (tabs, jump to Q10, "Next subject", submit, summary with the
+  subject breakdown, review with tabs), `/demo` study session. Saved local session checked (10 questions, mode,
+  subject).
+- Found and fixed in testing: the Speed Round countdown called its time-up handler inside a state update (runs
+  twice in development) with the answers from when the question opened.
+
 ## Not verified
 
 - Signed-in data (activity, sessions endpoint, leaderboard `me` row): tested as a guest only.
 - Push notifications with the new worker: the push code is unchanged, but not re-tested end to end.
 - iPhone Safari offline behaviour (Safari clears a site's data after ~7 days unused).
 - Real artwork: placeholder images were used.
+- Maths in explanations: KaTeX loads from a CDN, which the test machine can't reach, so formulas showed as raw
+  `$…$` in screenshots. Unchanged by this work; offline, formulas also show raw.
 
 ## Found, not changed
 

@@ -4,9 +4,15 @@
 //
 // v2: ErrorScreen tells a lost connection apart from a real error ("You're
 //     offline" + Try again) instead of showing "Failed to fetch".
+// v3: EndDialog restyled (session.module.css). QuestionNav and SessionTimer
+//     are replaced by QuestionPanel / QuestionGridSheet and SessionClock in
+//     SessionFrame.jsx. QuestionCountdown reads onTimeUp through a ref and no
+//     longer calls it inside a state updater (it ran twice under StrictMode
+//     and used the answers from when the question opened).
 
-import { useState, useEffect } from 'react'
-import { BLUE, CYAN, GREEN, RED, ORANGE } from './SessionUtils'
+import { useState, useEffect, useRef } from 'react'
+import { BLUE, GREEN, RED, ORANGE } from './SessionUtils'
+import s from './session.module.css'
 import { isConnectionProblem } from '@/lib/network'
 
 // ─── LOADING ──────────────────────────────────────────────────────────────────
@@ -42,101 +48,48 @@ export function ErrorScreen({ message, onBack }) {
 }
 
 // ─── END / SUBMIT DIALOG ─────────────────────────────────────────────────────
-// mode='submit' — triggered by Submit on last question
-// mode='end'    — triggered by the End button mid-session
+// mode 'submit' (after the last question) or 'end' (Exit / End mid-session).
+// Rendered inside SessionFrame (its `overlay`), which provides the styles' tokens.
 export function EndDialog({ answered, total, onConfirm, onCancel, mode = 'end' }) {
   const unanswered = total - answered
   const isSubmit   = mode === 'submit'
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:1200, background:'rgba(0,0,0,.65)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'var(--bg-base)', borderRadius:22, border:'1px solid var(--border)', padding:'28px 24px', maxWidth:360, width:'100%', boxShadow:'0 24px 60px rgba(0,0,0,.6)' }}>
-        <div style={{ fontSize:36, textAlign:'center', marginBottom:12 }}>{isSubmit ? '📋' : '⚠️'}</div>
-        <div style={{ fontSize:18, fontWeight:900, color:'var(--text-prim)', textAlign:'center', marginBottom:8 }}>
-          {isSubmit ? 'Ready to submit?' : 'End this session?'}
-        </div>
-        <div style={{ fontSize:13, color:'var(--text-tert)', textAlign:'center', lineHeight:1.7, marginBottom:22 }}>
-          You've answered <strong style={{ color:'var(--text-prim)' }}>{answered}</strong> of <strong style={{ color:'var(--text-prim)' }}>{total}</strong> questions.
-          {unanswered > 0 && <><br/><span style={{ color:ORANGE }}>{unanswered} unanswered</span> will be marked as incorrect.</>}
-          {isSubmit && unanswered === 0 && <><br/><span style={{ color:GREEN }}>All questions answered ✓</span></>}
-        </div>
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          <button onClick={onConfirm}
-            style={{ width:'100%', padding:'14px', borderRadius:13, border:'none', cursor:'pointer', background:isSubmit?BLUE:RED, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:isSubmit?`0 4px 0 #0a3fa0`:`0 4px 0 #b91c1c` }}>
-            {isSubmit ? 'Yes, submit' : 'End & See Results'}
+    <div className={s.dialogBackdrop} onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div className={s.dialog} role="alertdialog" aria-modal="true" aria-labelledby="end-title">
+        <div className={s.dialogIcon} aria-hidden="true">{isSubmit ? '📋' : '⚠️'}</div>
+        <h2 className={s.dialogTitle} id="end-title">{isSubmit ? 'Ready to submit?' : 'End this session?'}</h2>
+        <p className={s.dialogText}>
+          You’ve answered <b>{answered}</b> of <b>{total}</b> questions.
+          {unanswered > 0 && <span className={s.dialogWarn}>{unanswered} unanswered will count as wrong.</span>}
+          {isSubmit && unanswered === 0 && <span className={s.dialogOk}>All questions answered ✓</span>}
+        </p>
+        <div className={s.dialogActions}>
+          <button type="button" className={`${s.next} ${isSubmit ? '' : s.danger}`} onClick={onConfirm}>
+            {isSubmit ? 'Yes, submit' : 'End & see results'}
           </button>
-          <button onClick={onCancel}
-            style={{ width:'100%', padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:'pointer', background:'transparent', color:'var(--text-sec)', fontSize:14, fontWeight:700, fontFamily:'inherit' }}>
-            {isSubmit ? 'Go back' : 'Keep going'}
-          </button>
+          <button type="button" className={s.plain} onClick={onCancel}>{isSubmit ? 'Go back' : 'Keep going'}</button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── QUESTION NAVIGATOR ───────────────────────────────────────────────────────
-export function QuestionNav({ total, current, answerMap, onJump, sessionType, inline = false }) {
-  return (
-    <div style={{ borderTop:inline?'none':'1px solid var(--border)', background:inline?'transparent':'var(--bg-card)', padding:inline?'0':'10px 14px 12px' }}>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:6, maxHeight:96, overflow:'hidden' }}>
-        {Array.from({ length: total }, (_, i) => {
-          const info      = answerMap[i]
-          const isCurrent = i === current
-          const answered  = info?.answered
-          const correct   = info?.correct
-          const skipped   = info?.skipped
-          let bg, border, color
-          if (isCurrent) {
-            bg = BLUE; border = BLUE; color = '#fff'
-          } else if (answered && sessionType === 'study') {
-            bg = correct ? `${GREEN}18` : `${RED}14`; border = correct ? GREEN : RED; color = correct ? GREEN : RED
-          } else if (answered) {
-            bg = `${BLUE}15`; border = `${BLUE}55`; color = BLUE
-          } else if (skipped) {
-            bg = `${ORANGE}10`; border = `${ORANGE}50`; color = ORANGE
-          } else {
-            bg = 'var(--bg-subtle)'; border = 'var(--border)'; color = 'var(--text-tert)'
-          }
-          return (
-            <button key={i} onClick={() => onJump(i)}
-              style={{ width:30, height:30, borderRadius:8, border:`2px solid ${border}`, background:bg, color, fontSize:11, fontWeight:900, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .12s', flexShrink:0 }}>
-              {i + 1}
-            </button>
-          )
-        })}
-      </div>
-      <div style={{ display:'flex', gap:10, marginTop:7, flexWrap:'wrap' }}>
-        {[
-          { bg:BLUE,            border:BLUE,            label:'Current'  },
-          { bg:`${BLUE}15`,     border:`${BLUE}55`,     label:'Answered' },
-          { bg:`${ORANGE}10`,   border:`${ORANGE}50`,   label:'Skipped'  },
-          { bg:'var(--bg-subtle)', border:'var(--border)', label:'Not done' },
-          ...(sessionType === 'study' ? [
-            { bg:`${GREEN}18`, border:GREEN, label:'Correct' },
-            { bg:`${RED}14`,   border:RED,   label:'Wrong'   },
-          ] : []),
-        ].map((l, i) => (
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <div style={{ width:8, height:8, borderRadius:2, background:l.bg, border:`1.5px solid ${l.border}` }}/>
-            <span style={{ fontSize:9, fontWeight:700, color:'var(--text-tert)' }}>{l.label}</span>
-          </div>
-        ))}
       </div>
     </div>
   )
 }
 
 // ─── PER-QUESTION COUNTDOWN ───────────────────────────────────────────────────
+// Counts down from the moment it mounts (key it by question). onTimeUp is read
+// through a ref, so the latest handler (with the latest answers) runs at zero.
 export function QuestionCountdown({ secs, onTimeUp }) {
   const [remaining, setRemaining] = useState(secs)
+  const onTimeUpRef = useRef(onTimeUp)
+  useEffect(() => { onTimeUpRef.current = onTimeUp })
+
   useEffect(() => {
+    const endsAt = Date.now() + secs * 1000
     setRemaining(secs)
     const iv = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) { clearInterval(iv); onTimeUp(); return 0 }
-        return r - 1
-      })
-    }, 1000)
+      const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))
+      setRemaining(left)
+      if (left === 0) { clearInterval(iv); onTimeUpRef.current?.() }
+    }, 250)
     return () => clearInterval(iv)
   }, [secs])
 
@@ -153,38 +106,6 @@ export function QuestionCountdown({ secs, onTimeUp }) {
           style={{ transition:'stroke-dashoffset 1s linear, stroke .3s' }}/>
       </svg>
       <span style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, color }}>{remaining}</span>
-    </div>
-  )
-}
-
-// ─── OVERALL SESSION TIMER ────────────────────────────────────────────────────
-export function SessionTimer({ durationSecs, onTimeUp }) {
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setElapsed(e => {
-        const n = e + 1
-        if (n >= durationSecs) { clearInterval(iv); onTimeUp(); return durationSecs }
-        return n
-      })
-    }, 1000)
-    return () => clearInterval(iv)
-  }, [durationSecs, onTimeUp])
-
-  const remaining = durationSecs - elapsed
-  const mins  = Math.floor(remaining / 60)
-  const secs  = remaining % 60
-  const pctLeft = durationSecs > 0 ? Math.round((remaining / durationSecs) * 100) : 0
-  const color = pctLeft > 50 ? BLUE : pctLeft > 25 ? ORANGE : RED
-
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="13" r="8" stroke={color} strokeWidth="2.2"/>
-        <path d="M12 9v4l3 2" stroke={color} strokeWidth="2" strokeLinecap="round"/>
-        <path d="M9 2h6M12 2v3" stroke={color} strokeWidth="2" strokeLinecap="round"/>
-      </svg>
-      <span style={{ fontSize:14, fontWeight:900, color, fontVariantNumeric:'tabular-nums' }}>{mins}:{String(secs).padStart(2,'0')}</span>
     </div>
   )
 }

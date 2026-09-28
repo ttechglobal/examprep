@@ -158,10 +158,9 @@ export default function BattleReview({ items, subject, opponent, onDone }) {
             <ExplanationBlock
               explanation={q.explanation}
               isCorrect={isCorrect}
-              dark={false}
-              mobileModal={false}
               selectedKey={selectedKey}
               question={q.question}
+              alwaysLight
             />
           )}
 

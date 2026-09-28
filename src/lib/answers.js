@@ -17,3 +17,8 @@ export function normaliseOptions(raw) {
 export function checkCorrect(options, idx, correctAnswer) {
   return options[idx] === correctAnswer || LETTERS[idx] === correctAnswer || idx === correctAnswer
 }
+
+/** Index of the correct option (-1 if none matches), with the same rule as checkCorrect. */
+export function correctIndex(options, correctAnswer) {
+  return options.findIndex((_, i) => checkCorrect(options, i, correctAnswer))
+}

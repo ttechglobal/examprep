@@ -32,7 +32,8 @@ import { useState, useEffect, useRef, useCallback, forwardRef } from 'react'
 import { DEMO_CONFIG, getDemoQuestions, demoSubjectHasQuestions } from '@/lib/demoQuestions'
 import { createComputerOpponent } from '@/lib/battleAI'
 import { QuestionCard }    from '@/components/session/QuestionCard'
-import { ExplanationBlock } from '@/components/session/ExplanationBlock'
+import { ExplanationBlock, ExplanationSheet, ExplanationTrigger } from '@/components/session/ExplanationBlock'
+import { SessionFrame, SessionTopBar, QuestionPanel, QuestionGridSheet, SessionBottomBar } from '@/components/session/SessionFrame'
 import { MathText }         from '@/lib/mathRenderer'
 import {
   normaliseOptions,
@@ -310,7 +311,7 @@ function BattleExplanationSheet({ question, isCorrect, onClose }) {
         </div>
         <div style={{ height: 3, background: `linear-gradient(90deg,${GOLD},#FF6A00,${GOLD})`, flexShrink: 0 }} />
         <div style={{ overflowY: 'auto', padding: '20px 20px 16px', flex: 1, background: '#fff' }}>
-          <ExplanationBlock explanation={question.explanation} isCorrect={isCorrect} dark={false} mobileModal={false} question={question} />
+          <ExplanationBlock question={question} isCorrect={isCorrect} alwaysLight />
         </div>
         <div style={{ padding: '12px 20px 24px', flexShrink: 0, background: '#fff', borderTop: '1px solid #f1f5f9' }}>
           <button onClick={onClose} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', cursor: 'pointer', background: NAVY2, color: '#fff', fontSize: 14, fontWeight: 900, fontFamily: 'inherit', boxShadow: `0 5px 0 #031548` }}>
@@ -406,7 +407,7 @@ function BattleReview({ questions, answersLog, cpuChoices, subjectName, onDone }
         </div>
         {/* Explanation */}
         {q?.explanation && (
-          <ExplanationBlock explanation={q.explanation} isCorrect={isCorrect} dark={false} mobileModal={false} selectedKey={selectedKey} question={q} />
+          <ExplanationBlock question={q} isCorrect={isCorrect} selectedKey={selectedKey} alwaysLight />
         )}
         {/* Dot progress */}
         <div style={{ display: 'flex', gap: 5, justifyContent: 'center', padding: '4px 0' }}>
@@ -564,6 +565,66 @@ function BattleResultsScreen({ questions, answersLog, studentScore, cpuScore, xp
     </div>
   )
 }
+
+// ── Practice session ──────────────────────────────────────────────────────────
+// The real session screen (SessionFrame) under the demo banner: question panel,
+// the question, and in study modes the explanation beside it (desktop) or
+// behind "See the explanation" (phones). No saving; the last Next shows results.
+const DemoSession = forwardRef(function DemoSession({ questions, qIndex, answerMap, subject, modeLabel, sessionType, speedSecs, onJump, onAnswerChange, onNext, onEnd }, cardRef) {
+  const [gridOpen, setGridOpen] = useState(false)
+  const [expOpen,  setExpOpen]  = useState(false)
+  const mainRef = useRef(null)
+  useEffect(() => { mainRef.current?.scrollTo?.(0, 0); setExpOpen(false) }, [qIndex])
+
+  const q        = questions[qIndex]
+  const answer   = answerMap[qIndex] ?? null
+  const isStudy  = sessionType === 'study'
+  const isLast   = qIndex >= questions.length - 1
+  const selectedKey = answer?.selectedIdx != null ? LETTERS[answer.selectedIdx] : null
+  const stateOf  = i => (answerMap[i] ? (isStudy ? (answerMap[i].isCorrect ? 'correct' : 'wrong') : 'answered') : undefined)
+  const next     = () => {
+    const live = isStudy ? null : cardRef.current?.getSelection()
+    onNext(live?.selectedIdx != null ? live : {})
+  }
+
+  return (
+    <SessionFrame
+      style={{ top: 44 }}
+      mainRef={mainRef}
+      top={
+        <SessionTopBar
+          backLabel="End" onBack={onEnd} title={subject} subtitle={modeLabel}
+          current={qIndex} total={questions.length} answered={Object.keys(answerMap).length}
+          onOpenGrid={() => setGridOpen(true)}
+        />
+      }
+      panel={<QuestionPanel total={questions.length} current={qIndex} stateOf={stateOf} graded={isStudy} onJump={onJump} />}
+      aside={isStudy && answer && q.explanation ? <ExplanationBlock question={q} isCorrect={answer.isCorrect} selectedKey={selectedKey} /> : null}
+      bottom={
+        <SessionBottomBar
+          onPrev={() => onJump(Math.max(0, qIndex - 1))} prevDisabled={qIndex === 0}
+          onNext={next} nextLabel={isLast ? 'See results' : 'Next'}
+        />
+      }
+      overlay={<>
+        {gridOpen && <QuestionGridSheet total={questions.length} current={qIndex} stateOf={stateOf} graded={isStudy} onJump={onJump} onClose={() => setGridOpen(false)} />}
+        {expOpen && <ExplanationSheet question={q} isCorrect={!!answer?.isCorrect} selectedKey={selectedKey} position={{ current: qIndex, total: questions.length }} onClose={() => setExpOpen(false)} />}
+      </>}
+    >
+      <QuestionCard
+        ref={cardRef}
+        key={`${q.id}-${qIndex}`}
+        question={q} qIndex={qIndex}
+        sessionType={sessionType}
+        speedSecs={speedSecs}
+        onSpeedTimeUp={() => onNext({})}
+        alreadyAnswered={answer}
+        onAnswerChange={onAnswerChange}
+      />
+      {isStudy && answer && <ExplanationTrigger question={q} isCorrect={answer.isCorrect} onOpen={() => setExpOpen(true)} />}
+    </SessionFrame>
+  )
+})
 
 // ── Practice Results (score + CTA) ────────────────────────────────────────────
 function PracticeResults({ questions, answerMap, mode, subjectName, examType, onTryAnother, onHome }) {
@@ -786,12 +847,6 @@ export default function DemoPage() {
   const cpuTimer   = useRef(null)
   const logRef     = useRef([])
 
-  // Scroll to top on question change during practice
-  const bodyRef = useRef(null)
-  useEffect(() => {
-    if (bodyRef.current) bodyRef.current.scrollTop = 0
-  }, [qIndex])
-
   // CPU thinking timer for battle
   useEffect(() => {
     if (phase !== 'battle') return
@@ -931,7 +986,6 @@ export default function DemoPage() {
   const speedSecs = mode === 'timed' ? 30 : null
   const q = questions[qIndex]
 
-  const BLUE_NAV = BLUE
   const modeLabel = { topic: 'Topic Practice', custom: 'Study Mode', quick5: 'Quick 5', timed: 'Speed Round' }[mode] ?? 'Practice'
 
   // ── Render ─────────────────────────────────────────────────────────────────────
@@ -971,73 +1025,16 @@ export default function DemoPage() {
 
       {/* ── PRACTICE SESSION ── */}
       {phase === 'session' && q && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)', paddingTop: 44 }}>
-          {/* Top bar */}
-          <div style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', padding: '0 16px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52 }}>
-              <button onClick={() => setPhase('home')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-tert)', fontSize: 13, fontWeight: 700, padding: 0 }}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                End
-              </button>
-              <div style={{ textAlign: 'center', flex: 1, padding: '0 10px' }}>
-                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-prim)' }}>{subject}</div>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-tert)', fontVariantNumeric: 'tabular-nums' }}>
-                {qIndex + 1}<span style={{ color: 'var(--border-strong)' }}>/{questions.length}</span>
-              </span>
-            </div>
-            {/* Progress bar */}
-            <div style={{ height: 4, background: 'var(--bg-subtle)', overflow: 'hidden', borderRadius: 999 }}>
-              <div style={{ height: '100%', width: `${Math.round((Object.keys(answerMap).length / questions.length) * 100)}%`, background: `linear-gradient(90deg,${BLUE},${CYAN})`, borderRadius: 999, transition: 'width .35s ease' }} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0 9px' }}>
-              <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 9px', borderRadius: 999, background: `${BLUE}12`, color: BLUE }}>{modeLabel}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tert)' }}>{Object.keys(answerMap).length}/{questions.length} answered</span>
-            </div>
-          </div>
-
-          {/* Body */}
-          <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
-            <div style={{ borderRadius: 18, padding: '20px 16px', background: '#fff', boxShadow: '0 2px 16px rgba(6,42,120,.08)' }}>
-              <QuestionCard
-                ref={cardRef}
-                key={q.id + '-' + qIndex}
-                question={q}
-                qIndex={qIndex}
-                total={questions.length}
-                onNext={handleNext}
-                onAnswerChange={handleAnswerChange}
-                onPrev={() => setQIndex(i => Math.max(0, i - 1))}
-                sessionType={sessionType}
-                speedSecs={speedSecs}
-                onSpeedTimeUp={() => handleNext({})}
-                dark={false}
-                alreadyAnswered={answerMap[qIndex] ?? null}
-                reviewMode={false}
-                hideExplanation={sessionType !== 'study'}
-                hideNav={false}
-              />
-            </div>
-          </div>
-
-          {/* Bottom nav */}
-          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-card)', padding: '10px 14px 12px', display: 'flex', gap: 10, flexShrink: 0, paddingBottom: 'max(12px,env(safe-area-inset-bottom))' }}>
-            <button onClick={() => setQIndex(i => Math.max(0, i - 1))} disabled={qIndex === 0}
-              style={{ flex: 1, padding: '13px', borderRadius: 13, border: '1px solid var(--border)', cursor: qIndex === 0 ? 'default' : 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 14, background: 'transparent', color: qIndex === 0 ? 'var(--text-tert)' : 'var(--text-sec)', opacity: qIndex === 0 ? .4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              Prev
-            </button>
-            <button
-              onClick={() => {
-                const live = cardRef.current?.getSelection()
-                handleNext(live?.selectedIdx !== undefined && live.selectedIdx !== null ? { selectedIdx: live.selectedIdx, isCorrect: live.isCorrect } : {})
-              }}
-              style={{ flex: 2, padding: '13px', borderRadius: 13, border: 'none', cursor: 'pointer', background: BLUE, color: '#fff', fontSize: 14, fontWeight: 900, fontFamily: 'inherit', boxShadow: `0 4px 0 #0a3fa0`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-              {qIndex >= questions.length - 1 ? 'Submit' : 'Next'}
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-          </div>
-        </div>
+        <DemoSession
+          ref={cardRef}
+          questions={questions} qIndex={qIndex} answerMap={answerMap}
+          subject={subject} modeLabel={modeLabel}
+          sessionType={sessionType} speedSecs={speedSecs}
+          onJump={setQIndex}
+          onAnswerChange={a => handleAnswerChange(qIndex, a)}
+          onNext={handleNext}
+          onEnd={() => setPhase('home')}
+        />
       )}
 
       {/* ── PRACTICE RESULTS ── */}

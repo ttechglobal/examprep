@@ -10,7 +10,7 @@ export const GOLD   = '#FFB800'
 export const ORANGE = '#FF6A00'
 export const PURPLE = '#7c3aed'
 
-export { LETTERS, normaliseOptions, checkCorrect } from '@/lib/answers'
+export { LETTERS, normaliseOptions, checkCorrect, correctIndex } from '@/lib/answers'
 
 export function pct(a, b)    { return b > 0 ? Math.round((a / b) * 100) : 0 }
 export function msToSecs(ms) { return Math.round(ms / 1000) }

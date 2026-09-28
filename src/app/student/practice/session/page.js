@@ -1,10 +1,27 @@
 'use client'
-// src/app/student/practice/session/page.js
-// Orchestrates a practice session: loads questions, manages phase/state,
-// renders the right screen. All UI components live in @/components/session/.
+// src/app/student/practice/session/page.js — v3
+// ─────────────────────────────────────────────────────────────────────────────
+// A practice session: loads questions, tracks answers, saves the result
+// locally (then syncs), and shows the summary and review.
+//   Screens: SessionFrame (@/components/session/SessionFrame) → SessionSummary
+//   → ReviewSession. All UI lives in @/components/session/.
 //
-// v2: the saved session carries topic_name (the server already stored it, the
-//     page never sent it), so Recent Sessions can show "Topic: …".
+// Modes (config.sessionType / config.mode, from the practice setup sheet)
+//   practice  pick freely, answers revealed at the end
+//   study     instant feedback, two tries, explanation beside the question
+//             (desktop) or behind "See the explanation" (phones)
+//   timed     Speed Round: a countdown per question
+//   config.durationSecs  an overall countdown; without it the clock shows
+//             time spent (practice) or nothing (study, Speed Round)
+//
+// Answers live in answersRef (read by timers and Save, never stale) and are
+// mirrored into state for rendering. "Skipped" = left without an answer.
+//
+// v2: the saved session carries topic_name.
+// v3: new session design (SessionFrame, QuestionPanel, ExplanationBlock,
+//     SessionSummary). Try Again retries the same questions in place. Timers
+//     read answers from a ref, so time-up saves the latest picks.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -13,446 +30,304 @@ import { usePoints } from '@/contexts/PointsContext'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 import { computeSessionXP } from '@/lib/xp'
 
-import { BLUE, CYAN, GREEN, RED, ORANGE, GOLD, pct, msToSecs } from '@/components/session/SessionUtils'
-import { LoadingScreen, ErrorScreen, EndDialog, QuestionNav, SessionTimer, QuestionCountdown } from '@/components/session/SessionPrimitives'
-import { ExplanationBlock } from '@/components/session/ExplanationBlock'
+import { LETTERS, msToSecs } from '@/components/session/SessionUtils'
+import { LoadingScreen, ErrorScreen, EndDialog } from '@/components/session/SessionPrimitives'
+import { SessionFrame, SessionTopBar, SessionClock, QuestionPanel, QuestionGridSheet, SessionBottomBar, sessionStyles as s } from '@/components/session/SessionFrame'
+import { ExplanationBlock, ExplanationSheet, ExplanationTrigger } from '@/components/session/ExplanationBlock'
 import { Calculator } from '@/components/session/Calculator'
 import { QuestionCard } from '@/components/session/QuestionCard'
 import { ReviewSession } from '@/components/session/ReviewSession'
-import SessionResults from '@/components/student/SessionResults'
+import SessionSummary from '@/components/session/SessionSummary'
+import { Bulb } from '@/components/session/icons'
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
+// The first few questions load alone (one fast query) so the session opens
+// quickly; the rest load in the background while the student answers them.
+const FIRST_BATCH = 3
+const MODE_LABEL = { study: 'Study', practice: 'Practice', timed: 'Speed Round', quick5: 'Quick 5', mock: 'Mock Exam' }
+
+function readConfig() {
+  try { return JSON.parse(sessionStorage.getItem('practice_config') || '{}') } catch { return {} }
+}
+
+async function fetchQuestions(params) {
+  const r = await fetch(`/api/student/questions?${new URLSearchParams(params)}`)
+  const d = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(d.detail ?? d.error ?? `Server error ${r.status}`)
+  return d.questions ?? []
+}
+
+function resultFor(q, answer) {
+  const isCorrect = !!answer?.isCorrect
+  return {
+    question_id: q.id, topic_id: q.topic_id, subject_id: q.subject_id,
+    topic_name: q.topic_name || '', subject_name: q.subject_name || '',
+    isCorrect, is_correct: isCorrect,
+    selectedIdx: answer?.selectedIdx ?? null, time_taken_ms: answer?.timeTakenMs ?? 0,
+  }
+}
+
 export default function PracticeSessionPage() {
   const router   = useRouter()
   const { dark } = useTheme()
   const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
 
-  const [phase,        setPhase]       = useState('loading')
-  const [questions,    setQuestions]   = useState([])
-  const [loadingMore,  setLoadingMore] = useState(false)   // background batch in flight
-  const [qIndex,     setQIndex]    = useState(0)
-  const [answerMap,  setAnswerMap] = useState({})
-  const [skipped,    setSkipped]   = useState(new Set())
-  const [config,     setConfig]    = useState(null)
-  const [saveData,   setSaveData]  = useState(null)
-  const [errMsg,     setErrMsg]    = useState('')
-  const [showEnd,    setShowEnd]   = useState(false)
-  const [dialogMode, setDialogMode]= useState('end')
-  const [pendingMap, setPendingMap]= useState(null)
-  const [showCalc,   setShowCalc]  = useState(false)
+  const [phase,     setPhase]     = useState('loading')   // loading | session | saving | results | review | error
+  const [errMsg,    setErrMsg]    = useState('')
+  const [config,    setConfig]    = useState(null)
+  const [questions, setQuestions] = useState([])
+  const [qIndex,    setQIndex]    = useState(0)
+  const [answers,   setAnswers]   = useState({})           // index → { selectedIdx, isCorrect }
+  const [skipped,   setSkipped]   = useState(() => new Set())
+  const [dialog,    setDialog]    = useState(null)         // null | 'end' | 'submit'
+  const [gridOpen,  setGridOpen]  = useState(false)
+  const [expOpen,   setExpOpen]   = useState(false)
+  const [calcOpen,  setCalcOpen]  = useState(false)
+  const [attempt,   setAttempt]   = useState(0)            // remounts the clock on Try Again
+  const [saved,     setSaved]     = useState(null)         // { questions, results, xp, streak, durationSecs }
 
-  const startTimeRef    = useRef(Date.now())
-  const sessionIdRef    = useRef(crypto.randomUUID())
-  const savedResultsRef = useRef(null)   // set by saveSession; read by results + review screens
-  const qColRef         = useRef(null)   // scrollable question column — reset on each question
-  const cardRef         = useRef(null)   // ref to QuestionCard — lets mobile bottom bar read live selection
+  const answersRef   = useRef({})
+  const questionsRef = useRef([])
+  const startedAt    = useRef(Date.now())
+  const sessionId    = useRef(null)
+  const cardRef      = useRef(null)
+  const mainRef      = useRef(null)
 
-  // ── Scroll question column to top on every new question ───────────────────
+  useEffect(() => { questionsRef.current = questions }, [questions])
+  useEffect(() => { mainRef.current?.scrollTo?.(0, 0); setExpOpen(false) }, [qIndex])
+
+  const setAnswer = useCallback((idx, answer) => {
+    answersRef.current = { ...answersRef.current, [idx]: answer }
+    setAnswers(answersRef.current)
+    setSkipped(prev => { if (!prev.has(idx)) return prev; const n = new Set(prev); n.delete(idx); return n })
+  }, [])
+
+  const beginAttempt = useCallback(cfg => {
+    sessionId.current  = crypto.randomUUID()
+    startedAt.current  = Date.now()
+    answersRef.current = {}
+    setAnswers({})
+    setSkipped(new Set())
+    setQIndex(0)
+    setSaved(null)
+    setAttempt(a => a + 1)
+    try { localStorage.setItem('ep_pending_session', JSON.stringify({ session_id: sessionId.current, config: cfg, savedAt: Date.now() })) } catch {}
+    setPhase('session')
+  }, [])
+
+  // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (qColRef.current) qColRef.current.scrollTop = 0
-  }, [qIndex])
-
-  // ── Load questions — progressive ──────────────────────────────────────────
-  // Phase 1: fetch FIRST_BATCH questions immediately → start session fast.
-  //   count=3 hits the questions API fast path (single pool, no year machinery)
-  //   so phase 1 typically completes in one DB round-trip (~100ms).
-  // Phase 2: fetch remaining questions in the background while student answers Q1–Q3.
-  //   This means the student sees Q1 in ~100-200ms instead of waiting for all 20.
-  const FIRST_BATCH = 3
-
-  useEffect(() => {
-    let cfg
-    try { cfg = JSON.parse(sessionStorage.getItem('practice_config') || '{}') }
-    catch { cfg = {} }
+    const cfg = readConfig()
     if (!cfg.subjects?.length && !cfg.subject_id) {
       setErrMsg('No practice configuration found. Go back and set up a session.')
-      setPhase('error'); return
+      setPhase('error')
+      return
     }
     setConfig(cfg)
 
-    const totalCount = cfg.count || 20
-    const baseParams = {
-      exam:     cfg.examType || 'WAEC',
-      subjects: (cfg.subjects || []).join(','),
-      mode:     cfg.mode     || 'practice',
-    }
-    if (cfg.subject_id) baseParams.subject_id = cfg.subject_id
-    if (cfg.topic_id)   baseParams.topic_id   = cfg.topic_id
+    const base = { exam: cfg.examType || 'WAEC', subjects: (cfg.subjects || []).join(','), mode: cfg.mode || 'practice' }
+    if (cfg.subject_id) base.subject_id = cfg.subject_id
+    if (cfg.topic_id)   base.topic_id   = cfg.topic_id
+    let cancelled = false
 
-    // ── Phase 1: first batch ───────────────────────────────────────────────
-    const p1 = new URLSearchParams({ ...baseParams, count: String(FIRST_BATCH) })
-    fetch(`/api/student/questions?${p1}`)
-      .then(r => {
-        if (!r.ok) return r.json().then(d => { throw new Error(d.detail ?? d.error ?? `Server error ${r.status}`) })
-        return r.json()
-      })
-      .then(data => {
-        if (!data.questions?.length) {
-          setErrMsg(`No questions found for ${cfg.subjects?.join(', ')}.`)
-          setPhase('error'); return
+    fetchQuestions({ ...base, count: String(FIRST_BATCH) })
+      .then(first => {
+        if (cancelled) return
+        if (!first.length) {
+          setErrMsg(`No questions found for ${cfg.subjects?.join(', ') || 'this subject'}.`)
+          setPhase('error')
+          return
         }
+        setQuestions(first)
+        beginAttempt(cfg)
 
-        const firstBatch = data.questions
-        setQuestions(firstBatch)
-        startTimeRef.current = Date.now()
-        try { localStorage.setItem('ep_pending_session', JSON.stringify({ session_id: sessionIdRef.current, config: cfg, savedAt: Date.now() })) } catch {}
-        setPhase('session')
-
-        // ── Phase 2: fetch remaining in background ─────────────────────────
-        const remaining = totalCount - firstBatch.length
+        const remaining = (cfg.count || 20) - first.length
         if (remaining <= 0) return
-
-        const seenIds = firstBatch.map(q => q.id).join(',')
-        const p2 = new URLSearchParams({
-          ...baseParams,
-          count:   String(remaining),
-          exclude: seenIds,
-        })
-        setLoadingMore(true)
-        fetch(`/api/student/questions?${p2}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(data2 => {
-            if (data2?.questions?.length) {
-              setQuestions(prev => [...prev, ...data2.questions])
-            }
-          })
-          .catch(() => {}) // non-fatal — student already has first batch
-          .finally(() => setLoadingMore(false))
+        fetchQuestions({ ...base, count: String(remaining), exclude: first.map(q => q.id).join(',') })
+          .then(rest => { if (!cancelled && rest.length) setQuestions(prev => [...prev, ...rest]) })
+          .catch(() => {})   // the session carries on with what it has
       })
       .catch(err => {
+        if (cancelled) return
         setErrMsg(err?.message || 'Failed to load questions. Check your connection and try again.')
         setPhase('error')
       })
-  }, [])
+    return () => { cancelled = true }
+  }, [beginAttempt])
 
-  // ── Record answer ──────────────────────────────────────────────────────────
-  const recordAnswer = useCallback((idx, answer) => {
-    const q = questions[idx]
-    const entry = {
-      question_id: q.id, topic_id: q.topic_id, subject_id: q.subject_id,
-      topic_name: q.topic_name || '', subject_name: q.subject_name || '',
-      isCorrect: answer.isCorrect, is_correct: answer.isCorrect,
-      selectedIdx: answer.selectedIdx, time_taken_ms: answer.timeTakenMs || 0,
-    }
-    setAnswerMap(prev => ({ ...prev, [idx]: entry }))
-    setSkipped(prev => { const s = new Set(prev); s.delete(idx); return s })
-  }, [questions])
-
-  // ── Next / Submit ──────────────────────────────────────────────────────────
-  function handleNext({ selectedIdx, isCorrect } = {}) {
-    const isLast = qIndex >= questions.length - 1
-
-    // Build the updated map synchronously so we never lose the last answer
-    // to React's async batching when saveSession reads answerMap too early.
-    let updatedMap = answerMap
-    if (selectedIdx !== null && selectedIdx !== undefined) {
-      const q = questions[qIndex]
-      const entry = {
-        question_id: q.id, topic_id: q.topic_id, subject_id: q.subject_id,
-        topic_name: q.topic_name || '', subject_name: q.subject_name || '',
-        isCorrect, is_correct: isCorrect, selectedIdx, time_taken_ms: 0,
-      }
-      updatedMap = { ...answerMap, [qIndex]: entry }
-      setAnswerMap(updatedMap)
-      setSkipped(prev => { const s = new Set(prev); s.delete(qIndex); return s })
-    } else {
-      setSkipped(prev => new Set([...prev, qIndex]))
-    }
-
-    if (isLast) {
-      // Pass the fully-updated map directly so saveSession doesn't rely on
-      // stale state captured before React flushes the setAnswerMap above.
-      setDialogMode('submit')
-      setPendingMap(updatedMap)
-      setShowEnd(true)
-    } else {
-      setQIndex(i => i + 1)
-    }
-  }
-
-  // ── Save session ───────────────────────────────────────────────────────────
-  async function saveSession(mapOverride) {
+  // ── Save ───────────────────────────────────────────────────────────────────
+  const saveSession = useCallback(() => {
+    setDialog(null)
     setPhase('saving')
-    const map          = mapOverride ?? answerMap
-    const durationSecs = msToSecs(Date.now() - startTimeRef.current)
-    const results      = questions.map((q, i) => map[i] ?? {
-      question_id: q.id, topic_id: q.topic_id, subject_id: q.subject_id,
-      topic_name: q.topic_name || '', subject_name: q.subject_name || '',
-      isCorrect: false, is_correct: false, selectedIdx: null, time_taken_ms: 0,
-    })
-
-    const correctCount = results.filter(r => r.is_correct).length
+    const qs           = questionsRef.current
+    const map          = answersRef.current
+    const durationSecs = msToSecs(Date.now() - startedAt.current)
+    const results      = qs.map((q, i) => resultFor(q, map[i]))
     const payload = {
-      session_id:      sessionIdRef.current,
-      exam:            config?.examType    || 'WAEC',
-      mode:            config?.mode        || 'practice',
+      session_id:      sessionId.current,
+      exam:            config?.examType || 'WAEC',
+      mode:            config?.mode     || 'practice',
       subject_name:    config?.subjects?.[0] ?? 'Mixed',
       topic_name:      config?.topicName ?? null,
       results,
       duration_secs:   durationSecs,
       questions_count: results.length,
-      correct_count:   correctCount,
+      correct_count:   results.filter(r => r.is_correct).length,
     }
 
-    // Local-first: instant, never fails. Same formula the server uses.
-    const localXP = computeSessionXP(payload.mode, results)
-    saveSessionLocally(payload, localXP)
+    // Local first: instant and offline-safe, same XP formula as the server.
+    const xp = computeSessionXP(payload.mode, results)
+    saveSessionLocally(payload, xp)
     try { localStorage.removeItem('ep_pending_session') } catch {}
-
-    // Freeze the final answers in a ref BEFORE setPhase so that both
-    // SessionResults and ReviewSession always read the complete, correct list —
-    // never a stale answerMap snapshot from React's async state queue.
-    savedResultsRef.current = results
-
-    setTotalPoints((currentXP || 0) + localXP)
-    showXPToast(localXP, 'Practice session done!')
-    // Read local streak (computed by saveSessionLocally → computeAndSaveStreak)
-    const localStreak = readLocalStreak()
-    setSaveData({ xp_awarded: localXP, streak_days: localStreak, duration_secs: durationSecs })
+    setTotalPoints((currentXP || 0) + xp)
+    showXPToast(xp, 'Practice session done!')
+    setSaved({ questions: qs, results, xp, streak: readLocalStreak(), durationSecs })
     setPhase('results')
 
-    // Background sync — update streak from server response if available
     flushSyncQueue().then(synced => {
-      if (synced > 0) {
-        fetch('/api/student/profile')
-          .then(r => r.ok ? r.json() : null)
-          .then(prof => {
-            if (prof?.total_points) setTotalPoints(prof.total_points)
-            if (prof?.streak_days != null) {
-              setSaveData(prev => prev ? { ...prev, streak_days: prof.streak_days } : prev)
-            }
-          })
-          .catch(() => {})
-      }
+      if (!synced) return
+      fetch('/api/student/profile')
+        .then(r => (r.ok ? r.json() : null))
+        .then(prof => {
+          if (prof?.total_points) setTotalPoints(prof.total_points)
+          if (prof?.streak_days != null) setSaved(prev => (prev ? { ...prev, streak: prof.streak_days } : prev))
+        })
+        .catch(() => {})
     }).catch(() => {})
+  }, [config, currentXP, setTotalPoints, showXPToast])
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  const sessionType = config?.sessionType ?? 'practice'
+  const isStudy     = sessionType === 'study'
+  const isSpeed     = config?.mode === 'timed'
+  const total       = questions.length
+  const isLast      = qIndex >= total - 1
+
+  // The pick on screen. Practice records every pick, but read the card too so
+  // a tap followed at once by Next is never lost. Study counts only revealed
+  // answers (a wrong first try isn't an answer yet).
+  function captureCurrent() {
+    if (isStudy) return answersRef.current[qIndex] ?? null
+    const live = cardRef.current?.getSelection()
+    if (live?.selectedIdx != null) { setAnswer(qIndex, live); return live }
+    return answersRef.current[qIndex] ?? null
   }
 
-  const handleTimeUp      = useCallback(() => saveSession(), [answerMap, questions])
-  const handleSpeedTimeUp = useCallback(() => {
-    const q   = questions[qIndex]
-    const entry = { question_id:q.id, topic_id:q.topic_id, subject_id:q.subject_id, topic_name:q.topic_name||'', subject_name:q.subject_name||'', isCorrect:false, is_correct:false, selectedIdx:null, time_taken_ms:(config?.speedSecs??30)*1000 }
-    const newMap = { ...answerMap, [qIndex]: entry }
-    setAnswerMap(newMap)
-    if (qIndex < questions.length - 1) setQIndex(i => i + 1)
-    else saveSession(newMap)
-  }, [qIndex, questions, answerMap, config])
-
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const sessionType     = config?.sessionType ?? 'practice'
-  const isSpeedRound    = config?.mode === 'timed'
-  const hasOverallTimer = !isSpeedRound && !!(config?.durationSecs)
-  const speedSecs       = isSpeedRound ? (config?.speedSecs ?? 30) : null
-  const answeredCount   = Object.keys(answerMap).length
-  // After saveSession runs, read from the frozen ref — not from answerMap state
-  // which React may not have flushed yet when the results/review screens render.
-  const answersArray = savedResultsRef.current
-    ? savedResultsRef.current.map(r => ({ selectedIdx: r.selectedIdx, isCorrect: r.isCorrect ?? r.is_correct }))
-    : questions.map((_, i) => answerMap[i] ?? null)
-  const subjectLabel    = config?.subjects?.[0] ?? ''
-
-  // Called immediately on selection — updates answerMap so the mobile bottom bar
-  // can read the current selection when the student taps Next.
-  // In study mode: also triggers the desktop explanation panel to update.
-  // In practice mode: records the selection so mobile Next doesn't submit a blank answer.
-  const handleAnswerChange = useCallback(({ selectedIdx, isCorrect }) => {
-    recordAnswer(qIndex, { isCorrect, selectedIdx, timeTakenMs: 0 })
-  }, [qIndex, recordAnswer])
-
-  const modeLabel       = { study:'Study', practice:'Practice', timed:'Speed Round', quick5:'Quick 5', mock:'Mock Exam' }[config?.mode] ?? 'Practice'
-  const q               = questions[qIndex]
-
-  const navAnswerMap = {}
-  for (let i = 0; i < questions.length; i++) {
-    navAnswerMap[i] = { answered:!!answerMap[i], correct:answerMap[i]?.isCorrect??null, skipped:skipped.has(i) }
+  function goTo(i) {
+    const target = Math.min(Math.max(i, 0), total - 1)
+    if (target === qIndex) return
+    if (!captureCurrent()) setSkipped(prev => new Set(prev).add(qIndex))
+    setQIndex(target)
   }
 
-  // ── Phase routing ──────────────────────────────────────────────────────────
-  if (phase==='loading'||phase==='saving') return <LoadingScreen/>
-  if (phase==='error')   return <ErrorScreen message={errMsg} onBack={() => router.push('/student/practice')}/>
-  if (phase==='review')  return <ReviewSession questions={questions} answers={answersArray} onDone={() => setPhase('results')} dark={dark}/>
-  if (phase==='results') return (
-    <SessionResults
-      questions={questions} answers={answersArray} config={config}
-      xpAwarded={saveData?.xp_awarded??0} streakDays={saveData?.streak_days??0}
-      durationSecs={saveData?.duration_secs ?? msToSecs(Date.now() - startTimeRef.current)}
-      onRetry={() => router.push('/student/practice?modal=1')}
-      onHome={() => router.push('/student/practice')}
-      onReview={() => setPhase('review')}
-      dark={dark}
-    />
-  )
+  function next() {
+    if (!isLast) return goTo(qIndex + 1)
+    if (!captureCurrent()) setSkipped(prev => new Set(prev).add(qIndex))
+    setDialog('submit')
+  }
 
-  // ── Active session ─────────────────────────────────────────────────────────
+  // Speed Round: time's up on this question — keep any pick, move on.
+  function onSpeedTimeUp() {
+    if (isLast) { captureCurrent(); saveSession() } else goTo(qIndex + 1)
+  }
+
+  function onTimeUp() { captureCurrent(); saveSession() }
+
+  // ── Screens ────────────────────────────────────────────────────────────────
+  if (phase === 'loading') return <LoadingScreen />
+  if (phase === 'saving')  return <LoadingScreen message="Saving your results…" />
+  if (phase === 'error')   return <ErrorScreen message={errMsg} onBack={() => router.push('/student/practice')} />
+
+  if (phase === 'results' || phase === 'review') {
+    const finalAnswers = saved.results.map(r => ({ selectedIdx: r.selectedIdx, isCorrect: r.isCorrect }))
+    const subject = config?.subjects?.[0] || 'Practice'
+    return phase === 'review' ? (
+      <ReviewSession questions={saved.questions} answers={finalAnswers} title={subject} onDone={() => setPhase('results')} />
+    ) : (
+      <SessionSummary
+        questions={saved.questions} answers={finalAnswers} config={config}
+        xpAwarded={saved.xp} streakDays={saved.streak} durationSecs={saved.durationSecs}
+        onRetry={() => beginAttempt(config)} retryNote="Retry these questions"
+        onReview={() => setPhase('review')}
+        onHome={() => router.push('/student/practice')}
+      />
+    )
+  }
+
+  const q          = questions[qIndex]
+  const answer     = answers[qIndex] ?? null
+  const answered   = Object.keys(answers).length
+  const selectedKey = answer?.selectedIdx != null ? LETTERS[answer.selectedIdx] : null
+  const stateOf = i => {
+    const a = answers[i]
+    if (a) return isStudy ? (a.isCorrect ? 'correct' : 'wrong') : 'answered'
+    return skipped.has(i) ? 'skipped' : undefined
+  }
+
+  const clock = config?.durationSecs && !isSpeed
+    ? <SessionClock key={attempt} limitSecs={config.durationSecs} onTimeUp={onTimeUp} />
+    : !isStudy && !isSpeed ? <SessionClock key={attempt} /> : null
+
+  const aside = isStudy ? (
+    answer && q?.explanation
+      ? <ExplanationBlock question={q} isCorrect={answer.isCorrect} selectedKey={selectedKey} />
+      : (
+        <div className={s.asideEmpty}>
+          <span aria-hidden="true"><Bulb size={26} /></span>
+          <strong>{answer ? 'No explanation yet' : 'Explanation'}</strong>
+          {answer ? 'This question doesn’t have a worked explanation yet.' : 'Answer the question to see how it’s solved.'}
+        </div>
+      )
+  ) : null
+
   return (
-    <>
-      <style>{`
-        * { box-sizing: border-box }
-        @keyframes spin { to { transform: rotate(360deg) } }
-        /* user-select removed: was suppressing tap events on iOS in some scroll contexts */
-        @media (min-width: 1024px) {
-          .session-body { flex-direction: row !important; }
-          .session-nav-col {
-            width: 200px !important; flex-shrink: 0 !important;
-            overflow-y: auto !important; min-height: 0 !important;
-            border-right: 1px solid var(--border) !important;
-            padding: 16px 12px !important;
-          }
-          .session-q-col { flex: 1 !important; min-width: 0 !important; max-width: 680px !important; min-height: 0 !important; overflow-y: auto !important; padding: 32px 40px !important; }
-          .session-q-col-light { background: #EBF0FF !important; }
-          .session-exp-col { flex: 1 !important; min-width: 360px !important; max-width: 560px !important; flex-shrink: 0 !important; min-height: 0 !important; overflow-y: auto !important; padding: 32px 28px 32px 0 !important; border-left: 1px solid var(--border) !important; }
-          .session-nav-bottom { display: none !important; }
-        }
-        @media (max-width: 1023px) {
-          .session-nav-col { display: none !important; }
-          .session-exp-col { display: none !important; }
-          /* leave room for the fixed Prev/Next bar at the bottom */
-          .session-q-col { padding-bottom: 80px !important; }
-          /* hide QuestionCard's inline nav on mobile — bottom bar handles it */
-          .session-q-col .qcard-nav { display: none !important; }
-        }
-      `}</style>
-
-      <div style={{ position:'fixed', inset:0, zIndex:1000, background:'var(--bg-base)', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-
-      {showEnd && (
-        <EndDialog
-          answered={answeredCount} total={questions.length} mode={dialogMode}
-          onConfirm={() => { setShowEnd(false); saveSession(pendingMap ?? undefined) }}
-          onCancel={() => { setShowEnd(false); setPendingMap(null) }}
+    <SessionFrame
+      mainRef={mainRef}
+      top={
+        <SessionTopBar
+          backLabel="End" onBack={() => setDialog('end')}
+          title={config?.subjects?.[0] || 'Practice'}
+          subtitle={config?.topicName || MODE_LABEL[config?.mode] || 'Practice'}
+          clock={clock}
+          calcOpen={calcOpen} onCalc={() => setCalcOpen(o => !o)}
+          current={qIndex} total={total} answered={answered}
+          onOpenGrid={() => setGridOpen(true)}
         />
+      }
+      panel={<QuestionPanel total={total} current={qIndex} stateOf={stateOf} graded={isStudy} onJump={goTo} onViewAll={() => setGridOpen(true)} />}
+      aside={aside}
+      bottom={
+        <SessionBottomBar
+          onPrev={() => goTo(qIndex - 1)} prevDisabled={qIndex === 0}
+          onNext={next} nextLabel={isLast ? 'Submit' : 'Next'}
+        />
+      }
+      overlay={<>
+        {gridOpen && <QuestionGridSheet total={total} current={qIndex} stateOf={stateOf} graded={isStudy} onJump={goTo} onClose={() => setGridOpen(false)} />}
+        {expOpen && q && (
+          <ExplanationSheet
+            question={q} isCorrect={!!answer?.isCorrect} selectedKey={selectedKey}
+            position={{ current: qIndex, total }} onClose={() => setExpOpen(false)}
+          />
+        )}
+        {dialog && <EndDialog answered={answered} total={total} mode={dialog} onConfirm={saveSession} onCancel={() => setDialog(null)} />}
+        {calcOpen && <Calculator onClose={() => setCalcOpen(false)} dark={dark} />}
+      </>}
+    >
+      {q && (
+        <>
+          <QuestionCard
+            ref={cardRef}
+            key={`${attempt}-${q.id}-${qIndex}`}
+            question={q} qIndex={qIndex}
+            sessionType={sessionType}
+            speedSecs={isSpeed ? (config?.speedSecs ?? 30) : null}
+            onSpeedTimeUp={onSpeedTimeUp}
+            alreadyAnswered={answer}
+            onAnswerChange={a => setAnswer(qIndex, a)}
+          />
+          {isStudy && answer && <ExplanationTrigger question={q} isCorrect={answer.isCorrect} onOpen={() => setExpOpen(true)} />}
+        </>
       )}
-      {showCalc && <Calculator onClose={() => setShowCalc(false)} dark={dark}/>}
-
-        {/* TOP BAR */}
-        <div style={{ background:'var(--bg-card)', borderBottom:'1px solid var(--border)', padding:'0 16px', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', height:52 }}>
-            <button onClick={() => { setDialogMode('end'); setShowEnd(true) }}
-              style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', color:'var(--text-tert)', fontSize:13, fontWeight:700, padding:0 }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              End
-            </button>
-            <div style={{ textAlign:'center', flex:1, padding:'0 10px' }}>
-              <div style={{ fontSize:14, fontWeight:900, color:'var(--text-prim)' }}>{subjectLabel || 'Practice Session'}</div>
-              {config?.topicName && <div style={{ fontSize:11, color:'var(--text-tert)', marginTop:1 }}>{config.topicName}</div>}
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              {hasOverallTimer && <SessionTimer durationSecs={config.durationSecs} onTimeUp={handleTimeUp}/>}
-              <button onClick={() => setShowCalc(c => !c)}
-                style={{ width:32, height:32, borderRadius:9, background:showCalc?`${BLUE}15`:'var(--bg-subtle)', border:`1px solid ${showCalc?BLUE:'var(--border)'}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:showCalc?BLUE:'var(--text-tert)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M8 9h2M14 9h2M8 13h2M14 13h2M8 17h2M14 17h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              </button>
-              <span style={{ fontSize:12, fontWeight:800, color:'var(--text-tert)', fontVariantNumeric:'tabular-nums' }}>
-                {qIndex+1}<span style={{ color:'var(--border-strong)' }}>/</span>{questions.length}
-              </span>
-            </div>
-          </div>
-          <div style={{ height:4, background:'var(--bg-subtle)', overflow:'hidden', borderRadius:999 }}>
-            <div style={{ height:'100%', width:`${pct(answeredCount, questions.length)}%`, background:`linear-gradient(90deg,${BLUE},${CYAN})`, borderRadius:999, transition:'width .35s ease' }}/>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0 9px' }}>
-            <span style={{ fontSize:11, fontWeight:800, padding:'2px 9px', borderRadius:999, background:`${BLUE}12`, color:BLUE }}>{modeLabel}</span>
-            <span style={{ fontSize:11, fontWeight:700, color:'var(--text-tert)' }}>{answeredCount}/{questions.length} answered</span>
-          </div>
-        </div>
-
-        {/* BODY */}
-        <div className="session-body" style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0 }}>
-
-          {/* LEFT: question navigator (desktop) */}
-          <div className="session-nav-col" style={{ background:'var(--bg-card)' }}>
-            <div style={{ fontSize:11, fontWeight:900, color:'var(--text-tert)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10 }}>Questions</div>
-            <QuestionNav total={questions.length} current={qIndex} answerMap={navAnswerMap} onJump={setQIndex} sessionType={sessionType} inline={true}/>
-          </div>
-
-          {/* CENTRE: question card */}
-          <div className={`session-q-col${!dark ? ' session-q-col-light' : ''}`} ref={qColRef} style={{ flex:1, overflowY:'auto', padding:'20px 16px' }}>
-            <style>{`
-              .session-q-nav-mobile { display: none; }
-              @media (max-width: 1023px) {
-                .session-q-nav-mobile { display: block; margin-top: 16px; }
-              }
-              .session-q-card-wrap {
-                border-radius: 18px;
-                padding: 20px 16px;
-              }
-              .session-q-card-wrap-light {
-                background: #fff;
-                box-shadow: 0 2px 16px rgba(6,42,120,.08);
-              }
-              @media (max-width: 1023px) {
-                .session-q-card-wrap-dark-mobile { background: transparent !important; box-shadow: none !important; }
-              }
-            `}</style>
-            {q && (
-              <div className={`session-q-card-wrap${!dark ? ' session-q-card-wrap-light' : ''}`}>
-                <QuestionCard
-                  ref={cardRef}
-                  key={q.id + '-' + qIndex}
-                  question={q}
-                  qIndex={qIndex}
-                  total={questions.length}
-                  onNext={handleNext}
-                  onAnswerChange={handleAnswerChange}
-                  onPrev={() => setQIndex(i => Math.max(0, i-1))}
-                  sessionType={sessionType}
-                  speedSecs={speedSecs}
-                  onSpeedTimeUp={handleSpeedTimeUp}
-                  dark={dark}
-                  alreadyAnswered={answerMap[qIndex] ?? null}
-                  reviewMode={false}
-                  hideExplanation={sessionType !== 'study'}
-                  hideNav={false}
-                />
-              </div>
-            )}
-            {/* Mobile: numbered question grid — BELOW the card */}
-            <div className="session-q-nav-mobile">
-              <QuestionNav total={questions.length} current={qIndex} answerMap={navAnswerMap} onJump={setQIndex} sessionType={sessionType} inline={true}/>
-            </div>
-          </div>
-
-          {/* RIGHT: explanation panel (desktop, study mode only) */}
-          {sessionType === 'study' && (
-            <div className="session-exp-col" style={{ overflowY:'auto', background:'var(--bg-base)', padding: answerMap[qIndex] ? '0' : '0' }}>
-              {q?.explanation && answerMap[qIndex] ? (
-                <ExplanationBlock explanation={q.explanation} isCorrect={answerMap[qIndex]?.isCorrect} dark={dark}/>
-              ) : (
-                // Empty panel while question is unanswered — keeps layout stable
-                <div style={{ height:'100%' }}/>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* BOTTOM: mobile only — Prev / Next / Submit */}
-        <div className="session-nav-bottom" style={{ borderTop:'1px solid var(--border)', background:'var(--bg-card)', padding:'10px 14px 12px', display:'flex', gap:10, flexShrink:0 }}>
-          <button
-            onClick={() => setQIndex(i => Math.max(0, i - 1))}
-            disabled={qIndex === 0}
-            style={{ flex:1, padding:'13px', borderRadius:13, border:'1px solid var(--border)', cursor:qIndex===0?'default':'pointer', fontFamily:'inherit', fontWeight:700, fontSize:14, background:'transparent', color:qIndex===0?'var(--text-tert)':'var(--text-sec)', opacity:qIndex===0?.4:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Prev
-          </button>
-          <button
-            onClick={() => {
-              // Read the live selection directly from QuestionCard's ref.
-              // This is the mobile-safe path: React's async state batching means
-              // answerMap[qIndex] may not yet reflect the tap that just happened
-              // when the student taps an option and immediately hits Next on mobile.
-              // cardRef.getSelection() reads a synchronous ref that is updated
-              // in the same event handler as setSelected(), so it's always current.
-              const live = cardRef.current?.getSelection()
-              handleNext(live?.selectedIdx !== undefined && live.selectedIdx !== null
-                ? { selectedIdx: live.selectedIdx, isCorrect: live.isCorrect }
-                : {}
-              )
-            }}
-            style={{ flex:2, padding:'13px', borderRadius:13, border:'none', cursor:'pointer', background:BLUE, color:'#fff', fontSize:14, fontWeight:900, fontFamily:'inherit', boxShadow:`0 4px 0 #0a3fa0`, display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-            {qIndex >= questions.length - 1 ? 'Submit' : 'Next'}
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </div>
-      </div>
-    </>
+    </SessionFrame>
   )
 }
