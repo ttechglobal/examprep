@@ -4,27 +4,23 @@
 // POST   — insert array of formula rows
 // PATCH  — update a single formula by id
 // DELETE — delete a single formula by id
+//
+// v2 (29 Sep 2026): uses the shared requireAdmin() (signed admin cookie). The local
+// requireAdmin() checked only for a Supabase login, which returned 401 to admins signed
+// in with the admin password (see ADMIN_AUTH_FIX.md).
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 
 const svc = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-async function requireAdmin() {
-  // Admin pages are protected by the session cookie (AdminLayout redirects if no cookie).
-  // Here we just verify the Supabase session is valid — same as every other admin API route.
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user ?? null
-}
-
 export async function POST(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin()
+  if (authError) return authError
 
   const { formulas } = await request.json()
   if (!Array.isArray(formulas) || formulas.length === 0) {
@@ -41,8 +37,8 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin()
+  if (authError) return authError
 
   const { id, ...updates } = await request.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -54,8 +50,8 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authError = await requireAdmin()
+  if (authError) return authError
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')

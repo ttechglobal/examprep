@@ -1,9 +1,11 @@
 // src/app/api/admin/video-lessons/route.js
 // GET  /api/admin/video-lessons         — list all video lessons (with filters)
 // POST /api/admin/video-lessons         — create new video lesson
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login
+// check (it returned 401 to admins signed in with the admin password), and created_by
+// is no longer written: the admin password login has no user identity. See ADMIN_AUTH_FIX.md.
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
 
@@ -54,10 +56,6 @@ export async function POST(request) {
   const adminError = await requireAdmin()
   if (adminError) return adminError
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const body = await request.json()
   const {
     title, lesson_type, exam_type,
@@ -85,7 +83,6 @@ export async function POST(request) {
       visual_directions:  visual_directions ?? [],
       practice_questions: practice_questions ?? [],
       status:             status ?? 'draft',
-      created_by:         user.id,
     })
     .select('id')
     .single()

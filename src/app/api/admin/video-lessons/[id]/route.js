@@ -2,9 +2,9 @@
 // GET    /api/admin/video-lessons/[id]  — fetch full video lesson
 // PATCH  /api/admin/video-lessons/[id]  — update (content or status)
 // DELETE /api/admin/video-lessons/[id]  — delete
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
 
@@ -40,10 +40,6 @@ export async function PATCH(request, { params }) {
   if (adminError) return adminError
 
   const { id } = await params
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
 
@@ -82,10 +78,6 @@ export async function DELETE(request, { params }) {
   if (adminError) return adminError
 
   const { id } = await params
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const db = service()
   const { error } = await db

@@ -1,8 +1,8 @@
 // src/app/api/admin/questions/batches/route.js
 // Returns upload batch history, optionally filtered by subjectId and examType.
 // Separate from /api/admin/questions/batch (which creates batches — POST only).
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
 
-import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
@@ -15,10 +15,6 @@ const svc = () => createServiceClient(
 export async function GET(request) {
   const adminError = await requireAdmin()
   if (adminError) return adminError
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')

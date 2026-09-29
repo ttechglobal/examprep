@@ -19,6 +19,8 @@
 //
 // Returns:
 //   { fetched, new: N, duplicate: N, saved: N, errors: [...], questions: [...] }
+//
+// v2 (29 Sep 2026): no longer writes created_by. The admin password login has no user identity, and `user` was undefined here, so every call crashed with a ReferenceError (see ADMIN_AUTH_FIX.md).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -317,7 +319,6 @@ export async function POST(request) {
       total:      rawQuestions.length,
       saved,
       errors:     errors.length,
-      created_by: user.id,
       // Store extra context in a notes field if it exists; safe to fail
     }).catch(() => {})
   }

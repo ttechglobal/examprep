@@ -3,28 +3,31 @@
 // MyQuest API — Bulk Import (raw, no enrichment)
 // Used by the year-range bulk import mode where questions are saved directly
 // without going through the Claude enrichment step.
+// Called by: app/admin/questions/myquest-import/page.js
 //
 // POST /api/admin/myquest/import
-// Body: { mqSubject, exam, year, subjectId, examType, limit?, dryRun? }
+// Body: { exam, examYearId, mqSubject, year, subjectId, examType, dryRun? }
+//   exam, examYearId, mqSubject — MyQuest's own values from /api/admin/myquest/meta
+//   year                        — the year label saved on each question
+//   subjectId, examType         — the ExamPrep subject row the questions go into
+//
+// v2 (29 Sep 2026): fetches every page of the paper through lib/server/myquest
+// (v1 stopped at 50, so questions 51+ of every paper were dropped), sends
+// MyQuest's own exam / exam_year_id / subject values, and reports auth / HTTP
+// failures as errors instead of "no questions".
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { requireAdmin } from '@/lib/adminAuth'
 import { NextResponse } from 'next/server'
-
-const MYQUEST_BASE = 'https://api.myquest.com.ng/api'
+import { ALL_EXAMS } from '@/lib/constants'
+import { fetchAllQuestions, MyQuestError, isShortText } from '@/lib/server/myquest'
 
 const svc = () =>
   createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
-
-function getApiKey() {
-  const key = process.env.MYQUEST_API_KEY
-  if (!key) throw new Error('MYQUEST_API_KEY environment variable is not set')
-  return key
-}
 
 // ── Infer difficulty from question text ───────────────────────────────────────
 function inferDifficulty(q) {
@@ -82,56 +85,6 @@ function mapQuestion(mq, { subjectId, examType, year }) {
   }
 }
 
-// ── Fetch from MyQuest with pagination ───────────────────────────────────────
-async function fetchFromMyQuest({ mqSubject, exam, year, limit = 50 }) {
-  const apiKey = getApiKey()
-
-  async function fetchPage(page) {
-    const res = await fetch(`${MYQUEST_BASE}/questions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ exam, exam_year_id: parseInt(year, 10), subject: mqSubject, page }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(30_000),
-    })
-
-    let json
-    try { json = await res.json() } catch {
-      throw new Error(`MyQuest returned non-JSON (HTTP ${res.status})`)
-    }
-
-    if (!res.ok || !json.success) {
-      return { noData: true, questions: [], pagination: null }
-    }
-
-    return {
-      noData: false,
-      questions: json.data?.questions ?? [],
-      pagination: json.data?.pagination ?? null,
-    }
-  }
-
-  const page1 = await fetchPage(1)
-  if (page1.noData || !page1.questions.length) {
-    return { noData: true, questions: [], message: 'No questions for this combination' }
-  }
-
-  let all = [...page1.questions]
-  const totalPages = page1.pagination?.total_pages ?? 1
-
-  if (totalPages > 1 && all.length < limit) {
-    try {
-      const page2 = await fetchPage(2)
-      if (!page2.noData) all = [...all, ...page2.questions]
-    } catch { /* non-fatal */ }
-  }
-
-  return { noData: false, questions: all.slice(0, limit) }
-}
-
 // ── Deduplication (same logic as sdash import) ────────────────────────────────
 async function deduplicateQuestions(db, questions, subjectId, examType) {
   if (!questions.length) return { newQuestions: [], duplicates: 0 }
@@ -182,13 +135,14 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { mqSubject, exam, year, subjectId, examType, limit = 50, dryRun = false } = body
+  const { exam, examYearId, mqSubject, year, subjectId, examType, dryRun = false } = body ?? {}
 
-  if (!mqSubject)  return NextResponse.json({ error: 'mqSubject is required' },  { status: 400 })
-  if (!exam)       return NextResponse.json({ error: 'exam is required' },        { status: 400 })
-  if (!year)       return NextResponse.json({ error: 'year is required' },        { status: 400 })
-  if (!subjectId)  return NextResponse.json({ error: 'subjectId is required' },  { status: 400 })
-  if (!examType)   return NextResponse.json({ error: 'examType is required' },   { status: 400 })
+  if (!isShortText(exam))            return NextResponse.json({ error: 'exam is required' },        { status: 400 })
+  if (!isShortText(examYearId))      return NextResponse.json({ error: 'examYearId is required' },  { status: 400 })
+  if (!isShortText(mqSubject))       return NextResponse.json({ error: 'mqSubject is required' },   { status: 400 })
+  if (!isShortText(year))            return NextResponse.json({ error: 'year is required' },        { status: 400 })
+  if (!isShortText(subjectId))       return NextResponse.json({ error: 'subjectId is required' },   { status: 400 })
+  if (!ALL_EXAMS.includes(examType)) return NextResponse.json({ error: `examType must be one of: ${ALL_EXAMS.join(', ')}` }, { status: 400 })
 
   const db = svc()
   const errors = []
@@ -196,15 +150,18 @@ export async function POST(request) {
   // 1. Fetch from MyQuest
   let fetchResult
   try {
-    fetchResult = await fetchFromMyQuest({ mqSubject, exam, year, limit })
+    fetchResult = await fetchAllQuestions({ exam, examYearId, subject: mqSubject })
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 502 })
+    console.error('[myquest/import]', err.message)
+    const status = err instanceof MyQuestError ? err.status : 500
+    const message = err instanceof MyQuestError ? err.message : 'Could not fetch questions from MyQuest'
+    return NextResponse.json({ error: message }, { status })
   }
 
-  if (fetchResult.noData) {
+  if (!fetchResult.questions.length) {
     return NextResponse.json({
       fetched: 0, new: 0, duplicate: 0, saved: 0, errors: [], noData: true,
-      message: `MyQuest: no questions for ${mqSubject} / ${exam} / ${year}`,
+      message: `MyQuest: no questions for ${mqSubject} / ${exam} / ${year}${fetchResult.message ? ` (${fetchResult.message})` : ''}`,
     })
   }
 
@@ -237,6 +194,7 @@ export async function POST(request) {
       duplicate: duplicates,
       saved: 0,
       errors,
+      truncated: fetchResult.truncated,
       questions: newQuestions.slice(0, 10),
       dryRun: true,
     })
@@ -272,5 +230,6 @@ export async function POST(request) {
     duplicate: duplicates,
     saved,
     errors,
+    truncated: fetchResult.truncated,
   })
 }

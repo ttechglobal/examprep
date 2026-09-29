@@ -1,6 +1,8 @@
 // src/app/api/admin/access-codes/route.js
 // GET  — list all codes with redemption stats
 // POST — generate one or bulk codes
+//
+// v2 (29 Sep 2026): no longer writes created_by. The admin password login has no user identity, and `user` was undefined here, so every call crashed with a ReferenceError (see ADMIN_AUTH_FIX.md).
 
 import { requireAdmin }              from '@/lib/adminAuth'
 import { createClient as svcClient } from '@supabase/supabase-js'
@@ -125,7 +127,6 @@ export async function POST(request) {
       uses_count:   0,
       is_active:    true,
       expires_at:   expires_at ?? null,
-      created_by:   user.id,
       metadata:     { note: note || null, prefix: prefix || null },
     })
   }

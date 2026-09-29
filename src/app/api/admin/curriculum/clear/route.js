@@ -1,4 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+// src/app/api/admin/curriculum/clear/route.js
+// GET previews and DELETE clears all topics + subtopics of one subject.
+// Called by: app/admin/curriculum/upload/page.js
+//
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
+
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
@@ -40,10 +45,6 @@ export async function GET(request) {
 export async function DELETE(request) {
   const adminError = await requireAdmin()
   if (adminError) return adminError
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
   const subjectId = searchParams.get('subjectId')

@@ -4,16 +4,22 @@
 // MyQuest API Import Engine — Admin UI
 //
 // Flow (identical to S-Dash import):
-//   1. Pick subject + exam type + year
-//   2. Fetch questions from MyQuest API (preview 5, then fetch full batch)
+//   1. Pick MyQuest exam → year → subject (each list comes from MyQuest),
+//      and the ExamPrep subject the questions are saved into
+//   2. Fetch questions from MyQuest API (preview 5, then fetch the full paper)
 //   3. Generate enrichment prompt → copy to Claude/ChatGPT
 //   4. Paste AI response back → Tag Review
 //   5. Save to the same question bank
 //
 // Only what changes vs. S-Dash:
 //   • API calls go to /api/admin/myquest/* instead of /api/admin/sdash/*
-//   • Subject slugs use MyQuest format (e.g. "use-of-english" not "english")
-//   • Exam type is passed as "WAEC" / "JAMB" directly (not "wassce" / "utme")
+//   • Exam, year and subject are MyQuest's own values from /api/admin/myquest/meta,
+//     sent back unchanged (e.g. subject "Government", not a slug we invent)
+//
+// v2 (29 Sep 2026): the hard-coded MYQUEST_SLUG_MAP and the 1999→today year list
+// are gone. They sent subject names MyQuest doesn't use (so most fetches came back
+// empty), offered years MyQuest doesn't have, and mapped Civic Education →
+// Government and Further Maths → Mathematics, saving the wrong subject's questions.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -21,67 +27,55 @@ import Link from 'next/link'
 import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
 import { MathText } from '@/lib/mathRenderer'
 import { heldQuestionsStore } from '@/lib/heldQuestionsStore'
+import { ALL_EXAMS } from '@/lib/constants'
 
-// ── MyQuest subject slug map ──────────────────────────────────────────────────
-// Maps ExamPrep subject name → MyQuest API subject slug.
-// MyQuest slugs are lowercase, hyphenated where needed.
-// Lookup is case-insensitive.
-const MYQUEST_SLUG_MAP = {
-  // Accounting
-  'accounting':                    'accounting',
-  // Agriculture
-  'agriculture':                   'agriculture',
-  'agricultural science':          'agriculture',
-  'agric science':                 'agriculture',
-  'agric':                         'agriculture',
-  // Biology
-  'biology':                       'biology',
-  // Chemistry
-  'chemistry':                     'chemistry',
-  // Civic Education
-  'civic education':               'government',    // closest MyQuest equivalent
-  'civic':                         'government',
-  // Commerce
-  'commerce':                      'commerce',
-  // Computer
-  'computer':                      'computer',
-  'computer studies':              'computer',
-  'computer science':              'computer',
-  // CRK
-  'crk':                           'crk',
-  'christian religious knowledge': 'crk',
-  'christian religious studies':   'crk',
-  // Economics
-  'economics':                     'economics',
-  // English Language
-  'english':                       'use-of-english',
-  'english language':              'use-of-english',
-  'use of english':                'use-of-english',
-  // Literature in English
-  'english literature':            'literature-in-english',
-  'literature':                    'literature-in-english',
-  'literature in english':         'literature-in-english',
-  // Geography
-  'geography':                     'geography',
-  // Government
-  'government':                    'government',
-  // History
-  'history':                       'history',
-  // IRK
-  'irk':                           'irk',
-  'islamic religious knowledge':   'irk',
-  'islamic studies':               'irk',
-  // Mathematics
-  'mathematics':                   'mathematics',
+// ── Suggest the ExamPrep subject for a MyQuest subject ───────────────────────
+// Only a suggestion for the "Save into" dropdown; the admin sees it and can
+// change it. Nothing here is sent to MyQuest. Different subjects are never
+// aliased to each other (Civic Education ≠ Government, Further Maths ≠ Maths).
+const SUBJECT_NAME_ALIASES = {
+  'english':                       'english language',
+  'use of english':                'english language',
+  'literature':                    'literature in english',
+  'english literature':            'literature in english',
+  'agriculture':                   'agricultural science',
+  'agric':                         'agricultural science',
+  'agric science':                 'agricultural science',
+  'crk':                           'christian religious studies',
+  'crs':                           'christian religious studies',
+  'christian religious knowledge': 'christian religious studies',
+  'irk':                           'islamic studies',
+  'irs':                           'islamic studies',
+  'islamic religious knowledge':   'islamic studies',
+  'islamic religious studies':     'islamic studies',
   'maths':                         'mathematics',
-  'further mathematics':           'mathematics',
-  'further maths':                 'mathematics',
-  // Physics
-  'physics':                       'physics',
+  'general mathematics':           'mathematics',
+  'further maths':                 'further mathematics',
+  'computer':                      'computer studies',
+  'computer science':              'computer studies',
+  'civic':                         'civic education',
 }
 
-// ── Subjects with no MyQuest equivalent ──────────────────────────────────────
-const NO_MYQUEST_EQUIVALENT = new Set(['arabic', 'hausa', 'igbo', 'yoruba', 'fine art', 'visual art', 'insurance'])
+function canonicalSubjectName(name) {
+  const key = baseSubjectName(name).toLowerCase().replace(/[^a-z]+/g, ' ').trim()
+  return SUBJECT_NAME_ALIASES[key] ?? key
+}
+
+// Prefer the row for the same exam; otherwise any row with the same subject.
+function suggestSubjectId(mqSubjectName, mqExam, subjects) {
+  if (!mqSubjectName) return ''
+  const wanted = canonicalSubjectName(mqSubjectName)
+  const sameName = subjects.filter(s => canonicalSubjectName(s.name) === wanted)
+  const sameExam = sameName.find(s => s.exam_type === String(mqExam).toUpperCase())
+  return (sameExam ?? sameName[0])?.id ?? ''
+}
+
+// The year saved on each question: the 4-digit year in the MyQuest year entry.
+function yearLabelOf(item) {
+  if (!item) return ''
+  const m = `${item.label} ${item.value}`.match(/\b(19|20)\d{2}\b/)
+  return m ? m[0] : item.label
+}
 
 // ── Normalize a raw MyQuest question to the shape mergeSdashEnrichment expects ─
 // mergeSdashEnrichment reads q.option.a / q.option.A / q.answer.
@@ -130,11 +124,6 @@ function mqQuestionReferencesImage(q) {
   if (q.image) return true
   const text = (q.question ?? q.question_text ?? '').toLowerCase()
   return MQ_IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
-}
-
-function slugForSubject(name) {
-  const key = name.toLowerCase().trim()
-  return MYQUEST_SLUG_MAP[key] ?? null
 }
 
 function baseSubjectName(name) {
@@ -311,36 +300,37 @@ function ImportResult({ result }) {
   )
 }
 
+const SELECT_CLASS = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-gray-50 disabled:text-gray-400'
+
 // ── Year range builder ────────────────────────────────────────────────────────
-function YearRangePicker({ value, onChange }) {
-  const currentYear = new Date().getFullYear()
-  const years = []
-  for (let y = currentYear; y >= 1999; y--) years.push(y)
+// `years` is MyQuest's year list for the chosen exam ({ value, label }), so only
+// years MyQuest actually has can be picked.
+function YearRangePicker({ years, value, onChange }) {
+  const selectClass = 'px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400'
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <select
-        value={value.from}
-        onChange={e => onChange({ ...value, from: e.target.value })}
-        className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-      >
+      <select value={value.from} onChange={e => onChange({ ...value, from: e.target.value })} className={selectClass}>
         <option value="">From year…</option>
-        {years.map(y => <option key={y} value={y}>{y}</option>)}
+        {years.map(y => <option key={y.value} value={y.value}>{y.label}</option>)}
       </select>
       <span className="text-gray-400 text-sm font-medium">→</span>
-      <select
-        value={value.to}
-        onChange={e => onChange({ ...value, to: e.target.value })}
-        className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-      >
+      <select value={value.to} onChange={e => onChange({ ...value, to: e.target.value })} className={selectClass}>
         <option value="">To year…</option>
-        {years.map(y => <option key={y} value={y}>{y}</option>)}
+        {years.map(y => <option key={y.value} value={y.value}>{y.label}</option>)}
       </select>
     </div>
   )
 }
 
-const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_YEAR = String(CURRENT_YEAR - 1)
+// MyQuest year entries from `from` to `to` (either order), oldest first.
+function yearsInRange(years, range) {
+  const i = years.findIndex(y => y.value === range.from)
+  const j = years.findIndex(y => y.value === range.to)
+  if (i < 0 || j < 0) return []
+  return years
+    .slice(Math.min(i, j), Math.max(i, j) + 1)
+    .sort((a, b) => yearLabelOf(a).localeCompare(yearLabelOf(b)))
+}
 
 // ── Illustration Panel (same as S-Dash page) ──────────────────────────────────
 function IllustrationPanel({ prompt, svgCode, onChange }) {
@@ -422,13 +412,23 @@ function IllustrationPanel({ prompt, svgCode, onChange }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MyQuestImportPage() {
+  // MyQuest catalogue: exam → year → subject. Values are MyQuest's own and are
+  // sent back unchanged; each list loads when the level above is chosen.
+  const [mqExams,        setMqExams]        = useState([])   // [{ value, label }]
+  const [mqExam,         setMqExam]         = useState('')
+  const [mqYears,        setMqYears]        = useState([])
+  const [examYearId,     setExamYearId]     = useState('')
+  const [mqSubjects,     setMqSubjects]     = useState([])
+  const [mqSubject,      setMqSubject]      = useState('')
+  const [catalogLoading, setCatalogLoading] = useState(null) // 'exam' | 'exam_year_id' | 'subject' | null
+  const [catalogError,   setCatalogError]   = useState(null)
+  const [catalogRaw,     setCatalogRaw]     = useState({})   // list kind → raw MyQuest sample
+
+  // ExamPrep subject the questions are saved into (its row carries the exam type)
   const [subjects,       setSubjects]       = useState([])
   const [subjectId,      setSubjectId]      = useState('')
-  const [subjectName,    setSubjectName]    = useState('')
-  const [examType,       setExamType]       = useState('WAEC')
-  const [year,           setYear]           = useState(DEFAULT_YEAR)
   const [mode,           setMode]           = useState('single')   // 'single' | 'range'
-  const [yearRange,      setYearRange]      = useState({ from: '2015', to: DEFAULT_YEAR })
+  const [yearRange,      setYearRange]      = useState({ from: '', to: '' })
   const [preview,        setPreview]        = useState([])
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError,   setPreviewError]   = useState(null)
@@ -440,6 +440,7 @@ export default function MyQuestImportPage() {
 
   // Enrichment flow state
   const [fetchedQuestions,  setFetchedQuestions]  = useState([])
+  const [fetchInfo,         setFetchInfo]         = useState(null)   // { total, truncated } of the fetched paper
   const [topics,            setTopics]            = useState([])
   const [enrichStep,        setEnrichStep]        = useState(1)
   const [enrichPrompt,      setEnrichPrompt]      = useState('')
@@ -484,56 +485,81 @@ export default function MyQuestImportPage() {
 
   useEffect(() => { if (mounted) loadHeldGroups() }, [mounted])
 
-  const years = []
-  for (let y = CURRENT_YEAR; y >= 1999; y--) years.push(y)
-
-  // Group subjects by name
-  const groupedSubjects = useMemo(() => {
-    const map = {}
-    for (const s of subjects) {
-      if (!map[s.name]) map[s.name] = { name: s.name, exams: {} }
-      map[s.name].exams[s.exam_type] = s
+  // ── MyQuest catalogue loading ──────────────────────────────────────────────
+  async function loadCatalog(params, signal, onItems) {
+    setCatalogLoading(params.get)
+    setCatalogError(null)
+    try {
+      const res  = await fetch(`/api/admin/myquest/meta?${new URLSearchParams(params)}`, { signal })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not load the list from MyQuest')
+      setCatalogRaw(prev => ({ ...prev, [params.get]: data.rawSample ?? [] }))
+      if (!data.items?.length) setCatalogError(`MyQuest: ${data.message ?? 'no entries'}`)
+      onItems(data.items ?? [])
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      setCatalogError(err.message)
+      onItems([])
+    } finally {
+      if (!signal.aborted) setCatalogLoading(null)
     }
-    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
-  }, [subjects])
+  }
 
-  // Auto-resolve subjectId when name or examType changes
   useEffect(() => {
-    const group = groupedSubjects.find(g => g.name === subjectName)
-    if (!group) return
-    const row = group.exams[examType] ?? Object.values(group.exams)[0]
-    if (row?.id) setSubjectId(row.id)
-  }, [subjectName, examType, groupedSubjects])
+    const ctrl = new AbortController()
+    loadCatalog({ get: 'exam' }, ctrl.signal, items => {
+      setMqExams(items)
+      setMqExam(prev => prev || items[0]?.value || '')
+    })
+    return () => ctrl.abort()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load subjects
+  useEffect(() => {
+    setMqYears([])
+    setExamYearId('')
+    setYearRange({ from: '', to: '' })
+    if (!mqExam) return
+    const ctrl = new AbortController()
+    loadCatalog({ get: 'exam_year_id', exam: mqExam }, ctrl.signal, items => {
+      const newestFirst = [...items].sort((a, b) => yearLabelOf(b).localeCompare(yearLabelOf(a)))
+      setMqYears(newestFirst)
+      setExamYearId(newestFirst[0]?.value ?? '')
+    })
+    return () => ctrl.abort()
+  }, [mqExam]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Subjects differ by exam and year, so reload them for every year. Keep the
+  // chosen subject if the new year has it too.
+  useEffect(() => {
+    setMqSubjects([])
+    if (!mqExam || !examYearId) return
+    const ctrl = new AbortController()
+    loadCatalog({ get: 'subject', exam: mqExam, exam_year_id: examYearId }, ctrl.signal, items => {
+      const sorted = [...items].sort((a, b) => a.label.localeCompare(b.label))
+      setMqSubjects(sorted)
+      setMqSubject(prev => (sorted.some(i => i.value === prev) ? prev : sorted[0]?.value ?? ''))
+    })
+    return () => ctrl.abort()
+  }, [mqExam, examYearId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load ExamPrep subjects (the "Save into" list)
   useEffect(() => {
     fetch('/api/admin/subjects?active=true')
       .then(r => r.json())
-      .then(d => {
-        const list = Array.isArray(d) ? d : (d.subjects ?? [])
-        setSubjects(list)
-        if (list[0]) {
-          setSubjectName(list[0].name)
-          setSubjectId(list[0].id)
-          if (list[0].exam_type === 'JAMB') setExamType('JAMB')
-        }
-      })
+      .then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? [])))
       .catch(() => {})
   }, [])
 
-  // Auto-sync examType when subject changes
+  const mqSubjectItem = useMemo(() => mqSubjects.find(s => s.value === mqSubject), [mqSubjects, mqSubject])
+
+  // Suggest the ExamPrep subject whenever the MyQuest subject changes
   useEffect(() => {
-    const group = groupedSubjects.find(g => g.name === subjectName)
-    if (!group) return
-    if (!group.exams[examType]) {
-      const available = Object.keys(group.exams)[0]
-      if (available) setExamType(available)
-    }
-  }, [subjectName, groupedSubjects]) // eslint-disable-line react-hooks/exhaustive-deps
+    setSubjectId(suggestSubjectId(mqSubjectItem?.label, mqExam, subjects))
+  }, [mqSubjectItem, mqExam, subjects])
 
   // Load curriculum tree for subject
   useEffect(() => {
-    if (!subjectId) return
+    if (!subjectId) { setTopics([]); return }
     fetch(`/api/admin/curriculum?subjectId=${subjectId}`)
       .then(r => r.json())
       .then(d => setTopics(Array.isArray(d) ? d : []))
@@ -544,12 +570,28 @@ export default function MyQuestImportPage() {
     () => subjects.find(s => s.id === subjectId),
     [subjects, subjectId]
   )
-  const mqSlug = useMemo(() => {
-    if (!selectedSubject) return null
-    return slugForSubject(baseSubjectName(selectedSubject.name))
-  }, [selectedSubject])
+  // ExamPrep exam type comes from the subject row the questions are saved into
+  const examType = selectedSubject?.exam_type ?? ''
+  const year     = yearLabelOf(mqYears.find(y => y.value === examYearId))
 
-  const canImport = subjectId && mqSlug && year
+  // MyQuest exam names that are also ExamPrep exam types must match the target row
+  const mqExamUpper  = mqExam.toUpperCase()
+  const examMismatch = Boolean(selectedSubject && ALL_EXAMS.includes(mqExamUpper) && selectedSubject.exam_type !== mqExamUpper)
+
+  const canImport = Boolean(subjectId && mqExam && examYearId && mqSubject && year && !examMismatch)
+
+  function resetResults() {
+    setPreview([])
+    setPreviewError(null)
+    setImportResult(null)
+    setImportLog([])
+  }
+
+  const mqQuery = { exam: mqExam, exam_year_id: examYearId, subject: mqSubject }
+  const mqLabel = `${mqExam} ${year} · ${mqSubjectItem?.label ?? mqSubject}`
+
+  // A new selection makes earlier previews and results meaningless
+  useEffect(() => { resetResults() }, [mqExam, examYearId, mqSubject, subjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch full batch + build enrichment prompt ─────────────────────────────
   async function fetchAndBuildPrompt() {
@@ -557,17 +599,16 @@ export default function MyQuestImportPage() {
     setImporting(true)
     setPreviewError(null)
     try {
-      const params = new URLSearchParams({ subject: mqSlug, exam: examType, year, limit: '50' })
+      const params = new URLSearchParams(mqQuery)
       const res  = await fetch(`/api/admin/myquest/fetchbatch?${params}`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error ?? 'Fetch failed')
       if (data.noData) {
-        setPreviewError(
-          `MyQuest has no ${examType} questions for "${mqSlug}" in ${year}. Try a different year.`
-        )
+        setPreviewError(`MyQuest has no questions for ${mqLabel}${data.message ? ` (${data.message})` : ''}.`)
         return
       }
+      setFetchInfo({ total: data.total, truncated: Boolean(data.truncated) })
 
       const qs = (data.questions ?? []).map(q => normalizeMyQuestQuestion(q, year))
       if (!qs.length) {
@@ -581,7 +622,7 @@ export default function MyQuestImportPage() {
 
       if (diagramQs.length) {
         try {
-          const key     = `mq_${mqSlug}_${examType}_${year}`
+          const key     = `mq_${mqSubject}_${mqExam}_${examYearId}`
           setHeldGroups(await heldStore.putGroup({ key, subject: selectedSubject?.name, exam: examType, year, questions: diagramQs, savedAt: new Date().toISOString() }))
         } catch (e) { console.error('held questions:', e) }
       }
@@ -711,21 +752,17 @@ export default function MyQuestImportPage() {
 
   // ── Preview (5 questions) ──────────────────────────────────────────────────
   const loadPreview = useCallback(async () => {
-    if (!mqSlug || !year) return
+    if (!mqExam || !examYearId || !mqSubject) return
     setPreviewLoading(true)
     setPreviewError(null)
     setPreview([])
     try {
-      const params = new URLSearchParams({ subject: mqSlug, exam: examType, year })
+      const params = new URLSearchParams({ exam: mqExam, exam_year_id: examYearId, subject: mqSubject })
       const res  = await fetch(`/api/admin/myquest/preview?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Preview failed')
       if (data.noData) {
-        setPreviewError(
-          `MyQuest has no ${examType} questions for "${mqSlug}" in ${year}. Try a different year.`
-        )
-      } else if (!data.questions?.length) {
-        setPreviewError('No questions returned. Try a different year.')
+        setPreviewError(`MyQuest has no questions for ${mqLabel}${data.message ? ` (${data.message})` : ''}.`)
       } else {
         setPreview(data.questions.map(q => normalizeMyQuestQuestion(q, year)))
       }
@@ -734,38 +771,13 @@ export default function MyQuestImportPage() {
     } finally {
       setPreviewLoading(false)
     }
-  }, [mqSlug, examType, year])
-
-  // ── Single-year bulk import (no enrichment) ────────────────────────────────
-  async function runImport() {
-    if (!canImport) return
-    setImporting(true)
-    setImportResult(null)
-    try {
-      const res = await fetch('/api/admin/myquest/import', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mqSubject: mqSlug, exam: examType, year, subjectId, examType, limit: 50 }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Import failed')
-      setImportResult(data)
-    } catch (err) {
-      setImportResult({ error: err.message })
-    } finally {
-      setImporting(false)
-    }
-  }
+  }, [mqExam, examYearId, mqSubject, mqLabel, year])
 
   // ── Bulk year-range import ─────────────────────────────────────────────────
   async function runBulkImport() {
-    if (!canImport || !yearRange.from || !yearRange.to) return
-    const fromY = parseInt(yearRange.from)
-    const toY   = parseInt(yearRange.to)
-    if (fromY > toY) return
-
-    const yearsToImport = []
-    for (let y = fromY; y <= toY; y++) yearsToImport.push(String(y))
+    if (!canImport) return
+    const yearsToImport = yearsInRange(mqYears, yearRange)
+    if (!yearsToImport.length) return
 
     setImporting(true)
     setImportLog([])
@@ -774,20 +786,25 @@ export default function MyQuestImportPage() {
     let totalSaved = 0
     let totalDupe  = 0
 
-    for (const yr of yearsToImport) {
+    // The subject list is per year: a year that doesn't have this subject
+    // comes back as "no questions" and is logged as such.
+    for (const [i, yearItem] of yearsToImport.entries()) {
+      const yr = yearLabelOf(yearItem)
       setImportLog(prev => [...prev, { year: yr, status: 'fetching' }])
       try {
         const res = await fetch('/api/admin/myquest/import', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mqSubject: mqSlug, exam: examType, year: yr, subjectId, examType, limit: 50 }),
+          body: JSON.stringify({ exam: mqExam, examYearId: yearItem.value, mqSubject, year: yr, subjectId, examType }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? 'Import failed')
         totalSaved += data.saved ?? 0
         totalDupe  += data.duplicate ?? 0
         setImportLog(prev => prev.map(e => e.year === yr
-          ? { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, duplicate: data.duplicate, errors: data.errors?.length ?? 0 }
+          ? data.noData
+            ? { year: yr, status: 'nodata' }
+            : { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, duplicate: data.duplicate, errors: data.errors?.length ?? 0, truncated: data.truncated }
           : e
         ))
       } catch (err) {
@@ -796,7 +813,7 @@ export default function MyQuestImportPage() {
           : e
         ))
       }
-      if (yr !== String(toY)) await new Promise(r => setTimeout(r, 700))
+      if (i < yearsToImport.length - 1) await new Promise(r => setTimeout(r, 700))
     }
 
     setImportResult({ fetched: yearsToImport.length, new: totalSaved, duplicate: totalDupe, saved: totalSaved, errors: [], isBulk: true })
@@ -1059,54 +1076,100 @@ export default function MyQuestImportPage() {
           {/* ── STEP 1: SELECT ───────────────────────────────────────────── */}
           {enrichStep === 1 && (
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-5">
-              <p className="text-sm font-black text-gray-700">Step 1 — Select subject, exam and year</p>
+              <p className="text-sm font-black text-gray-700">Step 1 — Choose exam, year and subject from MyQuest</p>
 
+              {catalogError && <Alert type="error">{catalogError}</Alert>}
+
+              {/* MyQuest exam → year → subject. Each list is MyQuest's own. */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {/* Subject */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">Subject</label>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">MyQuest exam</label>
                   <select
-                    value={subjectName}
-                    onChange={e => { setSubjectName(e.target.value); setPreview([]); setImportResult(null) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    value={mqExam}
+                    onChange={e => setMqExam(e.target.value)}
+                    disabled={!mqExams.length}
+                    className={SELECT_CLASS}
                   >
-                    <option value="">Select subject…</option>
-                    {groupedSubjects.map(g => (
-                      <option key={g.name} value={g.name}>
-                        {g.name}{Object.keys(g.exams).length === 1 ? ` (${Object.keys(g.exams)[0]} only)` : ''}
-                      </option>
-                    ))}
+                    {!mqExams.length && <option value="">{catalogLoading === 'exam' ? 'Loading…' : 'No exams'}</option>}
+                    {mqExams.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
                   </select>
-                  {selectedSubject && (
-                    <p className="text-[11px] text-gray-400 mt-1.5">
-                      MyQuest →{' '}
-                      {mqSlug
-                        ? <>subject=<span className="font-mono text-violet-600 font-bold">{mqSlug}</span>{' '}exam=<span className="font-mono text-violet-600 font-bold">{examType}</span></>
-                        : <span className="text-red-500 font-bold">⚠ No MyQuest slug for &quot;{baseSubjectName(selectedSubject.name)}&quot;</span>
-                      }
-                    </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">
+                    {mode === 'range' ? 'Year (for preview & subject list)' : 'Year'}
+                  </label>
+                  <select
+                    value={examYearId}
+                    onChange={e => setExamYearId(e.target.value)}
+                    disabled={!mqYears.length}
+                    className={SELECT_CLASS}
+                  >
+                    {!mqYears.length && <option value="">{catalogLoading === 'exam_year_id' ? 'Loading…' : 'No years'}</option>}
+                    {mqYears.map(y => <option key={y.value} value={y.value}>{y.label}</option>)}
+                  </select>
+                  {mqYears.length > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">{mqYears.length} years on MyQuest</p>
                   )}
                 </div>
 
-                {/* Exam type */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">Exam Type</label>
-                  <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-                    {(() => {
-                      const group = groupedSubjects.find(g => g.name === subjectName)
-                      const available = group ? Object.keys(group.exams) : ['WAEC', 'JAMB']
-                      return ['WAEC', 'JAMB'].filter(et => available.includes(et)).map(et => (
-                        <button key={et}
-                          onClick={() => { setExamType(et); setPreview([]); setImportResult(null) }}
-                          className={`flex-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${examType === et ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                        >{et}</button>
-                      ))
-                    })()}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5">MyQuest subject</label>
+                  <select
+                    value={mqSubject}
+                    onChange={e => setMqSubject(e.target.value)}
+                    disabled={!mqSubjects.length}
+                    className={SELECT_CLASS}
+                  >
+                    {!mqSubjects.length && <option value="">{catalogLoading === 'subject' ? 'Loading…' : 'No subjects'}</option>}
+                    {mqSubjects.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+                  </select>
+                  {mqSubjects.length > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">{mqSubjects.length} subjects for {mqExam} {year}</p>
+                  )}
                 </div>
               </div>
 
-              {/* Year + mode */}
+              {/* ExamPrep subject the questions are saved into */}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">Save into ExamPrep subject</label>
+                <select
+                  value={subjectId}
+                  onChange={e => setSubjectId(e.target.value)}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Select subject…</option>
+                  {ALL_EXAMS.map(exam => {
+                    const rows = subjects.filter(s => s.exam_type === exam)
+                    if (!rows.length) return null
+                    return (
+                      <optgroup key={exam} label={exam}>
+                        {rows.map(s => <option key={s.id} value={s.id}>{s.name} ({exam})</option>)}
+                      </optgroup>
+                    )
+                  })}
+                </select>
+                {mqSubject && !subjectId && (
+                  <p className="text-[11px] text-amber-600 font-bold mt-1.5">
+                    ⚠ No ExamPrep subject matches &quot;{mqSubjectItem?.label ?? mqSubject}&quot;. Pick one, or create it in Subjects first.
+                  </p>
+                )}
+                {examMismatch && (
+                  <p className="text-[11px] text-red-600 font-bold mt-1.5">
+                    ⚠ These are {mqExamUpper} questions but {selectedSubject.name} is a {selectedSubject.exam_type} subject. Pick the {mqExamUpper} subject.
+                  </p>
+                )}
+                {canImport && (
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    MyQuest → exam=<span className="font-mono text-violet-600 font-bold">{mqExam}</span>{' '}
+                    exam_year_id=<span className="font-mono text-violet-600 font-bold">{examYearId}</span>{' '}
+                    subject=<span className="font-mono text-violet-600 font-bold">{mqSubject}</span>
+                    {' '}· saved as {selectedSubject?.name} ({examType}) {year}
+                  </p>
+                )}
+              </div>
+
+              {/* Single year / range */}
               <div className="space-y-3">
                 <div className="flex gap-2">
                   {['single', 'range'].map(m => (
@@ -1116,19 +1179,20 @@ export default function MyQuestImportPage() {
                     >{m === 'single' ? 'Single year' : 'Year range'}</button>
                   ))}
                 </div>
-
-                {mode === 'single' ? (
-                  <select
-                    value={year}
-                    onChange={e => { setYear(e.target.value); setPreview([]); setImportResult(null) }}
-                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
-                  >
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                ) : (
-                  <YearRangePicker value={yearRange} onChange={setYearRange} />
+                {mode === 'range' && (
+                  <YearRangePicker years={mqYears} value={yearRange} onChange={setYearRange} />
                 )}
               </div>
+
+              {/* What MyQuest actually sent, so the list format can be checked */}
+              {Object.keys(catalogRaw).length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-gray-400 font-bold">Raw MyQuest list responses (first 3 items each)</summary>
+                  <pre className="mt-2 bg-gray-50 border border-gray-100 rounded-lg p-3 overflow-x-auto text-[11px] text-gray-600">
+                    {JSON.stringify(catalogRaw, null, 2)}
+                  </pre>
+                </details>
+              )}
 
               {/* Preview strip */}
               <div className="border border-gray-100 rounded-xl overflow-hidden">
@@ -1136,7 +1200,7 @@ export default function MyQuestImportPage() {
                   <span className="text-xs font-black text-gray-600 uppercase tracking-wide">Preview (first 5 questions)</span>
                   <button
                     onClick={loadPreview}
-                    disabled={!mqSlug || !year || previewLoading}
+                    disabled={!mqExam || !examYearId || !mqSubject || previewLoading}
                     className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-violet-600 text-white rounded-lg hover:bg-violet-500 disabled:opacity-40 transition-colors"
                   >
                     {previewLoading ? <><Spinner size="sm" /> Loading…</> : '👁 Preview 5 questions'}
@@ -1149,7 +1213,7 @@ export default function MyQuestImportPage() {
 
                 {preview.length > 0 && (
                   <div className="p-4 space-y-3">
-                    {preview.map((q, i) => <QuestionPreviewCard key={i} q={q} year={year} examType={examType} />)}
+                    {preview.map((q, i) => <QuestionPreviewCard key={i} q={q} year={year} examType={examType || mqExam} />)}
                   </div>
                 )}
 
@@ -1174,7 +1238,7 @@ export default function MyQuestImportPage() {
                 {mode === 'range' && (
                   <button
                     onClick={runBulkImport}
-                    disabled={!canImport || importing || !yearRange.from || !yearRange.to}
+                    disabled={!canImport || importing || !yearsInRange(mqYears, yearRange).length}
                     className="flex items-center gap-2 px-6 py-3 bg-gray-800 text-white text-sm font-black rounded-xl hover:bg-gray-700 disabled:opacity-40 transition-colors shadow-sm"
                   >
                     {importing ? <><Spinner size="sm" /> Importing…</> : `⚡ Bulk import (no enrichment)`}
@@ -1194,7 +1258,8 @@ export default function MyQuestImportPage() {
                         <span className="text-sm font-bold text-gray-700">{entry.year}</span>
                         <div className="flex items-center gap-2">
                           {entry.status === 'fetching' && <><Spinner size="sm" /><span className="text-xs text-gray-500">Fetching…</span></>}
-                          {entry.status === 'done' && <><span className="text-xs text-green-600 font-bold">✓ {entry.saved} saved</span>{entry.duplicate > 0 && <span className="text-xs text-amber-600">({entry.duplicate} dupes)</span>}</>}
+                          {entry.status === 'done' && <><span className="text-xs text-green-600 font-bold">✓ {entry.saved} of {entry.fetched} saved</span>{entry.duplicate > 0 && <span className="text-xs text-amber-600">({entry.duplicate} dupes)</span>}{entry.truncated && <span className="text-xs text-red-600">(paper cut off at 500)</span>}</>}
+                          {entry.status === 'nodata' && <span className="text-xs text-gray-400">No questions on MyQuest</span>}
                           {entry.status === 'error' && <span className="text-xs text-red-600 font-bold">⚠ {entry.error}</span>}
                         </div>
                       </div>
@@ -1217,7 +1282,14 @@ export default function MyQuestImportPage() {
 
               <Alert type="success">
                 ✅ Fetched <strong>{fetchedQuestions.length} questions</strong> ready for enrichment — {selectedSubject?.name} · {examType} · {year}
+                {fetchInfo?.total > 0 && <> (MyQuest paper total: {fetchInfo.total})</>}
               </Alert>
+
+              {fetchInfo?.truncated && (
+                <Alert type="error">
+                  ⚠ This paper has more than 500 questions on MyQuest; only the first 500 were fetched.
+                </Alert>
+              )}
 
               {diagramQuestions.length > 0 && (
                 <Alert type="warning">
@@ -1826,9 +1898,9 @@ export default function MyQuestImportPage() {
           <h2 className="text-base font-black text-gray-900">How the MyQuest import works</h2>
           <div className="space-y-4">
             {[
-              { step: '1', title: 'Select subject + exam + year', body: 'Choose the ExamPrep subject. The system maps it to the MyQuest subject slug automatically (e.g. "English Language" → use-of-english). The exam type is sent as "WAEC" or "JAMB" directly — unlike SdashAPI which uses "wassce"/"utme".' },
+              { step: '1', title: 'Select exam → year → subject', body: 'The exam, year and subject lists come straight from MyQuest, so you can only pick combinations MyQuest has (subjects differ by exam and year). The values are sent back to MyQuest exactly as it returned them. Then pick the ExamPrep subject to save into — it is suggested by name, but check it.' },
               { step: '2', title: 'Preview before committing', body: 'Click "Preview 5 questions" to verify what MyQuest returns before running a full fetch.' },
-              { step: '3', title: 'Fetch & build enrichment prompt', body: 'Fetches up to 50 questions. Questions with image references are held back. The rest go into the enrichment prompt — the same prompt format used by SdashAPI, since you\'re sending to the same Claude pipeline.' },
+              { step: '3', title: 'Fetch & build enrichment prompt', body: 'Fetches every page of the paper (MyQuest sends 50 per page). Questions with image references are held back. The rest go into the enrichment prompt — the same prompt format used by SdashAPI, since you\'re sending to the same Claude pipeline.' },
               { step: '4', title: 'Copy prompt → Claude → paste response', body: 'Copy the generated prompt and paste it into Claude.ai. Claude returns a JSON array with topic tags, explanations, and difficulty. Paste it back here.' },
               { step: '5', title: 'Review & save', body: 'Review the enriched questions. Edit topic assignments if needed. Save — questions go into the same database as SdashAPI imports, with full deduplication.' },
               { step: '6', title: 'Bulk import (no enrichment)', body: 'Use year-range mode to import multiple years at once without going through enrichment. Questions are saved without AI-generated explanations — useful for quickly filling the question bank.' },
@@ -1841,19 +1913,6 @@ export default function MyQuestImportPage() {
                 </div>
               </div>
             ))}
-          </div>
-
-          <div className="border-t border-gray-100 pt-4 space-y-2">
-            <p className="text-xs font-black text-gray-500 uppercase tracking-wide">MyQuest subject slug reference</p>
-            <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-              {Object.entries(MYQUEST_SLUG_MAP).filter(([k]) => !k.includes(' ')).map(([name, slug]) => (
-                <div key={name} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-600 capitalize">{name}</span>
-                  <span className="text-gray-300">→</span>
-                  <span className="font-mono text-violet-600">{slug}</span>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="border border-violet-100 rounded-xl p-4 bg-violet-50">

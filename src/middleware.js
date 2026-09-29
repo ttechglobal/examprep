@@ -1,3 +1,16 @@
+// src/middleware.js
+// Route gate for staff areas and the admin API.
+//
+//   /api/admin/*        signed admin cookie (401 JSON)
+//   /admin/*            signed admin cookie (redirect to /admin-login)
+//   /reviewer, /school  a Supabase login (redirect to sign-in)
+//   /student/*          not gated here (guest access is handled client-side)
+//
+// v2 (29 Sep 2026): /admin pages are gated by the admin cookie. They used to need a
+// Supabase login cookie instead, which the admin password login never creates, so admins
+// were sent to the student sign-in unless some Supabase account happened to be signed in
+// (see ADMIN_AUTH_FIX.md).
+
 import { NextResponse } from 'next/server'
 import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/adminSession'
 
@@ -15,15 +28,21 @@ export async function middleware(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // ── Admin pages: the admin password login, not a Supabase account ─────────
+  // The admin layout checks the same cookie; this stops the request earlier.
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    const token = request.cookies.get(ADMIN_COOKIE)?.value
+    if (await verifyAdminToken(token)) return NextResponse.next()
+    return NextResponse.redirect(new URL('/admin-login', request.url))
+  }
+
   // ── Route classification ──────────────────────────────────────────────────
   // /student/* is intentionally guest-accessible — the layout handles the
   // guest↔auth split via localStorage (ep_guest). Middleware must NOT gate it,
   // because middleware runs server-side and cannot read localStorage.
   //
-  // /admin, /reviewer, /school are staff-only and DO require a real session.
-  // (The admin layout additionally verifies the signed admin cookie.)
+  // /reviewer and /school are staff-only and DO require a real Supabase session.
   const requiresRealSession =
-    pathname.startsWith('/admin') ||
     pathname.startsWith('/reviewer') ||
     pathname.startsWith('/school')
 

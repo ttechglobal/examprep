@@ -12,9 +12,9 @@
 //   Body: { url: "https://..." }
 //   Response: { valid: true, sizeKb: 45 }
 //          or { valid: false, error: "Image too large: 120KB (max 50KB)" }
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
 
@@ -23,10 +23,6 @@ const MAX_KB = 50
 export async function POST(request) {
   const adminError = await requireAdmin()
   if (adminError) return adminError
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { url } = await request.json()
   if (!url) return NextResponse.json({ valid: true })  // No image — nothing to validate

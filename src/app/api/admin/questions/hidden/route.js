@@ -28,9 +28,11 @@ import { requireAdmin } from '@/lib/adminAuth'
 //   difficulty     text
 //   hide_reason    text   — 'manual_review' | 'image_required' | 'mismatch' | 'missing_context'
 //   sdash_id       text   — original SdashAPI id if available
-//   created_by     uuid   — admin user id
+//   created_by     uuid   — not written (the shared admin login has no user id)
 //   created_at     timestamptz
 //   notes          text   — optional admin note
+//
+// v2 (29 Sep 2026): no longer writes created_by. The admin password login has no user identity, and `user` was undefined here, so every call crashed with a ReferenceError (see ADMIN_AUTH_FIX.md).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -88,7 +90,6 @@ export async function POST(request) {
       hide_reason,
       sdash_id,
       notes,
-      created_by: user.id,
     })
     .select('id')
     .single()

@@ -1,8 +1,8 @@
 // src/app/api/admin/questions/generated/route.js
 // Updated: exam_type string → exam_types[] array
+// v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
 
 import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
 
@@ -20,10 +20,6 @@ const toExamTypes = (raw) => {
 export async function POST(request) {
   const adminError = await requireAdmin()
   if (adminError) return adminError
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { questions, subtopicId, topicId, subjectId, examType } = await request.json()
 
