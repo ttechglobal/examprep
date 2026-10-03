@@ -1,0 +1,135 @@
+/* Sizes come from the board around it (--answer-* in BattleArena), with
+   fallbacks for standalone use (the review screen). */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.answer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--answer-height, 64px);
+  padding: 10px 14px;
+  text-align: left;
+  font: inherit;
+  color: #071b3d;
+  background: linear-gradient(135deg, #fff, #f2f3f6);
+  border: 2px solid #d1d5db;
+  border-radius: 20px;
+  box-shadow: 0 2px 0 #b6bdc166;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: transform .12s, border-color .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .answer:not(:disabled):hover {
+    transform: translateY(-2px);
+    border-color: #008bff;
+  }
+}
+
+.answer:disabled {
+  cursor: default;
+}
+
+.answer:focus-visible {
+  outline: 3px solid #087cff;
+  outline-offset: 4px;
+}
+
+.selected {
+  background: linear-gradient(135deg, #e5f9ff, #b4e7ff);
+  border-color: #00d3ff;
+  box-shadow: inset 0 0 0 3px white, 0 0 0 3px #0091f9, 0 3px 0 #00639480, 0 0 16px #00cfff66;
+}
+
+.letter {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--answer-letter, 42px);
+  height: var(--answer-letter, 42px);
+  border-radius: 50%;
+  background: #417dcc;
+  color: white;
+  font-size: var(--answer-letter-font, 22px);
+  font-weight: 700;
+}
+
+.selected .letter {
+  background: #0067f5;
+}
+
+.text {
+  min-width: 0;
+  font-size: var(--answer-font, 21px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.correct {
+  background: linear-gradient(#e3fff0, #c3f2d9);
+  border-color: #0fb26a;
+  color: #075e31;
+}
+
+.correct .letter {
+  background: #17a76b;
+}
+
+.wrong {
+  background: linear-gradient(#fff1f0, #ffd6d4);
+  border-color: #f35f56;
+  color: #93231d;
+}
+
+.wrong .letter {
+  background: #e53835;
+}
+
+.muted {
+  opacity: .7;
+}
+
+.pick {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  z-index: 3;
+}
+
+.pickBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 2px solid white;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px #17335244;
+}
+
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .answer {
+    border-radius: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer {
+    transition: none;
+  }
+}

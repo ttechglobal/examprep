@@ -139,7 +139,7 @@ export default function VSHeader({ qIndex, total, me, opponent, onMenu, menuLabe
             {/* Panel — mirrored parallelogram */}
             <div style={{
               flex:1, minWidth:0,
-              background:'linear-gradient(160deg,#7C3AED,#5B20C0)',
+              background:'linear-gradient(160deg,#b91c1c,#5B20C0)',
               borderRadius:'0 16px 16px 0',
               clipPath:`polygon(${SKEW}px 0, 100% 0, 100% 100%, 0 100%)`,
               boxShadow:'inset 0 -5px 0 rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.14)',
@@ -154,7 +154,7 @@ export default function VSHeader({ qIndex, total, me, opponent, onMenu, menuLabe
                 <div style={{ fontSize:30, fontWeight:900, color:'#fff', lineHeight:1, fontVariantNumeric:'tabular-nums', textShadow:'0 2px 0 rgba(0,0,0,.25)' }}>{opponent.score}</div>
                 <div style={{ display:'flex', gap:3, marginTop:5, flexDirection:'row-reverse' }}>
                   {Array.from({length:5}).map((_,i)=>(
-                    <div key={i} style={{ flex:1, height:5, borderRadius:3, background: i<opponent.dots ? '#C084FC' : 'rgba(255,255,255,.2)', transition:'background .3s', boxShadow: i<opponent.dots ? '0 0 5px #C084FC' : 'none' }}/>
+                    <div key={i} style={{ flex:1, height:5, borderRadius:3, background: i<opponent.dots ? '#fca5a5' : 'rgba(255,255,255,.2)', transition:'background .3s', boxShadow: i<opponent.dots ? '0 0 5px #fca5a5' : 'none' }}/>
                   ))}
                 </div>
               </div>
@@ -163,14 +163,14 @@ export default function VSHeader({ qIndex, total, me, opponent, onMenu, menuLabe
             <div style={{ position:'absolute', right:0, zIndex:4, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
               <div style={{
                 width:AV, height:AV, borderRadius:'50%',
-                background:'linear-gradient(150deg,#9333EA,#7C3AED)',
+                background:'linear-gradient(150deg,#ed4343,#b91c1c)',
                 border:'3.5px solid #fff',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 fontSize:28,
                 boxShadow:'0 4px 16px rgba(0,0,0,.4)',
               }}>{opponent.avatar}</div>
               {/* Status pill */}
-              <div aria-live="polite" style={{ background: opponent.answered ? '#16A34A' : '#7C3AED', borderRadius:999, padding:'2px 8px', display:'flex', alignItems:'center', gap:3, boxShadow:'0 2px 6px rgba(0,0,0,.35)', whiteSpace:'nowrap' }}>
+              <div aria-live="polite" style={{ background: opponent.answered ? '#16A34A' : '#b91c1c', borderRadius:999, padding:'2px 8px', display:'flex', alignItems:'center', gap:3, boxShadow:'0 2px 6px rgba(0,0,0,.35)', whiteSpace:'nowrap' }}>
                 {opponent.answered
                   ? <span style={{ fontSize:8, fontWeight:900, color:'#fff' }}>✓ Answered</span>
                   : <>

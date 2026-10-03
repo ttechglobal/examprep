@@ -41,7 +41,17 @@ export async function GET(request) {
       .eq('is_active', true)
       .order('name')
     if (error) return NextResponse.json({ error: 'Could not load subjects' }, { status: 500 })
-    return NextResponse.json(rows ?? [], {
+    let catalog = rows ?? []
+    if (url.searchParams.get('counts') === '1') {
+      const service = svc()
+      const counts = await Promise.allSettled(catalog.map(subject => service.rpc('topic_question_counts', { p_subject_id: subject.id, p_exam: examParam })))
+      catalog = catalog.map((subject,index) => {
+        const result = counts[index]
+        if (result.status !== 'fulfilled' || result.value.error) return subject
+        return { ...subject, question_count:(result.value.data ?? []).reduce((sum,row) => sum + (Number(row.question_count) || 0), 0) }
+      })
+    }
+    return NextResponse.json(catalog, {
       headers: { 'Cache-Control': `public, s-maxage=${CACHE_SECS}, stale-while-revalidate=600` },
     })
   }

@@ -69,7 +69,7 @@ function resultFor(q, answer) {
 export default function PracticeSessionPage() {
   const router   = useRouter()
   const { dark } = useTheme()
-  const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
+  const { totalPoints: currentXP, setTotalPoints } = usePoints()
 
   const [phase,     setPhase]     = useState('loading')   // loading | session | saving | results | review | error
   const [errMsg,    setErrMsg]    = useState('')
@@ -179,7 +179,6 @@ export default function PracticeSessionPage() {
     saveSessionLocally(payload, xp)
     try { localStorage.removeItem('ep_pending_session') } catch {}
     setTotalPoints((currentXP || 0) + xp)
-    showXPToast(xp, 'Practice session done!')
     setSaved({ questions: qs, results, xp, streak: readLocalStreak(), durationSecs })
     setPhase('results')
 
@@ -193,7 +192,7 @@ export default function PracticeSessionPage() {
         })
         .catch(() => {})
     }).catch(() => {})
-  }, [config, currentXP, setTotalPoints, showXPToast])
+  }, [config, currentXP, setTotalPoints])
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const sessionType = config?.sessionType ?? 'practice'

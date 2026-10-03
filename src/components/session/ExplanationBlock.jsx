@@ -24,6 +24,7 @@
 
 import { useEffect, useState } from 'react'
 import { MathText } from '@/lib/mathRenderer'
+import { safeSvg } from '@/lib/safeSvg'
 import LazyImage from '@/components/ui/LazyImage'
 import { LETTERS, normaliseOptions, correctIndex } from './SessionUtils'
 import { CORRECT_ANSWER_ART } from './art'
@@ -48,11 +49,6 @@ function RichText({ text }) {
 // option's text; the row already shows both.
 const LETTER_PREFIX = /^\s*[A-E]\s*[—–-]\s*/
 
-function safeSvg(svg) {
-  const text = String(svg ?? '').trim()
-  if (!text.toLowerCase().startsWith('<svg')) return null
-  return text.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+="[^"]*"/gi, '')
-}
 
 // ── The explanation ──────────────────────────────────────────────────────────
 export function ExplanationBlock({ question, explanation = question?.explanation, isCorrect, selectedKey, onClose, headerless = false, alwaysLight = false }) {

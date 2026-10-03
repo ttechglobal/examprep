@@ -1,29 +1,23 @@
 // src/lib/battleAI.js
+import { normaliseOptions, correctIndex } from './answers.js'
 const DIFF = {
   easy:   { rate: 0.45, min: 3000, max: 7000  },
   medium: { rate: 0.65, min: 4000, max: 10000 },
   hard:   { rate: 0.80, min: 5000, max: 13000 },
 }
 
-function normaliseOptions(options) {
-  if (!options) return []
-  if (Array.isArray(options)) return options.map(o => typeof o === 'string' ? o : o?.text ?? o?.value ?? String(o))
-  if (typeof options === 'object') return Object.values(options).map(String)
-  return []
-}
-
-export function createComputerOpponent(difficulty = 'easy') {
+export function createComputerOpponent(difficulty = 'easy', random = Math.random) {
   const cfg = DIFF[difficulty] ?? DIFF.easy
   return {
     decide(question) {
-      const opts    = normaliseOptions(question.options)
-      const correct = question.correct_answer
-      if (Math.random() < cfg.rate) return correct
-      const wrongs = opts.filter(o => o !== correct)
-      return wrongs.length ? wrongs[Math.floor(Math.random() * wrongs.length)] : correct
+      const opts = normaliseOptions(question.options).map(o => typeof o === 'string' ? o : o?.text ?? o?.value ?? String(o))
+      const right = correctIndex(opts, question.correct_answer)
+      if (right >= 0 && random() < cfg.rate) return opts[right]
+      const wrongs = opts.filter((_,index) => index !== right)
+      return wrongs.length ? wrongs[Math.floor(random() * wrongs.length)] : opts[right]
     },
     getThinkingDelay() {
-      return cfg.min + Math.random() * (cfg.max - cfg.min)
+      return cfg.min + random() * (cfg.max - cfg.min)
     },
   }
 }

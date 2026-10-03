@@ -28,6 +28,7 @@ import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import { LETTERS, normaliseOptions, checkCorrect, correctIndex } from './SessionUtils'
 import { QuestionCountdown } from './SessionPrimitives'
 import FlagSheet from './FlagSheet'
+import QuestionFigure from '@/components/ui/QuestionFigure'
 import { Book, Flag, Check, Cross, Bulb } from './icons'
 import s from './session.module.css'
 
@@ -147,6 +148,8 @@ export const QuestionCard = forwardRef(function QuestionCard({
       {!hideHint && !reviewMode && !revealed && <Hint text={hint} />}
 
       <h2 className={s.qText}><MathText text={question.text ?? question.question_text ?? ''} as="span" /></h2>
+
+      <QuestionFigure question={question} className={s.qFigure} />
 
       <div className={s.options} role={reviewMode ? undefined : 'radiogroup'} aria-label="Options">
         {options.map((opt, idx) => {

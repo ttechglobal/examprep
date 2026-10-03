@@ -36,7 +36,7 @@ const CYAN = '#18B7F2'
 // setup, the match and the 1v1 screens take over the screen.
 const SHELL_EXCLUDED = [
   '/student/practice/session', '/student/practice/mock', '/student/learn/world',
-  '/student/battle/setup', '/student/battle/session', '/student/battle/1v1',
+  '/student/battle',
 ]
 
 // A battle guest (anonymous login from a 1v1 invite, no guest profile on this
@@ -336,7 +336,7 @@ function StudentLayoutInner({ children }) {
     <StudentProfileUpdateContext.Provider value={updateProfile}>
       <StudentUserContext.Provider value={profile}>
         {children}
-        <ProfileSetupGate profile={profile} />
+        {!pathname.startsWith('/student/battle') && <ProfileSetupGate profile={profile} />}
       </StudentUserContext.Provider>
     </StudentProfileUpdateContext.Provider>
   )

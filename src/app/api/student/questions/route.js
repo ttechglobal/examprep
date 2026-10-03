@@ -23,6 +23,7 @@
 import { createClient }  from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { NextResponse }  from 'next/server'
+import { selectedTopicIds, loadQuestionPool } from '@/lib/battleQuestionPool'
 
 const UUID_RE     = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EXAMS       = new Set(['WAEC', 'JAMB', 'IGCSE'])
@@ -74,6 +75,12 @@ function shape(q) {
     hint:             null,
     instruction_text: null,
     passage_text:     q.passage_text ?? null,
+    // Illustrations (20261003_question_illustrations.sql)
+    passage_image_url: q.passage_image_url ?? null,
+    has_image:        !!q.has_image,
+    image_url:        q.image_url ?? null,
+    image_description: q.image_description ?? null,
+    svg_diagram:      q.svg_diagram ?? null,
     year:             q.year         ?? null,
     difficulty:       q.difficulty   ?? 'medium',
     topic_id:         q.topic_id     ?? null,
@@ -91,6 +98,9 @@ export async function GET(request) {
     const count      = Math.min(Math.max(parseInt(searchParams.get('count') ?? '20', 10) || 20, 1), 100)
     const mode       = searchParams.get('mode') ?? 'mixed'
     const topicId    = searchParams.get('topic_id')
+    let topicIds
+    try { topicIds = selectedTopicIds(searchParams) }
+    catch { return NextResponse.json({ error: 'Invalid topic_ids' }, { status: 400 }) }
     const subjectId  = searchParams.get('subject_id')
     const subjectNames = (searchParams.get('subjects') ?? '')
       .split(',').map(s => s.trim()).filter(Boolean).slice(0, 10)
@@ -98,6 +108,7 @@ export async function GET(request) {
       .split(',').map(s => s.trim()).filter(s => UUID_RE.test(s)).slice(0, MAX_EXCLUDE)
 
     if (topicId && !UUID_RE.test(topicId))     return NextResponse.json({ error: 'Invalid topic_id' },   { status: 400 })
+    if (topicIds.length > 12 || topicIds.some(id => !UUID_RE.test(id))) return NextResponse.json({ error: 'Invalid topic_ids' }, { status: 400 })
     if (subjectId && !UUID_RE.test(subjectId)) return NextResponse.json({ error: 'Invalid subject_id' }, { status: 400 })
     if (!subjectNames.length && !subjectId) {
       return NextResponse.json({ error: 'subjects or subject_id required' }, { status: 400 })
@@ -121,17 +132,7 @@ export async function GET(request) {
     // ── 2. Candidate pool — one round trip ─────────────────────────────────────
     // Over-fetch (3×) so the difficulty mix has room to work. Year spread only
     // matters when there are enough questions for it to show.
-    const { data: pool, error: poolErr } = await db.rpc('get_practice_questions', {
-      p_subject_ids: subjectIds,
-      p_exam:        exam,
-      p_topic_id:    topicId || null,
-      p_exclude:     excludeIds.length ? excludeIds : null,
-      p_pool:        Math.min(count * 3, 300),
-      p_year_spread: count > 5,
-    })
-    if (poolErr) throw poolErr
-
-    const questions = (pool ?? []).filter(Boolean)
+    const questions = await loadQuestionPool(db, { subjectIds, exam, topicIds, excludeIds, count })
     if (!questions.length) {
       return NextResponse.json(
         { questions: [], count: 0, exam, mode, availableYears: [] },

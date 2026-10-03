@@ -58,7 +58,7 @@ export function publicName(fullName, isMe) {
   return last ? `${first} ${last[0].toUpperCase()}.` : first
 }
 
-const PROFILE_COLS = 'id, full_name, class_level, school_name, student_school_name, total_points, schools(name, city, state)'
+const PROFILE_COLS = 'id, full_name, username, class_level, school_name, student_school_name, total_points, schools(name, city, state)'
 
 async function loadProfiles(service, ids) {
   if (!ids.length) return {}
@@ -66,7 +66,7 @@ async function loadProfiles(service, ids) {
   if (error) {
     // Older schemas: no student_school_name / schools relation.
     ;({ data } = await service.from('profiles')
-      .select('id, full_name, class_level, school_name, total_points').in('id', ids))
+      .select('id, full_name, username, class_level, school_name, total_points').in('id', ids))
   }
   const map = {}
   for (const p of data ?? []) map[p.id] = p
@@ -79,7 +79,7 @@ function toRow({ id, rank, xp, answered, correct, profile, callerId }) {
   return {
     rank,
     student_id:    id,
-    name:          publicName(profile?.full_name, isMe),
+    name:          publicName(profile?.full_name || profile?.username, isMe),
     class_level:   profile?.class_level ?? null,
     // Linked school first, then the name the student typed in on their profile.
     school:        profile?.schools?.name || profile?.student_school_name || profile?.school_name || null,
@@ -221,6 +221,66 @@ export async function buildLeaderboard(service, {
   }
 
   return { leaderboard, me, window, fallback: false }
+}
+
+// ── Battle board ─────────────────────────────────────────────────────────────
+// XP earned in battles only (computer and 1v1), from battle_results
+// (20261003_battle_leaderboard.sql). No school scope and no all-time fallback:
+// an empty week is shown as an empty week.
+export const BATTLE_PERIODS = ['week', 'lastWeek', 'all']
+
+function toBattleRow({ id, rank, xp, battles, wins, profile, callerId }) {
+  const isMe  = id === callerId
+  const level = getLevel(profile?.total_points ?? 0)
+  return {
+    rank,
+    student_id:    id,
+    name:          publicName(profile?.full_name || profile?.username, isMe),
+    xp:            Number(xp) || 0,
+    battles:       Number(battles) || 0,
+    wins:          Number(wins) || 0,
+    level:         level.name,
+    level_tier:    level.tier,
+    level_numeral: level.numeral,
+    is_me:         isMe,
+  }
+}
+
+export async function buildBattleLeaderboard(service, { period = 'week', limit = 20, callerId = null } = {}) {
+  const days  = periodDays(period)
+  const from  = days?.fromDay ?? null
+  const to    = days?.toDay ?? null
+  const ttl   = days?.past ? 10 * 60_000 : 60_000
+  const top = await remember(`battle:${from}:${to}:${limit}`, ttl, async () => {
+    const { data, error } = await service.rpc('battle_leaderboard_top', { p_from: from, p_to: to, p_limit: limit })
+    if (error) throw error
+    return data ?? []
+  })
+
+  const topIds = top.map(r => r.student_id)
+  const inTop  = callerId && topIds.includes(callerId)
+  const wanted = callerId && !inTop ? [...topIds, callerId] : topIds
+  const [profiles, mine] = await Promise.all([
+    loadProfiles(service, wanted),
+    callerId && !inTop
+      ? service.rpc('battle_leaderboard_me', { p_student: callerId, p_from: from, p_to: to })
+      : { data: null },
+  ])
+  if (mine.error) throw mine.error
+
+  const leaderboard = top.map(r => toBattleRow({
+    id: r.student_id, rank: Number(r.rank), xp: r.xp, battles: r.battles, wins: r.wins,
+    profile: profiles[r.student_id], callerId,
+  }))
+  let me = leaderboard.find(r => r.is_me) ?? null
+  if (!me && callerId && profiles[callerId]) {
+    const m = mine.data?.[0] ?? { xp: 0, battles: 0, wins: 0, rank: null }
+    me = toBattleRow({
+      id: callerId, rank: m.rank == null ? null : Number(m.rank), xp: m.xp, battles: m.battles, wins: m.wins,
+      profile: profiles[callerId], callerId,
+    })
+  }
+  return { leaderboard, me, window: periodWindow(period) }
 }
 
 export function parseBoardParams(searchParams) {

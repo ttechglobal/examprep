@@ -459,6 +459,9 @@
   overflow-wrap: anywhere;
 }
 
+/* The question's image / diagram (components/ui/QuestionFigure). */
+.qFigure { --figure-max-h: min(36dvh, 320px); margin: -6px 0 18px; }
+
 .options { display: flex; flex-direction: column; gap: 10px; }
 
 .option {

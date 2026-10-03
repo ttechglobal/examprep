@@ -548,6 +548,49 @@
 
 .skel { height: 70px; background: linear-gradient(90deg, var(--lb-line-soft), transparent, var(--lb-line-soft)); opacity: 0.6; }
 
+/* ── My School gate (sign in / connect a school), in place of the board ──── */
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 18px;
+  text-align: center;
+}
+.gateIcon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--lb-me-bg);
+  color: var(--lb-blue);
+}
+.gateIcon svg { width: 28px; height: 28px; }
+.gateActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--lb-me-line);
+  border-radius: 999px;
+  background: var(--lb-me-bg);
+  color: var(--lb-blue);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.gateForm {
+  width: min(100%, 420px);
+  text-align: left;
+}
+
 /* ── Invite banner ───────────────────────────────────────────────────────── */
 .invite {
   display: flex;

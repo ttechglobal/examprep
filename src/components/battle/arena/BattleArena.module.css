@@ -1,0 +1,520 @@
+/* Battle arena — one viewport tall, nothing scrolls but the question board.
+ *
+ * Desktop:  topbar  [pause]      [ You 3  VS  2 Computer ]      [tools]
+ *           canvas  progress strip + question board (scrolls if long)
+ *           actions [← Previous]                         [Submit Answer]
+ *           The two fighters stand on podiums either side of the canvas
+ *           (wide screens only).
+ * Phones:   the score duel gets its own row under the topbar; the actions
+ *           stay pinned to the bottom.
+ * --u follows the smaller of width and height (see BattleWorld.module.css).
+ */
+
+.arena {
+  --pad: clamp(12px, calc(var(--u) * 2.4), 36px);
+  --fighter-w: clamp(150px, calc(var(--u) * 24), 330px);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  color: #071b3d;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: calc(var(--u) * 1.4);
+  padding: max(calc(var(--u) * 1.4), env(safe-area-inset-top)) var(--pad) calc(var(--u) * 1.2);
+  position: relative;
+  z-index: 20;
+}
+
+.tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 1);
+}
+
+.utility {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: max(40px, calc(var(--u) * 5.4));
+  aspect-ratio: 1;
+  border: 2px solid #155993;
+  border-radius: calc(var(--u) * 1.4);
+  background: linear-gradient(#073c76, #041d46);
+  color: white;
+  box-shadow: 0 4px 0 #01173860;
+  cursor: pointer;
+}
+
+.utility svg {
+  width: 56%;
+  height: 56%;
+}
+
+.flag {
+  background: linear-gradient(#67314d, #5d1834);
+  border-color: #86304d;
+  color: #ff5353;
+}
+
+.muteSlash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 150%;
+  color: #ffe05a;
+}
+
+/* ── Score duel ──────────────────────────────────────────────────────────── */
+/* The portraits overhang the panels; the side padding keeps them on screen. */
+.duel {
+  --portrait: max(62px, calc(var(--u) * 9.4));
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.2);
+  width: min(calc(var(--u) * 62), 52vw);
+  padding: 0 calc(var(--portrait) * .22);
+  position: relative;
+  z-index: 2;
+}
+
+.blueScore, .redScore {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  padding: calc(var(--u) * .5) calc(var(--u) * 1.6) calc(var(--u) * .5) calc(var(--portrait) * .86);
+  text-align: center;
+  color: white;
+  border: 3px solid #52d8ff;
+  border-radius: calc(var(--u) * 1.8);
+  background: linear-gradient(#008eff 37%, #045aca 38%);
+  box-shadow: inset 0 -6px 0 #07289d66, 0 4px 0 #062f7566;
+}
+
+.redScore {
+  padding: calc(var(--u) * .5) calc(var(--portrait) * .86) calc(var(--u) * .5) calc(var(--u) * 1.6);
+  border-color: #ff9182;
+  background: linear-gradient(#ff3439 37%, #c21525 38%);
+  box-shadow: inset 0 -6px 0 #8d111e66, 0 4px 0 #771b2266;
+}
+
+.blueScore > span, .redScore > span {
+  display: block;
+  font-size: max(15px, calc(var(--u) * 2));
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blueScore > strong, .redScore > strong {
+  display: block;
+  font-size: max(28px, calc(var(--u) * 4.2));
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.portrait {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--portrait) * -.22);
+  width: var(--portrait);
+  aspect-ratio: 1;
+  translate: 0 -50%;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 3px solid #e8faff;
+  background: linear-gradient(#00bfff, #0469a2);
+  box-shadow: 0 0 0 2px #003c75;
+}
+
+.portrait img {
+  width: 100%;
+  height: 135%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.redScore .portrait {
+  left: auto;
+  right: calc(var(--portrait) * -.22);
+  background: #e3f5ff;
+}
+
+.redScore .portrait img {
+  height: 110%;
+  object-position: center;
+}
+
+.vs {
+  flex: none;
+  font-family: var(--game-display);
+  font-size: max(30px, calc(var(--u) * 4.6));
+  color: #ffdf29;
+  -webkit-text-stroke: 2px #7b2f0b;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 #ba5b08;
+  rotate: -8deg;
+}
+
+/* ── Canvas ──────────────────────────────────────────────────────────────── */
+.canvas {
+  position: relative;
+  z-index: 3;
+  min-height: 0;
+  width: min(calc(100% - 2 * var(--fighter-w)), calc(var(--u) * 96));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* Short questions sit in the middle; long ones fill and scroll. */
+  justify-content: safe center;
+  padding-top: calc(var(--u) * .6);
+}
+
+.progress {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.8);
+  min-height: max(48px, calc(var(--u) * 6));
+  margin-bottom: calc(var(--u) * 1.2);
+  padding: calc(var(--u) * .7) calc(var(--u) * 2);
+  background: linear-gradient(#fffcf2, #f9eacb);
+  border: 3px solid #5c776c;
+  border-radius: calc(var(--u) * 2);
+  box-shadow: inset 0 0 0 3px #fff9e9, 0 4px 0 #5f674650;
+}
+
+.progress > strong {
+  font-size: max(17px, calc(var(--u) * 2.3));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.progressTrack {
+  flex: 1;
+  min-width: 30px;
+  height: max(10px, calc(var(--u) * 1.8));
+  overflow: hidden;
+  border-radius: 30px;
+  background: #dad8d3;
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: 30px;
+  background: linear-gradient(#00b9ff, #006aff);
+  transition: width .3s;
+}
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * .8);
+  font-size: max(20px, calc(var(--u) * 2.8));
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.clockIcon {
+  width: max(24px, calc(var(--u) * 3.6));
+}
+
+.urgent {
+  color: #c6152e;
+  animation: clockPulse 1s ease infinite;
+}
+
+@keyframes clockPulse {
+  50% {
+    opacity: .6;
+  }
+}
+
+.questionBoard {
+  --question-font: clamp(20px, calc(var(--u) * 2.8), 34px);
+  --answer-font: max(18px, calc(var(--u) * 2.3));
+  --answer-height: max(54px, calc(var(--u) * 6.6));
+  --answer-letter: max(36px, calc(var(--u) * 4.6));
+  --answer-letter-font: max(19px, calc(var(--u) * 2.4));
+  --figure-max-h: min(30dvh, 260px);
+  min-height: 0;
+  flex: 0 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.6);
+  padding: calc(var(--u) * 2);
+  background: linear-gradient(#fff9ed, #f8e9c7);
+  border: 3px solid #d7bc83;
+  border-radius: calc(var(--u) * 2.6);
+  box-shadow: inset 0 0 0 4px #fff4d9, 0 6px 0 #77735666, 0 12px 24px #12282030;
+  scrollbar-width: thin;
+}
+
+.questionBoard :global(.btiles) {
+  gap: calc(var(--u) * 1.4);
+}
+
+.feedback {
+  flex: none;
+  margin: calc(var(--u) * 1) 0 0;
+  padding: calc(var(--u) * .7) calc(var(--u) * 1.4);
+  text-align: center;
+  font-weight: 800;
+  font-size: max(17px, calc(var(--u) * 2.1));
+  line-height: 1.2;
+  background: #fffaf0e8;
+  border-radius: 14px;
+}
+
+.feedback span {
+  display: block;
+  margin-top: 3px;
+  font-size: max(14px, calc(var(--u) * 1.6));
+  font-weight: 500;
+}
+
+.correct {
+  color: #078543;
+}
+
+.incorrect {
+  color: #a02921;
+}
+
+/* ── Fighters ────────────────────────────────────────────────────────────── */
+.fighter {
+  position: absolute;
+  bottom: calc(var(--u) * 10);
+  width: var(--fighter-w);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.player {
+  left: calc(var(--u) * 1);
+}
+
+.robot {
+  right: calc(var(--u) * 1);
+}
+
+.fighterArt {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.podium {
+  position: relative;
+  margin: -6% 10% 0;
+  padding: 0 10% calc(var(--u) * 1.4);
+  text-align: center;
+  background: repeating-linear-gradient(0deg, #b58a56 0, #b58a56 41px, #715f47 42px, #e2be7b 46px);
+  border: 4px solid #aa8a62;
+  border-radius: 12px 12px 0 0;
+  box-shadow: inset 0 0 0 6px #cdac77;
+}
+
+.blueName, .redName {
+  margin-top: calc(var(--u) * -1.6);
+  font-size: max(17px, calc(var(--u) * 2.4));
+  font-weight: 800;
+  color: white;
+  white-space: nowrap;
+  background: linear-gradient(#098bff, #044dad);
+  border: 3px solid #e4a02b;
+  border-radius: 12px;
+  box-shadow: 0 3px 0 #6c4524;
+}
+
+.redName {
+  background: linear-gradient(#f83f35, #b71321);
+}
+
+.bluePoints, .redPoints {
+  display: block;
+  margin-top: calc(var(--u) * 1);
+  padding: calc(var(--u) * .4) 8px;
+  font-size: max(32px, calc(var(--u) * 5.2));
+  line-height: 1.05;
+  color: white;
+  background: linear-gradient(#0476ec, #064bb6);
+  border: 3px solid #dbaa49;
+  box-shadow: 0 4px 0 #624326;
+}
+
+.redPoints {
+  background: linear-gradient(#e72731, #ac1423);
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
+.actions {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 1.6) var(--pad) max(calc(var(--u) * 2), env(safe-area-inset-bottom));
+}
+
+.actions button {
+  min-height: max(52px, calc(var(--u) * 6.6));
+  min-width: max(150px, calc(var(--u) * 20));
+  font-size: max(20px, calc(var(--u) * 2.6));
+}
+
+.actions button:first-child {
+  background: linear-gradient(#fff, #edf3ff);
+  border-color: #80a5c5;
+  box-shadow: inset 0 0 0 3px #fff, 0 5px 0 #31618a66;
+}
+
+.actions .submit {
+  min-width: max(220px, calc(var(--u) * 30));
+  color: white;
+  background: linear-gradient(#00d771, #00a74d);
+  border-color: #02ec85;
+  box-shadow: inset 0 0 0 2px #36e386, 0 6px 0 #026d3c;
+}
+
+.actions .submit svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.reduceMotion * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* No room for the podiums: the canvas takes the width. */
+@media (max-width: 1099px) {
+  .fighter {
+    display: none;
+  }
+
+  .canvas {
+    width: min(calc(100% - 2 * var(--pad)), calc(var(--u) * 96));
+  }
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 899px) {
+  .arena {
+    --pad: 12px;
+  }
+
+  .topbar {
+    grid-template-columns: auto 1fr;
+    padding-bottom: 6px;
+  }
+
+  .duel {
+    --portrait: 64px;
+    grid-row: 2;
+    width: 100%;
+    max-width: 480px;
+    margin: 4px auto 10px;
+    padding: 0 18px;
+  }
+
+  .topbar > .duel {
+    grid-column: 1 / -1;
+  }
+
+  .blueScore > span, .redScore > span {
+    font-size: 16px;
+  }
+
+  .blueScore > strong, .redScore > strong {
+    font-size: 30px;
+  }
+
+  .vs {
+    font-size: 30px;
+    -webkit-text-stroke-width: 1px;
+  }
+
+  .canvas {
+    width: 100%;
+    padding: 0 var(--pad);
+  }
+
+  .progress {
+    gap: 10px;
+    min-height: 44px;
+    padding: 6px 12px;
+    border-width: 2px;
+  }
+
+  .questionBoard {
+    --question-font: 21px;
+    --answer-font: 19px;
+    --answer-height: 52px;
+    --answer-letter: 34px;
+    --answer-letter-font: 19px;
+    --figure-max-h: 200px;
+    padding: 12px 10px;
+    gap: 12px;
+    border-width: 2px;
+    border-radius: 20px;
+  }
+
+  .questionBoard :global(.btiles) {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .feedback span {
+    display: none;
+  }
+
+  .actions {
+    gap: 10px;
+    padding: 10px var(--pad) max(14px, env(safe-area-inset-bottom));
+  }
+
+  .actions button {
+    min-width: 0;
+    min-height: 52px;
+    padding: 8px 14px;
+    font-size: 20px;
+  }
+
+  .actions .submit {
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .tools {
+    gap: 6px;
+  }
+
+  .progress > strong {
+    font-size: 16px;
+  }
+
+  .actions .submit {
+    font-size: 18px;
+  }
+}

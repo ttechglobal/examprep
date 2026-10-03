@@ -1,0 +1,85 @@
+/* The battle world's scale (see BattleWorld.module.css), defined once here so
+   every battle screen and component inherits it. Screens may override it. */
+.experience {
+  --u: clamp(7px, min(.78vw, 1.25dvh), 14px);
+  --sign-w: calc(var(--u) * 46);
+  --gap: calc(var(--u) * 1.6);
+  --pad: clamp(14px, calc(var(--u) * 2.6), 40px);
+  height: 100dvh;
+  overflow: hidden;
+  font-family: var(--game-body), sans-serif;
+  color: #081b3b;
+  background: #158eda;
+}
+
+.loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px;
+  text-align: center;
+  color: white;
+  background: linear-gradient(#08366070, #06244990), url('/images/battle/design/courtyard.png') center / cover;
+}
+
+.loading img {
+  width: clamp(110px, 18dvh, 160px);
+  height: auto;
+}
+
+.loading h1 {
+  margin: 0;
+  font: clamp(30px, 5vw, 52px) var(--game-display);
+  color: #ffdf4d;
+  text-shadow: 0 3px #462a13;
+}
+
+.loading p {
+  margin: 0;
+  font-size: 22px;
+}
+
+.track {
+  width: min(360px, 80vw);
+  height: 20px;
+  overflow: hidden;
+  background: #092f5e;
+  border: 3px solid #d9eaff;
+  border-radius: 20px;
+}
+
+.track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(#ffeb64, #ffaa00);
+  transition: width .2s;
+}
+
+.confirm, .cancel {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  border: 2px solid #c9aa65;
+  border-radius: 12px;
+  font: 700 22px var(--game-body);
+  background: #ffcb27;
+  color: #081b3b;
+  cursor: pointer;
+}
+
+.cancel {
+  background: #fff6df;
+}
+
+@media (max-width: 899px) {
+  .experience {
+    --u: 8px;
+    --sign-w: 330px;
+    --gap: 12px;
+    --pad: 16px;
+  }
+}

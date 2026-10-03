@@ -27,6 +27,7 @@ import LazyImage from '@/components/ui/LazyImage'
 import { shareInvite } from '@/components/student/InviteFriendsCard'
 import { HERO_BG, PODIUM_IMAGES, AVATAR_RIM_OFFSET, INVITE_IMAGE } from './art'
 import { avatarLook } from '@/lib/leaderboard/avatar'
+import JoinSchool from '@/components/student/JoinSchool'
 
 const cx = (...names) => names.filter(Boolean).join(' ')
 
@@ -41,9 +42,9 @@ export function Avatar({ entry }) {
 }
 
 // ── National | My School ─────────────────────────────────────────────────────
-// "My School" without a linked school asks the page to connect one
-// (onChange('join')); the page decides what that means for guests.
-export function ScopeToggle({ scope, hasSchool, onChange }) {
+// Both tabs always switch the page; without a linked school, "My School"
+// shows SchoolGate in place of the board.
+export function ScopeToggle({ scope, onChange }) {
   const options = [
     { key: 'national', label: 'National',  icon: <NigeriaFlag /> },
     { key: 'school',   label: 'My School', icon: <SchoolIcon /> },
@@ -55,12 +56,39 @@ export function ScopeToggle({ scope, hasSchool, onChange }) {
           key={o.key} type="button"
           className={s.scopeBtn}
           aria-pressed={scope === o.key}
-          onClick={() => onChange(o.key === 'school' && !hasSchool ? 'join' : o.key)}
+          onClick={() => onChange(o.key)}
         >
           {o.icon}{o.label}
         </button>
       ))}
     </div>
+  )
+}
+
+// ── My School, before there is a school board ────────────────────────────────
+// Stays on the page: guests are asked to sign in, signed-in students without a
+// linked school connect one right here.
+export function SchoolGate({ isGuest, profile, onLinked }) {
+  return (
+    <section className={cx(s.board, s.gate)} aria-label="My School leaderboard">
+      <span className={s.gateIcon} aria-hidden="true"><SchoolIcon /></span>
+      {isGuest ? (
+        <>
+          <p className={s.emptyTitle}>Sign in to join your school leaderboard</p>
+          <p className={s.emptyBody}>See how you rank against your classmates and climb together.</p>
+          <div className={s.gateActions}>
+            <Link href="/onboarding?mode=signin&from=/student/leaderboard" className={s.primaryBtn}>Sign in</Link>
+            <Link href="/onboarding?mode=signup" className={s.secondaryBtn}>Create a free account</Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className={s.emptyTitle}>Connect your school to join its leaderboard</p>
+          <p className={s.emptyBody}>Enter the code from your teacher to see how you rank against your classmates.</p>
+          <div className={s.gateForm}><JoinSchool profile={profile} onLinked={onLinked} compact /></div>
+        </>
+      )}
+    </section>
   )
 }
 

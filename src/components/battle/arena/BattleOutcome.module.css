@@ -1,0 +1,130 @@
+/* Results. Desktop: the board and final score on the left, rewards and next
+   actions on the right, so "Battle again" is on screen even on short
+   laptops. Phones: one column. */
+.result {
+  --sign-w: calc(var(--u) * 44);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  column-gap: calc(var(--u) * 4);
+  width: min(100%, calc(var(--u) * 104));
+  margin: 0 auto;
+}
+
+.hero, .details {
+  min-width: 0;
+}
+
+.duel {
+  display: flex;
+  justify-content: center;
+  margin-top: calc(var(--u) * .4);
+}
+
+.details {
+  display: grid;
+  gap: var(--gap);
+}
+
+.details > * {
+  margin: 0;
+}
+
+.rewards {
+  text-align: center;
+}
+
+.xpLine {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  margin-bottom: calc(var(--u) * 1.2);
+  font-size: max(17px, calc(var(--u) * 2));
+  font-weight: 600;
+}
+
+.xp {
+  font-family: var(--game-display);
+  font-weight: 400;
+  font-size: max(32px, calc(var(--u) * 4.6));
+  color: #df9700;
+  text-shadow: 0 2px 0 #fff;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--u) * 1);
+}
+
+.stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: calc(var(--u) * 1) 8px;
+  background: #fff8e5;
+  border: 2px solid #d8c79c;
+  border-radius: 14px;
+}
+
+.stats strong {
+  font-size: max(24px, calc(var(--u) * 3));
+  font-weight: 800;
+}
+
+.stats span {
+  font-size: max(16px, calc(var(--u) * 1.8));
+}
+
+.stats > div:first-child strong {
+  color: #04854b;
+}
+
+.stats > div:nth-child(2) strong {
+  color: #bf292d;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--u) * 1);
+}
+
+.actions > button:first-child {
+  grid-column: 1 / -1;
+}
+
+.actions button {
+  min-width: 0;
+  padding-inline: 10px;
+  white-space: normal;
+  line-height: 1.05;
+}
+
+@media (max-width: 899px) {
+  .result {
+    --sign-w: 320px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .duel {
+    margin: 4px 0 var(--gap);
+  }
+
+  /* Pinned to the bottom of the scrolling stage, like the setup dock. */
+  .actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    margin: 0 calc(-1 * var(--pad));
+    padding: 12px var(--pad) max(14px, env(safe-area-inset-bottom));
+    background: linear-gradient(#0a2e4800, #0a2e48c0 30%);
+  }
+
+  .actions button:not(:first-child) {
+    min-height: 48px;
+    font-size: 17px;
+  }
+}

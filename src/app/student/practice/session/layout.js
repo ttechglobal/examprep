@@ -5,10 +5,9 @@
 // student/layout.js for this route only.
 //
 // The session page manages its own PointsContext call directly:
-//   const { setTotalPoints, showXPToast } = usePoints()
+//   const { setTotalPoints } = usePoints()
 //   // after session save:
 //   setTotalPoints(data.new_total_xp)
-//   showXPToast(data.xp_awarded, 'Practice session done!')
 //
 // When the student navigates away from the session back to any student page,
 // the student/layout.js re-mounts and picks up the new XP from localStorage

@@ -50,7 +50,7 @@ function resultFor(q, answer) {
 export default function MockPage() {
   const router   = useRouter()
   const { dark } = useTheme()
-  const { totalPoints: currentXP, setTotalPoints, showXPToast } = usePoints()
+  const { totalPoints: currentXP, setTotalPoints } = usePoints()
   const profile  = useStudentUser()
 
   const [phase,    setPhase]    = useState('pick-exam')   // pick-exam | setup | session | results | review | error
@@ -167,7 +167,6 @@ export default function MockPage() {
     const xp = computeSessionXP('mock', results)
     saveSessionLocally(payload, xp)
     setTotalPoints((currentXP || 0) + xp)
-    showXPToast(xp, 'Mock exam complete!')
     setSaved({
       questions, results, xp, streak: readLocalStreak(), durationSecs,
       subjects: secs.map((sec, si) => ({
@@ -188,7 +187,7 @@ export default function MockPage() {
         })
         .catch(() => {})
     }).catch(() => {})
-  }, [examType, currentXP, setTotalPoints, showXPToast])
+  }, [examType, currentXP, setTotalPoints])
 
   function onTimeUp() { captureCurrent(); saveSession() }
 

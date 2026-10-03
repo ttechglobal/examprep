@@ -57,7 +57,7 @@ function Match({ matchId }) {
   const router = useRouter()
   const match = useMatch(matchId)
   const { state, phase, serverNow, clockOffset, lockedIdx } = match
-  const { totalPoints, setTotalPoints, showXPToast } = usePoints()
+  const { totalPoints, setTotalPoints } = usePoints()
 
   const [isGuest,   setIsGuest]   = useState(false)   // playing from an invite link, no account
   const [selection, setSelection] = useState(null)    // { q, idx } picked but maybe not locked in
@@ -123,8 +123,7 @@ function Match({ matchId }) {
     awarded.current = true
     const xp = matchXp(state)
     setTotalPoints((totalPoints || 0) + xp)
-    showXPToast(xp, 'Battle done!')
-  }, [phase, state, isGuest, totalPoints, setTotalPoints, showXPToast])
+  }, [phase, state, isGuest, totalPoints, setTotalPoints])
 
   // Both players end up in a rematch as soon as it starts.
   const rematch = state?.rematch

@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MathText, WorkingsBlock, injectMathStyles } from '@/lib/mathRenderer'
+import { safeSvg } from '@/lib/safeSvg'
 
 function safeParseJson(val, fallback) {
   if (val === null || val === undefined) return fallback
@@ -28,13 +29,8 @@ function safeParseJson(val, fallback) {
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
 function SvgBlock({ svg, label }) {
-  if (!svg || typeof svg !== 'string') return null
-  const trimmed = svg.trim()
-  if (!trimmed.toLowerCase().startsWith('<svg')) return null
-  const safe = trimmed
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
+  const safe = safeSvg(svg)
+  if (!safe) return null
   return (
     <div className="rounded-[20px] overflow-hidden border-2 border-default bg-card">
       {label && (
