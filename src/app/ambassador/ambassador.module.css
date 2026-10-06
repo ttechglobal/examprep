@@ -140,13 +140,21 @@
   font-weight: 900;
   letter-spacing: -.035em;
   margin: 0 0 20px;
-  max-width: 14ch;
+  max-width: 16ch;
+}
+.heroMark {
+  background: linear-gradient(135deg, var(--gold), var(--orange));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--gold);
+  white-space: nowrap;
 }
 .heroSub {
   font-size: clamp(16px, 2vw, 18px);
   line-height: 1.6;
   color: rgba(255,255,255,.72);
-  max-width: 34em;
+  max-width: 26em;
   margin: 0 0 32px;
 }
 .heroActions {
@@ -573,39 +581,46 @@
 .featureTitle { font-size: 15px; font-weight: 800; margin: 2px 0 4px; }
 .featureText  { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.6); margin: 0; }
 
-/* School dashboard block */
-.schoolBlock {
-  margin-top: 72px;
+/* Ambassador dashboard */
+.dashGrid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 32px;
+  gap: 40px;
   align-items: center;
-  padding: 28px;
-  border-radius: 24px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.08);
 }
-.schoolTitle { font-size: 22px; font-weight: 900; letter-spacing: -.02em; margin: 0 0 10px; }
-.schoolText { font-size: 15px; line-height: 1.7; color: rgba(255,255,255,.64); margin: 0; }
+.dashLead { font-size: 17px; line-height: 1.75; color: var(--ink-2); margin: 0; max-width: 34em; }
 .dash {
   border-radius: 18px;
   background: #fff;
   color: var(--ink);
   padding: 18px;
-  box-shadow: 0 20px 44px rgba(0,0,0,.35);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 0 var(--line), 0 20px 44px rgba(6,42,120,.12);
 }
+.dashNote { margin: 18px 0 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .dashHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
 .dashTitle { font-size: 14px; font-weight: 900; }
 .dashMeta { font-size: 11px; color: var(--ink-3); font-weight: 700; }
-.dashKpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.dashKpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
 .dashKpi { border-radius: 12px; padding: 10px; background: #f0f4ff; }
 .dashKpiNum { font-size: 18px; font-weight: 900; }
 .dashKpiLabel { font-size: 10.5px; color: var(--ink-3); font-weight: 700; }
-.dashSub { font-size: 12px; font-weight: 800; margin-bottom: 8px; }
-.dashRow { display: grid; grid-template-columns: 1fr 110px 34px; gap: 10px; align-items: center; font-size: 12px; font-weight: 600; padding: 6px 0; }
-.dashTrack { height: 7px; border-radius: 999px; background: #fee2e2; overflow: hidden; }
-.dashTrack span { display: block; height: 100%; background: #ef4444; border-radius: 999px; }
-.dashPct { font-weight: 900; color: #dc2626; text-align: right; }
+.dashSub { font-size: 12px; font-weight: 800; margin-bottom: 4px; }
+.dashRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.dashSub + .dashRow { border-top: 0; }
+.dashName { font-weight: 800; }
+.dashPlan { color: var(--ink-3); }
+.dashCredit { font-weight: 900; color: #059669; text-align: right; min-width: 52px; }
+.dashPending { font-weight: 700; color: var(--ink-3); text-align: right; min-width: 52px; }
 
 /* ── Program ─────────────────────────────────────────────────────────────── */
 .programGrid {
@@ -800,23 +815,22 @@
 
 /* ── Breakpoints ─────────────────────────────────────────────────────────── */
 @media (min-width: 720px) {
-  .showcase { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .showcase { grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 760px; margin-left: auto; margin-right: auto; }
   .features { grid-template-columns: 1fr 1fr; }
   .steps { grid-template-columns: 1fr 1fr; }
-  .stepLast { grid-column: 1 / -1; }
 }
 @media (min-width: 960px) {
   .hero { padding: 88px 0 112px; }
   .heroGrid { grid-template-columns: 1.15fr .85fr; }
-  .features { grid-template-columns: repeat(3, 1fr); }
-  .schoolBlock { grid-template-columns: .9fr 1.1fr; padding: 40px; }
+  .features { grid-template-columns: repeat(4, 1fr); }
+  .dashGrid { grid-template-columns: .9fr 1.1fr; gap: 56px; }
   .programGrid { grid-template-columns: 1.2fr .8fr; gap: 56px; }
   .whoGrid { grid-template-columns: .9fr 1.1fr; gap: 56px; }
   .section { padding: 104px 0; }
 }
 @media (max-width: 420px) {
   .heroActions .btn, .finalActions .btn { width: 100%; }
-  .dashRow { grid-template-columns: 1fr 70px 32px; }
+  .dashRow { gap: 8px; font-size: 11.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

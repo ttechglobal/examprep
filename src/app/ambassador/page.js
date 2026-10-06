@@ -3,33 +3,45 @@
 // Teacher Ambassador Program — public info page.
 //
 // One link to share when anyone asks "how does the ambassador program work?"
-// Explains the app, the program and the terms, then sends interested
-// teachers to the Google Form. Responses land in Google Sheets.
+// The model: a teacher recommends ExamPrep A1 to their students. Students sign
+// up through the teacher's referral link or code. When a student pays, the
+// teacher is credited a percentage, visible on their own dashboard. Bringing a
+// whole school on board is welcome but optional.
+//
+// Applications go to the Google Form and land in Google Sheets. Submitting
+// does not guarantee a place: we review and contact selected teachers.
 //
 // Server component: no client JS needed. The FAQ uses native <details>,
 // buttons use CSS :active for the press effect. Metadata below controls the
 // WhatsApp / social link preview.
 //
 // TO EDIT:
-//   • GOOGLE_FORM_URL — paste the real form link
-//   • SCREENSHOTS     — drop real screenshots into /public/images/ambassador/
-//                       and set `image` to swap out the built-in mockups
+//   • GOOGLE_FORM_URL    — paste the real form link
+//   • COMMISSION_RATE    — the ambassador's share. Stated in the FAQ only.
+//                          Plan prices are deliberately NOT shown on this page.
+//   • SCREENSHOTS        — drop real screenshots into /public/images/ambassador/
+//                          and set `image` to swap out the built-in mockups
 // ─────────────────────────────────────────────────────────────────────────────
 
 import styles from './ambassador.module.css'
 import { whatsappLink } from '@/lib/contact'
+import { TRIAL_DAYS } from '@/lib/plans'
 
 // ── Links ─────────────────────────────────────────────────────────────────────
 const GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeKMOeCcqMQB5Srt3iqfYPlbETgyoipbp7qRyIF3fLHm7g59g/viewform?usp=header'
 const WHATSAPP_URL    = whatsappLink('Hi, I have a question about the ExamPrep A1 Teacher Ambassador Program')
-const PRICE_PER_YEAR  = '₦5,000'
+
+// ── Commission ────────────────────────────────────────────────────────────────
+// Stated in the FAQ only, by design. Everywhere else the page says "a percentage".
+const COMMISSION_RATE = 0.2
+const COMMISSION_PCT  = `${COMMISSION_RATE * 100}%`
 
 export const metadata = {
   title:       'Teacher Ambassador Program | ExamPrep A1',
-  description: 'Introduce ExamPrep A1 to your school and earn a percentage of every student subscription. Free to join. Schools pay nothing.',
+  description: 'Recommend ExamPrep A1, the gamified WAEC and JAMB learning app, to your students and earn when they subscribe. Free to join.',
   openGraph: {
     title:       'ExamPrep A1 Teacher Ambassador Program',
-    description: 'Help your students pass WAEC and JAMB, and earn while you do it.',
+    description: 'Recommend a gamified learning app to your students and earn when they subscribe.',
     images:      ['/images/examprep_logo.png'],
     type:        'website',
   },
@@ -40,25 +52,21 @@ export const metadata = {
 // to show a real screenshot instead of the built-in mockup.
 const SCREENSHOTS = {
   explanation: { image: null, alt: 'A past question with its step-by-step explanation' },
-  battle:      { image: null, alt: 'Battle mode against the computer' },
-  progress:    { image: null, alt: 'Student progress showing weak topics' },
+  battle:      { image: null, alt: 'Battle mode: a student competing against the computer on a past question' },
 }
 
 const FEATURES = [
-  { icon: '📚', title: 'Real WAEC and JAMB past questions', text: 'Organised by subject, topic and year, so students practise exactly what shows up in the exam.' },
-  { icon: '💡', title: 'Explanations that teach',             text: 'Step-by-step working that explains the idea behind the answer, not just which option is right.' },
-  { icon: '⏱',  title: 'Many ways to practise',               text: 'Topic practice, study mode, quick 5-question drills, timed speed rounds and full mock exams.' },
-  { icon: '⚔️', title: 'Battle mode',                          text: 'Students go head-to-head against the computer on real exam questions. Revision that feels like a game.' },
-  { icon: '🗂',  title: 'Daily challenges, flashcards, formulas', text: 'Short, regular revision that keeps students coming back every day.' },
-  { icon: '📈', title: 'Progress and leaderboards',            text: 'Students see their weak topics and what to study next, and compete on school and national leaderboards.' },
+  { icon: '⚔️', title: 'Battle the computer',        text: 'Students compete head-to-head against the computer while answering real past questions.' },
+  { icon: '🔥', title: 'XP, streaks and levels',     text: 'Every question earns XP. Streaks and levels make revision a daily habit.' },
+  { icon: '🏆', title: 'Missions and leaderboards',  text: 'Daily goals and school and national leaderboards give students a reason to keep going.' },
+  { icon: '📚', title: 'Real WAEC and JAMB questions', text: 'Organised by subject, topic and year, with step-by-step explanations.' },
 ]
 
 const STEPS = [
-  { title: 'Apply',                         text: 'Fill the short application form. It takes about three minutes.' },
-  { title: 'We review and select',          text: 'We go through every application and reach out to selected ambassadors with the full details, including your commission rate.' },
-  { title: 'Introduce ExamPrep A1 to your school', text: 'Tell your principal or school management about the app. We give you materials to share and can join a call or visit to present it with you.' },
-  { title: 'The school comes on board',     text: 'Once the school approves, we set it up and students join with the school’s own code.' },
-  { title: 'You earn',                      text: 'For every student from your school who pays for ExamPrep A1, you earn a percentage of their payment.' },
+  { title: 'Apply',                    text: 'Fill the short form. It takes about three minutes.' },
+  { title: 'We review and select',     text: 'Applying does not guarantee a place. We reach out to the teachers we select.' },
+  { title: 'Share with your students', text: 'You get a referral link and code. Students sign up with it.' },
+  { title: 'Earn when they pay',       text: 'A percentage of each payment is credited to you, visible on your dashboard.' },
 ]
 
 const FAQS = [
@@ -67,45 +75,46 @@ const FAQS = [
     a: 'No. Joining the program is completely free.',
   },
   {
-    q: 'Does the school have to pay?',
-    a: `No. The school only needs to approve ExamPrep A1 for its students. Students pay for the app themselves.`,
+    q: 'How much do I earn?',
+    a: `You earn ${COMMISSION_PCT} of whatever each student pays. There is no limit on how many students you can refer.`,
   },
   {
-    q: 'How much will I earn?',
-    a: 'You earn a percentage of every student subscription from the schools you bring on board. There is no limit: more paying students and more schools means more earnings. We share the exact rate with ambassadors once they are selected.',
+    q: 'Do I get paid just for students signing up?',
+    a: 'No. You earn when a student you referred actually pays, not when they sign up.',
   },
   {
-    q: 'What happens after I fill the form?',
-    a: 'Our team reviews every application. If you are selected, we contact you directly with the full program details and help you prepare to introduce ExamPrep A1 to your school.',
+    q: 'Can students try the app before paying?',
+    a: `Yes. Every new student gets ${TRIAL_DAYS} days of everything free, and some features stay free after that.`,
   },
   {
-    q: 'How do you know which students came from my school?',
-    a: 'Each school gets its own code, and students join through it. Every paying student linked to your school counts toward your earnings.',
-  },
-  {
-    q: 'What if another teacher from my school also applies?',
-    a: 'The first ambassador to register a school and get it approved is credited for that school.',
-  },
-  {
-    q: 'Do I have to convince every student to pay?',
-    a: 'No. Your role is to bring the school on board. You should never pressure students or parents to pay.',
-  },
-  {
-    q: 'Can I introduce more than one school?',
-    a: 'Yes. You earn from every school you bring on board.',
+    q: 'How do you know which students are mine?',
+    a: 'Students sign up through your referral link, or enter your referral code when they register. Every payment from a student linked to you is credited to you.',
   },
   {
     q: 'Can I see how I’m doing?',
-    a: 'Yes. We send you a regular summary of the students who have joined and paid from your school.',
+    a: 'Yes. Your own dashboard shows who signed up with your link or code, who has paid, and what you have earned. It is fully transparent.',
+  },
+  {
+    q: 'What happens after I fill the form?',
+    a: 'We review every application. Submitting the form does not automatically make you an ambassador. If you are selected, we reach out to you directly.',
+  },
+  {
+    q: 'Do I have to convince students to pay?',
+    a: 'No. Just recommend the app. You should never pressure students or parents to pay.',
+  },
+  {
+    q: 'Can I bring my whole school on board?',
+    a: 'Yes, you are welcome to. Tell us when we speak and we will help you present it to your school. Students from your school who sign up with your link or code count toward your earnings.',
   },
 ]
 
 const TERMS = [
-  'Ambassadors earn a percentage of payments actually received from students at schools they introduced and that ExamPrep A1 approved. The rate is shared with you when you are selected.',
-  'A school counts as yours only after it is registered through your application and approved by ExamPrep A1. ExamPrep A1 may decline a school at its discretion.',
+  'Ambassadors earn a percentage of payments actually received from students who signed up using their referral link or code.',
   'Submitting the application form does not guarantee selection as an ambassador.',
+  'Each student is linked to the ambassador whose link or code they used when signing up.',
   'Refunded or reversed payments are removed from your earnings.',
-  'You may not misrepresent ExamPrep A1, make promises on our behalf (such as guaranteed results or discounts we have not approved), or offer payments to school staff to win approval.',
+  'You may not misrepresent ExamPrep A1, make promises on our behalf (such as guaranteed results or discounts we have not approved), or pressure students or parents to pay.',
+  'Creating fake or duplicate accounts to earn commission is not allowed.',
   'ExamPrep A1 may update the program terms with notice to ambassadors. Earnings already made are not affected.',
   'ExamPrep A1 may remove ambassadors who break these terms.',
 ]
@@ -183,64 +192,30 @@ function BattleMock() {
   )
 }
 
-function ProgressMock() {
-  const subjects = [
-    { icon: '📐', name: 'Mathematics', pct: 74, color: '#FFB800' },
-    { icon: '⚗️', name: 'Chemistry',   pct: 58, color: '#9b7ae0' },
-    { icon: '🧬', name: 'Biology',     pct: 81, color: '#4ade80' },
+// Sample data, for illustration only. No amounts are shown on purpose.
+function AmbassadorDashMock() {
+  const recent = [
+    { name: 'Chidi O.', status: 'Subscribed', credited: true },
+    { name: 'Aisha B.', status: 'Subscribed', credited: true },
+    { name: 'Tunde A.', status: 'Subscribed', credited: true },
+    { name: 'Ngozi E.', status: 'Signed up',  credited: false },
   ]
   return (
-    <div className={`${styles.screen} ${styles.mDark}`} role="img" aria-label={SCREENSHOTS.progress.alt}>
-      <div>
-        <div className={styles.mHello}>Good evening, Tolu</div>
-        <div className={styles.mHelloSub}>WAEC 2027 · 3 subjects</div>
-      </div>
-      <div className={styles.mStreak}>
-        <div><strong>🔥 9</strong>day streak</div>
-        <div><strong>✦ 1,240</strong>XP</div>
-      </div>
-      {subjects.map(s => (
-        <div key={s.name} className={styles.mSubj}>
-          <span>{s.icon}</span>
-          <span className={styles.mSubjName}>{s.name}</span>
-          <span className={styles.mSubjBar}><span style={{ width: `${s.pct}%`, background: s.color }} /></span>
-          <span className={styles.mSubjPct} style={{ color: s.color }}>{s.pct}%</span>
-        </div>
-      ))}
-      <div className={styles.mWeakTitle}>Work on these next</div>
-      <div>
-        <span className={styles.mWeak}>Mole concept</span>
-        <span className={styles.mWeak}>Quadratic equations</span>
-        <span className={styles.mWeak}>Electrolysis</span>
-      </div>
-    </div>
-  )
-}
-
-function SchoolDashMock() {
-  const weak = [
-    { t: 'Mole concept',          p: 38 },
-    { t: 'Logarithms',            p: 44 },
-    { t: 'Genetics',              p: 51 },
-    { t: 'Electromagnetic induction', p: 55 },
-  ]
-  return (
-    <div className={styles.dash} role="img" aria-label="School dashboard showing topics the class is struggling with">
+    <div className={styles.dash} role="img" aria-label="Ambassador dashboard showing students signed up, students who subscribed">
       <div className={styles.dashHead}>
-        <span className={styles.dashTitle}>SS3 overview</span>
-        <span className={styles.dashMeta}>This week</span>
+        <span className={styles.dashTitle}>Your dashboard</span>
+        <span className={styles.dashMeta}>This term</span>
       </div>
       <div className={styles.dashKpis}>
-        <div className={styles.dashKpi}><div className={styles.dashKpiNum}>142</div><div className={styles.dashKpiLabel}>Active students</div></div>
-        <div className={styles.dashKpi}><div className={styles.dashKpiNum}>6,380</div><div className={styles.dashKpiLabel}>Questions answered</div></div>
-        <div className={styles.dashKpi}><div className={styles.dashKpiNum} style={{ color: '#059669' }}>+12%</div><div className={styles.dashKpiLabel}>Average score</div></div>
+        <div className={styles.dashKpi}><div className={styles.dashKpiNum}>48</div><div className={styles.dashKpiLabel}>Signed up</div></div>
+        <div className={styles.dashKpi}><div className={styles.dashKpiNum}>14</div><div className={styles.dashKpiLabel}>Subscribed</div></div>
       </div>
-      <div className={styles.dashSub}>Topics your class is struggling with</div>
-      {weak.map(w => (
-        <div key={w.t} className={styles.dashRow}>
-          <span>{w.t}</span>
-          <span className={styles.dashTrack}><span style={{ width: `${w.p}%` }} /></span>
-          <span className={styles.dashPct}>{w.p}%</span>
+      <div className={styles.dashSub}>Recent activity</div>
+      {recent.map(r => (
+        <div key={r.name} className={styles.dashRow}>
+          <span className={styles.dashName}>{r.name}</span>
+          <span className={styles.dashPlan}>{r.status}</span>
+          <span className={r.credited ? styles.dashCredit : styles.dashPending}>{r.credited ? 'Credited' : 'Free trial'}</span>
         </div>
       ))}
     </div>
@@ -268,10 +243,12 @@ export default function AmbassadorPage() {
         <section className={styles.hero}>
           <div className={`${styles.wrap} ${styles.heroGrid}`}>
             <div>
-              <h1 className={styles.heroTitle}>Help your students pass WAEC and JAMB, and earn while you do it.</h1>
+              <h1 className={styles.heroTitle}>
+                Recommend <span className={styles.heroMark}>ExamPrep A1</span> to your students.
+                Earn when they <span className={styles.heroMark}>subscribe</span>.
+              </h1>
               <p className={styles.heroSub}>
-                Join the ExamPrep A1 Teacher Ambassador Program. Introduce ExamPrep A1 to your school,
-                and earn a percentage of every student subscription that comes from your school.
+                Become a Teacher Ambassador. Share your link, and earn when your students pay.
               </p>
               <div className={styles.heroActions}>
                 <ApplyButton />
@@ -290,27 +267,27 @@ export default function AmbassadorPage() {
                   <span className={styles.passChip}>★ Ambassador</span>
                 </div>
                 <p className={styles.passRole}>Teacher Ambassador</p>
-                <p className={styles.passSchool}>Your school · WAEC &amp; JAMB</p>
+                <p className={styles.passSchool}>Your referral code · ADEOLA24</p>
                 <div className={styles.passStats}>
                   <div className={styles.passStat}>
-                    <div className={styles.passStatNum}>128</div>
-                    <div className={styles.passStatLabel}>Students joined</div>
+                    <div className={styles.passStatNum}>64</div>
+                    <div className={styles.passStatLabel}>Students signed up</div>
                   </div>
                   <div className={styles.passStat}>
-                    <div className={styles.passStatNum}>96</div>
-                    <div className={styles.passStatLabel}>Paid this year</div>
+                    <div className={styles.passStatNum}>18</div>
+                    <div className={styles.passStatLabel}>Have subscribed</div>
                   </div>
                 </div>
                 <div className={styles.passEarn}>
                   <span className={styles.passEarnIcon}>₦</span>
-                  You earn on every student who pays
+                  You earn every time they pay
                 </div>
               </div>
               <div className={styles.passFloat}>
-                <span style={{ fontSize: 20 }}>🏫</span>
+                <span style={{ fontSize: 20 }}>🎉</span>
                 <div>
-                  <div className={styles.passFloatTitle}>School approved</div>
-                  <div className={styles.passFloatSub}>Students can now join</div>
+                  <div className={styles.passFloatTitle}>A student subscribed</div>
+                  <div className={styles.passFloatSub}>Credited to you</div>
                 </div>
               </div>
             </div>
@@ -320,33 +297,25 @@ export default function AmbassadorPage() {
         {/* What is ExamPrep A1 */}
         <section className={`${styles.section} ${styles.sectionDark}`}>
           <div className={styles.wrap}>
-            <h2 className={styles.h2}>What is ExamPrep A1?</h2>
+            <h2 className={styles.h2}>A gamified learning app for WAEC and JAMB</h2>
             <p className={styles.lead}>
-              ExamPrep A1 is a study app built for Nigerian secondary school students preparing for WAEC and JAMB.
-              Students don’t just read past questions. They practise them, understand them, and see exactly
-              where they are weak. It works on any phone, straight from the browser.
+              Students can practise normally, or battle the computer while answering real past questions.
+              It works on any phone, straight from the browser.
             </p>
 
             <div className={styles.showcase}>
               <figure className={styles.shot}>
                 <Phone shot={SCREENSHOTS.explanation}><ExplanationMock /></Phone>
                 <figcaption className={styles.caption}>
-                  <div className={styles.captionTitle}>Every answer explained</div>
-                  <div className={styles.captionText}>Step-by-step, including why the wrong options are wrong.</div>
+                  <div className={styles.captionTitle}>Practise normally</div>
+                  <div className={styles.captionText}>Real past questions with step-by-step explanations.</div>
                 </figcaption>
               </figure>
               <figure className={styles.shot}>
                 <Phone shot={SCREENSHOTS.battle}><BattleMock /></Phone>
                 <figcaption className={styles.caption}>
-                  <div className={styles.captionTitle}>Revision that feels like a game</div>
-                  <div className={styles.captionText}>Timed battles against the computer on real questions.</div>
-                </figcaption>
-              </figure>
-              <figure className={styles.shot}>
-                <Phone shot={SCREENSHOTS.progress}><ProgressMock /></Phone>
-                <figcaption className={styles.caption}>
-                  <div className={styles.captionTitle}>Students know what to study next</div>
-                  <div className={styles.captionText}>Progress by subject, with weak topics called out.</div>
+                  <div className={styles.captionTitle}>Battle the computer</div>
+                  <div className={styles.captionText}>Compete on actual past questions, game style.</div>
                 </figcaption>
               </figure>
             </div>
@@ -362,18 +331,6 @@ export default function AmbassadorPage() {
                 </li>
               ))}
             </ul>
-
-            <div className={styles.schoolBlock}>
-              <div>
-                <h3 className={styles.schoolTitle}>Schools and teachers get a dashboard too</h3>
-                <p className={styles.schoolText}>
-                  The school dashboard shows which topics students are collectively struggling with,
-                  how each class is performing week by week, and how engaged each student is.
-                  Parents can also receive weekly progress reports by email.
-                </p>
-              </div>
-              <SchoolDashMock />
-            </div>
           </div>
         </section>
 
@@ -383,24 +340,18 @@ export default function AmbassadorPage() {
             <div className={styles.programText}>
               <h2 className={styles.h2}>What is the Teacher Ambassador Program?</h2>
               <p>
-                Teachers know their schools better than anyone. You know the principal, you know the students,
-                and you know how hard they work for these exams.
+                Recommend ExamPrep A1 to your students. They sign up with your referral link or code,
+                and when they pay, you earn a percentage of their payment.
               </p>
-              <p>
-                The Teacher Ambassador Program lets you bring ExamPrep A1 to your school and get rewarded for it.
-                You introduce the app to your school’s management. Once the school approves it and students
-                start using it, you earn a percentage of every student subscription from that school.
-              </p>
-            </div>
+              </div>
             <aside className={styles.earnCard}>
               <h3 className={styles.earnTitle}>What you earn</h3>
               <p className={styles.earnText}>
-                A percentage of every student who pays for ExamPrep A1 at the schools you bring on board.
-                We share the exact rate with ambassadors once they are selected.
+                A percentage of every payment made by a student you referred.
               </p>
               <ul className={styles.earnList}>
-                <li><span className={styles.tick}>✓</span>No limit on how much you can earn</li>
-                <li><span className={styles.tick}>✓</span>Bring more than one school and earn from each</li>
+                <li><span className={styles.tick}>✓</span>Paid when students pay</li>
+                <li><span className={styles.tick}>✓</span>No limit on how many students you can refer</li>
                 <li><span className={styles.tick}>✓</span>Free to join, nothing to buy</li>
               </ul>
             </aside>
@@ -411,7 +362,7 @@ export default function AmbassadorPage() {
         <section id="how-it-works" className={styles.section} style={{ paddingTop: 0 }}>
           <div className={styles.wrap}>
             <h2 className={styles.h2}>How it works</h2>
-            <p className={styles.lead}>Five steps from applying to earning.</p>
+            <p className={styles.lead}>Four simple steps.</p>
             <ol className={styles.steps}>
               {STEPS.map((s, i) => (
                 <li key={s.title} className={`${styles.step} ${i === STEPS.length - 1 ? styles.stepLast : ''}`}>
@@ -423,18 +374,34 @@ export default function AmbassadorPage() {
           </div>
         </section>
 
-        {/* Who can apply */}
+        {/* Dashboard */}
         <section className={`${styles.section} ${styles.sectionWhite}`}>
+          <div className={`${styles.wrap} ${styles.dashGrid}`}>
+            <div>
+              <h2 className={styles.h2}>Your own dashboard. Nothing hidden.</h2>
+              <p className={styles.dashLead}>
+                See who signed up with your link, who has subscribed, and what you have earned.
+              </p>
+            </div>
+            <div>
+              <AmbassadorDashMock />
+              <p className={styles.dashNote}>Sample data, for illustration.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Who can apply */}
+        <section className={styles.section} style={{ paddingBottom: 0 }}>
           <div className={`${styles.wrap} ${styles.whoGrid}`}>
             <div>
               <h2 className={styles.h2}>Who can apply?</h2>
               <p className={styles.whoNote}>
-                No sales experience is needed. You are recommending something that helps your students.
+                No sales experience needed. You are recommending something that helps your students.
               </p>
             </div>
             <ul className={styles.whoList}>
               <li><span className={styles.tick}>✓</span>Teachers currently working in a Nigerian secondary school, public or private.</li>
-              <li><span className={styles.tick}>✓</span>Anyone with a genuine working relationship with a school: administrators, exam officers, heads of department, lesson teachers.</li>
+              <li><span className={styles.tick}>✓</span>Anyone with a genuine working relationship with students preparing for WAEC or JAMB: lesson teachers, exam officers, heads of department, administrators.</li>
             </ul>
           </div>
         </section>
@@ -476,7 +443,7 @@ export default function AmbassadorPage() {
           <div className={styles.wrap}>
             <h2 className={styles.finalTitle}>Your students are already preparing. Help them prepare better.</h2>
             <p className={styles.finalText}>
-              Apply in about three minutes. We review every application and contact selected ambassadors directly.
+              Apply in about three minutes. We review every application and reach out to the teachers we select.
             </p>
             <div className={styles.finalActions}>
               <ApplyButton />
