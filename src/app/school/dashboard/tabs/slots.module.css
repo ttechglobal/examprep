@@ -11,9 +11,24 @@
 .card { padding: 18px; border: 1px solid #e4eaf5; border-radius: 18px; background: #fff; margin-bottom: 14px; }
 .cardTitle { font-size: 16px; font-weight: 900; color: #071B49; margin: 0 0 6px; }
 .cardText { font-size: 13px; color: #7a8aaa; line-height: 1.5; margin: 0 0 12px; }
+/* Fields are always light, whatever the phone or browser theme: with no background
+   set they went dark on these white cards. */
+.input, .textarea, .qtyInput { background: #fff; color: #071B49; color-scheme: light; font-family: inherit; }
+.input::placeholder, .textarea::placeholder { color: #9aa7c4; opacity: 1; }
+.input:focus, .textarea:focus, .qtyInput:focus { border-color: #1264E5; box-shadow: 0 0 0 3px rgba(18,100,229,.12); }
 .addRow { display: flex; gap: 8px; flex-wrap: wrap; }
-.input { flex: 1; min-width: 200px; padding: 11px 13px; border: 1.5px solid #e4eaf5; border-radius: 12px; font: inherit; font-size: 14px; color: #071B49; outline: none; }
-.input:focus { border-color: #1264E5; }
+.input { flex: 1; min-width: 200px; padding: 11px 13px; border: 1.5px solid #e4eaf5; border-radius: 12px; font-size: 14px; outline: none; }
+.textarea { display: block; width: 100%; box-sizing: border-box; min-height: 112px; padding: 12px 14px; border: 1.5px solid #e4eaf5; border-radius: 12px; font-size: 14px; line-height: 1.55; resize: vertical; outline: none; }
+.textarea:disabled { background: #f6f8fc; color: #9aa7c4; }
+.addFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.tally { font-size: 13px; font-weight: 700; color: #7a8aaa; }
+.tallyBad { color: #dc2626; }
+.results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.results li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; }
+.results li > span:first-child { font-weight: 900; flex-shrink: 0; }
+.results strong { display: block; font-weight: 800; color: #071B49; overflow-wrap: anywhere; }
+.resOk { background: #f0fdf4; color: #166534; }
+.resBad { background: #fef2f2; color: #991b1b; }
 .primary { min-height: 44px; padding: 0 18px; border: 0; border-radius: 12px; background: #1264E5; color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
 .primary:disabled { opacity: .5; cursor: default; }
 .ok, .error, .warn { margin: 10px 0 0; padding: 9px 12px; border-radius: 10px; font-size: 13px; }
@@ -23,7 +38,7 @@
 .quantities { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .qty { min-width: 52px; min-height: 40px; border: 1.5px solid #e4eaf5; border-radius: 10px; background: #fff; font: inherit; font-weight: 800; color: #071B49; cursor: pointer; }
 .qtyOn { border-color: #1264E5; background: #eef4ff; color: #1264E5; }
-.qtyInput { width: 90px; min-height: 40px; padding: 0 10px; border: 1.5px solid #e4eaf5; border-radius: 10px; font: inherit; font-weight: 800; }
+.qtyInput { width: 90px; min-height: 40px; padding: 0 10px; border: 1.5px solid #e4eaf5; border-radius: 10px; font-size: 15px; font-weight: 800; text-align: center; outline: none; }
 .total { font-size: 14px; color: #3a4870; margin: 0 0 12px; }
 .total strong { font-size: 18px; color: #071B49; }
 .whatsapp { display: flex; align-items: center; justify-content: center; min-height: 46px; border-radius: 12px; background: #16a34a; color: #fff; font-size: 14px; font-weight: 800; text-decoration: none; }

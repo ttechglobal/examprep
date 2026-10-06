@@ -61,3 +61,21 @@
 - a paid student queued correctly when a school adds them
 - the team functions, sign-up and contact lookup
 - every log entry
+
+## Update: several students at once, faster, requests that identify the school
+
+Run `20261013_school_roster.sql` before deploying.
+
+- **Add many students at once.** On Slots & Premium, paste or type phone numbers or emails, one per line (or separated by
+  commas), up to 50 at a time. Each uses a slot. One person failing (no account yet, linked to another school, already
+  added) never stops the rest; when the slots run out the remaining ones are reported as not added. Whoever failed stays in
+  the box so it can be fixed and tried again.
+- **Slot requests carry who is asking.** "Request N slots on WhatsApp" now includes the school and the admin's name, sign-in
+  email and phone, taken from the account (not typed), so the school can be found on the admin Schools page. A student's
+  Premium request includes their name, phone, email and username the same way.
+- **Light inputs.** The student box and the slots number used to look dark on the white cards on some phones and browsers
+  (they had no background set). They are always light now.
+- **Lighter on the database.** The roster (students and their Premium) is one query (`school_roster`) instead of four or five
+  round trips; the dashboard runs its independent queries at once and keeps the result for 90 seconds per school; adding or
+  removing a student, or the admin adding slots, clears it. The admin Schools panel opens at once with the row you clicked
+  and loads the students behind it.

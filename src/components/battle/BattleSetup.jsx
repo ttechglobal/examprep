@@ -52,7 +52,9 @@ export default function BattleSetup({ opponent = 'computer' }) {
   const topics = useBattleTopics(state.exam, subject?.id, retry)
   const selectedTopics = topics.rows.filter(t => state.topicIds.includes(t.id))
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    let active = true
+    Promise.resolve().then(() => {
+      if (!active) return
       const preferences = readBattlePreferences()
       const patch = {exam:getLocalExamType() || 'WAEC',count:friend && ![5,10,15,20].includes(preferences.count) ? 10 : preferences.count,timerSecs:preferences.timerSecs}
       // A weekly mission opens the setup filled in: its exam, subject and topic,
@@ -61,7 +63,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
       if (mission) Object.assign(patch,{exam:mission.exam,subjectId:mission.subject,questionSet:'topic',topicIds:[mission.topic],step:'setup',count:BATTLE_COUNTS.find(c => c >= mission.left) ?? BATTLE_COUNTS.at(-1)})
       dispatch({type:'patch',patch})
     })
-    return () => cancelAnimationFrame(frame)
+    return () => { active = false }
   }, [friend])
   const subtitle = {exam:'Which exam would you like to battle?',subject:`${state.exam} - ${EXAM_NAME[state.exam]}`,type:'Pick how you want your battle questions.',topics:friend ? 'Choose a topic to battle.' : 'Select one or more topics to battle.',setup:'Choose how you want to battle.'}[state.step]
   const ready = !!subject?.id && (state.questionSet === 'random' || selectedTopics.length > 0)

@@ -38,9 +38,12 @@ function CopyButton({ text }) {
   }}>{done ? '✓ Copied' : '⧉ Copy'}</button>
 }
 
-export default function SchoolPanel({ id, year, onClose, onChanged }) {
+// preview: the school's row from the list. The panel shows its contact and slots at once;
+// the slot history and the students (their own requests) fill in as they arrive.
+export default function SchoolPanel({ id, preview, year, onClose, onChanged }) {
   const [tab, setTab] = useState('overview')
   const [data, setData] = useState(null)
+  const [roster, setRoster] = useState(null)      // { rows } | { error } | null while loading
   const [error, setError] = useState(null)
   const panel = useRef(null)
 
@@ -52,9 +55,15 @@ export default function SchoolPanel({ id, year, onClose, onChanged }) {
 
   useEffect(() => {
     let active = true
-    Promise.resolve().then(() => { if (active) { setData(null); setTab('overview'); load() } })
+    Promise.resolve().then(() => {
+      if (!active) return
+      setData(null); setRoster(null); setTab('overview'); load()
+      send(`/api/admin/schools/${id}/students`, 'GET')
+        .then(r => { if (active) setRoster({ rows: r.students ?? [] }) })
+        .catch(e => { if (active) setRoster({ error: e.message }) })
+    })
     return () => { active = false }
-  }, [load])
+  }, [load, id])
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
@@ -63,7 +72,12 @@ export default function SchoolPanel({ id, year, onClose, onChanged }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const school = data?.school
+  const shown = data ?? (preview?.id === id ? {
+    school: { ...preview, admins: [] },
+    slots: { total: preview.slots_total, used: preview.slots_used, available: preview.slots_available },
+    history: null,
+  } : null)
+  const school = shown?.school
   return <>
     <div className={s.scrim} onClick={onClose} aria-hidden="true"/>
     <aside ref={panel} tabIndex={-1} className={s.panel} role="dialog" aria-modal="true" aria-labelledby="school-panel-title">
@@ -77,23 +91,31 @@ export default function SchoolPanel({ id, year, onClose, onChanged }) {
       </div>
 
       {error ? <p className={s.problem}>{error} <button type="button" className={s.link} onClick={load}>Try again</button></p>
-        : !data ? <p className={s.loading}>Loading…</p>
-        : tab === 'overview' ? <Overview data={data} year={year} onSeeStudents={() => setTab('students')}
-            onSlots={next => { setData(d => ({ ...d, ...next })); onChanged?.() }} id={id}/>
-        : tab === 'students' ? <Students students={data.students}/>
-        : tab === 'history' ? <History history={data.history}/>
+        : !shown ? <p className={s.loading}>Loading…</p>
+        : tab === 'overview' ? <Overview data={shown} roster={roster} ready={!!data} year={year} onSeeStudents={() => setTab('students')}
+            onSlots={next => { setData(d => (d ? { ...d, ...next } : d)); onChanged?.() }} id={id}/>
+        : tab === 'students' ? <RosterList roster={roster}/>
+        : tab === 'history' ? (data ? <History history={data.history}/> : <p className={s.loading}>Loading…</p>)
         : <ActivityFeed school={id} compact/>}
     </aside>
   </>
 }
 
-function Overview({ id, data, year, onSeeStudents, onSlots }) {
-  const { school, slots, students, history } = data
+// The roster loads on its own; until it arrives (or if it fails) say so in place.
+function RosterList({ roster }) {
+  if (!roster) return <p className={s.loading}>Loading students…</p>
+  if (roster.error) return <p className={s.problem}>{roster.error}</p>
+  return <Students students={roster.rows}/>
+}
+
+function Overview({ id, data, roster, ready, year, onSeeStudents, onSlots }) {
+  const { school, slots, history } = data
+  const students = roster?.rows ?? null
   const phone = school.contact_phone
   const wa = toNationalNumber(phone ?? '') ? `234${toNationalNumber(phone)}` : null
   const usedPct = slots.total ? Math.round(slots.used / slots.total * 100) : 0
   const thisYear = year === 'all' ? null : Number(year)
-  const boughtThisYear = thisYear ? history.filter(h => h.slots > 0 && Number(appDay(h.created_at).slice(0, 4)) === thisYear).reduce((n, h) => n + h.slots, 0) : null
+  const boughtThisYear = thisYear && history ? history.filter(h => h.slots > 0 && Number(appDay(h.created_at).slice(0, 4)) === thisYear).reduce((n, h) => n + h.slots, 0) : null
 
   return <>
     <div className={s.identity}>
@@ -140,15 +162,17 @@ function Overview({ id, data, year, onSeeStudents, onSlots }) {
           Slots never expire.{boughtThisYear != null ? ` Bought in ${thisYear}: ${boughtThisYear}.` : ''}
         </span>
       </div>
-      <AddSlots id={id} onSaved={onSlots}/>
+      {ready && <AddSlots id={id} onSaved={onSlots}/>}
     </section>
 
     <section className={s.section}>
       <div className={s.sectionHead}>
         <h3 className={s.sectionTitle}>Recent students</h3>
-        {students.length > 5 && <button type="button" className={s.link} onClick={onSeeStudents}>View all ({students.length}) →</button>}
+        {students && students.length > 5 && <button type="button" className={s.link} onClick={onSeeStudents}>View all ({students.length}) →</button>}
       </div>
-      <Students students={students.slice(0, 5)}/>
+      {students ? <Students students={students.slice(0, 5)}/>
+        : roster?.error ? <p className={s.problem}>{roster.error}</p>
+        : <p className={s.muted} style={{ fontSize: 13 }}>Loading students…</p>}
     </section>
   </>
 }

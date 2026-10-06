@@ -8,6 +8,7 @@
 //   plan    free | trial | premium (optional; the student's plan now)
 //   school  a school id          (optional)
 //   meta=1  also return the schools for the filter
+//   refresh=1  skip the cache and count again
 //
 // Response: { range: { from, to, days }, sections... } — only the sections the
 // tab shows (kpis, daily, newReturning, features, subjects, topics, difficult,
@@ -16,6 +17,10 @@
 // Everything is counted in Postgres (analytics_* in 20261008_analytics.sql).
 // v2 replaces v1, which downloaded raw rows and counted them here; Supabase
 // returns at most 1,000 rows, so v1's numbers were cut short.
+// v3: easy on the database (these are the heaviest queries in the app). Each
+// answer is kept for 5 minutes per server (lib/server/memo.js), so switching tabs
+// back and forth, reloading, or two admins looking at once runs the counts once.
+// "Refresh" on the page skips it. Analytics don't need to be to-the-second.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }  from 'next/server'
@@ -23,6 +28,9 @@ import { requireAdmin }  from '@/lib/adminAuth'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { appDay, addDays } from '@/lib/dates'
 import { UUID_RE }       from '@/lib/uuid'
+import { memo }          from '@/lib/server/memo'
+
+const CACHE_MS = 5 * 60_000
 
 const TABS = {
   overview:   ['kpis', 'daily', 'newReturning', 'features', 'subjects', 'topics', 'conversion', 'triggers'],
@@ -52,6 +60,7 @@ export async function GET(request) {
   const weeks = days <= 7 ? 4 : days <= 30 ? 5 : 13
 
   const db = supabaseAdmin()
+  const meta = params.get('meta') === '1'
   const queries = {
     kpis:         () => db.rpc('analytics_kpis', f),
     daily:        () => db.rpc('analytics_daily', f),
@@ -69,15 +78,20 @@ export async function GET(request) {
 
   try {
     const wanted = TABS[tab]
-    const results = await Promise.all([
-      ...wanted.map(key => queries[key]()),
-      params.get('meta') === '1' ? db.from('schools').select('id, name').order('name') : Promise.resolve(null),
-    ])
-    const failed = results.find(r => r?.error)
-    if (failed) throw failed.error
-    const body = { tab, range: { from, to, days } }
-    wanted.forEach((key, i) => { body[key] = results[i].data })
-    if (results.at(-1)) body.schools = results.at(-1).data ?? []
+    const load = async () => {
+      const results = await Promise.all([
+        ...wanted.map(key => queries[key]()),
+        meta ? db.from('schools').select('id, name').order('name') : Promise.resolve(null),
+      ])
+      const failed = results.find(r => r?.error)
+      if (failed) throw failed.error
+      const body = { tab, range: { from, to, days }, at: Date.now() }
+      wanted.forEach((key, i) => { body[key] = results[i].data })
+      if (results.at(-1)) body.schools = results.at(-1).data ?? []
+      return body
+    }
+    const key = `admin-analytics:${tab}:${days}:${exam ?? ''}:${plan ?? ''}:${school ?? ''}:${meta ? 'm' : ''}:${to}`
+    const body = await memo(key, CACHE_MS, load, { fresh: params.get('refresh') === '1' })
     return NextResponse.json(body, { headers: { 'Cache-Control': 'private, max-age=60' } })
   } catch (err) {
     console.error('[admin/analytics] GET:', err?.message ?? err)

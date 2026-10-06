@@ -30,15 +30,17 @@ const FREE_KEEPS = [
   `${FEATURES.battle.freePerDay} battles a day`,
 ]
 
-// What the student sends us: the plan, and who they are (name and the phone
-// or email they sign in with), so the admin can find them on the Students page.
+// What the student sends us: the plan, and who they are (name, and both the phone
+// and the email on the account when they have them, plus their username), taken
+// from their account so nobody has to type it. The admin finds them on the
+// Students page by any of these.
 function premiumRequest(plan, account) {
   const name = account?.full_name?.trim()
   const phone = account?.phone_number ? formatPhoneForDisplay(account.phone_number) : null
   const email = account?.email && !isPhoneAuthEmail(account.email) ? account.email : null
-  const who = [name && `Name: ${name}`, phone && `Phone: ${phone}`, !phone && email && `Email: ${email}`, !name && account?.username && `Username: ${account.username}`]
+  const who = [name && `Name: ${name}`, phone && `Phone: ${phone}`, email && `Email: ${email}`, account?.username && `Username: ${account.username}`]
     .filter(Boolean).join('\n')
-  return `Hi, I'd like ExamPrep A1 Premium: ${plan.name} (${priceLabel(plan.price)}).${who ? `\n${who}` : ''}`
+  return `Hi, I'd like ExamPrep A1 Premium: ${plan.name} (${priceLabel(plan.price)}).${who ? `\n\n${who}` : ''}`
 }
 
 const formatDate = iso => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Africa/Lagos' })
@@ -115,8 +117,8 @@ export function UpgradeSheet({ feature, reason, guest, account, onClose }) {
 export function TrialWelcome({ until, name, onClose }) {
   return <Modal labelledBy="trial-title" onClose={onClose}>
     <div className={s.zara}><Zara size={76}/></div>
-    <h2 id="trial-title" className={s.title}>{name ? `${name}, you've got Premium!` : `You've got Premium!`}</h2>
-    <p className={s.text}>Your first {TRIAL_DAYS} days are on us: use the whole app, with nothing locked{until ? `, until ${formatDate(until)}` : ''}.</p>
+    <h2 id="trial-title" className={s.title}>{name ? `${name}, you have ${TRIAL_DAYS} days of Premium` : `You have ${TRIAL_DAYS} days of Premium`}</h2>
+    <p className={s.text}>Enjoy the full ExamPrep experience, free, for {TRIAL_DAYS} days{until ? `, until ${formatDate(until)}` : ''}. Nothing is locked.</p>
     <ul className={s.perks}>{PREMIUM_PERKS.map(perk => <li key={perk}>{perk}</li>)}</ul>
     <button type="button" className={s.cta} onClick={onClose}>Start exploring</button>
   </Modal>

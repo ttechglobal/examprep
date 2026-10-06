@@ -7,8 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { phoneVariants, isPhoneAuthEmail, formatPhoneForDisplay } from '@/lib/auth/phone'
-import { selectAll, schoolStudentIds } from '@/lib/server/paging'
-import { selectByIds } from '@/lib/server/schoolStats'
+import { selectAll } from '@/lib/server/paging'
 import { SLOT_REFUND_DAYS } from '@/lib/plans'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -53,59 +52,52 @@ export async function findStudentByContact(db, contact) {
   return { student: data[0] }
 }
 
-const ROSTER_COLUMNS = 'id, full_name, username, email, phone_number, plan, plan_expires_at, created_at'
+/**
+ * Every student of a school with what the dashboards need, in ONE query
+ * (school_roster, 20261013_school_roster.sql): profile fields plus when this
+ * school's Premium for them ends and was added.
+ */
+export function schoolRosterRows(db, schoolId) {
+  return selectAll(() => db.rpc('school_roster', { p_school: schoolId }).order('id'))
+}
 
 /**
- * Each student's Premium, for profiles that include plan + plan_expires_at:
- * Map id → { premium: 'school' | 'own' | null, until, added_at, refundable }
+ * One roster row's Premium: { premium: 'school' | 'own' | null, until, added_at, refundable }
  *   school: from this school's slot · own: a plan of their own (paid or school
  *   elsewhere) · added_at: when this school used a slot on them
  */
-export async function premiumByStudent(db, schoolId, profiles) {
-  const subs = await selectAll(() => db.from('subscriptions')
-    .select('id, student_id, ends_at, created_at')
-    .eq('school_id', schoolId).eq('status', 'active').order('id'))
-  const latest = new Map()
-  for (const sub of subs) {
-    const current = latest.get(sub.student_id)
-    if (!current || Date.parse(sub.ends_at) > Date.parse(current.ends_at)) latest.set(sub.student_id, sub)
+export function premiumOf(row, now = Date.now()) {
+  const schoolActive = !!row.school_ends_at && Date.parse(row.school_ends_at) > now
+  const ownActive = row.plan === 'premium' && !!row.plan_expires_at && Date.parse(row.plan_expires_at) > now
+  return {
+    premium:  schoolActive ? 'school' : ownActive ? 'own' : null,
+    until:    schoolActive ? row.school_ends_at : ownActive ? row.plan_expires_at : null,
+    added_at: row.school_added_at ?? null,
+    // Removing them now gives the slot back (same rule as cancel_subscription).
+    refundable: schoolActive && Date.parse(row.school_added_at) > now - SLOT_REFUND_DAYS * 86_400_000,
   }
-  const now = Date.now()
-  return new Map(profiles.map(p => {
-    const viaSchool = latest.get(p.id)
-    const schoolActive = viaSchool && Date.parse(viaSchool.ends_at) > now
-    const ownActive = p.plan === 'premium' && p.plan_expires_at && Date.parse(p.plan_expires_at) > now
-    return [p.id, {
-      premium:  schoolActive ? 'school' : ownActive ? 'own' : null,
-      until:    schoolActive ? viaSchool.ends_at : ownActive ? p.plan_expires_at : null,
-      added_at: viaSchool?.created_at ?? null,
-      // Removing them now gives the slot back (same rule as cancel_subscription).
-      refundable: !!schoolActive && Date.parse(viaSchool.created_at) > now - SLOT_REFUND_DAYS * 86_400_000,
-    }]
-  }))
 }
 
 /** The contact a school sees: phone, else a real email. */
 export const studentContact = p =>
   p.phone_number ? formatPhoneForDisplay(p.phone_number) : (p.email && !isPhoneAuthEmail(p.email) ? p.email : null)
 
-/**
- * The school's students with their Premium: everyone on the roster (added with
- * a slot or joined with the invite code), most recently added first.
- */
-export async function schoolRoster(db, schoolId) {
-  const { studentIds } = await schoolStudentIds(db, schoolId)
-  if (!studentIds.length) return []
-  const profiles = await selectByIds(db, 'profiles', ROSTER_COLUMNS, studentIds)
-  const plans = await premiumByStudent(db, schoolId, profiles)
-  return profiles.map(p => ({
-    id:       p.id,
-    name:     p.full_name?.trim() || null,
-    username: p.username ?? null,
-    contact:  studentContact(p),
-    ...plans.get(p.id),
-    joined:   p.created_at,
+/** Roster rows → the list the Slots tab and the admin panel show, most recently added first. */
+export function shapeRoster(rows) {
+  const now = Date.now()
+  return rows.map(r => ({
+    id:       r.id,
+    name:     r.full_name?.trim() || null,
+    username: r.username ?? null,
+    contact:  studentContact(r),
+    ...premiumOf(r, now),
+    joined:   r.created_at,
   })).sort((a, b) => Date.parse(b.added_at ?? b.joined ?? 0) - Date.parse(a.added_at ?? a.joined ?? 0))
+}
+
+/** The school's students with their Premium: everyone on the roster (added with a slot or joined with the invite code). */
+export async function schoolRoster(db, schoolId) {
+  return shapeRoster(await schoolRosterRows(db, schoolId))
 }
 
 /** SQL error codes from school_add_student / school_remove_student → messages. */

@@ -32,7 +32,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { planStatus, featureAccess, FEATURES, RENEW_REMINDER_DAYS } from '@/lib/plans'
+import { planStatus, featureAccess, FEATURES, RENEW_REMINDER_DAYS, TRIAL_DAYS } from '@/lib/plans'
 import { appDay } from '@/lib/dates'
 import { isProfileComplete } from '@/lib/profileSetup'
 import { UpgradeSheet, TrialWelcome, PlanNotice } from '@/components/plan/PlanModals'
@@ -67,7 +67,8 @@ function whichPopup(status, id) {
     const seen = seenKey(date ? `${kind}_${date}` : kind, id)
     return read(seen) ? null : { kind, date, seen }
   }
-  if (status.source === 'trial') return unseen('welcome')
+  // Keyed by the trial's length, so everyone sees the welcome again when the trial changes (7 → 14 days).
+  if (status.source === 'trial') return unseen('welcome', String(TRIAL_DAYS))
   if (status.source === 'paid' && status.until && status.daysLeft <= RENEW_REMINDER_DAYS) return unseen('renew', status.until)
   if (status.source === 'free' && status.paidEnded) return unseen('paid_ended', status.paidEnded)
   if (status.source === 'free' && status.trialEnded) return unseen('trial_ended')

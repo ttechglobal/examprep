@@ -61,25 +61,7 @@ column is also correct × 5 (`20261010`). Existing XP is not changed.
 
 ## Notifications
 
-Reminders still go out at **12:00, 16:00 and 20:00** (Lagos). They are now personal
-(`supabase/functions/send-notifications/messages.ts`, plain functions with no network, so they can be tested anywhere):
-
-| When | Message | Sent to |
-|---|---|---|
-| Mon 12:00 | "Your new missions are live" (names the student, 50 XP each) | everyone with subjects |
-| Wed 16:00 | "N missions still open", names the next topic | only if some are open |
-| Fri 16:00 | "3 days left on your missions" | only if some are open |
-| Sun 16:00 | "Missions end tonight", names the next topic | only if some are open |
-| 20:00 | "Your N-day streak ends tonight" | streak of 2+ not practised today |
-| otherwise | a reminder from the slot's pool, rotating by day and student | those who haven't practised today |
-
-- A student who has already practised today gets **no** generic reminder (fewer, better-timed pushes). Mission
-  reminders on Mon/Wed/Fri/Sun still go.
-- Students who never opened Battle this week (so no missions exist yet) get "Your weekly missions are waiting".
-- Devices without an account get the plain reminder. Admin custom blasts are unchanged.
-- The old copy had made-up numbers ("retain 35% more"); they are gone. Nothing now states a statistic we don't have.
-- The function's reply has a new `skipped` count (students who'd already practised).
-- To change wording or timing: `messages.ts` only.
+See `docs/notifications.md` (automatic reminders, weekly-mission messages, the admin sender, no emojis).
 
 ## Removed
 
@@ -90,3 +72,26 @@ Reminders still go out at **12:00, 16:00 and 20:00** (Lagos). They are now perso
 ## Left alone
 
 `subtopics.exam_frequency` (hand-set 1 to 5 from the lesson-building days). Not the real frequency.
+
+## Update: the Missions page and button
+
+Run `20261012_trial_for_everyone.sql` and `20261013_school_roster.sql` too (after `20261011`).
+
+- **The battle hub always has a Missions button** (a full-width row above Leaderboard and Settings) saying where the student
+  stands: "1 of 3 done · 2 days left", "Mission complete! +50 XP", "Sign in to get weekly missions", "Choose your subjects to
+  get missions". A red dot shows when missions are still open in the last 3 days of the week.
+- **`/student/battle/missions`** lists the missions with progress. Tapping one opens the battle setup already filled in. It
+  explains itself when there are none (guest, no subjects, nothing ready yet) with a button for what to do.
+- **Why missions could be missing.** The old inline card hid itself without a word when there was nothing to show. Two causes
+  are fixed: the app keeps a student's subjects on the phone first, so a new account might have none saved yet (the phone's
+  subjects are now sent with the request and used when the account has none); and a subject whose past papers aren't all
+  imported had no eligible topic (the best-stocked topics now fill in).
+- Opening the Missions button from the hub costs one request; going on to the page within 15 seconds reuses it.
+
+## Update: the trial and the admin pages
+
+- `20261012_trial_for_everyone.sql` gives every student without Premium a fresh 14 days from the moment it runs. Students see
+  the mascot's welcome once more ("You have 14 days of Premium").
+- Admin Analytics keeps each view for 5 minutes (server and page; "Refresh" counts again), and no longer fetches twice on
+  first load. The Students list counts in one pass, and only when year, school or search change. The Schools list is kept
+  for a minute. See `src/lib/server/memo.js`.

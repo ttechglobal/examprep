@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BattleWorld, BattleSign, styles } from '@/components/battle/BattleWorld'
 import BattleSettings from '@/components/battle/BattleSettings'
-import BattleMissions from '@/components/battle/BattleMissions'
+import { MissionsLink } from '@/components/battle/BattleMissions'
 import IllustratedIcon from '@/components/battle/IllustratedIcon'
 import { GameGlyph } from '@/components/student/GameShell'
 import { usePlan } from '@/contexts/PlanContext'
@@ -28,8 +28,8 @@ export default function BattlePage() {
         {battles.limit != null && <small className={styles.allowance}>{battles.remaining > 0 ? `${battles.remaining} free ${battles.remaining === 1 ? 'battle' : 'battles'} left today` : '👑 Go Premium for more battles today'}</small>}</span>
       <span className={styles.actionArrow} aria-hidden="true"><GameGlyph name="arrow"/></span>
     </button>
-    <BattleMissions/>
     <div className={styles.links}>
+      <MissionsLink/>
       <Link className={styles.secondary} href="/student/battle/leaderboard"><IllustratedIcon name="trophy" size={null} className={styles.linkIcon}/><span><strong>Leaderboard</strong><small>Top battlers this week</small></span><GameGlyph name="arrow"/></Link>
       <button type="button" className={styles.secondary} onClick={() => setSettingsOpen(true)}><IllustratedIcon name="settings" size={null} className={styles.linkIcon}/><span><strong>Settings</strong><small>Customize your battle</small></span><GameGlyph name="arrow"/></button>
     </div>

@@ -1,4 +1,4 @@
-// src/app/api/school/dashboard/route.js — v2
+// src/app/api/school/dashboard/route.js — v4
 //
 // School admin dashboard data. Source of truth: question_attempts, grouped in
 // Postgres (lib/server/schoolStats.js). lesson_progress and student_streaks
@@ -7,19 +7,151 @@
 // v2: school_admin role required; totals come from SQL functions instead of
 // downloading every answer (which Supabase capped at 1,000 rows); rosters are
 // paged so big schools aren't cut off.
-// v3: the roster is the whole school (lib/server/paging.js schoolStudentIds),
-// each student says whether they have Premium (and from where), and the school
-// comes with its slot balance (20261007_schools_and_admin_log.sql).
+// v3: the roster is the whole school, each student says whether they have
+// Premium (and from where), and the school comes with its slot balance
+// (20261007_schools_and_admin_log.sql).
+// v4: lighter on the database. The roster and every student's Premium come from
+// ONE query (school_roster, 20261013) instead of five round trips; every query
+// that doesn't depend on another runs at the same time; and the result is kept
+// for 90 seconds per school (lib/server/memo.js), so opening the dashboard twice
+// or from two devices runs the queries once. Adding or removing a student on
+// the Slots tab clears it.
 
 import { createClient }       from '@/lib/supabase/server'
 import { supabaseAdmin }      from '@/lib/server/supabaseAdmin'
-import { schoolStudentIds }   from '@/lib/server/paging'
-import { requireSchoolAdmin, selectByIds, loadSchoolStats, groupTopicsBySubject } from '@/lib/server/schoolStats'
+import { selectAll }          from '@/lib/server/paging'
+import { requireSchoolAdmin, loadSchoolStats, groupTopicsBySubject } from '@/lib/server/schoolStats'
 import { appDay }             from '@/lib/dates'
-import { slotBalance, premiumByStudent, studentContact } from '@/lib/server/schoolSlots'
+import { memo, schoolDashboardKey } from '@/lib/server/memo'
+import { slotBalance, schoolRosterRows, premiumOf, studentContact } from '@/lib/server/schoolSlots'
 import { NextResponse }       from 'next/server'
 
 const DAY_MS = 86_400_000
+const CACHE_MS = 90_000
+
+async function loadDashboard(db, schoolId) {
+  // Everything that doesn't depend on anything else, at once.
+  const [slots, cohortsRes, roster] = await Promise.all([
+    slotBalance(db, schoolId),
+    db.from('cohorts')
+      .select('id, name, session, invite_code, invite_active, is_active, created_at')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false }),
+    schoolRosterRows(db, schoolId),
+  ])
+  if (cohortsRes.error) throw cohortsRes.error
+  const allCohorts = cohortsRes.data ?? []
+  const cohort = allCohorts.find(c => c.is_active) ?? null   // the newest active one (list is newest first)
+  const studentIds = roster.map(r => r.id)
+
+  if (!studentIds.length) {
+    return {
+      slots, cohort, allCohorts,
+      summary: { totalStudents: 0, premiumStudents: 0, activeThisWeek: 0, avgAccuracy: null, totalQuestionsThisWeek: 0 },
+      students: [], subjectTopics: [], weeklyEngagement: [], atRiskSegmented: [],
+    }
+  }
+
+  // ── Stats (grouped in SQL) ────────────────────────────────────────────────
+  const now       = Date.now()
+  const weekAgo   = new Date(now - 7  * DAY_MS).toISOString()
+  const thirtyAgo = new Date(now - 30 * DAY_MS).toISOString()
+
+  const [members, stats30, weekStats, engagement] = await Promise.all([
+    cohort
+      ? selectAll(() => db.from('cohort_members').select('student_id, joined_at').eq('cohort_id', cohort.id).order('student_id'))
+      : [],
+    loadSchoolStats(db, studentIds, thirtyAgo),
+    db.rpc('stats_by_student', { p_student_ids: studentIds, p_since: weekAgo }),
+    db.rpc('active_students_by_bucket', { p_student_ids: studentIds, p_end: appDay(), p_bucket_days: 7, p_buckets: 4 }),
+  ])
+  if (weekStats.error)  throw weekStats.error
+  if (engagement.error) throw engagement.error
+
+  const joinedAt = {}
+  for (const m of members) joinedAt[m.student_id] = m.joined_at
+  const twoWeeksAgoDate = new Date(now - 14 * DAY_MS)
+
+  // ── Per-student enrichment ───────────────────────────────────────────────
+  const enrichedStudents = roster.map(profile => {
+    const id      = profile.id
+    const s       = stats30.byStudent.get(id) ?? { answered: 0, correct: 0, lastActive: null }
+    const total   = s.answered
+    const correct = s.correct
+    const lastActive = s.lastActive
+    const daysSinceLastPractice = lastActive
+      ? Math.floor((now - new Date(lastActive).getTime()) / DAY_MS)
+      : null
+    const plan = premiumOf(profile, now)
+
+    return {
+      id,
+      full_name:             profile.full_name?.trim() || profile.username || 'No name yet',
+      contact:               studentContact(profile),
+      premium:               plan.premium,      // 'school' | 'own' | null
+      premiumUntil:          plan.until,
+      exam_type:             profile.exam_type,
+      subjects:              Array.isArray(profile.subjects) ? profile.subjects : [],
+      accuracy:              total > 0 ? Math.round((correct / total) * 100) : null,
+      correct,
+      total,                 // questions answered in last 30 days
+      lastActive,            // ISO string of most recent attempt
+      daysSinceLastPractice,
+      isActiveThisWeek:      daysSinceLastPractice !== null && daysSinceLastPractice <= 7,
+      subjectAcc:            stats30.subjectsByStudent.get(id) ?? {},
+      joinedCohortAt:        joinedAt[id] ?? null,
+    }
+  })
+
+  // ── Summary ──────────────────────────────────────────────────────────────
+  const activeThisWeek   = enrichedStudents.filter(s => s.isActiveThisWeek).length
+  const totalCorrectAll  = enrichedStudents.reduce((a, s) => a + s.correct, 0)
+  const totalAttemptsAll = enrichedStudents.reduce((a, s) => a + s.total,   0)
+  const avgAccuracy      = totalAttemptsAll > 0 ? Math.round((totalCorrectAll / totalAttemptsAll) * 100) : null
+  const totalQuestionsThisWeek = (weekStats.data ?? []).reduce((a, r) => a + (Number(r.answered) || 0), 0)
+
+  // ── At-risk segmentation ─────────────────────────────────────────────────
+  const atRiskSegmented = enrichedStudents
+    .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
+    .map(s => {
+      const wasActiveRecently = s.lastActive && new Date(s.lastActive) >= twoWeeksAgoDate
+      const tier =
+        !s.isActiveThisWeek && wasActiveRecently ? 'dropped'  :
+        !s.isActiveThisWeek                      ? 'inactive' :
+                                                   'struggling'
+      return {
+        id:                    s.id,
+        name:                  s.full_name,
+        tier,
+        accuracy:              s.accuracy,
+        daysSinceLastPractice: s.daysSinceLastPractice,
+      }
+    })
+
+  // ── Weekly engagement: oldest week first, labelled by its first day ──────
+  const weeklyEngagement = [...(engagement.data ?? [])]
+    .sort((a, b) => b.bucket - a.bucket)
+    .map(b => ({
+      label:  new Date(`${String(b.bucket_start).slice(0, 10)}T12:00:00Z`)
+                .toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }),
+      active: Number(b.active) || 0,
+    }))
+
+  return {
+    slots, cohort, allCohorts,
+    summary: {
+      totalStudents: studentIds.length,
+      premiumStudents: enrichedStudents.filter(s => s.premium).length,
+      activeThisWeek,
+      avgAccuracy,
+      totalQuestionsThisWeek,
+    },
+    students: enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
+    subjectTopics: groupTopicsBySubject(stats30.topics, 'subjectName'),
+    weeklyEngagement,
+    atRiskSegmented,
+  }
+}
 
 export async function GET() {
   const supabase = await createClient()
@@ -34,139 +166,10 @@ export async function GET() {
     if (denied) return denied
 
     const schoolId = adminProfile.school_id
-    const school   = { ...adminProfile.schools, slots: await slotBalance(db, schoolId) }
-
-    // ── Cohorts + roster ───────────────────────────────────────────────────────
-    const { data: allCohorts } = await db
-      .from('cohorts')
-      .select('id, name, session, invite_code, invite_active, is_active, created_at')
-      .eq('school_id', schoolId)
-      .order('created_at', { ascending: false })
-
-    const { cohort, members: cohortMembers, studentIds } = await schoolStudentIds(db, schoolId)
-    const activeCohort = cohort ? (allCohorts ?? []).find(c => c.id === cohort.id) ?? cohort : null
-
-    if (!studentIds.length) {
-      return NextResponse.json({
-        school,
-        cohort:           activeCohort,
-        allCohorts:       allCohorts ?? [],
-        adminName:        adminProfile.full_name ?? '',
-        summary:          { totalStudents: 0, premiumStudents: 0, activeThisWeek: 0, avgAccuracy: null, totalQuestionsThisWeek: 0 },
-        students:         [],
-        subjectTopics:    [],
-        weeklyEngagement: [],
-        atRiskSegmented:  [],
-      })
-    }
-
-    // ── Stats (grouped in SQL) ────────────────────────────────────────────────
-    const now       = Date.now()
-    const weekAgo   = new Date(now - 7  * DAY_MS).toISOString()
-    const thirtyAgo = new Date(now - 30 * DAY_MS).toISOString()
-
-    const [profiles, stats30, weekStats, engagement] = await Promise.all([
-      selectByIds(db, 'profiles', 'id, full_name, username, email, phone_number, exam_type, subjects, created_at, plan, plan_expires_at', studentIds),
-      loadSchoolStats(db, studentIds, thirtyAgo),
-      db.rpc('stats_by_student', { p_student_ids: studentIds, p_since: weekAgo }),
-      db.rpc('active_students_by_bucket', { p_student_ids: studentIds, p_end: appDay(), p_bucket_days: 7, p_buckets: 4 }),
-    ])
-    if (weekStats.error)  throw weekStats.error
-    if (engagement.error) throw engagement.error
-
-    const profileMap = {}
-    for (const p of profiles) profileMap[p.id] = p
-    const plans = await premiumByStudent(db, schoolId, profiles)
-    const joinedAt = {}
-    for (const m of cohortMembers) joinedAt[m.student_id] = m.joined_at
-
-    const twoWeeksAgoDate = new Date(now - 14 * DAY_MS)
-
-    // ── Per-student enrichment ───────────────────────────────────────────────
-    const enrichedStudents = studentIds.map(id => {
-      const profile = profileMap[id] ?? { id, full_name: 'Unknown' }
-      const s       = stats30.byStudent.get(id) ?? { answered: 0, correct: 0, lastActive: null }
-      const total   = s.answered
-      const correct = s.correct
-      const lastActive = s.lastActive
-      const daysSinceLastPractice = lastActive
-        ? Math.floor((now - new Date(lastActive).getTime()) / DAY_MS)
-        : null
-
-      return {
-        id,
-        full_name:             profile.full_name?.trim() || profile.username || 'No name yet',
-        contact:               profile.id ? studentContact(profile) : null,
-        premium:               plans.get(id)?.premium ?? null,      // 'school' | 'own' | null
-        premiumUntil:          plans.get(id)?.until ?? null,
-        exam_type:             profile.exam_type,
-        subjects:              profile.subjects ?? [],
-        accuracy:              total > 0 ? Math.round((correct / total) * 100) : null,
-        correct,
-        total,                 // questions answered in last 30 days
-        lastActive,            // ISO string of most recent attempt
-        daysSinceLastPractice,
-        isActiveThisWeek:      daysSinceLastPractice !== null && daysSinceLastPractice <= 7,
-        subjectAcc:            stats30.subjectsByStudent.get(id) ?? {},
-        joinedCohortAt:        joinedAt[id] ?? null,
-      }
-    })
-
-    // ── Summary ──────────────────────────────────────────────────────────────
-    const activeThisWeek   = enrichedStudents.filter(s => s.isActiveThisWeek).length
-    const totalCorrectAll  = enrichedStudents.reduce((a, s) => a + s.correct, 0)
-    const totalAttemptsAll = enrichedStudents.reduce((a, s) => a + s.total,   0)
-    const avgAccuracy      = totalAttemptsAll > 0 ? Math.round((totalCorrectAll / totalAttemptsAll) * 100) : null
-    const totalQuestionsThisWeek = (weekStats.data ?? []).reduce((a, r) => a + (Number(r.answered) || 0), 0)
-
-    // ── At-risk segmentation ─────────────────────────────────────────────────
-    const atRiskSegmented = enrichedStudents
-      .filter(s => !s.isActiveThisWeek || (s.accuracy !== null && s.accuracy < 40))
-      .map(s => {
-        const wasActiveRecently = s.lastActive && new Date(s.lastActive) >= twoWeeksAgoDate
-        const tier =
-          !s.isActiveThisWeek && wasActiveRecently ? 'dropped'  :
-          !s.isActiveThisWeek                      ? 'inactive' :
-                                                     'struggling'
-        return {
-          id:                    s.id,
-          name:                  s.full_name,
-          tier,
-          accuracy:              s.accuracy,
-          daysSinceLastPractice: s.daysSinceLastPractice,
-        }
-      })
-
-    // ── Topic breakdown + weekly engagement ──────────────────────────────────
-    const subjectTopics = groupTopicsBySubject(stats30.topics, 'subjectName')
-
-    // Oldest week first, labelled by its first day (as before).
-    const weeklyEngagement = [...(engagement.data ?? [])]
-      .sort((a, b) => b.bucket - a.bucket)
-      .map(b => ({
-        label:  new Date(`${String(b.bucket_start).slice(0, 10)}T12:00:00Z`)
-                  .toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }),
-        active: Number(b.active) || 0,
-      }))
+    const { slots, ...rest } = await memo(schoolDashboardKey(schoolId), CACHE_MS, () => loadDashboard(db, schoolId))
 
     return NextResponse.json(
-      {
-        school,
-        adminName:  adminProfile.full_name ?? '',
-        cohort:     activeCohort,
-        allCohorts: allCohorts ?? [],
-        summary: {
-          totalStudents: studentIds.length,
-          premiumStudents: enrichedStudents.filter(s => s.premium).length,
-          activeThisWeek,
-          avgAccuracy,
-          totalQuestionsThisWeek,
-        },
-        students: enrichedStudents.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
-        subjectTopics,
-        weeklyEngagement,
-        atRiskSegmented,
-      },
+      { ...rest, school: { ...adminProfile.schools, slots }, adminName: adminProfile.full_name ?? '' },
       { headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300' } }
     )
   } catch (err) {

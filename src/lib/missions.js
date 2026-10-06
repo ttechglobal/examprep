@@ -32,13 +32,18 @@ export function missionCountFor() {
   return MISSIONS_PER_WEEK
 }
 
-// The topics a subject's missions may use: ranked, examined at least once, and
-// with enough questions in the bank to be playable.
+// The topics a subject's missions may use: playable (enough questions in the bank),
+// the most-examined first. Topics that appear in past papers come first, in rank
+// order; if past-paper tagging is thin, the best-stocked remaining topics fill the
+// pool, so a subject never ends up with no missions just because its past papers
+// aren't all imported yet.
 export function eligibleTopics(topics) {
-  return (topics ?? [])
-    .filter(t => t.past_count > 0 && t.bank_count >= MIN_TOPIC_QUESTIONS)
+  const playable = (topics ?? []).filter(t => t.bank_count >= MIN_TOPIC_QUESTIONS)
+  const examined = playable.filter(t => t.past_count > 0)
     .sort((a, b) => a.rank - b.rank || b.past_count - a.past_count)
-    .slice(0, MISSION_POOL_SIZE)
+  const rest = playable.filter(t => !(t.past_count > 0))
+    .sort((a, b) => b.bank_count - a.bank_count)
+  return [...examined, ...rest].slice(0, MISSION_POOL_SIZE)
 }
 
 function shuffled(list, random) {

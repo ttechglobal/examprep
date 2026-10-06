@@ -13,7 +13,7 @@
 | Flashcards, explanations, Learn, daily challenge, leaderboards, progress | Open | Open |
 
 - Every new account gets **14 days of Premium** (the trial; `TRIAL_DAYS` in `src/lib/plans.js` and the default of `profiles.trial_ends_at`, set by `20261011_trial_and_admin_speed.sql`), whichever way its profile is created.
-- Accounts that exist when `20261005_plans.sql` runs get 7 days from that moment.
+- Accounts that existed when `20261005_plans.sql` ran got 7 days from that moment. `20261012_trial_for_everyone.sql` then gave every student (without Premium) a fresh 14 days. Students see the mascot's welcome once more, because its "seen" key includes the trial length.
 - Guests (no account) are on Free. Their daily limits are counted on the device, and signing up starts their trial.
 - Days are Nigerian calendar days, the same as streaks.
 - "First 5 topics" means the first five topics that have questions for that exam, in curriculum order (`topics.order_index`).
@@ -65,7 +65,7 @@ The flow: a student taps **Get Premium**, picks a plan and sends the WhatsApp me
     - history with a Cancel option
     - a WhatsApp renewal reminder for expiring and expired students
     - Delete
-- **Students are told in the app**, once each: when their plan is within 7 days of ending, and when it has ended. Both point to Renew. Push notifications are broadcast-only today, so per-student expiry pushes would need the `send-notifications` function to target users.
+- **Students are told in the app**, once each: when their plan is within 7 days of ending, and when it has ended. Both point to Renew. The admin Notifications page can send to "Plan ending within 7 days" (`docs/notifications.md`).
 - **APIs** (all require the admin login):
   - `GET /api/admin/students`
   - `GET` and `PATCH /api/admin/students/[id]`

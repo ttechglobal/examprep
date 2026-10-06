@@ -1,7 +1,11 @@
 // supabase/functions/send-notifications/index.ts
 //
 // Called by pg_cron three times daily (12:00, 16:00, 20:00 Lagos) with { slot: 'noon' | 'afternoon' | 'evening' }
-// and by /api/admin/notifications for custom blasts. Callers must send a
+// and by /api/admin/notifications for custom messages:
+//   { custom: true, title, body, url, tag, audience?: { kind, value? } }
+//   audience: all (default) | user | exam | plan | inactive | expiring, resolved in SQL
+//   (notification_audience, 20261011). "{name}" in the title or body becomes the
+//   student's first name ("there" when unknown). Callers must send a
 // Supabase secret key (sb_secret_…) in the `apikey` header.
 // Sends Web Push to every active subscription, 500 per invocation (see Batching).
 // Marks subscriptions inactive if the browser has unsubscribed (HTTP 404/410).
@@ -20,7 +24,8 @@
 //   student (weekly battle missions, streak, whether they've practised today) and is
 //   chosen in messages.ts. A student who has already practised today gets no reminder,
 //   so "delivered" can be lower than the number of devices; "skipped" counts those.
-//   Devices without an account get the plain reminder. Custom blasts are unchanged.
+//   Devices without an account get the plain reminder.
+// v4 (Oct 2026): custom messages can go to one student or a group, and can say "{name}".
 //
 // v2 (Sep 2026): moved from the legacy service_role JWT (Authorization: Bearer)
 //   to Supabase secret keys (apikey header, SUPABASE_SECRET_KEYS), so the legacy
@@ -29,7 +34,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush          from 'npm:web-push@3'
-import { buildMessage, lagosWeekday, lagosDayNumber, userKey, type Context, type Slot } from './messages.ts'
+import { buildMessage, lagosWeekday, lagosDayNumber, userKey, fillName, type Context, type Slot } from './messages.ts'
 
 // ── Batching ──────────────────────────────────────────────────────────────────
 // Each invocation handles one page of subscribers, then hands the next page to
@@ -75,6 +80,14 @@ function databaseKey(): string | undefined {
   return keys.default ?? Object.values(keys)[0]
 }
 
+// ── Audience (custom messages) ────────────────────────────────────────────────
+const AUDIENCES = ['all', 'user', 'exam', 'plan', 'inactive', 'expiring']
+function parseAudience(raw: any): { kind: string; value: string | null } | null {
+  const kind = raw?.kind ?? 'all'
+  if (!AUDIENCES.includes(kind)) return null
+  return { kind, value: raw?.value == null ? null : String(raw.value) }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -109,6 +122,11 @@ Deno.serve(async (req) => {
     return new Response('Custom blast requires title and body', { status: 400 })
   }
 
+  const audience = isCustom ? parseAudience(parsedBody.audience) : null
+  if (isCustom && !audience) {
+    return new Response('Unknown audience', { status: 400 })
+  }
+
   webpush.setVapidDetails(
     Deno.env.get('VAPID_SUBJECT')!,
     Deno.env.get('VAPID_PUBLIC_KEY')!,
@@ -119,13 +137,27 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  // One page of active subscriptions, in a stable order.
-  const { data: subs, error } = await db
-    .from('push_subscriptions')
-    .select('id, subscription, user_id')
-    .eq('active', true)
-    .order('id')
-    .range(offset, offset + PAGE_SIZE - 1)
+  // One page of devices, in a stable order. Custom messages ask SQL for their
+  // audience; scheduled reminders go to every active device.
+  type Device = { id: string; subscription: any; user_id: string | null; first_name?: string | null }
+  let subs: Device[] | null = null
+  let error: { message: string } | null = null
+  if (isCustom) {
+    const res = await db.rpc('notification_targets', {
+      p_kind: audience!.kind, p_value: audience!.value, p_offset: offset, p_limit: PAGE_SIZE,
+    })
+    subs = res.data as Device[] | null
+    error = res.error
+  } else {
+    const res = await db
+      .from('push_subscriptions')
+      .select('id, subscription, user_id')
+      .eq('active', true)
+      .order('id')
+      .range(offset, offset + PAGE_SIZE - 1)
+    subs = res.data as Device[] | null
+    error = res.error
+  }
 
   if (error) {
     console.error('DB read error:', error.message)
@@ -152,15 +184,15 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Custom blasts send one message to every device. Scheduled reminders are built
-  // per device from its student's context (messages.ts).
-  const customPayload = isCustom
-    ? JSON.stringify({
+  // Custom messages are the same for everyone in the audience, except "{name}".
+  // Scheduled reminders are built per device from its student's context (messages.ts).
+  const customMessage = isCustom
+    ? {
         title: String(parsedBody.title).trim(),
         body:  String(parsedBody.body).trim(),
         url:   parsedBody.url?.trim() || '/student/practice',
         tag:   parsedBody.tag?.trim() || 'ep-custom',
-      })
+      }
     : null
 
   const contexts = new Map<string, Context>()
@@ -181,9 +213,15 @@ Deno.serve(async (req) => {
   let firstError: string | null = null
   for (let i = 0; i < subs.length; i += CONCURRENCY) {
     await Promise.allSettled(
-      subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription, user_id }) => {
-        let payload = customPayload
-        if (!payload) {
+      subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription, user_id, first_name }) => {
+        let payload: string | null = null
+        if (customMessage) {
+          payload = JSON.stringify({
+            ...customMessage,
+            title: fillName(customMessage.title, first_name),
+            body:  fillName(customMessage.body, first_name),
+          })
+        } else {
           const msg = buildMessage({
             slot: slot as Slot, weekday, day, key: userKey(user_id ?? id),
             ctx: user_id ? contexts.get(user_id) ?? null : null,

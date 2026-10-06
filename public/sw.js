@@ -16,6 +16,10 @@
 //     pages. Questions, scores and battles stay live.
 //   • Bump VERSION to throw every cache away.
 //
+// v6.1 (Oct 2026)
+//   • Notifications carry no emojis (default text and the action buttons).
+//   • A notification can open another site (e.g. the WhatsApp channel): that link opens
+//     in its own tab and leaves the app where it was. App links work as before.
 // v6 (4 Oct 2026)
 //   • Optimized images (/_next/image) and /audio are saved too. Battle World
 //     draws almost all of its artwork through /_next/image, so it was
@@ -48,7 +52,7 @@ const OUR_CACHE = /^ep-/                     // every cache this worker has ever
 const APP_HOME = '/student/home'
 const PRECACHE_PAGES = [
   APP_HOME, '/student/practice', '/student/battle', '/student/battle/setup',
-  '/student/battle/session', '/student/battle/leaderboard', '/student/leaderboard',
+  '/student/battle/session', '/student/battle/leaderboard', '/student/battle/missions', '/student/leaderboard',
   '/student/profile', '/student/learn', '/student/learn/flashcards', '/student/progress',
   '/onboarding', '/offline',
 ]
@@ -219,7 +223,7 @@ async function trim(cacheName, limit) {
 self.addEventListener('push', event => {
   const defaults = {
     title: 'ExamPrep A1',
-    body:  '📚 Time to practise!',
+    body:  'Time to practise.',
     url:   '/student/practice',
     tag:   'ep-reminder',
   }
@@ -236,8 +240,8 @@ self.addEventListener('push', event => {
       renotify: true,
       data:     { url: data.url },
       actions:  [
-        { action: 'open',    title: '📚 Practise now' },
-        { action: 'dismiss', title: 'Later'            },
+        { action: 'open',    title: 'Open'  },
+        { action: 'dismiss', title: 'Later' },
       ],
     })
   )
@@ -249,8 +253,13 @@ self.addEventListener('notificationclick', event => {
   if (event.action === 'dismiss') return
 
   const target = event.notification.data?.url || '/student/practice'
+  // A link to another site opens in its own tab. The app's own pages reuse an
+  // open window of the app when there is one.
+  let external = false
+  try { external = new URL(target, self.location.origin).origin !== self.location.origin } catch {}
 
   event.waitUntil(
+    external ? self.clients.openWindow(target) :
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then(clients => {

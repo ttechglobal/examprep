@@ -1,541 +1,277 @@
 'use client'
-// src/app/admin/notifications/page.js
+// src/app/admin/notifications/page.js — v3
+// ─────────────────────────────────────────────────────────────────────────────
+// Write and send a notification: pick a template (or start blank), edit the
+// words, say who gets it and where a tap leads, check how many phones it will
+// reach, send.
 //
-// Manual push notification sender.
-// - Pick a saved template or write a custom message
-// - Preview how it looks on a phone
-// - Send to all subscribed users
-// - Save new templates to localStorage (no DB table needed)
+//   Audience   everyone · one student · by exam · by plan · not practised for a
+//              while · plan ending within 7 days. The count shown is real: only
+//              phones with notifications turned on.
+//   Opens      a page in the app, the WhatsApp channel (paste its link once; it
+//              is remembered on this browser) or any https link
+//   {name}     becomes each student's first name ("there" if unknown)
+//   Rules      no emojis; a short title and message (lib/notifications.js)
 //
-// v2: the result shows delivered and failed separately (it used to count
-//     failed pushes as sent), with the first failure's reason.
+// Everything sent is recorded in the Activity Log. The daily reminders and the
+// weekly-mission messages are automatic: their wording lives in
+// supabase/functions/send-notifications/messages.ts.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  TITLE_MAX, BODY_MAX, LINKS, AUDIENCES, TEMPLATES,
+  checkMessage, checkLink, checkAudience, audienceLabel,
+} from '@/lib/notifications'
+import s from './notifications.module.css'
 
-// ── Built-in templates ────────────────────────────────────────────────────────
-const BUILT_IN_TEMPLATES = [
-  {
-    id: 'challenge',
-    label: '🏆 New Challenge',
-    title: '🏆 New challenge just dropped!',
-    body:  'A special challenge is live right now. Can you top the leaderboard?',
-    url:   '/student/practice',
-    tag:   'ep-challenge',
-  },
-  {
-    id: 'offer',
-    label: '🎁 Special Offer',
-    title: '🎁 Special offer — act fast!',
-    body:  'We have something special for you. Open the app to see.',
-    url:   '/student/home',
-    tag:   'ep-offer',
-  },
-  {
-    id: 'streak',
-    label: '🔥 Streak Warning',
-    title: '🔥 Your streak is about to break!',
-    body:  "Don't lose your progress. Quick practice now — it only takes 2 minutes.",
-    url:   '/student/practice',
-    tag:   'ep-streak',
-  },
-  {
-    id: 'leaderboard',
-    label: '📊 Leaderboard Update',
-    title: '📊 Leaderboard just updated',
-    body:  "See where you rank. Others are catching up — don't let them.",
-    url:   '/student/home',
-    tag:   'ep-leaderboard',
-  },
-  {
-    id: 'new_content',
-    label: '📚 New Content',
-    title: '📚 New lessons are live!',
-    body:  'Fresh content has just been added. Check it out before your next exam.',
-    url:   '/student/profile?setup=1',
-    tag:   'ep-content',
-  },
-  {
-    id: 'exam_tip',
-    label: '💡 Exam Tip',
-    title: '💡 Quick exam tip for you',
-    body:  'Top students practise a little every day. Open ExamPrep and keep your streak.',
-    url:   '/student/practice',
-    tag:   'ep-tip',
-  },
-]
+const CHANNEL_KEY = 'ep_whatsapp_channel_url'
+const DEFAULT_CHANNEL = process.env.NEXT_PUBLIC_WHATSAPP_CHANNEL_URL ?? ''
 
-const LS_KEY = 'ep_admin_notif_templates'
-
-function loadCustomTemplates() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') } catch { return [] }
-}
-function saveCustomTemplates(templates) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(templates)) } catch {}
-}
-
-// ── Colours matching admin shell ───────────────────────────────────────────────
-const NAVY  = '#062A78'
-const BLUE  = '#1264E5'
-const GREEN = '#10b981'
-const RED   = '#ef4444'
-const GOLD  = '#FFB800'
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function SectionHeader({ children }) {
-  return (
-    <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: '#94a3b8', marginBottom: 10 }}>
-      {children}
-    </p>
-  )
-}
-
-function Card({ children, style }) {
-  return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 22px', ...style }}>
-      {children}
-    </div>
-  )
-}
-
-// Phone preview of what the notification will look like
-function NotifPreview({ title, body }) {
-  const hasContent = title.trim() || body.trim()
-  return (
-    <div style={{ background: '#f1f5f9', borderRadius: 14, padding: 16 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Preview</p>
-      <div style={{
-        background: '#fff',
-        borderRadius: 14,
-        padding: '12px 14px',
-        boxShadow: '0 4px 20px rgba(0,0,0,.1)',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 10,
-      }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-          background: NAVY,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ fontSize: 16 }}>📚</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8' }}>ExamPrep A1</p>
-            <p style={{ fontSize: 10, color: '#cbd5e1' }}>now</p>
-          </div>
-          <p style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 2, lineHeight: 1.3 }}>
-            {hasContent ? (title || 'Notification title') : 'Notification title'}
-          </p>
-          <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
-            {hasContent ? (body || 'Your message body goes here.') : 'Your message body goes here.'}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function TemplateButton({ template, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%', padding: '10px 12px',
-        borderRadius: 10, border: `1.5px solid ${active ? BLUE : '#e2e8f0'}`,
-        background: active ? '#eff6ff' : '#fff',
-        textAlign: 'left', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', gap: 8,
-        transition: 'all .12s',
-        marginBottom: 4,
-      }}
-    >
-      <span style={{ fontSize: 14, flexShrink: 0 }}>{template.label.split(' ')[0]}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: active ? BLUE : '#1e293b', lineHeight: 1.2 }}>
-          {template.label.split(' ').slice(1).join(' ')}
-        </p>
-        <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {template.body}
-        </p>
-      </div>
-      {active && (
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: BLUE, flexShrink: 0 }} />
-      )}
-    </button>
-  )
-}
-
-// ── Main page ──────────────────────────────────────────────────────────────────
-export default function AdminNotificationsPage() {
-  const [customTemplates, setCustomTemplates] = useState([])
-  const [activeTemplateId, setActiveTemplateId] = useState(null)
-
-  // Form state
-  const [title,   setTitle]   = useState('')
-  const [body,    setBody]    = useState('')
-  const [url,     setUrl]     = useState('/student/practice')
-  const [tag,     setTag]     = useState('ep-custom')
-
-  // Send state
-  const [sending, setSending] = useState(false)
-  const [result,  setResult]  = useState(null)   // { ok, delivered, failed, stale, more_pages, first_error } | { error }
-
-  // Save template state
-  const [savingTpl,   setSavingTpl]   = useState(false)
-  const [newTplLabel, setNewTplLabel] = useState('')
-
+function useDebounced(value, ms) {
+  const [debounced, setDebounced] = useState(value)
   useEffect(() => {
-    setCustomTemplates(loadCustomTemplates())
+    const timer = setTimeout(() => setDebounced(value), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return debounced
+}
+
+function readChannel() {
+  try { return localStorage.getItem(CHANNEL_KEY) || DEFAULT_CHANNEL } catch { return DEFAULT_CHANNEL }
+}
+
+export default function AdminNotificationsPage() {
+  const [templateId, setTemplateId] = useState(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [linkId, setLinkId] = useState('practice')
+  const [customUrl, setCustomUrl] = useState('')
+  const [channelUrl, setChannelUrl] = useState(DEFAULT_CHANNEL)
+  const [audience, setAudience] = useState({ kind: 'all', value: null })
+  const [student, setStudent] = useState(null)           // { id, name } for "One student"
+  const [studentQuery, setStudentQuery] = useState('')
+  const [matches, setMatches] = useState({ key: '', rows: [] })
+  const [reach, setReach] = useState({ key: '', data: null, error: null })
+  const [confirming, setConfirming] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState(null)             // { ok, ... } | { error }
+
+  // The remembered channel link lives in this browser only.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setChannelUrl(readChannel()))
+    return () => cancelAnimationFrame(frame)
   }, [])
 
-  const allTemplates = [...BUILT_IN_TEMPLATES, ...customTemplates]
-
-  function applyTemplate(tpl) {
-    setActiveTemplateId(tpl.id)
-    setTitle(tpl.title)
-    setBody(tpl.body)
-    setUrl(tpl.url || '/student/practice')
-    setTag(tpl.tag || 'ep-custom')
-    setResult(null)
+  function pickTemplate(t) {
+    setTemplateId(t.id)
+    setTitle(t.title)
+    setBody(t.body)
+    setLinkId(t.link)
+    setAudience({ kind: t.audience.kind, value: t.audience.value ?? null })
+    setStudent(null); setStudentQuery('')
+    setConfirming(false); setResult(null)
   }
 
-  function clearForm() {
-    setActiveTemplateId(null)
-    setTitle('')
-    setBody('')
-    setUrl('/student/practice')
-    setTag('ep-custom')
-    setResult(null)
+  function chooseAudience(kind) {
+    const spec = AUDIENCES.find(a => a.kind === kind)
+    setAudience({ kind, value: spec?.values?.[0]?.[0] ?? null })
+    setStudent(null); setStudentQuery('')
+    setConfirming(false); setResult(null)
   }
 
-  async function handleSend() {
-    if (!title.trim() || !body.trim()) return
-    setSending(true)
-    setResult(null)
+  function saveChannel(value) {
+    setChannelUrl(value)
+    try { localStorage.setItem(CHANNEL_KEY, value.trim()) } catch {}
+  }
+
+  // ── What will be sent ─────────────────────────────────────────────────────
+  const link = LINKS.find(l => l.id === linkId)
+  const url = linkId === 'whatsapp' ? checkLink(channelUrl)
+    : linkId === 'custom' ? checkLink(customUrl)
+    : link?.url
+  const message = checkMessage({ title, body })
+  const typed = title.trim() || body.trim()
+  const audienceSpec = AUDIENCES.find(a => a.kind === audience.kind)
+  const target = audience.kind === 'user' ? (student ? { kind: 'user', value: student.id } : null) : checkAudience(audience)
+  const targetKey = target ? `${target.kind}:${target.value ?? ''}` : ''
+
+  // Who it reaches: only phones with notifications on.
+  useEffect(() => {
+    if (!targetKey) return
+    let live = true
+    const params = new URLSearchParams({ kind: target.kind })
+    if (target.value) params.set('value', target.value)
+    const timer = setTimeout(() => {
+      fetch(`/api/admin/notifications/audience?${params}`)
+        .then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Could not count'); return d })
+        .then(d => { if (live) setReach({ key: targetKey, data: d, error: null }) })
+        .catch(e => { if (live) setReach({ key: targetKey, data: null, error: e.message }) })
+    }, 250)
+    return () => { live = false; clearTimeout(timer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey])
+  const reachNow = reach.key === targetKey ? reach : null
+
+  // Finding the student for "One student".
+  const query = useDebounced(studentQuery.trim(), 300)
+  useEffect(() => {
+    if (audience.kind !== 'user' || student || query.length < 2) return
+    let live = true
+    fetch(`/api/admin/notifications/students?q=${encodeURIComponent(query)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => { if (live) setMatches({ key: query, rows: Array.isArray(rows) ? rows : [] }) })
+      .catch(() => { if (live) setMatches({ key: query, rows: [] }) })
+    return () => { live = false }
+  }, [query, audience.kind, student])
+  const studentRows = matches.key === query ? matches.rows : []
+
+  // ── Sending ───────────────────────────────────────────────────────────────
+  const devices = reachNow?.data?.devices ?? null
+  const problem = !typed ? null
+    : message.error ? message.error
+    : !url ? (linkId === 'whatsapp' ? 'Paste the WhatsApp channel link under "When they tap it".' : 'Check the link: use a page in the app (starting with /) or a full https:// link.')
+    : null
+  const ready = !message.error && !!url && !!target && devices > 0 && !sending
+  const toEveryone = audience.kind === 'all'
+  const label = audienceLabel(audience, student?.name)
+
+  async function send() {
+    setSending(true); setResult(null)
     try {
       const res = await fetch('/api/admin/notifications', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ title, body, url, tag }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body, url, audience: target, audienceName: student?.name }),
       })
-      const data = await res.json()
-      setResult(data)
-    } catch (e) {
-      setResult({ error: e.message })
-    } finally {
-      setSending(false)
-    }
+      const data = await res.json().catch(() => ({}))
+      setResult(res.ok ? data : { error: data.error || 'Could not send. Try again.' })
+      if (res.ok) setConfirming(false)
+    } catch {
+      setResult({ error: 'Could not reach the server. Check your connection and try again.' })
+    } finally { setSending(false) }
   }
 
-  function handleSaveTemplate() {
-    if (!newTplLabel.trim() || !title.trim() || !body.trim()) return
-    const newTpl = {
-      id:    'custom-' + Date.now(),
-      label: newTplLabel.trim(),
-      title: title.trim(),
-      body:  body.trim(),
-      url:   url.trim() || '/student/practice',
-      tag:   tag.trim() || 'ep-custom',
-    }
-    const updated = [...customTemplates, newTpl]
-    setCustomTemplates(updated)
-    saveCustomTemplates(updated)
-    setNewTplLabel('')
-    setSavingTpl(false)
-    setActiveTemplateId(newTpl.id)
-  }
+  const previewTitle = (title.trim() || 'Notification title').replace(/\{name\}/gi, 'Ada')
+  const previewBody = (body.trim() || 'Your message appears here.').replace(/\{name\}/gi, 'Ada')
+  const opens = useMemo(() => {
+    if (linkId === 'whatsapp') return url ? 'Opens the WhatsApp channel' : 'Opens the WhatsApp channel (link needed)'
+    return `Opens: ${link?.label ?? 'a link'}`
+  }, [linkId, link, url])
 
-  function handleDeleteTemplate(id) {
-    const updated = customTemplates.filter(t => t.id !== id)
-    setCustomTemplates(updated)
-    saveCustomTemplates(updated)
-    if (activeTemplateId === id) clearForm()
-  }
-
-  const canSend = title.trim() && body.trim() && !sending
-
-  return (
-    <div style={{ maxWidth: 900 }}>
-      {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(135deg, ${NAVY}, ${BLUE})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-            🔔
-          </div>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1 }}>
-              Push Notifications
-            </h1>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              Send a notification to all subscribed users right now
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20, alignItems: 'start' }}>
-
-        {/* ── Left: template picker ── */}
-        <div>
-          <Card>
-            <SectionHeader>Templates</SectionHeader>
-
-            <SectionHeader>Built-in</SectionHeader>
-            {BUILT_IN_TEMPLATES.map(tpl => (
-              <TemplateButton
-                key={tpl.id}
-                template={tpl}
-                active={activeTemplateId === tpl.id}
-                onClick={() => applyTemplate(tpl)}
-              />
-            ))}
-
-            {customTemplates.length > 0 && (
-              <>
-                <div style={{ height: 1, background: '#f1f5f9', margin: '14px 0 10px' }} />
-                <SectionHeader>Saved</SectionHeader>
-                {customTemplates.map(tpl => (
-                  <div key={tpl.id} style={{ position: 'relative' }}>
-                    <TemplateButton
-                      template={tpl}
-                      active={activeTemplateId === tpl.id}
-                      onClick={() => applyTemplate(tpl)}
-                    />
-                    <button
-                      onClick={() => handleDeleteTemplate(tpl.id)}
-                      title="Delete template"
-                      style={{
-                        position: 'absolute', top: 8, right: 8,
-                        width: 20, height: 20, borderRadius: 6,
-                        background: '#fef2f2', border: '1px solid #fecaca',
-                        color: RED, fontSize: 11, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        lineHeight: 1,
-                      }}
-                    >✕</button>
-                  </div>
-                ))}
-              </>
-            )}
-
-            <div style={{ height: 1, background: '#f1f5f9', margin: '14px 0 12px' }} />
-            <button
-              onClick={clearForm}
-              style={{
-                width: '100%', padding: '9px 12px',
-                borderRadius: 10, border: '1.5px dashed #cbd5e1',
-                background: 'transparent', color: '#64748b',
-                fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              }}
-            >
-              + Custom message
-            </button>
-          </Card>
-        </div>
-
-        {/* ── Right: compose + send ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Compose */}
-          <Card>
-            <SectionHeader>Compose</SectionHeader>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>
-                  Title <span style={{ color: RED }}>*</span>
-                </label>
-                <input
-                  value={title}
-                  onChange={e => { setTitle(e.target.value); setActiveTemplateId(null) }}
-                  placeholder="e.g. 🏆 New challenge just dropped!"
-                  maxLength={80}
-                  style={{
-                    width: '100%', padding: '10px 12px',
-                    borderRadius: 10, border: '1.5px solid #e2e8f0',
-                    fontSize: 13, fontFamily: 'inherit', outline: 'none',
-                    color: '#0f172a',
-                  }}
-                />
-                <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, textAlign: 'right' }}>{title.length}/80</p>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>
-                  Body <span style={{ color: RED }}>*</span>
-                </label>
-                <textarea
-                  value={body}
-                  onChange={e => { setBody(e.target.value); setActiveTemplateId(null) }}
-                  placeholder="The message students will read in the notification..."
-                  maxLength={150}
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '10px 12px',
-                    borderRadius: 10, border: '1.5px solid #e2e8f0',
-                    fontSize: 13, fontFamily: 'inherit', outline: 'none',
-                    resize: 'vertical', color: '#0f172a', lineHeight: 1.5,
-                  }}
-                />
-                <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, textAlign: 'right' }}>{body.length}/150</p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>
-                    Deep link URL
-                  </label>
-                  <input
-                    value={url}
-                    onChange={e => setUrl(e.target.value)}
-                    placeholder="/student/practice"
-                    style={{
-                      width: '100%', padding: '10px 12px',
-                      borderRadius: 10, border: '1.5px solid #e2e8f0',
-                      fontSize: 12, fontFamily: 'inherit', outline: 'none', color: '#0f172a',
-                    }}
-                  />
-                  <p style={{ fontSize: 9, color: '#94a3b8', marginTop: 3 }}>Where tapping opens in the app</p>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>
-                    Tag
-                  </label>
-                  <input
-                    value={tag}
-                    onChange={e => setTag(e.target.value)}
-                    placeholder="ep-custom"
-                    style={{
-                      width: '100%', padding: '10px 12px',
-                      borderRadius: 10, border: '1.5px solid #e2e8f0',
-                      fontSize: 12, fontFamily: 'inherit', outline: 'none', color: '#0f172a',
-                    }}
-                  />
-                  <p style={{ fontSize: 9, color: '#94a3b8', marginTop: 3 }}>Replaces existing notif with same tag</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Preview */}
-          <Card>
-            <NotifPreview title={title} body={body} />
-          </Card>
-
-          {/* Save as template */}
-          <Card>
-            <SectionHeader>Save as template</SectionHeader>
-            {savingTpl ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={newTplLabel}
-                  onChange={e => setNewTplLabel(e.target.value)}
-                  placeholder="Template name, e.g. 🎁 Flash Sale"
-                  onKeyDown={e => e.key === 'Enter' && handleSaveTemplate()}
-                  autoFocus
-                  style={{
-                    flex: 1, padding: '9px 12px',
-                    borderRadius: 10, border: '1.5px solid #e2e8f0',
-                    fontSize: 12, fontFamily: 'inherit', outline: 'none', color: '#0f172a',
-                  }}
-                />
-                <button
-                  onClick={handleSaveTemplate}
-                  disabled={!newTplLabel.trim() || !title.trim() || !body.trim()}
-                  style={{
-                    padding: '9px 16px', borderRadius: 10, border: 'none',
-                    background: GREEN, color: '#fff', fontSize: 12, fontWeight: 700,
-                    cursor: 'pointer', opacity: (!newTplLabel.trim() || !title.trim() || !body.trim()) ? 0.5 : 1,
-                  }}
-                >Save</button>
-                <button
-                  onClick={() => setSavingTpl(false)}
-                  style={{
-                    padding: '9px 12px', borderRadius: 10,
-                    border: '1px solid #e2e8f0', background: '#fff',
-                    fontSize: 12, color: '#64748b', cursor: 'pointer',
-                  }}
-                >Cancel</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setSavingTpl(true)}
-                disabled={!title.trim() || !body.trim()}
-                style={{
-                  padding: '9px 16px', borderRadius: 10,
-                  border: '1.5px dashed #cbd5e1', background: 'transparent',
-                  color: '#64748b', fontSize: 12, fontWeight: 700,
-                  cursor: (!title.trim() || !body.trim()) ? 'default' : 'pointer',
-                  opacity: (!title.trim() || !body.trim()) ? 0.5 : 1,
-                }}
-              >
-                + Save current message as template
-              </button>
-            )}
-          </Card>
-
-          {/* Send */}
-          <Card style={{ background: canSend ? `linear-gradient(135deg, ${NAVY}, ${BLUE})` : '#f8fafc', border: canSend ? 'none' : '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 800, color: canSend ? '#fff' : '#94a3b8', marginBottom: 2 }}>
-                  {sending ? 'Sending…' : 'Send to all users'}
-                </p>
-                <p style={{ fontSize: 11, color: canSend ? 'rgba(255,255,255,.65)' : '#cbd5e1' }}>
-                  {canSend
-                    ? 'This will immediately push to every subscribed device.'
-                    : 'Fill in title and body to enable sending.'}
-                </p>
-              </div>
-              <button
-                onClick={handleSend}
-                disabled={!canSend}
-                style={{
-                  padding: '11px 24px', borderRadius: 12, border: 'none',
-                  background: canSend ? GOLD : '#e2e8f0',
-                  color: canSend ? NAVY : '#94a3b8',
-                  fontSize: 13, fontWeight: 900,
-                  cursor: canSend ? 'pointer' : 'default',
-                  flexShrink: 0,
-                  boxShadow: canSend ? '0 2px 0 #CC8F00' : 'none',
-                  transition: 'all .15s',
-                }}
-              >
-                {sending ? '⏳ Sending…' : '🔔 Send now'}
-              </button>
-            </div>
-
-            {/* Result */}
-            {result && (
-              <div style={{
-                marginTop: 14, padding: '10px 14px', borderRadius: 10,
-                background: result.ok ? 'rgba(255,255,255,.12)' : '#fef2f2',
-                border: result.ok ? '1px solid rgba(255,255,255,.2)' : '1px solid #fecaca',
-              }}>
-                {result.ok ? (
-                  <>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                      {result.failed > 0 ? '⚠️' : '✅'} Delivered to {result.delivered} device{result.delivered !== 1 ? 's' : ''}
-                      {result.failed > 0 ? ` · ${result.failed} failed` : ''}
-                      {result.stale > 0 ? ` · ${result.stale} no longer subscribed (removed)` : ''}
-                      {result.more_pages ? ' · more devices are being sent to in the background' : ''}
-                    </p>
-                    {result.first_error && (
-                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', marginTop: 4 }}>First failure: {result.first_error}</p>
-                    )}
-                  </>
-                ) : (
-                  <p style={{ fontSize: 12, fontWeight: 700, color: RED }}>
-                    ❌ {result.error ?? 'Failed to send'}
-                  </p>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
+  return <div className={s.page}>
+    <div className={s.head}>
+      <h1 className={s.title}>Notifications</h1>
+      <p className={s.sub}>Send a message to students’ phones: to everyone, to a group, or to one student. Daily reminders and
+        weekly-mission messages go out on their own; this page is for the messages you write.</p>
     </div>
-  )
+
+    <div className={s.layout}>
+      <div>
+        <section className={s.card}>
+          <p className={s.step}>1. Start from a template</p>
+          <div className={s.templates}>
+            {TEMPLATES.map(t => <button key={t.id} type="button" className={`${s.chip} ${templateId === t.id ? s.chipOn : ''}`} onClick={() => pickTemplate(t)}>{t.label}</button>)}
+          </div>
+        </section>
+
+        <section className={s.card}>
+          <p className={s.step}>2. Write the message</p>
+          <div className={s.field}>
+            <label className={s.label} htmlFor="n-title"><span>Title</span><span className={`${s.count} ${title.length > TITLE_MAX ? s.over : ''}`}>{title.length}/{TITLE_MAX}</span></label>
+            <input id="n-title" className={s.input} value={title} onChange={e => { setTitle(e.target.value); setResult(null) }} placeholder="e.g. A scholarship you should see" autoComplete="off"/>
+          </div>
+          <div className={s.field}>
+            <label className={s.label} htmlFor="n-body"><span>Message</span><span className={`${s.count} ${body.length > BODY_MAX ? s.over : ''}`}>{body.length}/{BODY_MAX}</span></label>
+            <textarea id="n-body" className={s.textarea} value={body} onChange={e => { setBody(e.target.value); setResult(null) }} placeholder="Say it in a sentence or two."/>
+            <p className={s.hint}>No emojis. Write <b>{'{name}'}</b> to use each student’s first name, for example “{'{name}'}, a new scholarship is open.”</p>
+          </div>
+          <div className={s.field}>
+            <label className={s.label} htmlFor="n-link"><span>When they tap it</span></label>
+            <select id="n-link" className={s.select} value={linkId} onChange={e => { setLinkId(e.target.value); setResult(null) }}>
+              {LINKS.map(l => <option key={l.id} value={l.id}>{l.id === 'custom' || l.id === 'whatsapp' ? l.label : `Open: ${l.label}`}</option>)}
+            </select>
+            {linkId === 'whatsapp' && <>
+              <input className={s.input} style={{ marginTop: 8 }} value={channelUrl} onChange={e => saveChannel(e.target.value)} placeholder="https://whatsapp.com/channel/…" aria-label="WhatsApp channel link" inputMode="url"/>
+              <p className={s.hint}>Paste your channel’s link once. This browser remembers it.</p>
+            </>}
+            {linkId === 'custom' && <>
+              <input className={s.input} style={{ marginTop: 8 }} value={customUrl} onChange={e => setCustomUrl(e.target.value)} placeholder="/student/battle or https://…" aria-label="Link" inputMode="url"/>
+              <p className={s.hint}>{LINKS.find(l => l.id === 'custom').hint}</p>
+            </>}
+          </div>
+          {problem && <p className={s.problem} role="alert">{problem}</p>}
+        </section>
+
+        <section className={s.card}>
+          <p className={s.step}>3. Who gets it</p>
+          <div className={s.field}>
+            <select className={s.select} value={audience.kind} onChange={e => chooseAudience(e.target.value)} aria-label="Audience">
+              {AUDIENCES.map(a => <option key={a.kind} value={a.kind}>{a.label}</option>)}
+            </select>
+          </div>
+          {audienceSpec?.values && <div className={s.field}>
+            <select className={s.select} value={audience.value ?? ''} onChange={e => { setAudience({ kind: audience.kind, value: e.target.value }); setConfirming(false); setResult(null) }} aria-label={audienceSpec.label}>
+              {audienceSpec.values.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+            </select>
+          </div>}
+          {audience.kind === 'user' && <div className={s.field}>
+            {student
+              ? <div className={s.picked}><span>{student.name || 'Student'}</span><button type="button" className={s.link} onClick={() => { setStudent(null); setConfirming(false) }}>Change</button></div>
+              : <>
+                <input className={s.input} value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder="Search by name, username, phone or email" aria-label="Find a student" autoComplete="off"/>
+                {studentRows.length > 0 && <div className={s.matches}>
+                  {studentRows.map(r => <button key={r.id} type="button" className={s.match} onClick={() => { setStudent({ id: r.id, name: r.name || r.username || 'Student' }); setStudentQuery(''); setConfirming(false); setResult(null) }}>
+                    <span><span className={s.matchName}>{r.name || r.username || 'No name'}</span><span className={s.matchSub}>{[r.username && `@${r.username}`, r.phone, r.school].filter(Boolean).join(' · ')}</span></span>
+                  </button>)}
+                </div>}
+                {query.length >= 2 && matches.key === query && !studentRows.length && <p className={s.hint}>No student found for “{query}”.</p>}
+              </>}
+          </div>}
+        </section>
+      </div>
+
+      <aside className={s.side}>
+        <div className={s.phone}>
+          <p className={s.phoneLabel}>Preview</p>
+          <div className={s.notif}>
+            <span className={s.notifIcon} aria-hidden="true">A1</span>
+            <div className={s.notifBody}>
+              <div className={s.notifApp}><span>ExamPrep A1</span><span>now</span></div>
+              <p className={s.notifTitle}>{previewTitle}</p>
+              <p className={s.notifText}>{previewBody}</p>
+            </div>
+          </div>
+          <p className={s.opens}>{opens}</p>
+        </div>
+
+        <section className={s.card}>
+          <p className={s.reach}>
+            {!target ? 'Choose a student to see who it reaches.'
+              : !reachNow ? 'Counting…'
+              : reachNow.error ? <span className={s.reachNone}>{reachNow.error}</span>
+              : devices > 0 ? <>Reaches <strong>{devices.toLocaleString()}</strong> {devices === 1 ? 'phone' : 'phones'}{reachNow.data.students ? <> ({reachNow.data.students.toLocaleString()} {reachNow.data.students === 1 ? 'student' : 'students'})</> : null}.</>
+              : <span className={s.reachNone}>{audience.kind === 'user' ? 'This student has not turned on notifications, so nothing can be sent.' : 'No one in this group has notifications turned on.'}</span>}
+          </p>
+
+          {result?.error && <p className={s.error} role="alert">{result.error}</p>}
+          {result?.ok && <p className={s.done} role="status">
+            Sent to {label}: <b>{result.delivered.toLocaleString()}</b> delivered{result.failed ? `, ${result.failed} failed` : ''}{result.stale ? `, ${result.stale} phones no longer reachable` : ''}.
+            {result.more_pages ? ' A large audience is sent in batches, so these are the first batch’s numbers.' : ''}
+            {result.first_error ? ` First error: ${result.first_error}` : ''}
+          </p>}
+
+          {!confirming
+            ? <button type="button" className={s.send} disabled={!ready} onClick={() => { setResult(null); toEveryone || devices > 1 ? setConfirming(true) : send() }}>
+                {sending ? 'Sending…' : devices ? `Send to ${devices.toLocaleString()} ${devices === 1 ? 'phone' : 'phones'}` : 'Send'}
+              </button>
+            : <>
+                <button type="button" className={`${s.send} ${s.sendWarn}`} disabled={sending} onClick={send}>
+                  {sending ? 'Sending…' : `Yes, send to ${label.toLowerCase() === 'everyone' ? 'everyone' : label} (${devices.toLocaleString()})`}
+                </button>
+                <button type="button" className={s.cancel} disabled={sending} onClick={() => setConfirming(false)}>Cancel</button>
+              </>}
+        </section>
+      </aside>
+    </div>
+  </div>
 }

@@ -153,3 +153,64 @@
   font-weight: 600;
   color: #6b5a2c;
 }
+
+/* The hub's Missions button: a full-width row above Leaderboard and Settings. */
+.entry {
+  grid-column: 1 / -1;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: max(14px, calc(var(--u) * 1.5));
+  height: max(14px, calc(var(--u) * 1.5));
+  margin-left: auto;
+  border-radius: 50%;
+  background: #e0212b;
+  box-shadow: 0 0 0 3px #fff7db;
+}
+
+.skeleton {
+  height: calc(var(--u) * 8);
+  border-radius: calc(var(--u) * 1.4);
+  background: linear-gradient(90deg, #efe3bf 25%, #f8efd2 50%, #efe3bf 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+.message {
+  display: grid;
+  gap: calc(var(--u) * 1);
+  justify-items: center;
+  text-align: center;
+}
+
+.message strong {
+  font-size: max(20px, calc(var(--u) * 2.3));
+}
+
+.message p {
+  margin: 0;
+  max-width: 34em;
+  font-size: max(15px, calc(var(--u) * 1.7));
+  font-weight: 600;
+  color: #6b5a2c;
+}
+
+.message a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.note {
+  margin: calc(var(--u) * 1.2) 0 0;
+}

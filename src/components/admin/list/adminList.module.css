@@ -162,3 +162,6 @@
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
+
+/* Fields stay light on these white pages whatever the browser theme. */
+.input, .select, .search input, .year select { background: #fff; color: var(--ink); color-scheme: light; }

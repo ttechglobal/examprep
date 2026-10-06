@@ -4,16 +4,20 @@
 // Slots & Premium: where a school gives its students Premium.
 //   Slots        total · used · available. One slot = one student, 12 months
 //                of Premium. Unused slots never expire.
-//   Add student  by the phone number or email they signed up with; uses a slot
+//   Add students by the phone number or email each signed up with: one, or a
+//                whole list pasted in (up to 50 at a time); each uses a slot
 //   Buy slots    choose how many; the price is worked out (lib/plans.js
 //                SCHOOL_SLOT_PRICE) and the request goes to us on WhatsApp with
-//                the school's name, email and number. We add the slots once
-//                payment is confirmed.
+//                the school's name and the admin's name, email and number, so we
+//                can find the school at once. We add the slots once payment is
+//                confirmed.
 //   Students     the school's students and their Premium; Remove (the slot
 //                comes back if they were added in the last 7 days)
 //   History      the free slot and every purchase
 // Data: /api/school/subscriptions.
 //
+// v3: several students at once; the slot request carries the admin's own
+// email and phone (from the account, not typed); neater inputs.
 // v2: rebuilt on the slot ledger. v1's WhatsApp button went to a placeholder
 // number, students could only be added by email, and the list showed only
 // slot holders.
@@ -38,19 +42,45 @@ async function send(method, body) {
   return data
 }
 
-function buyMessage(count, school, adminName) {
-  const contact = [adminName && `Name: ${adminName}`, school?.contact_email && `Email: ${school.contact_email}`, school?.contact_phone && `Phone: ${school.contact_phone}`]
-    .filter(Boolean).join('\n')
+// What we're sent on WhatsApp: the order, and who is asking (the school and the
+// admin's name, sign-in email and phone), so the school can be found on the
+// admin Schools page by any of them.
+function buyMessage(count, school, admin, adminName) {
+  const name = admin?.name || adminName
+  const email = admin?.email || school?.contact_email
+  const phone = admin?.phone || school?.contact_phone
+  const lines = [
+    `School: ${school?.name ?? 'Our school'}`,
+    name && `Name: ${name}`,
+    email && `Email: ${email}`,
+    phone && `Phone: ${phone}`,
+    school?.contact_email && school.contact_email !== email && `School email: ${school.contact_email}`,
+  ].filter(Boolean).join('\n')
   return `Hi, I'd like to buy ${count} Premium slot${count === 1 ? '' : 's'} for ${school?.name ?? 'our school'}.\n` +
-    `${count} × ${priceLabel(SCHOOL_SLOT_PRICE)} = ${priceLabel(count * SCHOOL_SLOT_PRICE)}\n${contact}`
+    `${count} × ${priceLabel(SCHOOL_SLOT_PRICE)} = ${priceLabel(count * SCHOOL_SLOT_PRICE)}\n\n${lines}`
+}
+
+const MAX_BULK = 50
+// A pasted list → the distinct phone numbers and emails in it. Lines, commas and
+// semicolons separate people (a phone number may have spaces inside it).
+function parseContacts(text) {
+  const seen = new Set()
+  const out = []
+  for (const part of text.split(/[\n,;]+/)) {
+    const contact = part.trim()
+    const key = contact.toLowerCase().replace(/[\s()-]/g, '')
+    if (contact && !seen.has(key)) { seen.add(key); out.push(contact) }
+  }
+  return out
 }
 
 export default function SubscriptionsTab({ adminName }) {
   const [data, setData] = useState(null)        // { slots, students, history, school }
   const [error, setError] = useState(null)
-  const [contact, setContact] = useState('')
+  const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState(null)    // { tone: 'ok' | 'bad', text }
+  const [notice, setNotice] = useState(null)    // { tone: 'ok' | 'bad', text } for removing a student
+  const [outcome, setOutcome] = useState(null)  // the last add: { results, added, failed }
   const [count, setCount] = useState(20)
   const [removing, setRemoving] = useState(null)
 
@@ -66,13 +96,16 @@ export default function SubscriptionsTab({ adminName }) {
 
   async function add(e) {
     e.preventDefault()
-    setBusy(true); setNotice(null)
+    const list = parseContacts(text)
+    if (!list.length) return
+    setBusy(true); setNotice(null); setOutcome(null)
     try {
-      const result = await send('POST', { contact })
-      setData(d => ({ ...d, slots: result.slots, students: result.students }))
-      setContact('')
-      setNotice({ tone: 'ok', text: result.message })
-    } catch (err) { setNotice({ tone: 'bad', text: err.message }) }
+      const result = await send('POST', { contacts: list })
+      setData(d => ({ ...d, slots: result.slots, students: result.students ?? d.students }))
+      setOutcome(result)
+      // Whoever couldn't be added stays in the box, so it's easy to fix and try again.
+      setText(result.results.filter(r => !r.ok).map(r => r.contact).join('\n'))
+    } catch (err) { setOutcome({ error: err.message }) }
     finally { setBusy(false) }
   }
 
@@ -90,7 +123,10 @@ export default function SubscriptionsTab({ adminName }) {
   if (error) return <div className="sd-content"><p className={s.problem}>{error} <button className={s.link} onClick={load}>Try again</button></p></div>
   if (!data) return <div className="sd-content"><p className={s.loading}>Loading your slots…</p></div>
 
-  const { slots, students, history, school } = data
+  const { slots, students, history, school, admin } = data
+  const contacts = parseContacts(text)
+  const toAdd = contacts.length
+  const tooMany = toAdd > MAX_BULK
   const usedPct = slots.total > 0 ? Math.min(100, Math.round((slots.used / slots.total) * 100)) : 0
 
   return <div className="sd-content">
@@ -110,14 +146,37 @@ export default function SubscriptionsTab({ adminName }) {
 
     <div className={s.cols}>
       <section className={s.card}>
-        <h2 className={s.cardTitle}>Give a student Premium</h2>
-        <p className={s.cardText}>Enter the phone number or email the student signed up with. They need an ExamPrep account first.</p>
-        <form className={s.addRow} onSubmit={add}>
-          <input className={s.input} value={contact} onChange={e => setContact(e.target.value)}
-            placeholder="0801 234 5678 or student@email.com" aria-label="Student's phone number or email" disabled={!slots.available}/>
-          <button className={s.primary} type="submit" disabled={busy || !contact.trim() || !slots.available}>{busy ? 'Adding…' : 'Add student'}</button>
+        <h2 className={s.cardTitle}>Give students Premium</h2>
+        <p className={s.cardText}>Enter the phone number or email each student signed up with. For several students, put one on each line, or paste a list. They need an ExamPrep account first.</p>
+        <form onSubmit={add}>
+          <textarea className={s.textarea} rows={4} value={text} onChange={e => setText(e.target.value)} disabled={!slots.available || busy}
+            placeholder={'0801 234 5678\n0802 345 6789\nstudent@email.com'} aria-label="Students' phone numbers or emails" spellCheck={false}/>
+          <div className={s.addFoot}>
+            <span className={`${s.tally} ${tooMany ? s.tallyBad : ''}`}>
+              {!toAdd ? `Up to ${MAX_BULK} at a time`
+                : tooMany ? `${toAdd} entered. The most is ${MAX_BULK} at a time.`
+                : `${toAdd} ${toAdd === 1 ? 'student' : 'students'} · uses ${Math.min(toAdd, slots.available)} of your ${slots.available} ${slots.available === 1 ? 'slot' : 'slots'}`}
+            </span>
+            <button className={s.primary} type="submit" disabled={busy || !toAdd || tooMany || !slots.available}>
+              {busy ? 'Adding…' : toAdd > 1 ? `Add ${toAdd} students` : 'Add student'}
+            </button>
+          </div>
         </form>
         {!slots.available && <p className={s.warn}>You have no slots left. Buy more to add students.</p>}
+        {slots.available > 0 && toAdd > slots.available && !tooMany && <p className={s.warn}>You have {slots.available} {slots.available === 1 ? 'slot' : 'slots'}, so only the first {slots.available} will be added.</p>}
+        {outcome?.error && <p className={s.error} role="alert">{outcome.error}</p>}
+        {outcome?.results && <div role="status">
+          <p className={outcome.added ? s.ok : s.error}>
+            {outcome.added ? `${outcome.added} ${outcome.added === 1 ? 'student was' : 'students were'} added.` : 'No one was added.'}
+            {outcome.failed ? ` ${outcome.failed} could not be added.` : ''}
+          </p>
+          <ul className={s.results}>
+            {outcome.results.map(r => <li key={r.contact} className={r.ok ? s.resOk : s.resBad}>
+              <span aria-hidden="true">{r.ok ? '✓' : '✕'}</span>
+              <span><strong>{r.contact}</strong>{r.message}</span>
+            </li>)}
+          </ul>
+        </div>}
         {notice && <p className={notice.tone === 'ok' ? s.ok : s.error} role="status">{notice.text}</p>}
       </section>
 
@@ -130,7 +189,7 @@ export default function SubscriptionsTab({ adminName }) {
             onChange={e => setCount(Math.max(1, Math.min(2000, Number.parseInt(e.target.value, 10) || 1)))}/>
         </div>
         <p className={s.total}>{count} × {priceLabel(SCHOOL_SLOT_PRICE)} = <strong>{priceLabel(count * SCHOOL_SLOT_PRICE)}</strong></p>
-        <a className={s.whatsapp} href={whatsappLink(buyMessage(count, school, adminName))} target="_blank" rel="noopener noreferrer">Request {count} slots on WhatsApp</a>
+        <a className={s.whatsapp} href={whatsappLink(buyMessage(count, school, admin, adminName))} target="_blank" rel="noopener noreferrer">Request {count} slots on WhatsApp</a>
       </section>
     </div>
 

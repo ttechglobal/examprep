@@ -158,6 +158,6 @@ export default function AdminSchoolsPage() {
         </table>}
     </div>
 
-    {selected && <SchoolPanel id={selected} year={year} onClose={closePanel} onChanged={refresh}/>}
+    {selected && <SchoolPanel id={selected} preview={data?.schools.find(r => r.id === selected)} year={year} onClose={closePanel} onChanged={refresh}/>}
   </div>
 }

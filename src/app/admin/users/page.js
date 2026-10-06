@@ -17,7 +17,7 @@
 // v3: replaces v2's analytics list (XP, streak, accuracy) with plan management.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import StudentPanel from '@/components/admin/students/StudentPanel'
 import {
   STATE_BADGE, FILTER_CHIPS, SORT_OPTIONS, expiryCell, displayPhone,
@@ -54,6 +54,11 @@ export default function AdminStudentsPage() {
   const [selected, setSelected] = useState(null)
   const [reload, setReload]   = useState(0)
   const [state, setState]     = useState({ loading: true, error: null, data: null })
+  // The cards and chips (counts), and the filter options. They depend only on
+  // year, school and search, so they are fetched when one of those changes (or
+  // after an edit), not on every page turn, filter click or sort.
+  const [summary, setSummary] = useState({ counts: {}, schools: [], years: null })
+  const countsFor = useRef(null)
   const query = useDebounced(search.trim(), 300)
 
   useEffect(() => {
@@ -61,11 +66,18 @@ export default function AdminStudentsPage() {
     const params = new URLSearchParams({ year, filter, sort, page: String(page) })
     if (school) params.set('school', school)
     if (query) params.set('q', query)
+    const countsKey = `${year}|${school}|${query}|${reload}`
+    const needCounts = countsFor.current !== countsKey
+    if (!needCounts) params.set('counts', '0')
     Promise.resolve().then(() => setState(prev => ({ ...prev, loading: true, error: null })))
     fetch(`/api/admin/students?${params}`, { signal: controller.signal })
       .then(async res => {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not load students')
+        if (data.counts) {
+          countsFor.current = countsKey
+          setSummary({ counts: data.counts, schools: data.schools ?? [], years: data.years ?? null })
+        }
         setState({ loading: false, error: null, data })
       })
       .catch(err => { if (err.name !== 'AbortError') setState(prev => ({ ...prev, loading: false, error: err.message })) })
@@ -78,9 +90,10 @@ export default function AdminStudentsPage() {
   const closePanel = useCallback(() => setSelected(null), [])
 
   const data = state.data
-  const counts = data?.counts ?? {}
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.perPage)) : 1
-  const years = data?.years ?? [THIS_YEAR + 1, THIS_YEAR]
+  const counts = summary.counts
+  const total = counts[filter] ?? 0
+  const pages = data ? Math.max(1, Math.ceil(total / data.perPage)) : 1
+  const years = summary.years ?? [THIS_YEAR + 1, THIS_YEAR]
 
   return <div className={s.page}>
     <div className={s.head}>
@@ -123,11 +136,11 @@ export default function AdminStudentsPage() {
     </div>
 
     <div className={s.toolbar}>
-      <span className={s.count}>{data ? `${data.total.toLocaleString()} student${data.total === 1 ? '' : 's'}` : ' '}</span>
+      <span className={s.count}>{data ? `${total.toLocaleString()} student${total === 1 ? '' : 's'}` : ' '}</span>
       <div className={s.selects}>
         <select className={s.select} value={school} onChange={e => choose(setSchool)(e.target.value)} aria-label="School">
           <option value="">All Schools</option>
-          {(data?.schools ?? []).map(name => <option key={name} value={name}>{name}</option>)}
+          {summary.schools.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
         <select className={s.select} value={sort} onChange={e => choose(setSort)(e.target.value)} aria-label="Sort">
           {SORT_OPTIONS.map(o => <option key={o.id} value={o.id}>Sort: {o.label}</option>)}
@@ -167,12 +180,12 @@ export default function AdminStudentsPage() {
         </table>}
     </div>
 
-    {data && data.total > data.perPage && <div className={s.pager}>
+    {data && total > data.perPage && <div className={s.pager}>
       <button type="button" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Previous</button>
       <span>Page {page + 1} of {pages}</span>
       <button type="button" disabled={page + 1 >= pages} onClick={() => setPage(p => p + 1)}>Next →</button>
     </div>}
 
-    {selected && <StudentPanel id={selected} onClose={closePanel} onChanged={refresh}/>}
+    {selected && <StudentPanel id={selected} preview={data?.students.find(x => x.id === selected)} onClose={closePanel} onChanged={refresh}/>}
   </div>
 }

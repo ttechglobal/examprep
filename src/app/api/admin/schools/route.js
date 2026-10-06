@@ -24,6 +24,12 @@ import { NextResponse }  from 'next/server'
 import { requireAdmin }  from '@/lib/adminAuth'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { appDay }        from '@/lib/dates'
+import { memo }          from '@/lib/server/memo'
+
+// One scan of every school's slots and students. Kept for a minute, so reloading
+// or reopening the page doesn't count again; adding slots clears it
+// (admin/schools/[id]/slots).
+const CACHE_MS = 60_000
 
 function schoolStatus(row) {
   if (row.slots_used === 0) return 'no_usage'
@@ -41,7 +47,7 @@ export async function GET(request) {
 
   try {
     const db = supabaseAdmin()
-    const { data, error } = await db.rpc('admin_schools', { p_year: year })
+    const { data, error } = await memo(`admin-schools:${year ?? 'all'}`, CACHE_MS, () => db.rpc('admin_schools', { p_year: year }))
     if (error) throw error
     const schools = (data ?? []).map(r => ({ ...r, status: schoolStatus(r) }))
     const sum = key => schools.reduce((total, r) => total + (r[key] ?? 0), 0)

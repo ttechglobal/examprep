@@ -14,9 +14,13 @@
 // practice stays on their phones).
 // Data: /api/admin/analytics (counted in Postgres, 20261008_analytics.sql).
 // v2 replaces v1, whose numbers were cut off at 1,000 rows.
+// v3: kinder to the database. A view you have already opened is kept for 5
+// minutes here (switching tabs back and forth costs nothing) and for 5 minutes on
+// the server; "Refresh" counts again. The first load used to fetch twice (the
+// school filter list arriving re-ran the fetch); it fetches once now.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   OverviewKpis, DailyActive, DailyQuestions, NewReturning, FeatureUsage, Completion, Subjects, Topics, Exams,
   EngagementKpis, Habits, Retention, Conversion, PlanMix, Triggers,
@@ -24,6 +28,8 @@ import {
 import s from '@/components/admin/analytics/analytics.module.css'
 
 const TABS = [['overview', 'Overview'], ['engagement', 'Engagement'], ['features', 'Features'], ['learning', 'Learning'], ['conversion', 'Conversion']]
+
+const KEEP_MS = 5 * 60_000
 
 export default function AdminAnalyticsPage() {
   const [tab, setTab] = useState('overview')
@@ -33,25 +39,38 @@ export default function AdminAnalyticsPage() {
   const [school, setSchool] = useState('')
   const [schools, setSchools] = useState(null)
   const [state, setState] = useState({ loading: true, error: null, data: null })
+  const [refresh, setRefresh] = useState(0)
+  const kept = useRef(new Map())           // view key → { at, data }
+  const haveSchools = useRef(false)
 
   useEffect(() => {
     const controller = new AbortController()
+    const key = `${tab}|${days}|${exam}|${plan}|${school}`
+    const forced = refresh > 0 && kept.current.get('forced') !== refresh
+    const hit = kept.current.get(key)
+    if (!forced && hit && Date.now() - hit.at < KEEP_MS) {
+      Promise.resolve().then(() => setState({ loading: false, error: null, data: hit.data }))
+      return
+    }
+    if (forced) kept.current.set('forced', refresh)
     const params = new URLSearchParams({ tab, days })
     if (exam) params.set('exam', exam)
     if (plan) params.set('plan', plan)
     if (school) params.set('school', school)
-    if (!schools) params.set('meta', '1')
+    if (!haveSchools.current) params.set('meta', '1')
+    if (forced) params.set('refresh', '1')
     Promise.resolve().then(() => setState(prev => ({ ...prev, loading: true, error: null })))
     fetch(`/api/admin/analytics?${params}`, { signal: controller.signal })
       .then(async res => {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not load analytics')
-        if (data.schools) setSchools(data.schools)
+        if (data.schools) { haveSchools.current = true; setSchools(data.schools) }
+        kept.current.set(key, { at: Date.now(), data })
         setState({ loading: false, error: null, data })
       })
       .catch(err => { if (err.name !== 'AbortError') setState(prev => ({ ...prev, loading: false, error: err.message })) })
     return () => controller.abort()
-  }, [tab, days, exam, plan, school, schools])
+  }, [tab, days, exam, plan, school, refresh])
 
   const d = state.data?.tab === tab ? state.data : null
   const n = Number(days)
@@ -63,6 +82,10 @@ export default function AdminAnalyticsPage() {
         <p className={s.sub}>How students use ExamPrep, and what to improve next.</p>
       </div>
       <div className={s.filters}>
+        <button type="button" className={s.filter} onClick={() => setRefresh(n => n + 1)} disabled={state.loading}
+          title="Count again (the numbers are kept for 5 minutes)" style={{ cursor: 'pointer', font: 'inherit', fontWeight: 700 }}>
+          {state.loading ? 'Loading…' : 'Refresh'}{state.data?.at && !state.loading ? ` · counted ${new Date(state.data.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })}` : ''}
+        </button>
         <label className={s.filter}>📅<select value={days} onChange={e => setDays(e.target.value)} aria-label="Date range">
           <option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option>
         </select></label>

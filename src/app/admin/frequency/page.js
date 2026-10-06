@@ -7,7 +7,7 @@
 // (lib/missions.js), so this page shows exactly what students will be given.
 
 import { useState, useEffect, useMemo } from 'react'
-import { MISSION_POOL_SIZE, MIN_TOPIC_QUESTIONS } from '@/lib/missions'
+import { MISSION_POOL_SIZE, MIN_TOPIC_QUESTIONS, eligibleTopics } from '@/lib/missions'
 
 const EXAMS = ['WAEC', 'JAMB']
 
@@ -53,11 +53,7 @@ export default function FrequencyPage() {
   const error   = (result.key === key ? result.error : null) ?? subjectsError
   const topics  = useMemo(() => data?.topics ?? [], [data])
   // The pool missions draw from: the same rule as lib/missions.js eligibleTopics.
-  const pool = useMemo(() => new Set(
-    topics.filter(t => t.past_count > 0 && t.bank_count >= MIN_TOPIC_QUESTIONS)
-      .sort((a, b) => a.rank - b.rank || b.past_count - a.past_count)
-      .slice(0, MISSION_POOL_SIZE).map(t => t.topic_id)
-  ), [topics])
+  const pool = useMemo(() => new Set(eligibleTopics(topics).map(t => t.topic_id)), [topics])
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">

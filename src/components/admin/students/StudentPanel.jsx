@@ -38,7 +38,9 @@ function CopyButton({ text }) {
   }}>{done ? '✓ Copied' : '⧉ Copy'}</button>
 }
 
-export default function StudentPanel({ id, onClose, onChanged }) {
+// preview: the student's row from the list. The panel shows it at once; the plan and
+// history (which need their own request) fill in a moment later.
+export default function StudentPanel({ id, preview, onClose, onChanged }) {
   const [data, setData] = useState(null)        // { student, subscriptions, at } — at: when loaded
   const [error, setError] = useState(null)
   const [mode, setMode] = useState(null)        // null | 'activate' | 'edit' | 'delete' | { cancel: subId }
@@ -78,7 +80,7 @@ export default function StudentPanel({ id, onClose, onChanged }) {
     finally { setBusy(false) }
   }
 
-  const student = data?.student
+  const student = data?.student ?? (preview?.id === id ? preview : null)
   const subscriptions = data?.subscriptions ?? []
   const now = data?.at
 
@@ -106,6 +108,7 @@ export default function StudentPanel({ id, onClose, onChanged }) {
             onEdit={() => { setFormError(null); setMode('edit') }} onCancel={() => setMode(null)}
             onSave={patch => change(() => send(`/api/admin/students/${id}`, 'PATCH', patch))}/>
 
+          {!data ? <p className={s.loading} style={{ padding: '24px 0' }}>Loading subscription…</p> : <>
           <section className={s.section}>
             <div className={s.sectionHead}><h3 className={s.sectionTitle}>Subscription</h3></div>
             <Subscription student={student} subscriptions={subscriptions} now={now} activating={mode === 'activate'} busy={busy}
@@ -121,6 +124,7 @@ export default function StudentPanel({ id, onClose, onChanged }) {
               onAsk={subId => { setFormError(null); setMode({ cancel: subId }) }} onKeep={() => setMode(null)}
               onConfirm={(subId, reason) => change(() => send(`/api/admin/subscriptions/${subId}`, 'PATCH', { action: 'cancel', reason }))}/>
           </section>
+          </>}
 
           <div className={s.danger}>
             {mode === 'delete' ? <div className={s.cancelBox}>

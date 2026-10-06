@@ -14,6 +14,7 @@ import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { UUID_RE } from '@/lib/uuid'
 import { slotBalance, slotHistory } from '@/lib/server/schoolSlots'
 import { SCHOOL_SLOT_PRICE } from '@/lib/plans'
+import { forget, schoolDashboardKey } from '@/lib/server/memo'
 
 export async function POST(request, { params }) {
   const { admin, error: authError } = await adminContext()
@@ -44,6 +45,7 @@ export async function POST(request, { params }) {
       if (/cannot remove more slots/.test(error.message ?? '')) return NextResponse.json({ error: 'You can only remove slots the school hasn’t used' }, { status: 409 })
       throw error
     }
+    forget('admin-schools:'); forget(schoolDashboardKey(id))
     const [slotsNow, history] = await Promise.all([slotBalance(db, id), slotHistory(db, id)])
     return NextResponse.json({ slots: slotsNow, history })
   } catch (err) {
