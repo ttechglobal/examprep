@@ -35,11 +35,12 @@ import {
   SettingsCard, Banner, ProfileSkeleton, styles as s,
 } from '@/components/student/profile/ProfileSections'
 import {
-  InfoSheet, SubjectsSheet, GoalsSheet, PlansSheet, CareerSheet, ParentsSheet,
+  InfoSheet, SubjectsSheet, GoalsSheet, CareerSheet, ParentsSheet,
   LanguageSheet, AccountSheet, NotificationsSheet,
 } from '@/components/student/profile/sheets'
 import { useStudentActivity } from '@/hooks/useStudentActivity'
-import { getPlanStatus, goalsOf, activeExamsOf } from '@/components/student/profile/profileModel'
+import { planCardModel, goalsOf, activeExamsOf } from '@/components/student/profile/profileModel'
+import { usePlan } from '@/contexts/PlanContext'
 
 const NOTIFICATION_LABEL = { checking: '…', on: 'On', off: 'Off', blocked: 'Blocked', failed: 'Needs attention', unsupported: 'Not available', unavailable: 'Not available' }
 
@@ -49,6 +50,7 @@ export default function ProfilePage() {
   const { dark, toggle }    = useTheme()
   const { totalPoints: xp } = usePoints()
   const layoutProfile       = useStudentUser()
+  const planState           = usePlan()
   const updateLayoutProfile = useUpdateStudentProfile()
   const notifications = usePushSubscription()
 
@@ -111,7 +113,7 @@ export default function ProfilePage() {
   if (!profile) return <ProfileSkeleton />
 
   const setupStep = nextSetupStep(profile)
-  const plan      = getPlanStatus(profile)
+  const plan      = planCardModel(planState.status)
   const goals     = goalsOf(profile)
   const firstExam = activeExamsOf(profile)[0] ?? 'WAEC'
 
@@ -143,7 +145,7 @@ export default function ProfilePage() {
       <ProfileHero profile={profile} xp={xp || 0} isGuest={isGuest} onEdit={() => setSheet({ type: 'info' })} />
 
       <div className={s.featureRow}>
-        <PlanCard plan={plan} onSeePlans={() => setSheet({ type: 'plans' })} />
+        <PlanCard plan={plan} onSeePlans={() => planState.showUpgrade()} />
         <FeatureCard
           kind="career"
           title="Career Quest"
@@ -194,7 +196,6 @@ export default function ProfilePage() {
       {sheet?.type === 'goals' && (
         <GoalsSheet profile={profile} isGuest={isGuest} focus={sheet.focus ?? null} onClose={closeSheet} onSaved={patchProfile} />
       )}
-      {sheet?.type === 'plans' && <PlansSheet plan={plan} onClose={closeSheet} />}
       {sheet?.type === 'career' && (
         <CareerSheet onClose={closeSheet} onSetGoals={() => setSheet({ type: 'goals', focus: 'university' })} />
       )}

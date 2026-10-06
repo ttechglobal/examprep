@@ -16,6 +16,7 @@ import PlayfulTitle from '@/components/ui/PlayfulTitle'
 import { getSubjectAccent } from '@/lib/subjectAccents'
 import { appDay, addDays } from '@/lib/dates'
 import { HERO_IMAGE, TOPIC_CARD, MOCK_CARD } from './art'
+import PlanBadge from '@/components/plan/PlanBadge'
 import s from './practice.module.css'
 
 const cx = (...names) => names.filter(Boolean).join(' ')
@@ -57,7 +58,7 @@ export function PrimaryModes({ onTopic, onMock }) {
       />
       <ArtCard
         onClick={onMock} art={MOCK_CARD} tall={240}
-        chipBoxed chipIcon={<PaperIcon />} chip="Mock exam"
+        chipBoxed chipIcon={<PaperIcon />} chip="Mock exam" badge={<PlanBadge feature="mock" />}
         title="Full Exam Simulation"
         desc="Timed, no peeking. Experience the real exam feel and boost your confidence."
         cta="Start Mock" ctaStyle="white" ctaInk="#6D28D9"
@@ -69,10 +70,12 @@ export function PrimaryModes({ onTopic, onMock }) {
 // ── More practice modes ──────────────────────────────────────────────────────
 // "See all" opens the full mode picker (Speed Round lives only there). Wide
 // screens can also hide the row (remembered on this device).
+// feature: the Free plan limit it shares (lib/plans.js); Study is Custom
+// Practice with instant explanations.
 const MORE_MODES = [
   { key: 'quick5', title: 'Quick 5',         short: '5 random questions fast',           desc: '5 random questions for a fast challenge.',  tone: '#F59E0B', icon: <BoltIcon /> },
-  { key: 'custom', title: 'Custom Practice', short: 'Choose exam, subject & number',     desc: 'Choose exam, subject, number of questions.', tone: '#7C3AED', icon: <ShuffleIcon /> },
-  { key: 'study',  title: 'Study Practice',  short: 'Practice with instant explanations', desc: 'Practice with instant explanations.',        tone: '#1264E5', icon: <LayersIcon /> },
+  { key: 'custom', title: 'Custom Practice', short: 'Choose exam, subject & number',     desc: 'Choose exam, subject, number of questions.', tone: '#7C3AED', icon: <ShuffleIcon />, feature: 'custom' },
+  { key: 'study',  title: 'Study Practice',  short: 'Practice with instant explanations', desc: 'Practice with instant explanations.',        tone: '#1264E5', icon: <LayersIcon />, feature: 'custom' },
 ]
 const HIDE_KEY = 'ep_practice_modes_hidden'
 
@@ -106,7 +109,7 @@ export function MoreModes({ onPick, onSeeAll }) {
           <button key={m.key} type="button" className={s.mode} onClick={() => onPick(m.key)} style={{ '--tone': m.tone }}>
             <span className={s.modeIcon} aria-hidden="true">{m.icon}</span>
             <span style={{ minWidth: 0 }}>
-              <span className={s.modeTitle}>{m.title}</span>
+              <span className={s.modeTitle}>{m.title}{m.feature && <PlanBadge feature={m.feature} className={s.modeBadge} />}</span>
               <span className={`${s.modeDesc} ${s.modeDescNarrow}`}>{m.short}</span>
               <span className={`${s.modeDesc} ${s.modeDescWide}`}>{m.desc}</span>
             </span>
@@ -121,7 +124,7 @@ export function MoreModes({ onPick, onSeeAll }) {
 }
 
 // ── Recent sessions ──────────────────────────────────────────────────────────
-const MODE_LABEL = { practice: 'Practice', study: 'Study', quick5: 'Quick 5', timed: 'Speed Round', mock: 'Mock Exam' }
+const MODE_LABEL = { practice: 'Practice', study: 'Study', quick5: 'Quick 5', timed: 'Speed Round', mock: 'Mock Exam', battle: 'Battle' }
 
 function scoreColor(pct) {
   if (pct >= 70) return '#10B981'
@@ -142,6 +145,8 @@ function formatWhen(session) {
 }
 
 function topicLine(session) {
+  // Battles are practice too; they say so, with their topics when chosen.
+  if (session.mode === 'battle') return `⚔️ Battle · ${session.topic ?? 'Mixed topics'}`
   if (session.topic) return `Topic: ${session.topic}`
   const mode = MODE_LABEL[session.mode] ?? 'Practice'
   return session.mode === 'mock' ? mode : `${mode} · Mixed topics`

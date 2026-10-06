@@ -2,9 +2,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePoints } from '@/contexts/PointsContext'
+import { usePlan } from '@/contexts/PlanContext'
 import { createComputerOpponent, readLocalBattleStats, recordLocalBattleResult } from '@/lib/battleAI'
 import { computeSessionXP } from '@/lib/xp'
-import { saveSessionLocally } from '@/lib/localSessionSync'
+import { saveSessionLocally, flushSyncQueue } from '@/lib/localSessionSync'
 import { normaliseOptions, checkCorrect } from '@/lib/answers'
 import { battleQuestionParams } from '@/lib/battleQuestionRequest'
 import { isConnectionProblem } from '@/lib/network'
@@ -29,6 +30,9 @@ export default function BattleSessionPage() {
   const router = useRouter()
   const experience = useBattleExperience()
   const {totalPoints:currentXP,setTotalPoints} = usePoints()
+  const plan = usePlan()
+  const planRef = useRef(plan)
+  useEffect(() => { planRef.current = plan }, [plan])
   const [phase,setPhase] = useState('loading')
   const [config,setConfig] = useState(null)
   const [questions,setQuestions] = useState([])
@@ -81,10 +85,12 @@ export default function BattleSessionPage() {
         sessionId.current = crypto.randomUUID()
         const response = await fetch(`/api/student/questions?${battleQuestionParams(cfg)}`,{signal:controller.signal})
         const data = await response.json()
+        if (response.status === 403) planRef.current.denied(data)   // Free plan limit
         if (!response.ok) throw new Error(data.error || 'Your battle could not load. Try again.')
         if (!active) return
         if (!data.questions?.length) throw new Error('No questions are available for this selection. Try another subject or topic.')
         const opponent = createComputerOpponent(readLocalBattleStats().ai_difficulty || 'easy')
+        planRef.current.recordUse('battle',cfg.ref)
         setQuestions(data.questions)
         setChoices(data.questions.map(q => opponent.decide(q)))
         setLog(data.questions.map(q => ({question_id:q.id,topic_id:q.topic_id,subject_id:q.subject_id,topic_name:q.topic_name || '',subject_name:q.subject_name || '',isCorrect:false,is_correct:false,selectedIdx:null})))
@@ -133,10 +139,17 @@ export default function BattleSessionPage() {
     const outcome = finalS > cpuScore ? 'win' : finalS < cpuScore ? 'loss' : 'draw'
     experience?.setScene('lobby');experience?.play(outcome)
     const xp = computeSessionXP('battle',log,{outcome})
-    saveSessionLocally({session_id:sessionId.current,exam:config.exam,mode:'battle',session_type:'battle',opponent:'computer',opponent_score:cpuScore,battle_outcome:outcome,subject_name:config.subject_name,results:log,questions_count:questions.length,correct_count:correct},xp)
+    // A battle is practice in another mode: it is saved as a practice session
+    // (mode 'battle'), so its questions count towards the student's activity,
+    // streak and mastery and it shows as "Battle" in Recent Sessions. It's
+    // sent at once; the server checks the answers and awards XP and battle XP.
+    const topicName = config.topic_names?.length ? config.topic_names.join(', ') : undefined
+    saveSessionLocally({session_id:sessionId.current,ref:config.ref,exam:config.exam,mode:'battle',session_type:'battle',opponent:'computer',opponent_score:cpuScore,battle_outcome:outcome,subject_name:config.subject_name,topic_name:topicName,results:log,questions_count:questions.length,correct_count:correct},xp)
     setTotalPoints((currentXP || 0) + xp)
     recordLocalBattleResult({outcome,xp})
-    fetch('/api/student/battle/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({outcome,xp_awarded:xp,session_id:sessionId.current})}).catch(() => {})
+    experience?.addBattleXp(xp)
+    const stats = fetch('/api/student/battle/stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({outcome,xp_awarded:xp,session_id:sessionId.current})}).catch(() => {})
+    Promise.allSettled([stats,flushSyncQueue()]).then(() => experience?.refreshPlayer())
     setSaved({finalS,finalC:cpuScore,xp});setPhase('results')
   }
   function next() {
@@ -147,7 +160,8 @@ export default function BattleSessionPage() {
     setIndex(i => i + 1);setSelected(null);setRevealed(false);setEndsAt(Date.now() + (config?.timerSecs || 30)*1000)
   }
   function rematch() {
-    try {sessionStorage.setItem('battle_config',JSON.stringify({...config,_exclude:questions.map(q=>q.id).join(',')}))}
+    if (!plan.gate('battle')) return
+    try {sessionStorage.setItem('battle_config',JSON.stringify({...config,ref:crypto.randomUUID(),_exclude:questions.map(q=>q.id).join(',')}))}
     catch {setError('Your browser could not prepare the rematch.');setPhase('error');return}
     finished.current = false;roundResolved.current = false;pauseStarted.current = null
     setPhase('loading')

@@ -7,12 +7,16 @@
 // v2: school_admin role required; totals come from SQL functions instead of
 // downloading every answer (which Supabase capped at 1,000 rows); rosters are
 // paged so big schools aren't cut off.
+// v3: the roster is the whole school (lib/server/paging.js schoolStudentIds),
+// each student says whether they have Premium (and from where), and the school
+// comes with its slot balance (20261007_schools_and_admin_log.sql).
 
 import { createClient }       from '@/lib/supabase/server'
 import { supabaseAdmin }      from '@/lib/server/supabaseAdmin'
 import { schoolStudentIds }   from '@/lib/server/paging'
 import { requireSchoolAdmin, selectByIds, loadSchoolStats, groupTopicsBySubject } from '@/lib/server/schoolStats'
 import { appDay }             from '@/lib/dates'
+import { slotBalance, premiumByStudent, studentContact } from '@/lib/server/schoolSlots'
 import { NextResponse }       from 'next/server'
 
 const DAY_MS = 86_400_000
@@ -25,12 +29,12 @@ export async function GET() {
   try {
     const db = supabaseAdmin()
     const { profile: adminProfile, error: denied } = await requireSchoolAdmin(
-      db, user.id, 'school_id, role, full_name, schools(id, name, city, state, slots_purchased, slots_used)'
+      db, user.id, 'school_id, role, full_name, schools(id, name, city, state, contact_name, contact_email, contact_phone)'
     )
     if (denied) return denied
 
     const schoolId = adminProfile.school_id
-    const school   = adminProfile.schools ?? null
+    const school   = { ...adminProfile.schools, slots: await slotBalance(db, schoolId) }
 
     // ── Cohorts + roster ───────────────────────────────────────────────────────
     const { data: allCohorts } = await db
@@ -48,7 +52,7 @@ export async function GET() {
         cohort:           activeCohort,
         allCohorts:       allCohorts ?? [],
         adminName:        adminProfile.full_name ?? '',
-        summary:          { totalStudents: 0, activeThisWeek: 0, avgAccuracy: null, totalQuestionsThisWeek: 0 },
+        summary:          { totalStudents: 0, premiumStudents: 0, activeThisWeek: 0, avgAccuracy: null, totalQuestionsThisWeek: 0 },
         students:         [],
         subjectTopics:    [],
         weeklyEngagement: [],
@@ -62,7 +66,7 @@ export async function GET() {
     const thirtyAgo = new Date(now - 30 * DAY_MS).toISOString()
 
     const [profiles, stats30, weekStats, engagement] = await Promise.all([
-      selectByIds(db, 'profiles', 'id, full_name, exam_type, subjects, created_at', studentIds),
+      selectByIds(db, 'profiles', 'id, full_name, username, email, phone_number, exam_type, subjects, created_at, plan, plan_expires_at', studentIds),
       loadSchoolStats(db, studentIds, thirtyAgo),
       db.rpc('stats_by_student', { p_student_ids: studentIds, p_since: weekAgo }),
       db.rpc('active_students_by_bucket', { p_student_ids: studentIds, p_end: appDay(), p_bucket_days: 7, p_buckets: 4 }),
@@ -72,6 +76,7 @@ export async function GET() {
 
     const profileMap = {}
     for (const p of profiles) profileMap[p.id] = p
+    const plans = await premiumByStudent(db, schoolId, profiles)
     const joinedAt = {}
     for (const m of cohortMembers) joinedAt[m.student_id] = m.joined_at
 
@@ -90,7 +95,10 @@ export async function GET() {
 
       return {
         id,
-        full_name:             profile.full_name,
+        full_name:             profile.full_name?.trim() || profile.username || 'No name yet',
+        contact:               profile.id ? studentContact(profile) : null,
+        premium:               plans.get(id)?.premium ?? null,      // 'school' | 'own' | null
+        premiumUntil:          plans.get(id)?.until ?? null,
         exam_type:             profile.exam_type,
         subjects:              profile.subjects ?? [],
         accuracy:              total > 0 ? Math.round((correct / total) * 100) : null,
@@ -149,6 +157,7 @@ export async function GET() {
         allCohorts: allCohorts ?? [],
         summary: {
           totalStudents: studentIds.length,
+          premiumStudents: enrichedStudents.filter(s => s.premium).length,
           activeThisWeek,
           avgAccuracy,
           totalQuestionsThisWeek,

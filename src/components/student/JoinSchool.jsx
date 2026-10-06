@@ -7,9 +7,9 @@
 //   2. Student's school isn't on ExamPrep yet → clicks "My school doesn't have a code"
 //      → fills in a short request form → calls /api/school/request-onboarding
 //
-// NOTE: this uses the SCHOOL / COHORT invite-code flow (/api/school/join).
-// It is NOT the premium access-code flow (/api/access-codes/redeem), which is
-// for schools selling premium licences to students. Keep them separate.
+// NOTE: joining with an invite code links the student to the school (so it
+// can follow their practice); it doesn't give Premium. Premium from a school
+// comes from the school using a slot on the student (Slots & Premium).
 
 import { useState } from 'react'
 

@@ -1,7 +1,8 @@
 'use client'
 // src/hooks/useRecentSessions.js
 // ─────────────────────────────────────────────────────────────────────────────
-// The student's latest practice sessions (battles excluded), newest first.
+// The student's latest practice sessions, battles included (shown as
+// "Battle": a battle is practice in another mode), newest first.
 //
 //   Device history (lib/localSessionSync.js) paints instantly, for everyone,
 //   offline included. Signed-in students also get GET /api/student/sessions
@@ -40,7 +41,7 @@ export function useRecentSessions(limit, { userId, isGuest, ready }) {
   useEffect(() => {
     if (!ready) return
     let cancelled = false
-    const local = readHistory().filter(s => s.mode !== 'battle')
+    const local = readHistory()
 
     if (isGuest || !userId) { setState({ sessions: merge(local, null, limit), loading: false }); return }
 
@@ -53,7 +54,7 @@ export function useRecentSessions(limit, { userId, isGuest, ready }) {
       .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(({ sessions }) => {
         try { localStorage.setItem(key, JSON.stringify({ sessions, ts: Date.now() })) } catch {}
-        if (!cancelled) setState({ sessions: merge(readHistory().filter(s => s.mode !== 'battle'), sessions, limit), loading: false })
+        if (!cancelled) setState({ sessions: merge(readHistory(), sessions, limit), loading: false })
       })
       .catch(() => { if (!cancelled) setState(s => ({ ...s, loading: false })) })
 

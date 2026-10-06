@@ -84,6 +84,9 @@
   text-transform: uppercase;
 }
 
+/* Optional corner badge, e.g. the Free plan's "Premium" (PlanBadge). */
+.badge { position: absolute; top: 14px; right: 14px; z-index: 1; }
+
 /* Icon in its own white tile (Practice design). */
 .chipBoxed { padding: 3px 12px 3px 3px; background: rgba(8, 10, 60, 0.3); }
 .chipIcon {

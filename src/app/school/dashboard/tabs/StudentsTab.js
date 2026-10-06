@@ -1,12 +1,15 @@
 'use client'
 // src/app/school/dashboard/tabs/StudentsTab.js
+// Every student in the school (added with a slot or joined with the invite
+// code) with their last-30-day practice, and whether they have Premium.
+// v2: whole-school list (was one cohort); Premium badge per student.
 
 import { useState }                                                      from 'react'
 import { pct, initials, lastLabel, statusOf, needsAttention, perfCol, avColor, TIER_META } from './shared'
 
 const PER_PAGE = 10
 
-export default function StudentsTab({ students = [], cohortName = '', atRiskSegmented = [] }) {
+export default function StudentsTab({ students = [], atRiskSegmented = [] }) {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name')
@@ -56,7 +59,7 @@ export default function StudentsTab({ students = [], cohortName = '', atRiskSegm
         <div>
           <div className="sd-page-title">Students</div>
           <div className="sd-page-sub">
-            {students.length} students{cohortName ? ` · ${cohortName}` : ''} · questions shown are last 30 days
+            {students.length} students · {students.filter(st => st.premium).length} with Premium · questions shown are last 30 days
           </div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
@@ -137,6 +140,7 @@ export default function StudentsTab({ students = [], cohortName = '', atRiskSegm
                   <div className="st-name">{s.full_name}</div>
                   <div className="st-sub">
                     {s.exam_type ?? ''}
+                    <span style={{ marginLeft:6, fontSize:9, fontWeight:800, color: s.premium ? '#15803d' : '#94a3b8' }}>{s.premium ? '👑 Premium' : 'Free'}</span>
                     {tierMeta && (
                       <span style={{ marginLeft:6, fontSize:9, fontWeight:700, color: tierMeta.color }}>● {tierMeta.label}</span>
                     )}

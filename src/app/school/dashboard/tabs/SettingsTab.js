@@ -1,5 +1,6 @@
 'use client'
 // src/app/school/dashboard/tabs/SettingsTab.js
+// v2: the contact name and WhatsApp number we reach the school on.
 
 import { useState }     from 'react'
 import { useRouter }    from 'next/navigation'
@@ -15,6 +16,8 @@ export default function SettingsTab({ school, onSaved }) {
   const [name,              setName]              = useState(school?.name  ?? '')
   const [city,              setCity]              = useState(school?.city  ?? '')
   const [state,             setState]             = useState(school?.state ?? '')
+  const [contactName,       setContactName]       = useState(school?.contact_name  ?? '')
+  const [contactPhone,      setContactPhone]      = useState(school?.contact_phone ?? '')
   const [saving,            setSaving]            = useState(false)
   const [saved,             setSaved]             = useState(false)
   const [error,             setError]             = useState(null)
@@ -28,12 +31,12 @@ export default function SettingsTab({ school, onSaved }) {
     try {
       const res = await fetch('/api/school/setup', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schoolName: name.trim(), city: city.trim(), state }),
+        body: JSON.stringify({ schoolName: name.trim(), city: city.trim(), state, contactName, contactPhone }),
       })
       const d = await res.json()
       if (d.error) { setError(d.error); return }
       setSaved(true); setTimeout(() => setSaved(false), 2500)
-      onSaved?.({ name: name.trim(), city: city.trim(), state })
+      onSaved?.(d.school)
     } catch { setError('Failed to save') } finally { setSaving(false) }
   }
 
@@ -82,6 +85,14 @@ export default function SettingsTab({ school, onSaved }) {
                 <option value="">Select state</option>
                 {STATES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:'#071B49', display:'block', marginBottom:5 }}>Contact person</label>
+              <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="e.g. Mr Adewale Johnson" style={INPUT_STYLE}/>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:'#071B49', display:'block', marginBottom:5 }}>Contact phone (WhatsApp)</label>
+              <input type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="0801 234 5678" style={INPUT_STYLE}/>
             </div>
 
             {error  && <div style={{ fontSize:12, color:'#dc2626', padding:'9px 12px', background:'#fef2f2', borderRadius:8, border:'1px solid #fecaca' }}>{error}</div>}

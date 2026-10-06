@@ -9,6 +9,7 @@ import { useBattleSubjects, useBattleTopics } from './useBattleCatalog'
 import { BattleWorld, BattleSign, BattleChoice, GameButton, styles } from './BattleWorld'
 import IllustratedIcon, { subjectArt, topicArt } from './IllustratedIcon'
 import { GameGlyph } from '@/components/student/GameShell'
+import { usePlan } from '@/contexts/PlanContext'
 
 const INITIAL = { step:'exam', exam:'WAEC', subjectId:null, questionSet:'random', topicIds:[], count:10, timerSecs:30 }
 function setupReducer(state, action) {
@@ -26,9 +27,18 @@ const GUIDE = {
 }
 const TITLE = {exam:'Choose|your exam',subject:'Choose your|subject',type:'Choose|question type',topics:'Choose|your topics',setup:'Battle setup'}
 const EXAM_NAME = {WAEC:'West African Senior School Certificate',JAMB:'Joint Admissions and Matriculation Board'}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// ?exam=&subject=&topic=&n= from BattleMissions; null unless every part is valid.
+function missionFromQuery(search) {
+  const q = new URLSearchParams(search)
+  const exam = q.get('exam'), subject = q.get('subject'), topic = q.get('topic')
+  if (!EXAM_NAME[exam] || !UUID_RE.test(subject || '') || !UUID_RE.test(topic || '')) return null
+  return {exam,subject,topic,left:Math.max(parseInt(q.get('n'),10) || 1,1)}
+}
 
 export default function BattleSetup({ opponent = 'computer' }) {
   const router = useRouter()
+  const plan = usePlan()
   const friend = opponent === 'friend'
   const [state, dispatch] = useReducer(setupReducer, INITIAL)
   const [retry, setRetry] = useState(0)
@@ -44,7 +54,12 @@ export default function BattleSetup({ opponent = 'computer' }) {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const preferences = readBattlePreferences()
-      dispatch({type:'patch',patch:{exam:getLocalExamType() || 'WAEC',count:friend && ![5,10,15,20].includes(preferences.count) ? 10 : preferences.count,timerSecs:preferences.timerSecs}})
+      const patch = {exam:getLocalExamType() || 'WAEC',count:friend && ![5,10,15,20].includes(preferences.count) ? 10 : preferences.count,timerSecs:preferences.timerSecs}
+      // A weekly mission opens the setup filled in: its exam, subject and topic,
+      // and a question count that covers what's left of the mission.
+      const mission = friend ? null : missionFromQuery(window.location.search)
+      if (mission) Object.assign(patch,{exam:mission.exam,subjectId:mission.subject,questionSet:'topic',topicIds:[mission.topic],step:'setup',count:BATTLE_COUNTS.find(c => c >= mission.left) ?? BATTLE_COUNTS.at(-1)})
+      dispatch({type:'patch',patch})
     })
     return () => cancelAnimationFrame(frame)
   }, [friend])
@@ -59,6 +74,9 @@ export default function BattleSetup({ opponent = 'computer' }) {
   async function start() {
     if (!ready || creating) return
     setError(null)
+    // Free plan (lib/plans.js): friend battles are Premium; computer battles
+    // have a daily allowance. The questions API checks it again.
+    if (!plan.gate(friend ? 'battle_friends' : 'battle')) return
     if (friend) {
       setCreating(true)
       const result = await pvpCall('pvp_create',{p_exam:state.exam,p_subject_id:subject.id,p_topic_id:state.questionSet === 'topic' ? selectedTopics[0]?.id : null,p_question_count:state.count,p_timer_secs:state.timerSecs})
@@ -72,6 +90,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
       questionSet:state.questionSet,topic_ids:state.questionSet === 'topic' ? selectedTopics.map(t => t.id) : [],
       topic_names:state.questionSet === 'topic' ? selectedTopics.map(t => t.name) : [],
       count:state.count,timerEnabled:true,timerSecs:state.timerSecs,
+      ref:crypto.randomUUID(),   // this match, for the Free plan's daily count
     }
     try { sessionStorage.setItem('battle_config',JSON.stringify(config)) }
     catch { setError('Your browser could not prepare this battle. Enable storage and try again.'); return }

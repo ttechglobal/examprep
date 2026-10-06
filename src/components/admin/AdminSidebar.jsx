@@ -1,5 +1,6 @@
 'use client'
-// src/components/admin/AdminSidebar.jsx — v8
+// src/components/admin/AdminSidebar.jsx — v9
+// v9: shows who is signed in; Activity Log and Admin Team replace Access Codes.
 //
 // Four distinct sections with clear mandates:
 //   Questions  — sourcing and managing the question bank
@@ -39,9 +40,10 @@ const SECTIONS = [
       { href: '/admin/questions',                 label: 'Question Bank',      icon: '🔍' },
       { href: '/admin/past-questions',            label: 'Past Questions',     icon: '🗃' },
       { href: '/admin/coverage',                  label: 'Year Coverage',      icon: '📅' },
+      { href: '/admin/frequency',                 label: 'Topic Frequency',    icon: '🔥' },
     ],
     // Paths that belong to this section (for auto-detection)
-    paths: ['/admin/questions', '/admin/past-questions', '/admin/coverage'],
+    paths: ['/admin/questions', '/admin/past-questions', '/admin/coverage', '/admin/frequency'],
   },
   {
     key:    'content',
@@ -52,12 +54,11 @@ const SECTIONS = [
     items: [
       { href: '/admin/curriculum',        label: 'Topic Tree',            icon: '🌿' },
       { href: '/admin/subjects-manager',  label: 'Subjects',              icon: '📑' },
-      { href: '/admin/core-topics',       label: 'Core Topics',           icon: '⭐' },
       { href: '/admin/flashcards',        label: 'Flashcards & Formulas', icon: '🃏' },
       { href: '/admin/video-lessons',     label: 'Video Lessons',         icon: '🎬' },
     ],
     paths: [
-      '/admin/curriculum', '/admin/subjects-manager', '/admin/core-topics',
+      '/admin/curriculum', '/admin/subjects-manager',
       '/admin/flashcards', '/admin/formulas', '/admin/video-lessons', '/admin/subjects',
     ],
   },
@@ -66,17 +67,18 @@ const SECTIONS = [
     label:  'Users',
     icon:   '👥',
     accent: '#10b981',
-    desc:   'Students, access & communications',
+    desc:   'Students, team & communications',
     items: [
       { href: '/admin/users',              label: 'Students',          icon: '👤' },
-      { href: '/admin/access-codes',       label: 'Access Codes',      icon: '🎟' },
+      { href: '/admin/activity',           label: 'Activity Log',      icon: '🧾' },
+      { href: '/admin/team',               label: 'Admin Team',        icon: '🔑' },
       { href: '/admin/early-access-leads', label: 'Early Access',      icon: '📋' },
       { href: '/admin/reviewers',          label: 'Reviewers',         icon: '👁' },
       { href: '/admin/notifications',      label: 'Notifications',     icon: '🔔' },
       { href: '/admin/analytics',          label: 'Analytics',         icon: '📈' },
     ],
     paths: [
-      '/admin/users', '/admin/access-codes', '/admin/early-access-leads',
+      '/admin/users', '/admin/activity', '/admin/team', '/admin/early-access-leads',
       '/admin/reviewers', '/admin/notifications', '/admin/analytics',
     ],
   },
@@ -122,6 +124,15 @@ function LogoMark({ size = 28 }) {
       height={size}
       style={{ flexShrink: 0, objectFit: 'contain', display: 'block' }}
     />
+  )
+}
+
+// Who is signed in (the activity log records this name).
+function SignedInAs({ admin }) {
+  return (
+    <p style={{ margin: '0 0 8px', fontSize: 11, lineHeight: 1.4, color: 'rgba(255,255,255,.45)', textAlign: 'center' }}>
+      Signed in as <strong style={{ color: 'rgba(255,255,255,.8)' }}>{admin.name}</strong>{admin.owner ? ' · Owner' : ''}
+    </p>
   )
 }
 
@@ -209,7 +220,7 @@ function SectionSwitcher({ active: activeKey, onChange }) {
 }
 
 // ── Desktop sidebar ───────────────────────────────────────────────────────────
-function SidebarBody({ pathname, onLinkClick, onSignOut }) {
+function SidebarBody({ admin, pathname, onLinkClick, onSignOut }) {
   const detectedKey   = detectSection(pathname)
   const [activeKey, setActiveKey] = useState(detectedKey)
 
@@ -289,6 +300,7 @@ function SidebarBody({ pathname, onLinkClick, onSignOut }) {
             <p style={{ fontSize: 9, color: 'rgba(255,255,255,.22)' }}>examprep.ng</p>
           </div>
         </div>
+        {admin && <SignedInAs admin={admin} />}
         <button
           onClick={onSignOut}
           style={{
@@ -351,7 +363,7 @@ function MobileBottomNav({ activeSection, onTabTap }) {
 }
 
 // ── Mobile slide-up sheet ─────────────────────────────────────────────────────
-function MobileSheet({ open, onClose, activeSection, pathname, onSignOut }) {
+function MobileSheet({ admin, open, onClose, activeSection, pathname, onSignOut }) {
   const section = getSection(activeSection)
 
   useEffect(() => {
@@ -483,6 +495,7 @@ function MobileSheet({ open, onClose, activeSection, pathname, onSignOut }) {
           borderTop: '1px solid rgba(255,255,255,.07)',
           flexShrink: 0, background: BG2,
         }}>
+          {admin && <SignedInAs admin={admin} />}
           <button
             onClick={onSignOut}
             style={{
@@ -500,7 +513,7 @@ function MobileSheet({ open, onClose, activeSection, pathname, onSignOut }) {
 }
 
 // ── Root export ───────────────────────────────────────────────────────────────
-export default function AdminSidebar() {
+export default function AdminSidebar({ admin }) {
   const pathname    = usePathname()
   const router      = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -540,7 +553,7 @@ export default function AdminSidebar() {
           zIndex: 40, isolation: 'isolate',
         }}
       >
-        <SidebarBody pathname={pathname} onLinkClick={undefined} onSignOut={signOut} />
+        <SidebarBody admin={admin} pathname={pathname} onLinkClick={undefined} onSignOut={signOut} />
       </aside>
 
       {/* ── Mobile: bottom tab bar + slide-up sheet ──────────────────────── */}
@@ -554,6 +567,7 @@ export default function AdminSidebar() {
           onClose={() => setSheetOpen(false)}
           activeSection={mobileSection}
           pathname={pathname}
+          admin={admin}
           onSignOut={signOut}
         />
       </div>

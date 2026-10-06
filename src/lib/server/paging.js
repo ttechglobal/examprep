@@ -22,28 +22,27 @@ export async function selectAll(makeQuery, max = 50_000) {
   return rows
 }
 
-/** Every student id in a school's active cohort, or in the school if it has no active cohort. */
+/**
+ * Every student in a school: profiles linked to it (added with a slot, or
+ * joined with the school's invite code). Also returns the school's newest
+ * active cohort (for its invite code) and that cohort's join dates.
+ *
+ * v2: the roster is the whole school. It used to be only the newest active
+ * cohort, so students added with a slot (who join no cohort) and students of
+ * older cohorts were missing from the dashboard, reports and school board.
+ */
 export async function schoolStudentIds(db, schoolId) {
-  // Newest active cohort (the school dashboard picks the same one).
-  const { data: cohorts, error } = await db
-    .from('cohorts')
-    .select('id, name')
-    .eq('school_id', schoolId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-  if (error) throw error
-  const activeCohort = cohorts?.[0] ?? null
-
-  if (activeCohort) {
-    const members = await selectAll(() => db
-      .from('cohort_members').select('student_id, joined_at')
-      .eq('cohort_id', activeCohort.id).order('student_id'))
-    return { cohort: activeCohort, members, studentIds: members.map(m => m.student_id) }
-  }
-
-  const students = await selectAll(() => db
-    .from('profiles').select('id')
-    .eq('school_id', schoolId).eq('role', 'student').order('id'))
-  return { cohort: null, members: [], studentIds: students.map(s => s.id) }
+  const [cohortRes, students] = await Promise.all([
+    db.from('cohorts').select('id, name')
+      .eq('school_id', schoolId).eq('is_active', true)
+      .order('created_at', { ascending: false }).limit(1),
+    selectAll(() => db.from('profiles').select('id')
+      .eq('school_id', schoolId).eq('role', 'student').order('id')),
+  ])
+  if (cohortRes.error) throw cohortRes.error
+  const cohort = cohortRes.data?.[0] ?? null
+  const members = cohort
+    ? await selectAll(() => db.from('cohort_members').select('student_id, joined_at').eq('cohort_id', cohort.id).order('student_id'))
+    : []
+  return { cohort, members, studentIds: students.map(s => s.id) }
 }

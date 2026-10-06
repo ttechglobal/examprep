@@ -13,6 +13,7 @@
 }
 
 .loading {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -28,6 +29,44 @@
 .loading img {
   width: clamp(110px, 18dvh, 160px);
   height: auto;
+}
+
+/* Same look as the battle bar's Back button (BattleWorld.module.css). */
+.back {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: var(--pad);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 16px 6px 10px;
+  font: 800 20px var(--game-body), sans-serif;
+  color: #09213f;
+  border: 2px solid #d0b989;
+  border-radius: 13px;
+  background: linear-gradient(#fff9e7, #f5dfaf);
+  box-shadow: 0 3px 0 #765b38;
+  cursor: pointer;
+}
+
+.back svg {
+  rotate: 180deg;
+}
+
+.back:active {
+  translate: 0 2px;
+  box-shadow: 0 1px 0 #765b38;
+}
+
+.crestWrap {
+  animation: crest 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 8px 14px #00102a80);
+}
+
+@keyframes crest {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.04); }
 }
 
 .loading h1 {
@@ -55,7 +94,42 @@
   display: block;
   height: 100%;
   background: linear-gradient(#ffeb64, #ffaa00);
-  transition: width .2s;
+  transition: width .2s linear;
+}
+
+.percent {
+  margin-top: -8px;
+  font: 800 20px var(--game-body), sans-serif;
+  color: #ffdf4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.loading .tip {
+  max-width: min(440px, 88vw);
+  min-height: 2.6em;
+  font-size: 18px;
+  opacity: .92;
+  animation: tip .4s ease-out;
+}
+
+.tip span {
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #081b3b;
+  background: #ffdf4d;
+}
+
+@keyframes tip {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crestWrap, .loading .tip { animation: none; }
 }
 
 .confirm, .cancel {

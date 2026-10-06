@@ -7,5 +7,6 @@ export function battleQuestionParams(config, timestamp = Date.now()) {
   if (config.topic_ids?.length) params.set('topic_ids',config.topic_ids.join(','))
   else if (config.topic_id) params.set('topic_id',config.topic_id)
   if (config._exclude) params.set('exclude',config._exclude)
+  if (config.ref) params.set('ref',config.ref)   // Free plan: one daily use per match
   return params
 }

@@ -66,6 +66,12 @@ const PILLARS = [
         label: 'Year Coverage',
         desc: 'See which years are fully covered per subject',
       },
+      {
+        href: '/admin/frequency',
+        icon: '🔥',
+        label: 'Topic Frequency',
+        desc: 'Which topics appear most across past papers (drives battle missions)',
+      },
     ],
   },
   {
@@ -89,12 +95,6 @@ const PILLARS = [
         icon: '📑',
         label: 'Subjects',
         desc: 'Add subjects and set WAEC / JAMB exam tags',
-      },
-      {
-        href: '/admin/core-topics',
-        icon: '⭐',
-        label: 'Core Topics',
-        desc: 'Flag high-frequency exam topics for students',
       },
       {
         href: '/admin/flashcards',
@@ -130,13 +130,13 @@ const PILLARS = [
         href: '/admin/schools',
         icon: '🏫',
         label: 'Schools',
-        desc: 'Partner schools, dashboards, and onboarding',
+        desc: 'Partner schools and their Premium slots',
       },
       {
-        href: '/admin/access-codes',
-        icon: '🎟',
-        label: 'Access Codes',
-        desc: 'Generate and manage invite and promo codes',
+        href: '/admin/activity',
+        icon: '🧾',
+        label: 'Activity Log',
+        desc: 'Who activated, cancelled or added what, and when',
       },
       {
         href: '/admin/analytics',

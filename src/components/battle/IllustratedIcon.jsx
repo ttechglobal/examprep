@@ -1,6 +1,8 @@
 // The supplied design sheets are retained unchanged. CSS sprite windows render
 // their original illustrations without replacing them with platform emoji.
 const ROOT = '/images/battle/design/'
+// One optimized copy of each sheet; BattleExperience preloads the same URLs.
+export const spriteUrl = file => `/_next/image?url=${encodeURIComponent(ROOT + file)}&w=1920&q=75`
 const ART = {
   mark: ['reference-hub.png', 36, 27, 49, 49],
   waec: ['reference-exams.png', 425, 493, 225, 207],
@@ -35,6 +37,8 @@ const ART = {
   sequence: ['reference-topics.png', 977, 710, 60, 61],
 }
 
+export const SPRITE_SHEETS = [...new Set(Object.values(ART).map(([file]) => file))]
+
 export function topicArt(name = '', subject = '') {
   const n = name.toLowerCase()
   if (/algebra|equation|inequalit|indices|logarithm/.test(n)) return 'algebra'
@@ -68,7 +72,7 @@ export default function IllustratedIcon({ name, size = 60, className = '' }) {
   const [file, x, y, width, height] = ART[name] ?? ART.english
   return <span className={className} aria-hidden="true" style={{
     display: 'inline-block', flexShrink: 0, width: size ?? undefined, aspectRatio: `${width} / ${height}`,
-    backgroundImage: `url('/_next/image?url=${encodeURIComponent(ROOT + file)}&w=1920&q=75')`, backgroundRepeat: 'no-repeat',
+    backgroundImage: `url('${spriteUrl(file)}')`, backgroundRepeat: 'no-repeat',
     backgroundSize: `${1536 / width * 100}% ${1024 / height * 100}%`,
     backgroundPosition: `${x / (1536 - width) * 100}% ${y / (1024 - height) * 100}%`,
     mixBlendMode: ['mark', 'xp', 'shield', 'flame'].includes(name) ? 'normal' : 'multiply',

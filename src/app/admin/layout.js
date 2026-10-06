@@ -1,17 +1,13 @@
 // src/app/admin/layout.js
 
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import AdminSidebar from '@/components/admin/AdminSidebar'
-import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/adminSession'
+import { getAdmin } from '@/lib/adminAuth'
 
 export default async function AdminLayout({ children }) {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(ADMIN_COOKIE)?.value
-
-  if (!(await verifyAdminToken(token))) {
-    redirect('/admin-login')
-  }
+  // A disabled team member is turned away here too, not only by the API.
+  const admin = await getAdmin()
+  if (!admin) redirect('/admin-login')
 
   return (
     <>
@@ -73,7 +69,7 @@ export default async function AdminLayout({ children }) {
       `}</style>
 
       <div className="admin-shell" style={{ minHeight: '100vh', display: 'flex' }}>
-        <AdminSidebar />
+        <AdminSidebar admin={admin} />
 
         {/* Main content — offset by sidebar width on desktop; pad bottom for mobile nav bar */}
         <div className="flex-1 min-w-0 lg:ml-[220px] admin-content">

@@ -387,6 +387,11 @@
 }
 .topicName { font-size: 14px; font-weight: 700; line-height: 1.3; }
 .topicCount { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--s-muted); }
+/* Free plan: topics past the free five (PlanBadge). */
+.topicBadge { margin-left: auto; }
+
+/* Free plan: "Premium" / "1 free today" beside a mode's name (PlanBadge). */
+.modeBadge { margin-left: 8px; vertical-align: 2px; }
 
 .chosen {
   display: flex;

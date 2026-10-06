@@ -17,6 +17,9 @@
 //
 // Idempotent: the session_id is unique. A retry after a timeout returns
 // { ok: true, duplicate: true } and awards nothing twice.
+//
+// body.ref (optional): the id the session started under (/api/student/questions);
+// its completion is recorded for Analytics' started-vs-completed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }       from '@/lib/supabase/server'
@@ -25,6 +28,8 @@ import { NextResponse }       from 'next/server'
 import { normaliseOptions, checkCorrect } from '@/lib/answers'
 import { computeSessionXP }   from '@/lib/xp'
 import { createHash }         from 'crypto'
+import { recordAfterResponse } from '@/lib/server/studentEvents'
+import { analyticsFeature }   from '@/lib/analytics'
 
 // A JAMB mock is 4 subjects × 40 questions; nothing legitimate is bigger.
 const MAX_RESULTS   = 200
@@ -125,6 +130,10 @@ export async function POST(request) {
       p_xp: xp,
     })
     if (saveErr) throw saveErr
+    if (typeof body.ref === 'string' && SESSION_ID_RE.test(body.ref)) recordAfterResponse({
+      studentId: user.id, event: 'session_complete', ref: body.ref,
+      feature: analyticsFeature({ mode, topic: body.topic_name }), detail: { exam, mode },
+    })
 
     return NextResponse.json({
       ok:           true,

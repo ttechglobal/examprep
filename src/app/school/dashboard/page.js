@@ -18,7 +18,7 @@ import SettingsTab         from './tabs/SettingsTab'
 // ── Session cache — keyed by user id to avoid cross-school bleed ──────────────
 const CACHE_TTL = 2 * 60 * 1000
 
-function cacheKey(userId) { return `ep_sdash_v4_${userId}` }
+function cacheKey(userId) { return `ep_sdash_v5_${userId}` }   // v5: roster is the whole school, with Premium
 function readCache(userId) {
   try {
     const c = JSON.parse(sessionStorage.getItem(cacheKey(userId)) || 'null')
@@ -131,7 +131,7 @@ function DashboardInner() {
     <>
       <style>{DASH_CSS}</style>
       {tab === 'overview'       && <OverviewTab    {...sharedProps} />}
-      {tab === 'students'       && <StudentsTab    students={students} cohortName={cohort?.name || ''} atRiskSegmented={atRiskSegmented} />}
+      {tab === 'students'       && <StudentsTab    students={students} atRiskSegmented={atRiskSegmented} />}
       {tab === 'performance'    && <PerformanceTab subjectTopics={subjectTopics} />}
       {tab === 'cohort'         && (
         <CohortTab
@@ -142,10 +142,7 @@ function DashboardInner() {
         />
       )}
       {tab === 'subscriptions'  && (
-        <SubscriptionsTab
-          school={school}
-          adminEmail={adminName}
-        />
+        <SubscriptionsTab adminName={adminName} />
       )}
       {tab === 'settings' && (
         <SettingsTab

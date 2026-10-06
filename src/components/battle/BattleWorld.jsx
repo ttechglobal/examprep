@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import Image from 'next/image'
 import GameShell, { GameGlyph } from '@/components/student/GameShell'
 import { useStudentUser } from '@/app/student/layout'
-import { usePoints } from '@/contexts/PointsContext'
+import { getRankProgress } from '@/lib/ranks'
 import { useBattleExperience } from './BattleExperience'
 import IllustratedIcon from './IllustratedIcon'
 import styles from './BattleWorld.module.css'
@@ -13,7 +13,8 @@ const cx = (...names) => names.filter(Boolean).join(' ')
 
 // One frame for every battle-world screen (BattleWorld.module.css):
 //   bar     Exit (hub only: nothing else in the world can leave it) or Back on
-//           the left; the player's XP and avatar on the right
+//           the left; the player's battle XP, rank (desktop) and avatar on
+//           the right
 //   stage   desktop: guide column | main column. Phones: one scrolling column.
 //   header  the screen's board. Phones show it first, then the guide strip,
 //           then the content; desktop keeps the guide in its own column.
@@ -54,14 +55,23 @@ export function BattleWorld({ children, header, hub = false, guide, dock, onBack
     </section>
   </GameShell>
 }
-// The player's XP and avatar (initials; there are no profile photos yet).
+// The player's battle XP and avatar (initials; there are no profile photos
+// yet). Battle XP is the battle world's own score (profiles.battle_xp), not
+// the app-wide total. Desktop also shows the rank it earns and the player's
+// place on the all-time battle leaderboard; phones have no room for it.
 // Display only: inside the battle world, only the hub's Exit leaves it.
+const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X']
 function PlayerBadge({ profile }) {
-  const { totalPoints } = usePoints()
+  const player = useBattleExperience()?.player
+  const xp = player?.xp ?? 0
   const name = (profile?.full_name || profile?.username || '').trim()
   const initials = name ? name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() : 'ME'
-  return <div className={styles.player} aria-label={`${name || 'You'}: ${(totalPoints || 0).toLocaleString()} XP`} role="group">
-    <span className={styles.xpPill}><IllustratedIcon name="xp" size={null} className={styles.xpIcon}/><strong>{(totalPoints || 0).toLocaleString()}</strong><small>XP</small></span>
+  const { tier, rank } = getRankProgress(xp)
+  const level = ROMAN[Math.max(1, rank - tier.min + 1) - 1] ?? ''
+  const place = player?.rank ? `#${player.rank.toLocaleString()} on the battle board` : 'Battle to get ranked'
+  return <div className={styles.player} aria-label={`${name || 'You'}: ${xp.toLocaleString()} battle XP, ${tier.tier} ${level}`} role="group">
+    <span className={styles.rankPill} title={place}><IllustratedIcon name="shield" size={null} className={styles.rankIcon}/><span><strong>{tier.tier} {level}</strong><small>{place}</small></span></span>
+    <span className={styles.xpPill}><IllustratedIcon name="xp" size={null} className={styles.xpIcon}/><strong>{player ? xp.toLocaleString() : '…'}</strong><small>XP</small></span>
     <span className={styles.avatar} title={name || 'You'} aria-hidden="true">{initials}</span>
   </div>
 }

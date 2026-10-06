@@ -24,6 +24,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
+import { usePlan } from '@/contexts/PlanContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { examSubjectNames } from '@/hooks/useExamSubjects'
 import { appDay } from '@/lib/dates'
@@ -41,6 +42,7 @@ const cap = str => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '')
 export default function PracticePage() {
   const router       = useRouter()
   const { dark }     = useTheme()
+  const plan         = usePlan()
   const { totalPoints: xp } = usePoints()
   const searchParams = useSearchParams()
 
@@ -74,8 +76,10 @@ export default function PracticePage() {
   // screen returns to Practice, not to a closed sheet.
   const leaveTo = useCallback(path => { setSheet(null); router.replace(path) }, [router])
 
+  // `ref` names this session for the Free plan's daily count: its question
+  // batches and any reload of the session page count as one use.
   function handleStart(config) {
-    sessionStorage.setItem('practice_config', JSON.stringify(config))
+    sessionStorage.setItem('practice_config', JSON.stringify({ ...config, ref: crypto.randomUUID() }))
     leaveTo('/student/practice/session')
   }
 
@@ -85,8 +89,12 @@ export default function PracticePage() {
     const MODE_PARAM = { speed: 'timed', custom: 'custom', quick5: 'quick5', topic: 'topic' }
     const mode = searchParams?.get('mode')
     if (mode === 'mock') { router.replace('/student/practice/mock'); return }
-    if (MODE_PARAM[mode]) openSheet(MODE_PARAM[mode])
+    if (MODE_PARAM[mode]) {
+      if (MODE_PARAM[mode] === 'custom' || MODE_PARAM[mode] === 'timed') { if (plan.gate('custom')) openSheet(MODE_PARAM[mode]) }
+      else openSheet(MODE_PARAM[mode])
+    }
     else if (searchParams?.get('modal') === '1') openSheet('modes')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per link, not again when the plan loads
   }, [searchParams, isReady, openSheet, router])
 
   if (!isReady) return <PracticeSkeleton />
@@ -102,9 +110,12 @@ export default function PracticePage() {
         <NoSubjects isGuest={isGuest} />
       ) : (
         <>
-          <PrimaryModes onTopic={() => openSheet('topic')} onMock={() => router.push('/student/practice/mock')} />
+          <PrimaryModes onTopic={() => openSheet('topic')} onMock={() => { if (plan.gate('mock')) router.push('/student/practice/mock') }} />
           <MoreModes
-            onPick={key => (key === 'study' ? openSheet('custom', 'study') : openSheet(key))}
+            onPick={key => {
+              if ((key === 'study' || key === 'custom') && !plan.gate('custom')) return
+              return key === 'study' ? openSheet('custom', 'study') : openSheet(key)
+            }}
             onSeeAll={() => openSheet('modes')}
           />
           <div className={s.bottom}>
@@ -127,7 +138,7 @@ export default function PracticePage() {
           initialScreen={sheet.screen}
           initialSessionType={sheet.sessionType}
           onStart={handleStart}
-          onMock={() => leaveTo('/student/practice/mock')}
+          onMock={() => { if (plan.gate('mock')) leaveTo('/student/practice/mock') }}
           onBattle={() => leaveTo('/student/battle')}
           onClose={closeSheet}
         />

@@ -192,6 +192,8 @@
   color: var(--tone);
 }
 
+.modeBadge { margin-left: 6px; vertical-align: 1px; }
+
 .modeTitle {
   display: block;
   font-size: 15px;

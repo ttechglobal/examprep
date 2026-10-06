@@ -4,18 +4,20 @@
 // uses it to award XP after re-checking each answer. Same inputs → same XP, so
 // the number a student sees never jumps after sync.
 //
+// 5 XP for every correct answer, in practice, mock and battle alike. Battles
+// add a small bonus for a win or a draw. Nothing else: no per-question
+// participation XP and no accuracy bonuses, so XP stays easy to read.
+//
 // results: [{ selectedIdx: number|null, is_correct: boolean }]
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const BATTLE_OUTCOMES = ['win', 'draw', 'loss']
 
-function tally(results) {
-  const total    = results.length
-  const answered = results.filter(r => r.selectedIdx !== null && r.selectedIdx !== undefined).length
-  const correct  = results.filter(r => r.is_correct).length
-  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0
-  return { total, answered, correct, accuracy }
-}
+export const XP_PER_CORRECT    = 5
+export const BATTLE_WIN_BONUS  = 10
+export const BATTLE_DRAW_BONUS = 5
+// Kept for callers that name the battle rate; it is the same rate.
+export const BATTLE_XP_PER_CORRECT = XP_PER_CORRECT
 
 /**
  * @param {'practice'|'quick5'|'timed'|'study'|'mock'|'battle'|string} mode
@@ -23,18 +25,13 @@ function tally(results) {
  * @param {object} [opts]  { outcome: 'win'|'draw'|'loss' } for battles
  */
 export function computeSessionXP(mode, results, opts = {}) {
-  const { answered, correct, accuracy } = tally(results ?? [])
+  const correct = (results ?? []).filter(r => r.is_correct).length
+  const base = correct * XP_PER_CORRECT
 
   if (mode === 'battle') {
     const outcome = BATTLE_OUTCOMES.includes(opts.outcome) ? opts.outcome : 'loss'
-    return correct * 10 + (outcome === 'win' ? 20 : outcome === 'draw' ? 10 : 0)
+    return base + (outcome === 'win' ? BATTLE_WIN_BONUS : outcome === 'draw' ? BATTLE_DRAW_BONUS : 0)
   }
 
-  if (mode === 'mock') {
-    return Math.max(10,
-      answered * 5 + correct * 10 + (accuracy >= 80 ? 100 : accuracy >= 60 ? 50 : 0))
-  }
-
-  return Math.max(5,
-    answered * 5 + correct * 10 + (accuracy >= 80 ? 50 : accuracy >= 60 ? 25 : 0))
+  return base
 }

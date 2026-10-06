@@ -1,11 +1,11 @@
 // supabase/functions/send-notifications/index.ts
 //
-// Called by pg_cron three times daily with { slot: 'noon' | 'afternoon' | 'evening' }
+// Called by pg_cron three times daily (12:00, 16:00, 20:00 Lagos) with { slot: 'noon' | 'afternoon' | 'evening' }
 // and by /api/admin/notifications for custom blasts. Callers must send a
 // Supabase secret key (sb_secret_…) in the `apikey` header.
 // Sends Web Push to every active subscription, 500 per invocation (see Batching).
 // Marks subscriptions inactive if the browser has unsubscribed (HTTP 404/410).
-// Response: { delivered, failed, stale, more_pages, first_error }. Only pushes the
+// Response: { delivered, failed, skipped, stale, more_pages, first_error }. Only pushes the
 // browser's push service accepted count as delivered.
 //
 // Deploy (the caller's key isn't a JWT, so the gateway must not check for one):
@@ -16,6 +16,12 @@
 //   VAPID_SUBJECT        (e.g. "mailto:hello@examprep.app")
 //   SUPABASE_URL, SUPABASE_SECRET_KEYS (set by Supabase)
 //
+// v3 (Oct 2026): scheduled reminders are personal. Each device's message depends on its
+//   student (weekly battle missions, streak, whether they've practised today) and is
+//   chosen in messages.ts. A student who has already practised today gets no reminder,
+//   so "delivered" can be lower than the number of devices; "skipped" counts those.
+//   Devices without an account get the plain reminder. Custom blasts are unchanged.
+//
 // v2 (Sep 2026): moved from the legacy service_role JWT (Authorization: Bearer)
 //   to Supabase secret keys (apikey header, SUPABASE_SECRET_KEYS), so the legacy
 //   keys can be switched off. "sent" used to count every non-404/410 failure as
@@ -23,47 +29,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush          from 'npm:web-push@3'
-
-// ── Message pools ─────────────────────────────────────────────────────────────
-const MESSAGES = {
-  noon: [
-    { title: '☀️ Lunch break = practice time',    body: "5 questions. That's all. You've got this." },
-    { title: '🎯 Midday check-in',                body: "How many topics have you hit today? Let's add one more." },
-    { title: "📚 12 o'clock drill",               body: 'Perfect time for a quick WAEC/JAMB practice session.' },
-    { title: '⚡ Midday energy boost',             body: 'A quick quiz beats doom-scrolling. Open ExamPrep.' },
-    { title: '🏆 Leaderboard update',             body: "Others are practising right now. Don't let them pass you." },
-    { title: '🔥 Keep your streak',               body: "Your streak is on the line. Quick practice now." },
-    { title: '📐 Midday brain boost',             body: 'Your recall is sharpest mid-day. Use it.' },
-    { title: '🧠 12pm knowledge session',         body: 'Top students practise daily. Today is your day.' },
-  ],
-  afternoon: [
-    { title: "⏰ 4pm — golden study hour",        body: 'This is when your brain retains best. Start now.' },
-    { title: '📖 Afternoon session time',         body: 'Lock in Chemistry, Physics, Maths — before the day ends.' },
-    { title: '🎯 One topic. 10 minutes.',         body: "That's your 4pm assignment. Open ExamPrep." },
-    { title: '⭐ XP is waiting for you',          body: 'Earn points, climb the leaderboard. Just 5 questions.' },
-    { title: '🔬 Subject drill at 4pm',           body: "Pick a subject and hammer it. You'll thank yourself." },
-    { title: '📊 Progress update time',           body: "Check how you're tracking. Then practise a little." },
-    { title: '💡 4pm power move',                 body: 'Students who practise in the afternoon retain 35% more.' },
-    { title: '🚀 Push through the 4pm slump',    body: "Don't nap — practise. 5 questions and you're done." },
-  ],
-  evening: [
-    { title: "🌙 8pm — last call to practise",   body: 'One quick session before you wind down. Let\'s go.' },
-    { title: '🔥 End the day strong',            body: "Don't go to bed without hitting your practice goal." },
-    { title: '⭐ Night-time XP run',             body: 'Quiet. Focused. Perfect time to earn points.' },
-    { title: '📚 Before-bed revision',           body: 'Sleep locks in what you learned tonight. Practise first.' },
-    { title: "🎯 Beat today's target",           body: 'How many questions did you do today? Add a few more.' },
-    { title: '🌟 Evening challenge',             body: 'One topic. Before bed. That\'s all we ask.' },
-    { title: '💪 Night grind',                  body: "The exam won't wait. Neither should you. Quick session." },
-    { title: '🏅 Close out the day right',      body: 'Practise tonight. Wake up sharper tomorrow.' },
-  ],
-}
-
-function pickMessage(slot: string) {
-  const pool = MESSAGES[slot as keyof typeof MESSAGES] ?? MESSAGES.noon
-  // Seed by UTC date so all users get the same message on a given day
-  const seed = parseInt(new Date().toISOString().slice(0, 10).replace(/-/g, ''), 10)
-  return pool[seed % pool.length]
-}
+import { buildMessage, lagosWeekday, lagosDayNumber, userKey, type Context, type Slot } from './messages.ts'
 
 // ── Batching ──────────────────────────────────────────────────────────────────
 // Each invocation handles one page of subscribers, then hands the next page to
@@ -156,7 +122,7 @@ Deno.serve(async (req) => {
   // One page of active subscriptions, in a stable order.
   const { data: subs, error } = await db
     .from('push_subscriptions')
-    .select('id, subscription')
+    .select('id, subscription, user_id')
     .eq('active', true)
     .order('id')
     .range(offset, offset + PAGE_SIZE - 1)
@@ -186,26 +152,45 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Build payload — custom blast uses supplied fields, scheduled uses message pool
-  const payload = isCustom
+  // Custom blasts send one message to every device. Scheduled reminders are built
+  // per device from its student's context (messages.ts).
+  const customPayload = isCustom
     ? JSON.stringify({
         title: String(parsedBody.title).trim(),
         body:  String(parsedBody.body).trim(),
         url:   parsedBody.url?.trim() || '/student/practice',
         tag:   parsedBody.tag?.trim() || 'ep-custom',
       })
-    : (() => {
-        const msg = pickMessage(slot)
-        return JSON.stringify({ title: msg.title, body: msg.body, url: '/student/practice', tag: `ep-${slot}` })
-      })()
+    : null
+
+  const contexts = new Map<string, Context>()
+  if (!isCustom) {
+    const userIds = [...new Set(subs.map(s => s.user_id).filter(Boolean))] as string[]
+    if (userIds.length > 0) {
+      const { data: rows, error: ctxError } = await db.rpc('notification_context', { p_user_ids: userIds })
+      // Without context everyone still gets the plain reminder.
+      if (ctxError) console.error('notification_context failed:', ctxError.message)
+      for (const r of rows ?? []) contexts.set(r.user_id, r as Context)
+    }
+  }
+  const weekday = lagosWeekday(), day = lagosDayNumber()
 
   // Send in small concurrent batches.
   const staleIds: string[] = []
-  let delivered = 0, failed = 0
+  let delivered = 0, failed = 0, skipped = 0
   let firstError: string | null = null
   for (let i = 0; i < subs.length; i += CONCURRENCY) {
     await Promise.allSettled(
-      subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription }) => {
+      subs.slice(i, i + CONCURRENCY).map(async ({ id, subscription, user_id }) => {
+        let payload = customPayload
+        if (!payload) {
+          const msg = buildMessage({
+            slot: slot as Slot, weekday, day, key: userKey(user_id ?? id),
+            ctx: user_id ? contexts.get(user_id) ?? null : null,
+          })
+          if (!msg) { skipped++; return }
+          payload = JSON.stringify(msg)
+        }
         try {
           await webpush.sendNotification(subscription, payload)
           delivered++
@@ -235,6 +220,7 @@ Deno.serve(async (req) => {
     offset,
     delivered,
     failed,
+    skipped,                      // students who'd already practised today
     stale:       staleIds.length,
     more_pages:  morePages,       // later pages are sent by further invocations
     first_error: firstError,

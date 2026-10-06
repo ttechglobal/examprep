@@ -4,6 +4,7 @@ The seven supplied screenshots define the computer-battle journey. Battle is a s
 
 ## Presentation and ownership
 
+- Entering Battle World always shows a loading screen for at least 3.5 s (up to 10 s while artwork is still downloading): crest, progress bar, tips and a Back button that asks before leaving. Behind it, `lib/battleAssets.js` preloads the exact image URLs the battle screens use. Lobby music starts with it when the student has already tapped on the page (the usual in-app entry); after a cold page load it starts on the first tap.
 - `BattleExperience`, mounted by the battle route layout, owns artwork loading, entrance progress, exit confirmation, browser/device Back handling and one audio engine. It persists between battle routes and cleans up on exit. It also defines the battle scale unit `--u` (below) for every battle screen.
 - Exit: only the battle hub has an Exit button, and only the hub's Back leaves the battle world (after a prompt). In a match, Back asks before abandoning it and returns to the hub; other battle screens step back to the hub (`lib/battleNavigation.js`). In-match "Leave match" and the results "Battle home" also return to the hub.
 - `components/student/GameShell`: courtyard backdrop and scoped game colors/fonts. Battle uses its immersive presentation with no application navigation.
@@ -29,7 +30,16 @@ The seven supplied screenshots define the computer-battle journey. Battle is a s
 
 Home, Practice, Learn, Profile, Leaderboard, profile setup and shared student navigation have been restored to their original styling and artwork. The arena removes the logo/mode banner and keeps Submit/Next visible while long question content scrolls inside the board. The references do not specify redesigned friend matchmaking screens.
 
-Every battle-world screen has a top bar: Exit (hub) or Back on the left, the player's XP and avatar (initials, display only) on the right. The arena keeps its own match bar; the countdown has none. On phones each screen's board (`header`) comes first, then the guide strip, then the content.
+Every battle-world screen has a top bar: Exit (hub) or Back on the left, the player's **battle XP** and avatar (initials, display only) on the right; desktop (≥ 900px) also shows the rank tier earned from battle XP and the player's all-time battle-leaderboard place.
+
+## Battle XP and practice activity
+
+- `profiles.battle_xp` (`20261004_battle_xp.sql`) is the battle world's own score: the sum of the `battle_results` ledger, kept up to date by a trigger and protected from client edits. `GET /api/student/battle/stats` returns it with the all-time rank; guests use this device's record. Battle XP still also counts towards total XP.
+- A computer battle is saved as a practice session (`mode: 'battle'`) and sent immediately, so it counts towards activity, streak and mastery and appears in Recent Sessions as "⚔️ Battle".
+
+## Caching
+
+The service worker (v6) keeps `/images`, `/icons`, `/audio`, code and the optimized `/_next/image` copies on the device after the first download, and saves the battle pages at install; `images.minimumCacheTTL` is one year. Only the player's data (`/api/*`) is fetched on each visit. The arena keeps its own match bar; the countdown has none. On phones each screen's board (`header`) comes first, then the guide strip, then the content.
 
 ## Audio
 

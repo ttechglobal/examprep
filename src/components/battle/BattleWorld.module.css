@@ -114,6 +114,40 @@
   width: 22px;
 }
 
+/* Desktop only (hidden under 900px): rank tier and battle-board place. */
+.rankPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 14px 4px 8px;
+  border: 2px solid #d0b989;
+  border-radius: 13px;
+  background: linear-gradient(#fff9e7, #f5dfaf);
+  box-shadow: 0 3px 0 #765b38;
+  color: #09213f;
+  line-height: 1.1;
+}
+
+.rankPill > span {
+  display: grid;
+}
+
+.rankPill strong {
+  font-size: clamp(16px, calc(var(--u) * 1.7), 20px);
+  font-weight: 800;
+}
+
+.rankPill small {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b4c22;
+}
+
+.rankIcon {
+  width: 28px;
+}
+
 .avatar {
   display: grid;
   place-items: center;
@@ -476,6 +510,17 @@
   font-weight: 600;
   color: #693204;
   white-space: normal;
+}
+
+.battleButton small.allowance {
+  display: inline-block;
+  margin-top: calc(var(--u) * .7);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: max(13px, calc(var(--u) * 1.7));
+  font-weight: 800;
+  color: #fff6df;
+  background: #8a3b06;
 }
 
 .battleButton .actionArrow {
@@ -1052,6 +1097,10 @@
 
   .bar {
     padding-top: max(10px, env(safe-area-inset-top));
+  }
+
+  .rankPill {
+    display: none;
   }
 
   /* The stage scrolls; main grows to fill it so the dock reaches the bottom. */

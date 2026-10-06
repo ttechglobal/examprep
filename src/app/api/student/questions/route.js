@@ -1,4 +1,4 @@
-// src/app/api/student/questions/route.js — v6
+// src/app/api/student/questions/route.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/student/questions — the question feed for every practice mode.
 //
@@ -15,15 +15,27 @@
 //   mode        'mixed' | 'weak' | 'quick5' | 'practice' | 'timed' | 'mock' | 'battle'
 //   topic_id    constrain to one topic
 //   exclude     comma-separated question ids to skip (max 200)
+//   ref         the session / match id; a Free student's daily uses count once
+//               per ref, so a session's two batches and any reload are one use
 //
 // Open to guests (guest mode practises too), so it only ever returns active,
 // published questions.
+//
+// v7: Free / Premium (lib/plans.js, enforced by lib/server/entitlements.js).
+// A refused request answers 403 { error, code: 'premium_required' |
+// 'daily_limit', feature, limit }. The check runs once questions are found,
+// so a subject with no questions never uses up a free session.
+// v8: a signed-in student's session start is recorded for Analytics (once per
+// ref, after the response is sent).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient }  from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { NextResponse }  from 'next/server'
 import { selectedTopicIds, loadQuestionPool } from '@/lib/battleQuestionPool'
+import { checkQuestionAccess } from '@/lib/server/entitlements'
+import { recordAfterResponse } from '@/lib/server/studentEvents'
+import { analyticsFeature } from '@/lib/analytics'
 
 const UUID_RE     = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EXAMS       = new Set(['WAEC', 'JAMB', 'IGCSE'])
@@ -97,6 +109,7 @@ export async function GET(request) {
     const exam       = EXAMS.has(examParam) ? examParam : 'WAEC'
     const count      = Math.min(Math.max(parseInt(searchParams.get('count') ?? '20', 10) || 20, 1), 100)
     const mode       = searchParams.get('mode') ?? 'mixed'
+    const ref        = searchParams.get('ref')
     const topicId    = searchParams.get('topic_id')
     let topicIds
     try { topicIds = selectedTopicIds(searchParams) }
@@ -140,15 +153,23 @@ export async function GET(request) {
       )
     }
 
-    // ── 3. Weak mode: weakest topics first (this student's mastery only) ───────
+    // ── 3. Free / Premium ─────────────────────────────────────────────────────
+    let userId = null
+    try {
+      const supabase = await createClient()
+      const user = (await supabase.auth.getUser()).data?.user ?? null
+      userId = user && !user.is_anonymous ? user.id : null
+    } catch { /* guest */ }
+    const access = await checkQuestionAccess(db, { userId, mode, topicId, exam, ref })
+    if (!access.ok) return NextResponse.json(access.body, { status: access.status, headers: { 'Cache-Control': 'no-store' } })
+    if (ref) recordAfterResponse({
+      studentId: userId, event: 'session_start', ref,
+      feature: analyticsFeature({ mode, topic: topicId }), detail: { exam, mode },
+    })
+
+    // ── 4. Weak mode: weakest topics first (this student's mastery only) ───────
     let ordered = questions
     if (mode === 'weak') {
-      let userId = null
-      try {
-        const supabase = await createClient()
-        userId = (await supabase.auth.getUser()).data?.user?.id ?? null
-      } catch { /* guest */ }
-
       const topicIds = [...new Set(questions.map(q => q.topic_id).filter(Boolean))]
       if (userId && topicIds.length) {
         const { data: stats } = await db.rpc('stats_by_topic', {
@@ -163,7 +184,7 @@ export async function GET(request) {
       }
     }
 
-    const finalCount = mode === 'quick5' ? Math.min(5, ordered.length) : Math.min(count, ordered.length)
+    const finalCount = Math.min(mode === 'quick5' ? 5 : count, access.maxCount ?? Infinity, ordered.length)
     const selected = mode === 'weak'
       ? ordered.slice(0, finalCount)
       : applyDifficultyDistribution(shuffle([...ordered]), finalCount)

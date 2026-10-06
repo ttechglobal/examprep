@@ -3,6 +3,8 @@
 // Student app shell: loads the profile once (shared via useStudentUser), and
 // wraps every page in the sidebar (desktop) or top bar + bottom nav (phones).
 //
+// Every page also gets the student's plan (usePlan, contexts/PlanContext).
+//
 // v2: Battle is a main tab, so /student/battle keeps the shell (only its
 //     setup, match and 1v1 screens are full screen). Phone top bar follows the
 //     new design (brand on Home and Practice). Rank names come from lib/ranks.js instead of
@@ -24,6 +26,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 import { endLaunchSplash } from '@/lib/launchSplash'
 import { hasLocalIdentity } from '@/lib/auth/client'
 import { getRankProgress } from '@/lib/ranks'
+import { PlanProvider } from '@/contexts/PlanContext'
 
 const NAVY = '#062A78'
 const BLUE = '#1264E5'
@@ -335,8 +338,10 @@ function StudentLayoutInner({ children }) {
   if (isExcluded) return (
     <StudentProfileUpdateContext.Provider value={updateProfile}>
       <StudentUserContext.Provider value={profile}>
+      <PlanProvider profile={profile}>
         {children}
         {!pathname.startsWith('/student/battle') && <ProfileSetupGate profile={profile} />}
+      </PlanProvider>
       </StudentUserContext.Provider>
     </StudentProfileUpdateContext.Provider>
   )
@@ -344,6 +349,7 @@ function StudentLayoutInner({ children }) {
   return (
     <StudentProfileUpdateContext.Provider value={updateProfile}>
     <StudentUserContext.Provider value={profile}>
+    <PlanProvider profile={profile}>
       <style>{`* { box-sizing: border-box } @keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <AppBackground dark={dark} />
 
@@ -388,6 +394,7 @@ function StudentLayoutInner({ children }) {
 
       {/* Asks new students to set up their profile before anything else */}
       <ProfileSetupGate profile={profile} />
+    </PlanProvider>
     </StudentUserContext.Provider>
     </StudentProfileUpdateContext.Provider>
   )

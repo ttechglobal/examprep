@@ -1,0 +1,155 @@
+/* Weekly missions card on the battle hub. Sits inside BattleWorld, so it
+   inherits --u, --gap and --ink from the world and wears the same wooden panel
+   (BattleWorld's styles.panel). */
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 calc(var(--u) * 1.2);
+}
+
+.head h2 {
+  margin: 0;
+  font-size: max(20px, calc(var(--u) * 2.3));
+  font-weight: 800;
+}
+
+.head small {
+  font-size: max(14px, calc(var(--u) * 1.5));
+  font-weight: 700;
+  color: #6b5a2c;
+}
+
+.list {
+  display: grid;
+  gap: calc(var(--u) * .9);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mission {
+  display: grid;
+  grid-template-columns: max(44px, calc(var(--u) * 5)) 1fr auto;
+  align-items: center;
+  gap: calc(var(--u) * 1.2);
+  width: 100%;
+  padding: calc(var(--u) * 1) calc(var(--u) * 1.3);
+  border: 2px solid #bdaf8a;
+  border-radius: calc(var(--u) * 1.4);
+  background: #fff8e0b8;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mission:disabled {
+  cursor: default;
+}
+
+.mission:not(:disabled):hover {
+  background: #fffbe9;
+}
+
+.mission:focus-visible {
+  outline: 3px solid #1264e5;
+  outline-offset: 2px;
+}
+
+.done {
+  border-color: #4f9d3a;
+  background: #e9f7d7;
+}
+
+.icon {
+  width: 100%;
+  height: auto;
+}
+
+.text {
+  min-width: 0;
+}
+
+.text strong {
+  display: block;
+  font-size: max(17px, calc(var(--u) * 2));
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.text small {
+  display: block;
+  margin-top: 2px;
+  font-size: max(14px, calc(var(--u) * 1.5));
+  font-weight: 600;
+  color: #6b5a2c;
+}
+
+.bar {
+  height: max(9px, calc(var(--u) * 1));
+  margin-top: calc(var(--u) * .7);
+  border-radius: 999px;
+  background: #d9c9a0;
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f6a609, #ffcf3a);
+  transition: width .4s ease;
+}
+
+.done .bar > span {
+  background: linear-gradient(90deg, #4f9d3a, #7ccf53);
+}
+
+.reward {
+  display: grid;
+  justify-items: center;
+  min-width: max(48px, calc(var(--u) * 5.4));
+  font-size: max(15px, calc(var(--u) * 1.7));
+  font-weight: 800;
+  line-height: 1.1;
+  color: #8a5a00;
+}
+
+.reward small {
+  font-size: max(12px, calc(var(--u) * 1.2));
+  font-weight: 700;
+}
+
+.done .reward {
+  color: #2f7a1f;
+}
+
+.banner {
+  margin: 0 0 calc(var(--u) * 1.1);
+  padding: calc(var(--u) * .9) calc(var(--u) * 1.3);
+  border-radius: calc(var(--u) * 1.2);
+  font-size: max(15px, calc(var(--u) * 1.7));
+  font-weight: 700;
+}
+
+.celebrate {
+  background: #e9f7d7;
+  border: 2px solid #4f9d3a;
+  color: #20560f;
+}
+
+.nudge {
+  background: #fff0c2;
+  border: 2px solid #f0a812;
+  color: #6d4700;
+}
+
+.note {
+  margin: 0;
+  font-size: max(15px, calc(var(--u) * 1.7));
+  font-weight: 600;
+  color: #6b5a2c;
+}

@@ -16,12 +16,16 @@
 // v3: new session design (SessionFrame, SubjectTabs, QuestionPanel,
 //     SessionSummary with the per-subject breakdown built in). WAEC and JAMB
 //     share one code path (sections).
+// Premium only (lib/plans.js): choosing an exam or starting asks Free
+// students to upgrade, whichever way they reached this page; the questions
+// API refuses Free students too.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
+import { usePlan } from '@/contexts/PlanContext'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 import { computeSessionXP } from '@/lib/xp'
 
@@ -52,6 +56,7 @@ export default function MockPage() {
   const { dark } = useTheme()
   const { totalPoints: currentXP, setTotalPoints } = usePoints()
   const profile  = useStudentUser()
+  const plan     = usePlan()
 
   const [phase,    setPhase]    = useState('pick-exam')   // pick-exam | setup | session | results | review | error
   const [examType, setExamType] = useState(null)
@@ -92,8 +97,15 @@ export default function MockPage() {
     let questions = []
     try {
       const count = exam === 'WAEC' ? MOCK_RULES.WAEC.count : MOCK_RULES.JAMB.perSubject
-      const r = await fetch(`/api/student/questions?${new URLSearchParams({ exam, subject_id: subject.id, count: String(count), mode: 'mock' })}`)
+      const r = await fetch(`/api/student/questions?${new URLSearchParams({ exam, subject_id: subject.id, count: String(count), mode: 'mock', ref: sessionId.current })}`)
       if (r.ok) questions = (await r.json()).questions ?? []
+      else if (r.status === 403) {
+        const body = await r.json().catch(() => ({}))
+        plan.denied(body)
+        setErrMsg(body.error || 'Mock exams are part of Premium.')
+        setPhase('error')
+        return
+      }
     } catch { /* shown as an empty section below */ }
     if (exam === 'WAEC' && !questions.length) {
       setErrMsg(`No questions found for ${subject.name}. Check your connection and try again.`)
@@ -101,9 +113,10 @@ export default function MockPage() {
       return
     }
     updateSections(prev => prev.map((sec, i) => (i === idx ? { ...sec, questions, loaded: true } : sec)))
-  }, [updateSections])
+  }, [updateSections, plan])
 
   function start(picked) {
+    if (!plan.gate('mock')) return
     sectionsRef.current = picked.map(subject => ({ subject, questions: [], loaded: false }))
     setSections(sectionsRef.current)
     requested.current  = new Set()
@@ -159,7 +172,7 @@ export default function MockPage() {
     const results      = secs.flatMap((sec, si) => sec.questions.map((q, i) => resultFor(q, map[key(si, i)])))
     const durationSecs = msToSecs(Date.now() - startedAt.current)
     const payload = {
-      session_id: sessionId.current, exam: examType, mode: 'mock',
+      session_id: sessionId.current, ref: sessionId.current, exam: examType, mode: 'mock',
       subject_name: examType === 'WAEC' ? secs[0]?.subject.name ?? 'WAEC' : 'JAMB Mock',
       results, duration_secs: durationSecs,
       questions_count: results.length, correct_count: results.filter(r => r.is_correct).length,
@@ -193,7 +206,7 @@ export default function MockPage() {
 
   // ── Screens ────────────────────────────────────────────────────────────────
   if (phase === 'error')     return <ErrorScreen message={errMsg} onBack={() => router.push('/student/practice')} />
-  if (phase === 'pick-exam') return <ExamChooser onPick={e => { setExamType(e); setPhase('setup') }} onBack={() => router.push('/student/practice')} />
+  if (phase === 'pick-exam') return <ExamChooser onPick={e => { if (!plan.gate('mock')) return; setExamType(e); setPhase('setup') }} onBack={() => router.push('/student/practice')} />
   if (phase === 'setup')     return <MockSetup exam={examType} subjects={examSubjects.subjects} loading={examSubjects.loading} hasAny={examSubjects.hasAny} dark={dark} onStart={start} onBack={() => setPhase('pick-exam')} />
 
   if (phase === 'results' || phase === 'review') {

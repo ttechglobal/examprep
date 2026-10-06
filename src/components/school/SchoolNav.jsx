@@ -77,8 +77,8 @@ const NAV_ITEMS = [
   { id: 'overview',       label: 'Overview',       Icon: IcoOverview       },
   { id: 'students',       label: 'Students',       Icon: IcoStudents       },
   { id: 'performance',    label: 'Performance',    Icon: IcoPerformance    },
-  { id: 'cohort',         label: 'Cohort',         Icon: IcoCohort         },
-  { id: 'subscriptions',  label: 'Subscriptions',  Icon: IcoSubscriptions  },
+  { id: 'cohort',         label: 'Invite Code',    Icon: IcoCohort         },
+  { id: 'subscriptions',  label: 'Slots & Premium', Icon: IcoSubscriptions },
   { id: 'settings',       label: 'Settings',       Icon: IcoSettings       },
 ]
 

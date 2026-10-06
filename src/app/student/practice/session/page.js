@@ -27,6 +27,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
+import { usePlan } from '@/contexts/PlanContext'
+import { practiceFeature } from '@/lib/plans'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 import { computeSessionXP } from '@/lib/xp'
 
@@ -52,7 +54,11 @@ function readConfig() {
 async function fetchQuestions(params) {
   const r = await fetch(`/api/student/questions?${new URLSearchParams(params)}`)
   const d = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(d.detail ?? d.error ?? `Server error ${r.status}`)
+  if (!r.ok) {
+    const err = new Error(d.detail ?? d.error ?? `Server error ${r.status}`)
+    if (r.status === 403) err.plan = d            // Free plan limit (lib/plans.js)
+    throw err
+  }
   return d.questions ?? []
 }
 
@@ -70,6 +76,9 @@ export default function PracticeSessionPage() {
   const router   = useRouter()
   const { dark } = useTheme()
   const { totalPoints: currentXP, setTotalPoints } = usePoints()
+  const plan = usePlan()
+  const planRef = useRef(plan)
+  useEffect(() => { planRef.current = plan }, [plan])
 
   const [phase,     setPhase]     = useState('loading')   // loading | session | saving | results | review | error
   const [errMsg,    setErrMsg]    = useState('')
@@ -127,6 +136,7 @@ export default function PracticeSessionPage() {
     const base = { exam: cfg.examType || 'WAEC', subjects: (cfg.subjects || []).join(','), mode: cfg.mode || 'practice' }
     if (cfg.subject_id) base.subject_id = cfg.subject_id
     if (cfg.topic_id)   base.topic_id   = cfg.topic_id
+    if (cfg.ref)        base.ref        = cfg.ref
     let cancelled = false
 
     fetchQuestions({ ...base, count: String(FIRST_BATCH) })
@@ -139,6 +149,7 @@ export default function PracticeSessionPage() {
         }
         setQuestions(first)
         beginAttempt(cfg)
+        planRef.current.recordUse(practiceFeature({ mode: cfg.mode, topicId: cfg.topic_id }), cfg.ref)
 
         const remaining = (cfg.count || 20) - first.length
         if (remaining <= 0) return
@@ -148,6 +159,7 @@ export default function PracticeSessionPage() {
       })
       .catch(err => {
         if (cancelled) return
+        if (err?.plan) planRef.current.denied(err.plan)
         setErrMsg(err?.message || 'Failed to load questions. Check your connection and try again.')
         setPhase('error')
       })
@@ -164,6 +176,7 @@ export default function PracticeSessionPage() {
     const results      = qs.map((q, i) => resultFor(q, map[i]))
     const payload = {
       session_id:      sessionId.current,
+      ref:             config?.ref,
       exam:            config?.examType || 'WAEC',
       mode:            config?.mode     || 'practice',
       subject_name:    config?.subjects?.[0] ?? 'Mixed',

@@ -64,6 +64,12 @@ create trigger battle_results_from_session
   for each row execute function public.battle_results_from_session();
 
 -- ── Computer battles: outcome (same body as 20260927, plus the ledger) ──────
+-- The columns 20260927_battle_recent_form.sql adds, in case it was never run:
+-- the function below reads them.
+alter table public.battle_stats add column if not exists recent_form     text not null default '';
+alter table public.battle_stats add column if not exists last_session_id text;
+drop function if exists public.record_battle_result(uuid, text, integer);
+
 create or replace function public.record_battle_result(
   p_student    uuid,
   p_outcome    text,

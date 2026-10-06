@@ -7,7 +7,7 @@
 // their save logic unchanged:
 //   Auth users  → /api/student/profile PATCH or /api/student/subjects PATCH
 //   Guest users → setLocalProfile() (localStorage)
-// New in v5: PlansSheet, CareerSheet, ParentsSheet, LanguageSheet, AccountSheet.
+// New in v5: CareerSheet, ParentsSheet, LanguageSheet, AccountSheet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useId } from 'react'
@@ -18,7 +18,7 @@ import JoinSchool from '@/components/student/JoinSchool'
 import { SubjectGlyph, Close, Check } from './icons'
 import {
   NAVY, BLUE, GOLD, ORANGE, GREEN, RED, WAEC_GRADES, ALL_SUBJECTS,
-  normalizeSubjectsForExam, TRIAL_END,
+  normalizeSubjectsForExam,
 } from './profileModel'
 
 // Selection colour per subject in the picker.
@@ -739,38 +739,6 @@ function SignupLink() {
       style={{ display: 'block', textAlign: 'center', textDecoration: 'none', padding: '14px', borderRadius: 14, fontWeight: 900, fontSize: 15, background: `linear-gradient(135deg,${NAVY},${BLUE})`, color: '#fff', boxShadow: `0 4px 16px ${BLUE}40` }}>
       Create free account
     </Link>
-  )
-}
-
-// ── See Plans ─────────────────────────────────────────────────────────────────
-const PREMIUM_INCLUDES = [
-  'Every WAEC and JAMB past question, with worked explanations',
-  'Lessons for every subtopic in your subjects',
-  'Full timed Exam Mode with a topic-by-topic score report',
-  'Weekly progress reports for your parents',
-]
-
-export function PlansSheet({ plan, onClose }) {
-  const trialEnds = TRIAL_END.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
-  return (
-    <Sheet title="Your plan" onClose={onClose}>
-      <p style={{ ...P, marginBottom: 6, fontWeight: 800, fontSize: 16, color: 'var(--text-prim)' }}>{plan.title}</p>
-      <p style={P}>
-        {plan.kind === 'trial' && `You have full access until ${trialEnds}. Nothing is charged when the trial ends.`}
-        {plan.kind === 'paid'  && plan.detail}
-        {plan.kind === 'free'  && 'Your free trial has ended. You can keep practising with free questions.'}
-      </p>
-      <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', margin: '0 0 10px' }}>Premium includes</p>
-      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'grid', gap: 10 }}>
-        {PREMIUM_INCLUDES.map(item => (
-          <li key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14, color: 'var(--text-sec)', lineHeight: 1.5 }}>
-            <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: `${GREEN}20`, color: GREEN, display: 'grid', placeItems: 'center', marginTop: 1 }}><Check /></span>
-            {item}
-          </li>
-        ))}
-      </ul>
-      <SaveButton onClick={onClose} label="Got it" />
-    </Sheet>
   )
 }
 

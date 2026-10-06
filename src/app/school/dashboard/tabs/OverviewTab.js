@@ -1,5 +1,7 @@
 'use client'
 // src/app/school/dashboard/tabs/OverviewTab.js
+// v2: numbers cover the whole school (not one cohort); shows how many students
+// have Premium and the slots left, and "Add students" leads to Slots & Premium.
 
 import { useState }                                           from 'react'
 import { pct, initials, getGreeting, lastLabel, statusOf, perfCol, perfBg, perfLabel, sIcon, sBg, avColor } from './shared'
@@ -60,7 +62,7 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
     {
       label: 'Total students',      val: summary.totalStudents ?? 0,
       Icon: IconStudents,           iconColor: '#7C3AED', iconBg: '#F3F0FF',
-      delta: engRate > 0 ? `${engRate}% active this week` : null,
+      delta: `${summary.premiumStudents ?? 0} with Premium · ${data.school?.slots?.available ?? 0} slot${data.school?.slots?.available === 1 ? '' : 's'} left`,
       deltaColor: '#7C3AED',
     },
     {
@@ -98,10 +100,10 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
           <div className="sd-page-sub">
             {summary.totalStudents > 0
               ? `${activeStudents.length} of ${summary.totalStudents} students active this week.`
-              : 'Set up your cohort to start tracking students.'}
+              : 'Add students with a Premium slot, or share your invite code, to start tracking them.'}
           </div>
         </div>
-        <button onClick={() => goTab('cohort')} style={{
+        <button onClick={() => goTab('subscriptions')} style={{
           display:'flex', alignItems:'center', gap:8, padding:'11px 20px',
           borderRadius:13, background:'#1264E5', color:'#fff', border:'none',
           fontSize:13, fontWeight:800, cursor:'pointer',
@@ -110,7 +112,7 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 2v10M2 7h10" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
           </svg>
-          Invite students
+          Add students
         </button>
       </div>
 
@@ -215,7 +217,7 @@ export default function OverviewTab({ data, adminName, goTab, cohort }) {
               <div style={{ display:'flex', alignItems:'center', gap:16, padding:'12px 20px 4px' }}>
                 <DonutChart value={avgAcc} color={avgAcc != null ? perfCol(avgAcc) : '#b0bada'} bg="#EEF2FF"/>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:11, color:'#b0bada', marginBottom:6 }}>Overall cohort accuracy</div>
+                  <div style={{ fontSize:11, color:'#b0bada', marginBottom:6 }}>Overall school accuracy</div>
                   <div style={{ fontSize:22, fontWeight:800, color: avgAcc != null ? perfCol(avgAcc) : '#b0bada', letterSpacing:'-.03em' }}>
                     {avgAcc != null ? `${avgAcc}%` : '—'}
                   </div>

@@ -146,3 +146,30 @@ Test it at `/student/battle/1v1`. Launch = enable that button in `app/student/ba
 - `pvp_rematch` accepts an existing offer instead of opening a second match (locked, so a double press is safe).
 - `pvp_claim_win(match)`: allowed when the opponent missed the last 3 questions and hasn't answered the current one,
   and you answered at least one of those 3. Finishes with `finish_reason = 'opponent_away'`.
+
+---
+
+# Battle, plans, subscriptions & schools — Oct 2026
+
+Goes with `20261004_battle_xp.sql`, `20261005_plans.sql`, `20261006_subscriptions.sql` and
+`20261007_schools_and_admin_log.sql`. Run them in that order **before** deploying; `20261005` gives every
+existing account its 7-day trial when it runs, so run it on launch day. Admins sign in again once.
+
+- **Battle:** a loading screen (3.5 s or more) with Back; artwork preloaded and cached on the device
+  (`sw.js` v6 caches `/_next/image` and `/audio`); a battle XP of its own (`profiles.battle_xp`); desktop shows
+  the battle rank. Battles count as practice and appear in Recent Sessions.
+- **Free / Premium:** the rules are in `lib/plans.js` and enforced in `/api/student/questions`
+  (`lib/server/entitlements.js`). Daily uses are counted atomically per session (`use_feature`). There's a
+  7-day trial, an upgrade sheet, and expiry notices. Details: `docs/plans.md`.
+- **Subscriptions:** a ledger (`subscriptions`), and `sync_profile_plan` is the only writer of
+  `profiles.plan`. The admin Students page is rebuilt for plan management.
+- **Schools:** slots are a ledger. A used slot is a 12-month subscription. Sign-up is server-side (this closes a
+  privilege escalation). The roster is the whole school. A new admin Schools page. Details and the audit:
+  `docs/schools.md`.
+- **Admins:** team members get their own logins (`admin_users`) and an activity log of every change
+  (`activity_log`). Access codes are removed.
+- **Analytics** (`20261008_analytics.sql`, run after `20261007`): the admin Analytics page is rebuilt. It has five
+  tabs (Overview, Engagement, Features, Learning, Conversion), and the filters (date, exam, plan, school) apply to
+  every tab. All counting happens in Postgres. The old page downloaded raw rows, which Supabase caps at 1,000.
+  New `student_events` table: session starts and completions, flashcard decks opened, upgrade-sheet views and taps.
+  Events are written after each response is sent and are idempotent per ref. Definitions: `docs/analytics.md`.

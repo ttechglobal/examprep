@@ -14,7 +14,7 @@
 // Row: { rank, student_id, name, class_level, school, location, xp, level, level_tier,
 //        level_numeral, accuracy, questions, is_me }
 //
-// XP for time windows = 10 per correct answer (unchanged).
+// XP for time windows = 5 per correct answer (computed in SQL, 20261010_xp_and_notifications.sql).
 // All-time XP         = profiles.total_points (unchanged).
 //
 // v3: rankings come from student_daily_stats (one row per student per day,

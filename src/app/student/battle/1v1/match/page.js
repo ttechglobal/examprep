@@ -21,6 +21,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePoints } from '@/contexts/PointsContext'
+import { useBattleExperience } from '@/components/battle/BattleExperience'
 import { useMatch } from '@/lib/pvp/useMatch'
 import { pvpMessage } from '@/lib/pvp/client'
 import { opponentRole, matchXp } from '@/lib/pvp/results'
@@ -58,6 +59,7 @@ function Match({ matchId }) {
   const match = useMatch(matchId)
   const { state, phase, serverNow, clockOffset, lockedIdx } = match
   const { totalPoints, setTotalPoints } = usePoints()
+  const experience = useBattleExperience()
 
   const [isGuest,   setIsGuest]   = useState(false)   // playing from an invite link, no account
   const [selection, setSelection] = useState(null)    // { q, idx } picked but maybe not locked in
@@ -123,7 +125,8 @@ function Match({ matchId }) {
     awarded.current = true
     const xp = matchXp(state)
     setTotalPoints((totalPoints || 0) + xp)
-  }, [phase, state, isGuest, totalPoints, setTotalPoints])
+    experience?.addBattleXp(xp)
+  }, [phase, state, isGuest, totalPoints, setTotalPoints, experience])
 
   // Both players end up in a rematch as soon as it starts.
   const rematch = state?.rematch

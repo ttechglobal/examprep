@@ -1,6 +1,7 @@
 'use client'
-// src/app/admin/login/page.js
-// Password-only admin login.
+// src/app/admin-login/page.js
+// Admin login. Team members use their email and password; the owner leaves
+// the email empty and uses the owner password (/api/admin/auth).
 // On success the API sets a secure httpOnly cookie — no Supabase session needed.
 
 import { useState } from 'react'
@@ -8,6 +9,7 @@ import { useRouter } from 'next/navigation'
 
 export default function AdminLoginPage() {
   const router = useRouter()
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
@@ -21,9 +23,9 @@ export default function AdminLoginPage() {
     const res  = await fetch('/api/admin/auth', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ password }),
+      body:    JSON.stringify({ email: email.trim(), password }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
 
     if (!res.ok || data.error) {
       setError(data.error ?? 'Incorrect password')
@@ -72,7 +74,7 @@ export default function AdminLoginPage() {
             Admin access
           </h1>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,.35)', marginBottom: 24 }}>
-            Enter the admin password to continue.
+            Team members: use your email and password. Owner: leave the email empty.
           </p>
 
           {error && (
@@ -86,14 +88,29 @@ export default function AdminLoginPage() {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email (team members)"
+              autoComplete="username"
+              aria-label="Email (team members)"
+              style={{
+                width: '100%', padding: '12px 14px',
+                background: '#0d0e14', border: '1.5px solid rgba(255,255,255,.1)',
+                borderRadius: 12, fontSize: 14, color: '#eef0fa',
+                outline: 'none', boxSizing: 'border-box',
+              }}
+            />
             <div style={{ position: 'relative' }}>
               <input
                 type={show ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Admin password"
+                placeholder="Password"
+                aria-label="Password"
+                autoComplete="current-password"
                 required
-                autoFocus
                 style={{
                   width: '100%', padding: '12px 44px 12px 14px',
                   background: '#0d0e14', border: '1.5px solid rgba(255,255,255,.1)',

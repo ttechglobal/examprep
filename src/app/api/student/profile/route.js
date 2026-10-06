@@ -41,8 +41,8 @@ const SELECT_COLS = SELECT_COLS_EXT
 
 const ALLOWED_PATCH = [
   'username', 'full_name', 'class_level',
-  // school_name is intentionally excluded — it must only be set by the
-  // access-code redeem route or /api/school/join, not by the student directly.
+  // school_name is intentionally excluded — a school link is only made by the
+  // school (a Premium slot) or /api/school/join, not by the student directly.
   // Allowing free-text here breaks the school dashboard's data integrity.
   // student_school_name is the free-text display field students edit themselves.
   'exam_type', 'exam_types',

@@ -1,4 +1,4 @@
-// public/sw.js — ExamPrep A1 Service Worker v5
+// public/sw.js — ExamPrep A1 Service Worker v6
 // Notifications are server-driven (pg_cron → Edge Function → Web Push).
 // This worker saves the app on the phone so it opens offline, receives push
 // events and handles notification clicks.
@@ -8,13 +8,19 @@
 //     get the latest version online; the saved copy opens when the network is
 //     missing or slow (no answer in 4 s). The main pages, and the code they
 //     load, are saved at install, so they open offline before the first visit.
-//   • /_next/static (content-hashed code), /images and /icons: saved on first
-//     use and served from the phone after that, so each file downloads once.
-//     Never replace a file in /images or /icons in place: use a new name.
+//   • /_next/static (content-hashed code), /images, /icons, /audio and the
+//     optimized images (/_next/image?url=/images/…): saved on first use and
+//     served from the phone after that, so each file downloads once. Never
+//     replace a file in /images, /icons or /audio in place: use a new name.
 //   • Never cached: /api/*, other sites (Supabase), admin / reviewer / school
 //     pages. Questions, scores and battles stay live.
 //   • Bump VERSION to throw every cache away.
 //
+// v6 (4 Oct 2026)
+//   • Optimized images (/_next/image) and /audio are saved too. Battle World
+//     draws almost all of its artwork through /_next/image, so it was
+//     downloaded again on every visit; now only the player's data is fetched.
+//   • The battle setup, session and leaderboard pages are saved at install.
 // v5 (28 Sep 2026)
 //   • Offline app: code, images and the main student pages are saved (v4 only
 //     saved two pages, without the code they need, so they didn't run offline).
@@ -30,18 +36,19 @@
 //   • Launch-splash images and app icons cached; notifications use the proper
 //     icon and a monochrome badge.
 
-const VERSION  = 'v5'
+const VERSION  = 'v6'
 const CACHES = {
   pages:  `ep-pages-${VERSION}`,
   code:   `ep-code-${VERSION}`,
   images: `ep-images-${VERSION}`,
 }
-const LIMITS   = { pages: 40, code: 400, images: 250 }
+const LIMITS   = { pages: 40, code: 400, images: 300 }
 const OUR_CACHE = /^ep-/                     // every cache this worker has ever made
 
 const APP_HOME = '/student/home'
 const PRECACHE_PAGES = [
-  APP_HOME, '/student/practice', '/student/battle', '/student/leaderboard',
+  APP_HOME, '/student/practice', '/student/battle', '/student/battle/setup',
+  '/student/battle/session', '/student/battle/leaderboard', '/student/leaderboard',
   '/student/profile', '/student/learn', '/student/learn/flashcards', '/student/progress',
   '/onboarding', '/offline',
 ]
@@ -130,7 +137,8 @@ self.addEventListener('fetch', event => {
     event.respondWith(cacheFirst(request, CACHES.code, LIMITS.code))
     return
   }
-  if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/icons/')) {
+  if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/audio/') ||
+      (url.pathname === '/_next/image' && (url.searchParams.get('url') ?? '').startsWith('/images/'))) {
     event.respondWith(cacheFirst(request, CACHES.images, LIMITS.images))
   }
   // Anything else (API calls, in-app page data, other files) goes to the network

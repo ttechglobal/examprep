@@ -1,0 +1,53 @@
+/* src/app/school/dashboard/tabs/slots.module.css — the Slots & Premium tab. */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
+.stat { padding: 16px; border: 1px solid #e4eaf5; border-radius: 16px; background: #fff; }
+.stat span { display: block; font-size: 12px; font-weight: 700; color: #7a8aaa; }
+.stat strong { display: block; font-size: 28px; font-weight: 900; color: #071B49; line-height: 1.15; }
+.good { color: #059669 !important; }
+.bad { color: #dc2626 !important; }
+.bar { height: 8px; border-radius: 99px; background: #e4eaf5; overflow: hidden; margin-bottom: 18px; }
+.bar span { display: block; height: 100%; background: #1264E5; border-radius: 99px; transition: width .4s; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.card { padding: 18px; border: 1px solid #e4eaf5; border-radius: 18px; background: #fff; margin-bottom: 14px; }
+.cardTitle { font-size: 16px; font-weight: 900; color: #071B49; margin: 0 0 6px; }
+.cardText { font-size: 13px; color: #7a8aaa; line-height: 1.5; margin: 0 0 12px; }
+.addRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.input { flex: 1; min-width: 200px; padding: 11px 13px; border: 1.5px solid #e4eaf5; border-radius: 12px; font: inherit; font-size: 14px; color: #071B49; outline: none; }
+.input:focus { border-color: #1264E5; }
+.primary { min-height: 44px; padding: 0 18px; border: 0; border-radius: 12px; background: #1264E5; color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.primary:disabled { opacity: .5; cursor: default; }
+.ok, .error, .warn { margin: 10px 0 0; padding: 9px 12px; border-radius: 10px; font-size: 13px; }
+.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+.quantities { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.qty { min-width: 52px; min-height: 40px; border: 1.5px solid #e4eaf5; border-radius: 10px; background: #fff; font: inherit; font-weight: 800; color: #071B49; cursor: pointer; }
+.qtyOn { border-color: #1264E5; background: #eef4ff; color: #1264E5; }
+.qtyInput { width: 90px; min-height: 40px; padding: 0 10px; border: 1.5px solid #e4eaf5; border-radius: 10px; font: inherit; font-weight: 800; }
+.total { font-size: 14px; color: #3a4870; margin: 0 0 12px; }
+.total strong { font-size: 18px; color: #071B49; }
+.whatsapp { display: flex; align-items: center; justify-content: center; min-height: 46px; border-radius: 12px; background: #16a34a; color: #fff; font-size: 14px; font-weight: 800; text-decoration: none; }
+.list { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f0f3fa; flex-wrap: wrap; }
+.row:last-child { border-bottom: 0; }
+.who { flex: 1; min-width: 180px; }
+.who strong { display: block; font-size: 14px; color: #071B49; }
+.who span { display: block; font-size: 12.5px; color: #7a8aaa; }
+.plan { font-size: 12.5px; color: #7a8aaa; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #f1f5f9; color: #475569; }
+.badgeSchool { background: #dcfce7; color: #15803d; }
+.badgeOwn { background: #dbeafe; color: #1d4ed8; }
+.small { min-height: 34px; padding: 0 12px; border: 1px solid #e4eaf5; border-radius: 9px; background: #fff; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; color: #3a4870; }
+.danger { min-height: 34px; padding: 0 12px; border: 1px solid #fecaca; border-radius: 9px; background: #fef2f2; color: #b91c1c; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: #b45309; }
+.problem, .loading { padding: 40px 0; text-align: center; color: #7a8aaa; font-size: 14px; }
+.problem { color: #b91c1c; }
+.link { border: 0; background: none; font: inherit; font-weight: 800; color: #1264E5; cursor: pointer; }
+@media (max-width: 860px) {
+  .cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .stats { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stat { padding: 12px; }
+  .stat strong { font-size: 22px; }
+}

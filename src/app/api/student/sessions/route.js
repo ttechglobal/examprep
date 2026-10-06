@@ -2,8 +2,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/student/sessions?limit=5
 //
-// The signed-in student's most recent practice sessions (battles excluded),
-// newest first. Used by Recent Sessions on the Practice page
+// The signed-in student's most recent practice sessions, battles included
+// (mode 'battle'), newest first. Used by Recent Sessions on the Practice page
 // (hooks/useRecentSessions.js), which shows the device's own history first.
 //
 // Response: { sessions: [{ id, subject, topic, mode, at, count, correct }] }
@@ -32,7 +32,6 @@ export async function GET(request) {
       .from('practice_sessions')
       .select('id, session_id, subject_name, topic_name, mode, created_at, questions_count, correct_count')
       .eq('student_id', user.id)                 // own sessions only
-      .or('mode.is.null,mode.neq.battle')
       .order('created_at', { ascending: false })
       .limit(raw)
     if (error) throw error

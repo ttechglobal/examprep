@@ -4,9 +4,15 @@
 //   → returns topics that have flashcards for this subject, with card counts
 //
 // GET /api/student/flashcards?subjectId=uuid&topicId=uuid
-//   → returns all flashcards for a specific topic
+//   → returns all flashcards for a specific topic. For a signed-in student,
+//     opening the deck is recorded for Analytics (once per topic per day, after
+//     the response is sent; flashcard progress itself stays on the phone).
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { recordEvent } from '@/lib/server/studentEvents'
+import { appDay } from '@/lib/dates'
+import { UUID_RE } from '@/lib/uuid'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 const svc = () => createServiceClient(
@@ -94,6 +100,15 @@ export async function GET(request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    if (UUID_RE.test(topicId) && cards?.length) {
+      after(async () => {
+        const supabase = await createClient()
+        const user = (await supabase.auth.getUser()).data?.user
+        if (user && !user.is_anonymous) {
+          await recordEvent(db, { studentId: user.id, event: 'flashcards_open', feature: 'flashcards', ref: `fc-${topicId}-${appDay()}`, detail: { topic_id: topicId } })
+        }
+      })
+    }
     return NextResponse.json({ cards: cards ?? [] })
   }
 

@@ -17,10 +17,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import styles from './ambassador.module.css'
+import { whatsappLink } from '@/lib/contact'
 
 // ── Links ─────────────────────────────────────────────────────────────────────
 const GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeKMOeCcqMQB5Srt3iqfYPlbETgyoipbp7qRyIF3fLHm7g59g/viewform?usp=header'
-const WHATSAPP_URL    = 'https://wa.me/2348166528437?text=Hi%2C%20I%20have%20a%20question%20about%20the%20ExamPrep%20A1%20Teacher%20Ambassador%20Program'
+const WHATSAPP_URL    = whatsappLink('Hi, I have a question about the ExamPrep A1 Teacher Ambassador Program')
 const PRICE_PER_YEAR  = '₦5,000'
 
 export const metadata = {

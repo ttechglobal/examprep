@@ -1,93 +1,65 @@
-// src/app/api/admin/schools/route.js
-// GET  — list all schools with student counts
-// POST — create a new school
+// src/app/api/admin/schools/route.js — v2
+// GET /api/admin/schools?year=2026|all — the admin Schools page.
+//
+// Response: {
+//   schools: [{ id, name, city, state, created_at, contact_name, contact_email,
+//               contact_phone, slots_total, slots_used, slots_available,
+//               bought_in_year, used_in_year, students, premium_students, status }],
+//   totals:  { schools, slots_total, slots_used, slots_available },
+//   counts:  { all, active, no_usage, fully_used },
+//   years, year
+// }
+//   Slots never expire, so slots_* are all-time; *_in_year are for the year.
+//   status: active (slots in use, some left) · fully_used (none left) ·
+//           no_usage (no slot used yet)
+// Search, filters and sorting are done on the page: a few hundred schools at
+// most (admin_schools returns one row per school, counted in SQL).
+//
+// v2: built on the slot ledger (20261007_schools_and_admin_log.sql). v1 read a
+// schools.is_active column that doesn't exist, so the list came back empty,
+// and its POST (create a school by hand) is gone: schools sign up themselves
+// at /school-signup.
 
-import { requireAdmin }              from '@/lib/adminAuth'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import { NextResponse }              from 'next/server'
+import { NextResponse }  from 'next/server'
+import { requireAdmin }  from '@/lib/adminAuth'
+import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { appDay }        from '@/lib/dates'
 
-function svc() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
+function schoolStatus(row) {
+  if (row.slots_used === 0) return 'no_usage'
+  if (row.slots_available <= 0) return 'fully_used'
+  return 'active'
 }
 
 export async function GET(request) {
-  const authError = await requireAdmin(request)
+  const authError = await requireAdmin()
   if (authError) return authError
-  const db = svc()
 
-  const { data: schools } = await db
-    .from('schools')
-    .select('id, name, city, state, created_at, is_active')
-    .order('created_at', { ascending: false })
+  const thisYear = Number(appDay().slice(0, 4))
+  const raw = new URL(request.url).searchParams.get('year')
+  const year = raw === 'all' ? null : (Number.parseInt(raw, 10) || thisYear)
 
-  // Get student counts per school
-  const schoolIds = (schools ?? []).map(s => s.id)
-  const { data: profiles } = await db
-    .from('profiles')
-    .select('school_id')
-    .in('school_id', schoolIds)
-    .eq('role', 'student')
-
-  const countMap = {}
-  for (const p of profiles ?? []) {
-    countMap[p.school_id] = (countMap[p.school_id] ?? 0) + 1
+  try {
+    const db = supabaseAdmin()
+    const { data, error } = await db.rpc('admin_schools', { p_year: year })
+    if (error) throw error
+    const schools = (data ?? []).map(r => ({ ...r, status: schoolStatus(r) }))
+    const sum = key => schools.reduce((total, r) => total + (r[key] ?? 0), 0)
+    const first = schools.reduce((min, r) => Math.min(min, Number(String(r.created_at).slice(0, 4)) || thisYear), thisYear)
+    return NextResponse.json({
+      schools,
+      totals: { schools: schools.length, slots_total: sum('slots_total'), slots_used: sum('slots_used'), slots_available: sum('slots_available') },
+      counts: {
+        all: schools.length,
+        active: schools.filter(r => r.status === 'active').length,
+        no_usage: schools.filter(r => r.status === 'no_usage').length,
+        fully_used: schools.filter(r => r.status === 'fully_used').length,
+      },
+      years: Array.from({ length: thisYear + 1 - first + 1 }, (_, i) => thisYear + 1 - i),
+      year: year ?? 'all',
+    }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (err) {
+    console.error('[admin/schools] GET:', err?.message ?? err)
+    return NextResponse.json({ error: 'Could not load schools' }, { status: 500 })
   }
-
-  // Get cohort counts
-  const { data: cohorts } = await db
-    .from('cohorts')
-    .select('school_id, is_active')
-    .in('school_id', schoolIds)
-
-  const cohortMap = {}
-  for (const c of cohorts ?? []) {
-    if (!cohortMap[c.school_id]) cohortMap[c.school_id] = { total: 0, active: 0 }
-    cohortMap[c.school_id].total++
-    if (c.is_active) cohortMap[c.school_id].active++
-  }
-
-  // Fetch school admin profiles — one per school (role='school_admin')
-  const { data: adminProfiles } = await db
-    .from('profiles')
-    .select('school_id, full_name, email')
-    .eq('role', 'school_admin')
-    .in('school_id', schoolIds)
-
-  const adminMap = {}
-  for (const a of adminProfiles ?? []) {
-    if (!adminMap[a.school_id]) adminMap[a.school_id] = a
-  }
-
-  const enriched = (schools ?? []).map(s => ({
-    ...s,
-    studentCount:  countMap[s.id]      ?? 0,
-    cohortCount:   cohortMap[s.id]?.total ?? 0,
-    activeCohort:  (cohortMap[s.id]?.active ?? 0) > 0,
-    admin_name:    adminMap[s.id]?.full_name ?? null,
-    admin_email:   adminMap[s.id]?.email     ?? null,
-  }))
-
-  return NextResponse.json({ schools: enriched })
-}
-
-export async function POST(request) {
-  const authError = await requireAdmin(request)
-  if (authError) return authError
-  const db = svc()
-
-  const body = await request.json()
-  const { name, city, state } = body
-  if (!name?.trim()) return NextResponse.json({ error: 'School name required' }, { status: 400 })
-
-  const { data, error } = await db
-    .from('schools')
-    .insert({ name: name.trim(), city: city?.trim() ?? null, state: state?.trim() ?? null, is_active: true })
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ school: data })
 }

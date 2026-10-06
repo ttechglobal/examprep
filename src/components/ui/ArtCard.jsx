@@ -15,7 +15,7 @@
 // Props: href (link) or onClick (button) · art { image, fallback } ·
 //        chip, chipIcon, chipBoxed (icon in a white tile) · title · desc · cta ·
 //        ctaStyle 'gold' | 'white' · ctaInk (text colour of a white button) ·
-//        tall (height when side by side, default 280).
+//        tall (height when side by side, default 280) · badge (corner chip).
 
 import Link from 'next/link'
 import LazyImage from '@/components/ui/LazyImage'
@@ -26,7 +26,7 @@ export function ArtCardRow({ children }) {
 }
 
 export default function ArtCard({
-  href, onClick, art, chip, chipIcon, chipBoxed = false,
+  href, onClick, art, chip, chipIcon, chipBoxed = false, badge = null,
   title, desc, cta, ctaStyle = 'gold', ctaInk, tall,
 }) {
   const style = {
@@ -43,6 +43,7 @@ export default function ArtCard({
           <span className={chipBoxed ? s.chipIcon : undefined} aria-hidden="true">{chipIcon}</span>
           {chip}
         </span>
+        {badge && <span className={s.badge}>{badge}</span>}
         <span className={s.title}>{title}</span>
         <span className={s.desc}>{desc}</span>
         <span className={`${s.cta} ${ctaStyle === 'white' ? s.ctaWhite : s.ctaGold}`}>

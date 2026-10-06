@@ -3,14 +3,15 @@
 // Route: /school-signup
 //
 // Flow:
-//   1. Credentials screen — name, email, password → signUp + signInWithPassword
-//   2. /api/school/setup (service role) → sets role='school_admin' on profiles
-//   3. Survey screen — 4 optional questions saved to school_survey
-//   4. Redirect to /school/dashboard
+//   1. Credentials screen — school, name, email, phone, password →
+//      /api/school/signup creates the account, the school (with 1 free slot)
+//      and the school-admin profile together; then signInWithPassword
+//   2. Survey screen — 4 optional questions saved to school_survey
+//   3. Redirect to /school/dashboard
 //
-// The service role call in step 2 is what correctly sets the role.
-// Supabase's handle_new_user trigger defaults every new user to role='student',
-// so we must override it with a service-role API call that bypasses RLS.
+// v2: the account is created on the server (it used to be a browser signUp
+// followed by /api/school/setup, which any signed-in student could call to
+// become a school admin). The phone is the school's WhatsApp contact.
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -106,6 +107,7 @@ function CredentialsScreen({ onSuccess }) {
   const [schoolName, setSchoolName] = useState('')
   const [fullName,   setFullName]   = useState('')
   const [email,      setEmail]      = useState('')
+  const [phone,      setPhone]      = useState('')
   const [password,   setPassword]   = useState('')
   const [showPass,   setShowPass]   = useState(false)
   const [loading,    setLoading]    = useState(false)
@@ -118,32 +120,18 @@ function CredentialsScreen({ onSuccess }) {
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     setLoading(true); setError(null)
 
-    const supabase = createClient()
-
-    // Step 1: create the auth user
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: fullName } },
-    })
-    if (signUpError) { setError(signUpError.message); setLoading(false); return }
-
-    // Step 2: sign in immediately to get a session
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-    if (signInError) { setError(signInError.message); setLoading(false); return }
-
-    // Step 3: call /api/school/setup with service role to set role='school_admin'
-    // This bypasses RLS — the only reliable way to override the trigger's default role='student'
-    const setupRes = await fetch('/api/school/setup', {
+    const res = await fetch('/api/school/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schoolName: schoolName.trim() }),
+      body: JSON.stringify({ schoolName: schoolName.trim(), fullName: fullName.trim(), email: email.trim(), phone, password }),
     })
-    if (!setupRes.ok) {
-      const { error: setupErr } = await setupRes.json().catch(() => ({}))
-      setError(setupErr || 'Account created but setup failed. Please contact support.')
-      setLoading(false)
-      return
-    }
+    const result = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(result.error || 'We couldn’t create your account. Please try again.'); setLoading(false); return }
+
+    // Signed in straight away: the account is created already confirmed.
+    const supabase = createClient()
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+    if (signInError) { setError(signInError.message); setLoading(false); return }
 
     setLoading(false)
     onSuccess({ userId: data?.user?.id, email, fullName })
@@ -175,6 +163,9 @@ function CredentialsScreen({ onSuccess }) {
         <Field label="Email address">
           <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@school.edu.ng" autoComplete="email"/>
         </Field>
+        <Field label={<>Phone number <span style={{ fontWeight:500, textTransform:'none' }}>(WhatsApp)</span></>}>
+          <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0801 234 5678" autoComplete="tel"/>
+        </Field>
         <Field label={<>Password <span style={{ fontWeight:500, textTransform:'none' }}>(min. 8 characters)</span></>}>
           <div style={{ position:'relative' }}>
             <input type={showPass?'text':'password'} value={password} onChange={e => setPassword(e.target.value)}
@@ -187,7 +178,7 @@ function CredentialsScreen({ onSuccess }) {
             </button>
           </div>
         </Field>
-        <Btn type="submit" loading={loading} disabled={!schoolName||!fullName||!email||!password}>
+        <Btn type="submit" loading={loading} disabled={!schoolName||!fullName||!email||!phone||!password}>
           {loading ? 'Setting up your account…' : 'Create account →'}
         </Btn>
       </form>

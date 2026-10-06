@@ -1,192 +1,163 @@
 'use client'
-// src/app/admin/schools/page.js
-// Lists all partner schools registered via the school registration portal.
-// Schools are never created manually here — they register themselves.
-// Click any row to view the full school profile.
+// src/app/admin/schools/page.js — v2
+// ─────────────────────────────────────────────────────────────────────────────
+// Schools: partner schools and their Premium slots.
+//   Academic year  slots bought / used that year (slots never expire, so the
+//                  totals and "available" are all time)
+//   Cards          partner schools · total slots · used (% usage) · available
+//   Filters        All, Active, No usage, Fully used; search by school,
+//                  contact, phone or email; sort
+//   Manage         the school panel (SchoolPanel): contact, slot allocation,
+//                  Add Slots after payment, students, slot history, activity
+// Data: /api/admin/schools (one row per school, counted in SQL).
+// v2: rebuilt on the slot ledger; v1's list was empty (it read a column that
+// doesn't exist) and slots were edited by overwriting a number.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import SchoolPanel from '@/components/admin/schools/SchoolPanel'
+import { formatPhoneForDisplay } from '@/lib/auth/phone'
+import s from '@/components/admin/list/adminList.module.css'
 
-const BLUE  = '#1264E5'
-const GREEN = '#10b981'
+const THIS_YEAR = new Date().getFullYear()
+const FILTERS = [['all', 'All'], ['active', 'Active'], ['no_usage', 'No usage'], ['fully_used', 'Fully used']]
+const SORTS = [['newest', 'Newest first'], ['name', 'Name A–Z'], ['used', 'Most slots used'], ['available', 'Most slots available']]
+const STATUS = { active: ['Active', 'green'], no_usage: ['No usage', 'grey'], fully_used: ['Fully used', 'orange'] }
 
-function formatDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
 export default function AdminSchoolsPage() {
-  const router              = useRouter()
-  const [schools,  setSchools]  = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
-  const [search,   setSearch]   = useState('')
+  const [year, setYear] = useState(String(THIS_YEAR))
+  const [filter, setFilter] = useState('all')
+  const [sort, setSort] = useState('newest')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(null)
+  const [reload, setReload] = useState(0)
+  const [state, setState] = useState({ loading: true, error: null, data: null })
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res  = await fetch('/api/admin/schools')
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Failed to load schools')
-      setSchools(data.schools ?? [])
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.resolve().then(() => setState(prev => ({ ...prev, loading: true, error: null })))
+    fetch(`/api/admin/schools?year=${year}`, { signal: controller.signal })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Could not load schools')
+        setState({ loading: false, error: null, data })
+      })
+      .catch(err => { if (err.name !== 'AbortError') setState(prev => ({ ...prev, loading: false, error: err.message })) })
+    return () => controller.abort()
+  }, [year, reload])
 
-  useEffect(() => { load() }, [load])
+  const refresh = useCallback(() => setReload(n => n + 1), [])
+  const closePanel = useCallback(() => setSelected(null), [])
+  const data = state.data
+  const yearLabel = year === 'all' ? 'all time' : year
 
-  const filtered = schools.filter(s => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      s.name?.toLowerCase().includes(q) ||
-      s.city?.toLowerCase().includes(q) ||
-      s.state?.toLowerCase().includes(q) ||
-      s.admin_name?.toLowerCase().includes(q) ||
-      s.admin_email?.toLowerCase().includes(q)
-    )
-  })
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const digits = q.replace(/\D/g, '').replace(/^(234|0)/, '')
+    return (data?.schools ?? [])
+      .filter(r => filter === 'all' || r.status === filter)
+      .filter(r => !q || [r.name, r.city, r.state, r.contact_name, r.contact_email].some(v => (v ?? '').toLowerCase().includes(q))
+        || (digits.length >= 4 && (r.contact_phone ?? '').includes(digits)))
+      .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name)
+        : sort === 'used' ? b.slots_used - a.slots_used
+        : sort === 'available' ? b.slots_available - a.slots_available
+        : Date.parse(b.created_at) - Date.parse(a.created_at))
+  }, [data, filter, search, sort])
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', border: `3px solid ${BLUE}`, borderTopColor: 'transparent', animation: 'spin .7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    </div>
-  )
+  const totals = data?.totals
+  const usage = totals?.slots_total ? Math.round(totals.slots_used / totals.slots_total * 100) : 0
+  const cards = [
+    { label: 'Partner Schools', value: totals?.schools, icon: '🏫', bg: '#eef2ff' },
+    { label: 'Total Slots', value: totals?.slots_total, icon: '🎟', bg: '#dcfce7' },
+    { label: 'Slots Used', value: totals?.slots_used, icon: '🎓', bg: '#ede9fe', note: `${usage}% usage` },
+    { label: 'Available Slots', value: totals?.slots_available, icon: '◔', bg: '#ffedd5', note: `${100 - usage}% remaining`, warm: true },
+  ]
 
-  if (error) return (
-    <div style={{ textAlign: 'center', padding: '60px 0' }}>
-      <p style={{ fontSize: 32, marginBottom: 10 }}>⚠️</p>
-      <p style={{ fontSize: 14, fontWeight: 700, color: '#374151', marginBottom: 16 }}>{error}</p>
-      <button onClick={load} style={{ padding: '9px 20px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Retry</button>
-    </div>
-  )
-
-  return (
-    <div style={{ maxWidth: 1000, fontFamily: 'inherit' }}>
-      <style>{`* { box-sizing: border-box }`}</style>
-
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-.03em', marginBottom: 4 }}>Schools</h1>
-        <p style={{ fontSize: 13, color: '#64748b' }}>
-          {schools.length} partner school{schools.length !== 1 ? 's' : ''} registered via the school portal
-        </p>
+  return <div className={s.page}>
+    <div className={s.head}>
+      <div>
+        <h1 className={s.title}>Schools</h1>
+        <p className={s.sub}>Manage partner schools and their Premium slots.</p>
       </div>
+      <label className={s.year}>
+        📅 Academic Year
+        <select value={year} onChange={e => setYear(e.target.value)} aria-label="Academic year">
+          {(data?.years ?? [THIS_YEAR + 1, THIS_YEAR]).map(y => <option key={y} value={String(y)}>{y}</option>)}
+          <option value="all">All years</option>
+        </select>
+      </label>
+    </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: 16 }}>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by school name, city, state, admin…"
-          style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: '#0f172a' }}
-        />
+    <div className={s.stats}>
+      {cards.map(card => <div key={card.label} className={s.stat} style={{ cursor: 'default' }}>
+        <span className={s.statIcon} style={{ background: card.bg }} aria-hidden="true">{card.icon}</span>
+        <span>
+          <span className={s.statLabel} style={card.warm ? { color: '#ea580c' } : undefined}>{card.label}</span>
+          <span className={s.statValue}>{card.value != null ? card.value.toLocaleString() : '—'}</span>
+          {card.note && data && <span className={s.statNote}>{card.note}</span>}
+        </span>
+      </div>)}
+    </div>
+
+    <div className={s.search}>
+      <span className={s.searchIcon} aria-hidden="true">🔍</span>
+      <input type="search" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search schools"
+        placeholder="Search by school name, contact, phone or email…"/>
+    </div>
+
+    <div className={s.toolbar}>
+      <div className={s.chips} role="group" aria-label="Filter schools" style={{ marginBottom: 0 }}>
+        {FILTERS.map(([id, label]) => <button key={id} type="button" className={`${s.chip} ${filter === id ? s.chipOn : ''}`}
+          aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}{data ? ` (${data.counts[id] ?? 0})` : ''}</button>)}
       </div>
+      <select className={s.select} value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort">
+        {SORTS.map(([id, label]) => <option key={id} value={id}>Sort: {label}</option>)}
+      </select>
+    </div>
 
-      {/* Table */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        {filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 24px' }}>
-            <p style={{ fontSize: 32, marginBottom: 10 }}>🏫</p>
-            <p style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              {search ? 'No schools match that search' : 'No schools registered yet'}
-            </p>
-            <p style={{ fontSize: 12, color: '#94a3b8' }}>
-              Schools appear here when they register via the school registration portal.
-            </p>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>School</th>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Admin</th>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Location</th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Students</th>
-                <th style={{ textAlign: 'center', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Status</th>
-                <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Registered</th>
+    <div className={s.tableWrap}>
+      {state.error ? <p className={s.problem}>{state.error}</p>
+        : !data ? <p className={s.loading}>Loading schools…</p>
+        : !rows.length ? <p className={s.empty}>No schools match this view.</p>
+        : <table className={s.table} style={{ opacity: state.loading ? .6 : 1 }}>
+          <thead><tr><th>School</th><th>Contact</th><th>Slots</th><th>Usage</th><th>Status</th><th aria-label="Actions"/></tr></thead>
+          <tbody>
+            {rows.map(r => {
+              const pct = r.slots_total ? Math.round(r.slots_used / r.slots_total * 100) : 0
+              const [statusLabel, tone] = STATUS[r.status]
+              return <tr key={r.id} className={`${s.row} ${selected === r.id ? s.rowOn : ''}`} onClick={() => setSelected(r.id)}>
+                <td><div className={s.who}>
+                  <span className={s.avatar} aria-hidden="true">{initials(r.name)}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span className={s.name}>{r.name}</span>
+                    <span className={s.handle}>{[r.city, r.state].filter(Boolean).join(', ') || r.contact_email || '—'}</span>
+                  </span>
+                </div></td>
+                <td>
+                  <span className={s.name} style={{ fontWeight: 700 }}>{r.contact_name ?? '—'}</span>
+                  <span className={s.handle}>{r.contact_phone ? formatPhoneForDisplay(r.contact_phone) : r.contact_email ?? ''}</span>
+                </td>
+                <td>
+                  <strong>{r.slots_total} slots</strong>
+                  <span className={s.expiryNote + ' ' + s.muted}>{r.bought_in_year > 0 ? `+${r.bought_in_year} in ${yearLabel}` : `none bought in ${yearLabel}`}</span>
+                </td>
+                <td>
+                  <span className={s.handle} style={{ color: 'inherit', fontWeight: 700 }}>{r.slots_used} / {r.slots_total}</span>
+                  <span className={s.usage}>
+                    <span className={s.usageTrack}><span className={`${s.usageFill} ${r.slots_available <= 0 ? s.usageFull : ''}`} style={{ width: `${pct}%` }}/></span>
+                    <span className={s.usagePct}>{pct}%</span>
+                  </span>
+                </td>
+                <td><span className={`${s.badge} ${s[`tone-${tone}`]}`}>{statusLabel}</span></td>
+                <td><button type="button" className={s.manage} onClick={e => { e.stopPropagation(); setSelected(r.id) }}>Manage →</button></td>
               </tr>
-            </thead>
-            <tbody>
-              {filtered.map((school, i) => (
-                <tr
-                  key={school.id}
-                  onClick={() => router.push(`/admin/schools/${school.id}`)}
-                  style={{
-                    borderBottom: i < filtered.length - 1 ? '1px solid #f8fafc' : 'none',
-                    cursor: 'pointer',
-                    transition: 'background .1s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  {/* School name */}
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
-                        🏫
-                      </div>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{school.name}</p>
-                        {school.slots_purchased != null && (
-                          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
-                            {school.slots_used ?? 0}/{school.slots_purchased} slots used
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Admin */}
-                  <td style={{ padding: '12px 16px' }}>
-                    {school.admin_name ? (
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{school.admin_name}</p>
-                        {school.admin_email && (
-                          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{school.admin_email}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p style={{ fontSize: 12, color: '#cbd5e1' }}>—</p>
-                    )}
-                  </td>
-
-                  {/* Location */}
-                  <td style={{ padding: '12px 16px' }}>
-                    <p style={{ fontSize: 12, color: '#64748b' }}>
-                      {[school.city, school.state].filter(Boolean).join(', ') || '—'}
-                    </p>
-                  </td>
-
-                  {/* Students */}
-                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>{(school.studentCount ?? 0).toLocaleString()}</span>
-                  </td>
-
-                  {/* Status */}
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    {school.activeCohort ? (
-                      <span style={{ display: 'inline-flex', padding: '2px 9px', borderRadius: 999, fontSize: 10, fontWeight: 800, background: '#f0fdf4', color: GREEN, border: '1px solid #bbf7d0' }}>Active</span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', padding: '2px 9px', borderRadius: 999, fontSize: 10, fontWeight: 800, background: '#f8fafc', color: '#94a3b8', border: '1px solid #e2e8f0' }}>No cohort</span>
-                    )}
-                  </td>
-
-                  {/* Registered */}
-                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    <p style={{ fontSize: 11, color: '#94a3b8' }}>{formatDate(school.created_at)}</p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            })}
+          </tbody>
+        </table>}
     </div>
-  )
+
+    {selected && <SchoolPanel id={selected} year={year} onClose={closePanel} onChanged={refresh}/>}
+  </div>
 }

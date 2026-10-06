@@ -3,7 +3,10 @@
 // Pure data + helpers for the profile page. No React, no DOM — safe to unit test.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { TRIAL_DAYS } from '@/lib/plans'
+
 // ── Brand colours used by the edit sheets (unchanged from profile v4) ────────
+
 export const NAVY   = '#062A78'
 export const BLUE   = '#1264E5'
 export const GOLD   = '#FFB800'
@@ -91,39 +94,39 @@ export function goalsOf(profile) {
 }
 
 // ── Plan status ──────────────────────────────────────────────────────────────
-// Everyone gets full access through September 2026. After that, a paid plan
-// is read from profiles.plan / plan_expires_at.
-export const TRIAL_START = new Date('2026-09-01T00:00:00')
-export const TRIAL_END   = new Date('2026-10-01T00:00:00')
+// What the Plan card says, from the student's live plan (usePlan().status,
+// lib/plans.js planStatus).
 const DAY_MS = 86_400_000
+const longDate = iso => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Africa/Lagos' })
 
-export function getPlanStatus(profile, now = new Date()) {
-  const expires = profile?.plan_expires_at ? new Date(profile.plan_expires_at) : null
-  const paid    = profile?.plan && profile.plan !== 'free' && (!expires || expires > now)
-
-  if (paid) {
-    return {
-      kind: 'paid',
-      title: 'EXL Premium',
-      detail: expires
-        ? `Active until ${expires.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}`
-        : 'Active',
-      pct: null,
+export function planCardModel(status, now = Date.now()) {
+  switch (status?.source) {
+    case 'paid':
+      return {
+        kind: 'paid', title: 'Premium', pct: null,
+        detail: !status.until ? 'Active' : status.daysLeft <= 7
+          ? `Ends ${longDate(status.until)} · ${status.daysLeft} day${status.daysLeft === 1 ? '' : 's'} left`
+          : `Active until ${longDate(status.until)}`,
+      }
+    case 'trial': {
+      const left = Math.max(0, Date.parse(status.until) - now)
+      return {
+        kind: 'trial', title: 'Premium (Trial)',
+        detail: `${status.daysLeft} day${status.daysLeft === 1 ? '' : 's'} left in your free trial`,
+        pct: Math.round(Math.min(1, Math.max(0, 1 - left / (TRIAL_DAYS * DAY_MS))) * 100),
+      }
     }
+    case 'free':
+      return {
+        kind: 'free', title: 'Free plan', pct: null,
+        detail: status.paidEnded ? `Your Premium ended on ${longDate(status.paidEnded)}`
+          : status.trialEnded ? 'Your free trial has ended' : 'Some features are on Premium',
+      }
+    case 'guest':
+      return { kind: 'guest', title: 'Guest', detail: `Create an account for ${TRIAL_DAYS} days of Premium`, pct: null }
+    default:
+      return { kind: 'unknown', title: 'Your plan', detail: 'Checking your plan…', pct: null }
   }
-
-  if (now < TRIAL_END) {
-    const daysLeft = Math.max(1, Math.ceil((TRIAL_END - now) / DAY_MS))
-    const elapsed  = (now - TRIAL_START) / (TRIAL_END - TRIAL_START)
-    return {
-      kind: 'trial',
-      title: 'EXL Premium (Trial)',
-      detail: `${daysLeft} day${daysLeft === 1 ? '' : 's'} left in your free trial`,
-      pct: Math.round(Math.min(1, Math.max(0, elapsed)) * 100),
-    }
-  }
-
-  return { kind: 'free', title: 'Free plan', detail: 'Your free trial has ended', pct: null }
 }
 
 // ── Formatting ───────────────────────────────────────────────────────────────

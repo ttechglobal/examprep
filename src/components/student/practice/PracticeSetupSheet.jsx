@@ -39,6 +39,8 @@ import SubjectIcon from '@/components/ui/SubjectIcon'
 import { getSubjectAccent } from '@/lib/subjectAccents'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useExamSubjects } from '@/hooks/useExamSubjects'
+import { usePlan } from '@/contexts/PlanContext'
+import PlanBadge from '@/components/plan/PlanBadge'
 import { SETUP_MASCOT } from './art'
 import s from './setupSheet.module.css'
 
@@ -57,6 +59,10 @@ const MODES = [
   { key: 'mock',   name: 'Mock Exam',       desc: 'Full exam simulation. WAEC or JAMB.',                                    icon: <ChecklistIcon /> },
   { key: 'battle', name: 'Battle Mode',     desc: 'Play against the computer or challenge your friends.',                   icon: <SwordsIcon /> },
 ]
+
+// The plan feature each mode uses (lib/plans.js). Study is Custom Practice
+// with instant explanations, so it shares Custom's free session.
+const MODE_FEATURE = { custom: 'custom', timed: 'custom', mock: 'mock', battle: 'battle' }
 
 const TITLES = {
   modes: 'Practice Mode', topic: 'Topic Practice', 'topic-pick': 'Topic Practice',
@@ -82,6 +88,7 @@ function defaultSubject(subjects) {
 
 export default function PracticeSetupSheet({ profile, initialScreen = 'modes', initialSessionType = 'practice', onStart, onMock, onBattle, onClose }) {
   const { dark } = useTheme()
+  const plan = usePlan()
   const [stack, setStack] = useState([initialScreen])
   const screen = stack[stack.length - 1]
   const mode   = screen.split('-')[0]                    // 'topic-pick' → 'topic'
@@ -121,6 +128,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
   function pickMode(key) {
     if (key === 'mock')   return onMock()
     if (key === 'battle') return onBattle()
+    if (MODE_FEATURE[key] && !plan.gate(MODE_FEATURE[key])) return
     go(key)
   }
 
@@ -131,6 +139,10 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
     return { subjects: [subject.name], subject_id: subject.id, examType: exam }
   }
   function start() {
+    // Checked again here: the day's free session may have gone since the mode
+    // was picked (another tab, another device).
+    if (screen === 'topic-pick' && !plan.gateTopic(topic)) return
+    if ((screen === 'custom-prefs' || screen === 'timed') && !plan.gate('custom')) return
     if (screen === 'topic-pick') return onStart({ ...base(), count: 20, mode: 'practice', sessionType: 'practice', topic_id: topic.id, topicName: topic.name })
     if (screen === 'quick5')     return onStart({ ...base(), count: 5, mode: 'quick5', sessionType: 'practice', answerMode: 'instant' })
     if (screen === 'timed')      return onStart({ ...base(), count: speedCount, mode: 'timed', sessionType: 'practice', speedSecs })
@@ -257,7 +269,7 @@ function ModePicker({ onPick }) {
           <button key={m.key} type="button" className={s.modeRow} style={{ '--tone': TONE[m.key] }} onClick={() => onPick(m.key)}>
             <span className={s.modeIcon} aria-hidden="true">{m.icon}</span>
             <span style={{ minWidth: 0 }}>
-              <span className={s.modeName}>{m.name}</span>
+              <span className={s.modeName}>{m.name}{MODE_FEATURE[m.key] && <PlanBadge feature={MODE_FEATURE[m.key]} className={s.modeBadge} />}</span>
               <span className={s.modeDesc}>{m.desc}</span>
             </span>
             <svg className={s.modeArrow} width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7.5 4l6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -307,6 +319,7 @@ function SubjectPicker({ exam, onExam, subjects, hasAny, loading, selected, onSe
 
 // ── Topics for one subject ───────────────────────────────────────────────────
 function TopicPicker({ exam, subject, selected, onSelect, onChangeSubject, dark }) {
+  const plan = usePlan()
   const [state, setState] = useState({ topics: [], loading: true, failed: false })
   const accent = getSubjectAccent(subject.name, dark)
 
@@ -342,12 +355,13 @@ function TopicPicker({ exam, subject, selected, onSelect, onChangeSubject, dark 
         <div className={s.topics}>
           {state.topics.map((t, i) => (
             <button key={t.id} type="button" className={cx(s.topic, selected?.id === t.id && s.topicOn)}
-              onClick={() => onSelect(t)} aria-pressed={selected?.id === t.id}>
+              onClick={() => { if (plan.gateTopic(t)) onSelect(t) }} aria-pressed={selected?.id === t.id}>
               <span className={s.topicNum}>{t.order_index ?? i + 1}</span>
               <span className={s.topicName}>
                 {t.name}
                 {t.question_count > 0 && <span className={s.topicCount}>{t.question_count} questions</span>}
               </span>
+              {t.free === false && <PlanBadge locked className={s.topicBadge} />}
             </button>
           ))}
         </div>
