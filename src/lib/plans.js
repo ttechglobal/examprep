@@ -4,8 +4,8 @@
 // server (API routes enforce them) and the app (screens show locks and limits
 // before a student hits them). Change a rule here and both follow.
 //
-//   Premium   everything. From a paid plan, a school slot or the 7-day trial
-//             every new account starts with.
+//   Premium   everything. From a paid plan, a school slot or the free trial
+//             (TRIAL_DAYS) every new account starts with.
 //   Free      Quick 5: open.
 //             Topic Practice: the first 5 topics of each subject.
 //             Custom Practice: 1 session a day, shared with Study Practice
@@ -21,7 +21,9 @@
 // Guests (no account) are on Free; signing up starts their trial.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const TRIAL_DAYS = 7
+// The free trial every new account starts with. The database default for
+// profiles.trial_ends_at must match (20261011_trial_and_admin_speed.sql).
+export const TRIAL_DAYS = 14
 
 export const FREE_TOPICS_PER_SUBJECT = 5
 

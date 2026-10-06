@@ -2,7 +2,7 @@
 // src/components/plan/PlanModals.jsx
 // The plan's pop-ups, opened by PlanProvider (contexts/PlanContext.jsx):
 //   UpgradeSheet   a locked feature or a used-up daily limit; shows the plans
-//   TrialWelcome   once, when a new account's 7-day Premium trial is running
+//   TrialWelcome   once, when a new account's free Premium trial is running
 //   PlanNotice     once each: the trial has ended · a paid plan ends within
 //                  7 days · a paid plan has ended
 // Paying is manual for now: "Get Premium" opens a WhatsApp chat with the plan

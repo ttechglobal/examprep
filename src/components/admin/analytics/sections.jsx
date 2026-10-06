@@ -203,7 +203,7 @@ export function Conversion({ c, days }) {
   const rate = pct(c.trials_converted, c.trials_ended)
   return <Card title="Premium Conversion" hint={`last ${days} days`}>
     <ul className={s.list}>
-      <li><span>7-day trials started</span><strong>{fmt(c.trials_started)}</strong></li>
+      <li><span>Trials started</span><strong>{fmt(c.trials_started)}</strong></li>
       <li><span>Trials active now</span><strong>{fmt(c.trials_active)}</strong></li>
       <li><span>Trials ended</span><strong>{fmt(c.trials_ended)}</strong></li>
       <li><span>…of those, bought a plan</span><strong>{fmt(c.trials_converted)}</strong></li>

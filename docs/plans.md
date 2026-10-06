@@ -12,7 +12,7 @@
 | Battle vs friends | Locked (creating a battle; anyone can still join an invite) | Open |
 | Flashcards, explanations, Learn, daily challenge, leaderboards, progress | Open | Open |
 
-- Every new account gets **7 days of Premium** (the trial), whichever way its profile is created.
+- Every new account gets **14 days of Premium** (the trial; `TRIAL_DAYS` in `src/lib/plans.js` and the default of `profiles.trial_ends_at`, set by `20261011_trial_and_admin_speed.sql`), whichever way its profile is created.
 - Accounts that exist when `20261005_plans.sql` runs get 7 days from that moment.
 - Guests (no account) are on Free. Their daily limits are counted on the device, and signing up starts their trial.
 - Days are Nigerian calendar days, the same as streaks.

@@ -17,7 +17,7 @@
 //                       shows why and refreshes
 //   showUpgrade(feature?)
 //
-// It also shows, once each, the "You've got Premium" welcome while the 7-day
+// It also shows, once each, the "You've got Premium" welcome while the free
 // trial runs (after profile setup, so it never stacks on that prompt), and
 // notes when the trial ends, when a paid plan is within 7 days of its end and
 // when it has ended (each paid plan's end is noted once). None interrupts a

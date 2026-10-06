@@ -1,15 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { planStatus, featureAccess, practiceFeature, isFreeTopic, priceLabel, FEATURES } from '../src/lib/plans.js'
+import { planStatus, featureAccess, practiceFeature, isFreeTopic, priceLabel, FEATURES, TRIAL_DAYS } from '../src/lib/plans.js'
 
 const NOW = Date.parse('2026-10-05T12:00:00Z')
 const days = n => new Date(NOW + n * 86_400_000).toISOString()
 
-test('a new account is on the 7-day trial', () => {
-  const status = planStatus({ plan: 'free', trial_ends_at: days(7) }, NOW)
+test('a new account is on the 14-day trial', () => {
+  assert.equal(TRIAL_DAYS, 14)
+  const status = planStatus({ plan: 'free', trial_ends_at: days(TRIAL_DAYS) }, NOW)
   assert.equal(status.premium, true)
   assert.equal(status.source, 'trial')
-  assert.equal(status.daysLeft, 7)
+  assert.equal(status.daysLeft, TRIAL_DAYS)
 })
 
 test('after the trial the account is Free and says the trial ended', () => {

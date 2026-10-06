@@ -4,12 +4,13 @@
 // Server component; only the nav (theme toggle) and install buttons run in
 // the browser. Layout is CSS media queries, so phones never flash the
 // desktop layout. Schools have their own page at /schools.
-// Pricing: no amounts on this page. Every new account gets a 7-day Pro trial.
+// Pricing: no amounts on this page. Every new account gets a free Pro trial (TRIAL_DAYS).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Link from 'next/link'
 import SiteNav from '@/components/landing/SiteNav'
 import SiteFooter from '@/components/landing/SiteFooter'
+import { TRIAL_DAYS } from '@/lib/plans'
 import InstallButton from '@/components/landing/InstallButton'
 import FaqList from '@/components/landing/FaqList'
 import { Phone, BattleScreen, ExplanationScreen, ProgressScreen, LeaderboardCard } from '@/components/landing/Mockups'
@@ -17,10 +18,10 @@ import s from '@/components/landing/landing.module.css'
 
 export const metadata = {
   title: 'ExamPrep A1: Practice that feels like a game | WAEC & JAMB',
-  description: 'Battle the computer on real WAEC and JAMB past questions, climb your class leaderboard and understand every answer. Start with a 7-day free trial.',
+  description: 'Battle the computer on real WAEC and JAMB past questions, climb your class leaderboard and understand every answer. Start with a ' + TRIAL_DAYS + '-day free trial.',
   openGraph: {
     title: 'ExamPrep A1: Practice that feels like a game',
-    description: 'Real WAEC and JAMB past questions, battles, streaks and step-by-step explanations. 7-day free trial.',
+    description: 'Real WAEC and JAMB past questions, battles, streaks and step-by-step explanations. ' + TRIAL_DAYS + '-day free trial.',
     images: ['/images/examprep_logo.png'],
     type: 'website',
   },
@@ -45,7 +46,7 @@ const LEVELS = [
 
 const FAQS = [
   { q: 'Is ExamPrep A1 free?',
-    a: 'You can start for free. Every new account gets 7 days of ExamPrep A1 Pro, so you can try every mode, including battles, before you decide.' },
+    a: `You can start for free. Every new account gets ${TRIAL_DAYS} days of ExamPrep A1 Pro, so you can try every mode, including battles, before you decide.` },
   { q: 'What is battle mode?',
     a: 'You play against the computer on real past questions. You both answer the same question against a timer, and correct answers score points. Win enough battles and the computer moves up to Medium, then Hard.' },
   { q: 'Which exams and subjects are covered?',
@@ -54,7 +55,7 @@ const FAQS = [
     a: 'Yes. ExamPrep A1 is built for phones and installs straight from your browser, with no app store needed. On iPhone, use Safari’s Share button, then Add to Home Screen.' },
   { q: 'How do I join my class?',
     a: 'If your school uses ExamPrep A1, your teacher will give you a class code. Enter it in the app to join your class and its leaderboard.' },
-  { q: 'What happens when my 7 days end?',
+  { q: `What happens when my ${TRIAL_DAYS} days end?`,
     a: 'You choose whether to continue with ExamPrep A1 Pro. Your progress, streak and XP stay on your account.' },
 ]
 
@@ -71,7 +72,7 @@ export default function LandingPage() {
               <h1 className={s.heroTitle}>Practice that feels like <span className={s.accent}>a game.</span></h1>
               <p className={s.heroSub}>
                 Battle the computer on real WAEC and JAMB past questions, climb your class leaderboard,
-                and understand every answer. Your first 7 days of Pro are free.
+                and understand every answer. Your first {TRIAL_DAYS} days of Pro are free.
               </p>
               <div className={s.heroActions}>
                 <InstallButton size="lg" />
@@ -79,7 +80,7 @@ export default function LandingPage() {
               </div>
               <p className={s.heroNote}>Already have an account? <Link href="/onboarding?mode=signin">Sign in</Link></p>
               <ul className={s.chips}>
-                <li><span className={s.dot} />7-day free trial</li>
+                <li><span className={s.dot} />{TRIAL_DAYS}-day free trial</li>
                 <li><span className={s.dot} />Real WAEC &amp; JAMB past questions</li>
                 <li><span className={s.dot} />No app store needed</li>
               </ul>
@@ -227,7 +228,7 @@ export default function LandingPage() {
         <section className={s.final}>
           <div className={s.wrap}>
             <h2 className={s.finalTitle}>Make practice the fun part of your day.</h2>
-            <p className={s.finalText}>Start your 7-day free trial and play your first battle today.</p>
+            <p className={s.finalText}>Start your {TRIAL_DAYS}-day free trial and play your first battle today.</p>
             <div className={s.finalActions}>
               <InstallButton size="lg" />
               <Link href={START} className={`${s.btn} ${s.btnGhost} ${s.btnLg}`}>Start practising free</Link>

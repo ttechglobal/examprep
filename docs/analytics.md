@@ -32,7 +32,7 @@ The filters sit in one row and apply to every tab:
   - A start is the session's first questions being served.
   - A completion is the same session being saved.
   - Retries and reloads count once.
-- **Trial → Premium:** of students whose 7-day trial ended in the period, the share who have bought a plan.
+- **Trial → Premium:** of students whose free trial ended in the period, the share who have bought a plan.
 - **Upgrade triggers:** what made the upgrade sheet appear, for example Mock Exam locked, Battle daily limit or Topic locked. Each counts once per student per trigger per day. "Bought" means an admin activated a plan within 30 days of the student first seeing that trigger.
 - **Retention:** of students who joined in a 7-day week, the share active in each of the following 4 weeks. "…" means that week isn't over yet.
 

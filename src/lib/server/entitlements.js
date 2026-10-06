@@ -5,7 +5,7 @@
 // real (another device, an old app version, a hand-made request).
 // Needs 20261005_plans.sql (run before deploying).
 
-import { planStatus, practiceFeature, FEATURES, DAILY_FEATURES } from '@/lib/plans'
+import { planStatus, practiceFeature, FEATURES, DAILY_FEATURES, TRIAL_DAYS } from '@/lib/plans'
 import { appDay } from '@/lib/dates'
 import { listSubjectTopics } from '@/lib/server/subjectTopics'
 
@@ -34,7 +34,7 @@ function denial(feature, reason, { guest, limit } = {}) {
   const error = reason === 'limit'
     ? `You've used today's free ${name === 'Battle' ? `battles (${limit})` : `${name} session`}. Go Premium for unlimited, or come back tomorrow.`
     : guest
-      ? `${name} is part of Premium. Create a free account to get 7 days of Premium.`
+      ? `${name} is part of Premium. Create a free account to get ${TRIAL_DAYS} days of Premium.`
       : `${name} is part of Premium.`
   return { ok: false, status: 403, body: { error, code: reason === 'limit' ? 'daily_limit' : 'premium_required', feature, limit: limit ?? null } }
 }

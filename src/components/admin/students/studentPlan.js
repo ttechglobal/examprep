@@ -3,7 +3,7 @@
 // left, the subscription history timeline and WhatsApp messages. Pure helpers;
 // the states come from admin_student_rows (20261006_subscriptions.sql).
 
-import { PLANS, priceLabel } from '@/lib/plans'
+import { PLANS, TRIAL_DAYS, priceLabel } from '@/lib/plans'
 import { toNationalNumber, formatPhoneForDisplay } from '@/lib/auth/phone'
 
 const DAY_MS = 86_400_000
@@ -110,7 +110,7 @@ export function historyEvents(student, subscriptions, now = Date.now()) {
     }
   }
   if (student?.joined) {
-    events.push({ key: 'joined', at: student.joined, kind: 'joined', title: 'Joined ExamPrep', detail: '7-day Premium trial started' })
+    events.push({ key: 'joined', at: student.joined, kind: 'joined', title: 'Joined ExamPrep', detail: `${TRIAL_DAYS}-day Premium trial started` })
   }
   return events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 }
