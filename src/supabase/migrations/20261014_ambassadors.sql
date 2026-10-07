@@ -51,10 +51,22 @@ begin
     raise exception 'log_activity is missing. Run 20261007_schools_and_admin_log.sql first.';
   end if;
 
-  -- A CHECK on profiles.role that doesn't allow 'ambassador' would reject sign-ups.
+  -- profiles.role is limited by a CHECK, which would reject ambassador sign-ups.
+  -- The known one (profiles_role_check: superadmin, admin, reviewer, school_admin,
+  -- student) is widened to also allow 'ambassador'. Any other role constraint is
+  -- not touched: the migration stops and says what to change.
   for r in select conname, pg_get_constraintdef(oid) as def from pg_constraint
             where conrelid = 'public.profiles'::regclass and contype = 'c' and pg_get_constraintdef(oid) ilike '%role%' loop
-    if r.def not ilike '%ambassador%' then
+    if r.def ilike '%ambassador%' then
+      null;   -- already allows it
+    elsif r.conname = 'profiles_role_check'
+          and (select count(*) from regexp_matches(r.def, '''[a-z_]+''::text', 'g')) = 5
+          and r.def ilike '%superadmin%' and r.def ilike '%admin%' and r.def ilike '%reviewer%'
+          and r.def ilike '%school_admin%' and r.def ilike '%student%' then
+      alter table public.profiles drop constraint profiles_role_check;
+      alter table public.profiles add constraint profiles_role_check
+        check (role = any (array['superadmin', 'admin', 'reviewer', 'school_admin', 'student', 'ambassador']));
+    else
       raise exception 'profiles constraint % limits role: %. Add ''ambassador'' to it, then run this again.', r.conname, r.def;
     end if;
   end loop;
