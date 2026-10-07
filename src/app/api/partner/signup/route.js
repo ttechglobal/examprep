@@ -1,9 +1,12 @@
 // src/app/api/partner/signup/route.js
 // POST /api/partner/signup — the only way an ambassador account is created.
 //
-// Body: { key, fullName, email, phone, school?, password }
-//   key: the private invite key from the sign-up link (AMBASSADOR_INVITE_KEY)
+// Body: { fullName, email, phone, school?, password }
 //   phone: the teacher's number, for WhatsApp and payouts
+//
+// Open to anyone who finds the page, on purpose: an ambassador only earns when
+// students they refer actually pay, so a stranger signing up costs nothing.
+// Admins can pause any ambassador (admin_update_ambassador).
 //
 // Creates a confirmed auth user, then the ambassador and its profile in one
 // transaction (create_ambassador_account, 20261014_ambassadors.sql). If that
@@ -12,7 +15,6 @@
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
-import { inviteKeyOk } from '@/lib/server/partner'
 import { normalizePhone, phoneProblem } from '@/lib/auth/phone'
 
 const MIN_PASSWORD = 8
@@ -24,10 +26,6 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().replace(/
 export async function POST(request) {
   let body = {}
   try { body = await request.json() } catch {}
-
-  if (!inviteKeyOk(body.key)) {
-    return fail(403, 'This sign-up link is not valid. Ask ExamPrep A1 for a new one.')
-  }
 
   const fullName = text(body.fullName, 80)
   const email    = text(body.email, 200).toLowerCase()
