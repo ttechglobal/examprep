@@ -19,9 +19,11 @@ export async function GET(request) {
   else if (/^\d{4}$/.test(param ?? '')) year = Number(param)
 
   const { data, error: rpcError } = await db.rpc('ambassador_dashboard', { p_user: user.id, p_year: year })
-  if (rpcError || !data) {
-    console.error('[partner/dashboard]', rpcError?.message ?? 'no data')
+  if (rpcError) {
+    console.error('[partner/dashboard]', rpcError.message)
     return NextResponse.json({ error: 'Could not load your dashboard' }, { status: 500 })
   }
+  // null: signed in, but not an ambassador.
+  if (!data) return NextResponse.json({ error: 'This is not an ambassador account' }, { status: 403 })
   return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 }

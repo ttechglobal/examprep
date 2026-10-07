@@ -13,6 +13,10 @@ import { signUp, signIn } from '@/lib/auth/client'
 import { cleanCode, getReferral, REFERRAL_CODE_RE } from '@/lib/referral'
 import s from './onboarding.module.css'
 
+// Answers from /api/referral/check, kept for this visit: retyping or revisiting a code
+// never asks again.
+const refCache = new Map()   // code → { code, valid, firstName }
+
 // refParam: a code from the page URL (?ref=). Otherwise the one /r/CODE saved
 // on this device. Either way the student can edit or clear it.
 export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, onGuest }) {
@@ -34,23 +38,28 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
   const [refOpen, setRefOpen] = useState(() => !!(cleanCode(refParam) || getReferral()))
   const [refInfo, setRefInfo] = useState(null)   // { code, valid, firstName } for the code last checked
 
-  // Check the code as it's typed, so a typo shows before they submit.
+  // Check the code once they stop typing, so a typo shows before they submit.
+  // One request per code at most: cached answers are reused, and a half-typed code
+  // is never sent (the timer is cancelled by the next keystroke).
   useEffect(() => {
     const code = cleanCode(refCode)
-    if (!REFERRAL_CODE_RE.test(code)) return
+    if (!REFERRAL_CODE_RE.test(code) || refCache.has(code)) return
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/referral/check?code=${encodeURIComponent(code)}`)
+        if (!res.ok) return                       // rate-limited or down: leave it unverified
         const data = await res.json()
-        if (!cancelled) setRefInfo({ code, valid: !!data.valid, firstName: data.firstName })
-      } catch { if (!cancelled) setRefInfo(null) }
-    }, 350)
+        const result = { code, valid: !!data.valid, firstName: data.firstName }
+        refCache.set(code, result)
+        if (!cancelled) setRefInfo(result)
+      } catch { /* offline: leave it unverified */ }
+    }, 600)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [refCode])
 
   const cleanedRef = cleanCode(refCode)
-  const refChecked = refInfo && refInfo.code === cleanedRef ? refInfo : null
+  const refChecked = refCache.get(cleanedRef) ?? (refInfo && refInfo.code === cleanedRef ? refInfo : null)
   const refGood = !!refChecked?.valid
   const refBad  = !!refChecked && !refChecked.valid
 

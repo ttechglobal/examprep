@@ -6,7 +6,7 @@
 // and paid. Numbers are per year (exams are written yearly); the balance is
 // all-time. Students appear as first name + last initial only.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from '@/lib/auth/client'
 import { priceLabel } from '@/lib/plans'
@@ -46,8 +46,13 @@ function CopyButton({ text, label }) {
   return <button type="button" className={`${s.smallBtn} ${done ? s.smallBtnDone : ''}`} onClick={copy}>{done ? 'Copied ✓' : label}</button>
 }
 
+// Switching between years you've already opened is instant and free: each year's answer
+// is kept for 30 seconds. Making a code clears it, so the new code shows at once.
+const YEAR_CACHE_MS = 30_000
+
 export default function PartnerDashboardPage() {
   const router = useRouter()
+  const yearCache = useRef(new Map())   // year ('' = this year) → { at, data }
   const [data, setData]       = useState(null)
   const [error, setError]     = useState(null)
   const [busy, setBusy]       = useState(false)
@@ -60,7 +65,14 @@ export default function PartnerDashboardPage() {
     setData(result.data)
     setError(null)
   }, [router])
-  const load = useCallback(year => fetchDashboard(year).then(show), [show])
+  const load = useCallback(year => {
+    const hit = yearCache.current.get(year ?? '')
+    if (hit && Date.now() - hit.at < YEAR_CACHE_MS) { show({ data: hit.data }); return Promise.resolve() }
+    return fetchDashboard(year).then(result => {
+      if (result.data) yearCache.current.set(year ?? '', { at: Date.now(), data: result.data })
+      show(result)
+    })
+  }, [show])
 
   useEffect(() => {
     let ignore = false
@@ -92,6 +104,7 @@ export default function PartnerDashboardPage() {
       const res = await fetch('/api/partner/code', { method: 'POST' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
+      yearCache.current.clear()
       await load(data?.year === null ? 'all' : data?.year)
     } catch (e) { setError(e.message || 'Could not make your code.') }
     setBusy(false)

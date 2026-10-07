@@ -13,18 +13,29 @@ import { cache } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { memo } from '@/lib/server/memo'
 import { cleanCode, REFERRAL_CODE_RE } from '@/lib/referral'
 import { TRIAL_DAYS } from '@/lib/plans'
 import Zara from '@/components/onboarding/Zara'
 import RememberReferral from './RememberReferral'
 import s from '@/components/onboarding/onboarding.module.css'
 
+// One lookup per request (React cache: the page and its metadata share it) and one
+// per minute per code (memo: chat apps fetch the link for a preview as well as
+// every student who opens it). A failed lookup isn't remembered.
 const lookup = cache(async rawCode => {
   const code = cleanCode(rawCode)
   if (!REFERRAL_CODE_RE.test(code)) return null
-  const { data, error } = await supabaseAdmin().rpc('referral_code_info', { p_code: code })
-  if (error) { console.error('[r/code]', error.message); return null }
-  return data?.[0] ? { code, firstName: data[0].first_name } : null
+  try {
+    return await memo(`referral-code:${code}`, 60_000, async () => {
+      const { data, error } = await supabaseAdmin().rpc('referral_code_info', { p_code: code })
+      if (error) throw error
+      return data?.[0] ? { valid: true, firstName: data[0].first_name } : { valid: false }
+    }).then(r => (r.valid ? { code, firstName: r.firstName } : null))
+  } catch (error) {
+    console.error('[r/code]', error?.message ?? error)
+    return null
+  }
 })
 
 export async function generateMetadata({ params }) {

@@ -840,6 +840,52 @@ function DetailRow({ label, value }) {
   )
 }
 
+// ── Referral code ─────────────────────────────────────────────────────────────
+// For a student who signed up without their teacher's code: allowed in the first
+// 7 days and before any paid plan (the server decides, see /api/referral/apply).
+// Shown only when the account is that new, using the created_at the profile already
+// has, and it makes no request until the student presses the button.
+const REFERRAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const REFERRAL_MESSAGE = {
+  applied:  ['ok',   'Done! Your teacher’s code has been added.'],
+  already:  ['info', 'You’ve already added a referral code.'],
+  too_late: ['warn', 'Codes can only be added in your first 7 days, before you subscribe.'],
+  self:     ['warn', 'That code can’t be used on your own account.'],
+  invalid:  ['warn', 'We don’t recognise that code. Check it with your teacher.'],
+}
+
+function ReferralCodeBox({ createdAt }) {
+  const [now]                = useState(() => Date.now())   // fixed at open: the window is days long
+  const [code, setCode]     = useState('')
+  const [busy, setBusy]     = useState(false)
+  const [result, setResult] = useState(null)   // [tone, message]
+
+  async function submit() {
+    if (busy || code.trim().length < 6) return
+    setBusy(true); setResult(null)
+    try {
+      const res  = await fetch('/api/referral/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
+      const data = await res.json()
+      setResult(REFERRAL_MESSAGE[data.status] ?? ['warn', data.error ?? 'Something went wrong. Please try again.'])
+    } catch { setResult(['warn', 'You’re offline. Connect to the internet and try again.']) }
+    setBusy(false)
+  }
+
+  const done = result?.[1] === REFERRAL_MESSAGE.applied[1] || result?.[1] === REFERRAL_MESSAGE.already[1]
+  if (!createdAt || now - Date.parse(createdAt) >= REFERRAL_WINDOW_MS) return null
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', margin: '0 0 10px' }}>Referral code</p>
+      {result && <Note tone={result[0]}>{result[1]}</Note>}
+      {!done && <>
+        <Field label="Your teacher’s code" value={code} onChange={v => setCode(v.toUpperCase())} placeholder="e.g. K7MQ4XZ2"
+          hint="Did a teacher tell you about ExamPrep? Enter their code within your first 7 days." />
+        <SaveButton onClick={submit} saving={busy} label="Add code" />
+      </>}
+    </div>
+  )
+}
+
 export function AccountSheet({ profile, isGuest, onClose, onLinked, onEditInfo, onLogout }) {
   const signIn = profile?.signup_method === 'phone'
     ? formatPhoneForDisplay(profile?.phone_number)
@@ -862,6 +908,8 @@ export function AccountSheet({ profile, isGuest, onClose, onLinked, onEditInfo, 
         {profile?.class_level && <div style={{ borderTop: '1px solid var(--border)' }}><DetailRow label="Class" value={profile.class_level} /></div>}
         {profile?.student_school_name && <div style={{ borderTop: '1px solid var(--border)' }}><DetailRow label="Your school" value={profile.student_school_name} /></div>}
       </div>
+
+      <ReferralCodeBox createdAt={profile?.created_at} />
 
       <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-prim)', margin: '0 0 10px' }}>School connection</p>
       {profile?.school_id ? (

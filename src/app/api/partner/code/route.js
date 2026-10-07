@@ -12,11 +12,11 @@ export async function POST() {
 
   const { data, error: rpcError } = await db.rpc('ambassador_generate_code', { p_user: user.id })
   if (rpcError) {
-    const paused = /paused/.test(rpcError.message ?? '')
-    if (!paused) console.error('[partner/code]', rpcError.message)
-    return NextResponse.json(
-      { error: paused ? 'Your account is paused. Contact ExamPrep A1.' : 'Could not make your code. Please try again.' },
-      { status: paused ? 403 : 500 })
+    const message = rpcError.message ?? ''
+    if (/ambassador not found/.test(message)) return NextResponse.json({ error: 'This is not an ambassador account' }, { status: 403 })
+    if (/paused/.test(message)) return NextResponse.json({ error: 'Your account is paused. Contact ExamPrep A1.' }, { status: 403 })
+    console.error('[partner/code]', message)
+    return NextResponse.json({ error: 'Could not make your code. Please try again.' }, { status: 500 })
   }
   return NextResponse.json({ code: data })
 }

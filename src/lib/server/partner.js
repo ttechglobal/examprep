@@ -2,8 +2,11 @@
 // Shared by the /api/partner/* routes (the Teacher Ambassador portal).
 // Server-only: uses the service-role client.
 //
-//   requirePartner()   who is signed in, and are they an ambassador?
-//                      → { user, db } or { error: NextResponse }
+//   requirePartner()   who is signed in? → { user, db } or { error: NextResponse }
+//                      One auth check and nothing else. Whether they are an ambassador
+//                      is enforced by the SQL functions each route calls
+//                      (ambassador_dashboard returns null, ambassador_generate_code
+//                      raises 'ambassador not found'), which saves a query per request.
 //   lagosYear()        this year in Nigerian time (the dashboard's default view)
 
 import { NextResponse } from 'next/server'
@@ -16,12 +19,7 @@ export async function requirePartner() {
   if (!user || user.is_anonymous) {
     return { error: NextResponse.json({ error: 'Sign in first' }, { status: 401 }) }
   }
-  const db = supabaseAdmin()
-  const { data: ambassador } = await db.from('ambassadors').select('id').eq('id', user.id).maybeSingle()
-  if (!ambassador) {
-    return { error: NextResponse.json({ error: 'This is not an ambassador account' }, { status: 403 }) }
-  }
-  return { user, db }
+  return { user, db: supabaseAdmin() }
 }
 
 export function lagosYear() {

@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { rateLimited } from '@/lib/server/rateLimit'
 import { normalizePhone, phoneProblem } from '@/lib/auth/phone'
 
 const MIN_PASSWORD = 8
@@ -24,6 +25,10 @@ const fail = (status, error, field) => NextResponse.json({ ok: false, error, fie
 const text = (value, max) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '')
 
 export async function POST(request) {
+  // Creating accounts is the expensive thing a stranger can ask for: 10 an hour per visitor.
+  const limited = rateLimited(request, 'partner-signup', 10, 60 * 60_000)
+  if (limited) return limited
+
   let body = {}
   try { body = await request.json() } catch {}
 
