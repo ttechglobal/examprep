@@ -23,7 +23,7 @@ export default function InstallPrompt() {
   const [installing, setInstalling] = useState(false)
 
   const eligible =
-    pwa.canPrompt && !pwa.standalone && !pwa.installed && !SKIP_PATHS.includes(pathname)
+    pwa.canPrompt && !pwa.standalone && !pwa.installed && !SKIP_PATHS.includes(pathname) && !pathname?.startsWith('/r/')
 
   useEffect(() => {
     if (!eligible) { setVisible(false); return }

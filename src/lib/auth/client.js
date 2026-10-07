@@ -19,6 +19,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { phoneProblem, phoneToAuthEmail } from '@/lib/auth/phone'
+import { clearReferral } from '@/lib/referral'
 
 export const INTRO_SEEN_KEY = 'ep_intro_seen'
 const GUEST_KEY = 'ep_guest'
@@ -133,7 +134,7 @@ function flushPracticeQueue() {
 }
 
 // ── Sign up ───────────────────────────────────────────────────────────────────
-export async function signUp({ method, phone, email, password }) {
+export async function signUp({ method, phone, email, password, referralCode }) {
   const invalid = validateCredentials({ method, phone, email, password })
   if (invalid) return { ok: false, ...invalid }
   const guestToken = await battleGuestToken()   // read before the new login replaces it
@@ -143,7 +144,7 @@ export async function signUp({ method, phone, email, password }) {
     res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method, phone, email, password, guest: guestSetupForMigration() }),
+      body: JSON.stringify({ method, phone, email, password, guest: guestSetupForMigration(), referral_code: referralCode || undefined }),
     })
     data = await res.json()
   } catch {
@@ -164,6 +165,7 @@ export async function signUp({ method, phone, email, password }) {
   await claimBattleGuest(guestToken)
   flushPracticeQueue()
   markIntroSeen()
+  clearReferral()   // used (or not valid): don't carry it to another account on this device
   return { ok: true }
 }
 

@@ -10,7 +10,8 @@
 //   First visit           → intro slides, then the sign-up screen
 //   Seen the intro before → sign-up screen
 //
-// Other params: ?from=/path (return after sign-in), ?join=CODE (invite links).
+// Other params: ?from=/path (return after sign-in), ?join=CODE (invite links),
+// ?ref=CODE (a teacher's referral code, from /r/CODE; prefilled on sign-up).
 // /signup, /register and /login all redirect here, so there is exactly one
 // sign-up screen in the product.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { hasSeenIntro, markIntroSeen, continueAsGuest, destinationAfterAuth, isAccountSession } from '@/lib/auth/client'
+import { saveReferral } from '@/lib/referral'
 import IntroSlides from '@/components/onboarding/IntroSlides'
 import AuthPanel from '@/components/onboarding/AuthPanel'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -31,9 +33,13 @@ function Onboarding() {
   const mode   = params.get('mode')
   const from   = params.get('from')
   const join   = params.get('join')
+  const ref    = params.get('ref')      // a teacher's referral code (see /r/[code])
   const authError = params.get('error') === 'auth_failed'
 
   const [view, setView] = useState('checking')   // 'checking' | 'intro' | 'auth'
+
+  // Keep a referral code through the intro slides and any page changes before sign-up.
+  useEffect(() => { if (ref) saveReferral(ref) }, [ref])
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +93,7 @@ function Onboarding() {
             )}
             <AuthPanel
               initialMode={mode === 'signin' ? 'signin' : 'signup'}
+              refParam={ref}
               onAuthed={handleAuthed}
               onGuest={handleGuest}
             />

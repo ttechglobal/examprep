@@ -8,6 +8,7 @@
 //   email?:   string,
 //   password: string,            // 6+ characters
 //   guest?:   { full_name, exam_types, subjects_waec, subjects_jamb }
+//   referral_code?: string       // an ambassador's code; ignored if it isn't valid
 // }
 //
 // Why server-side:
@@ -18,7 +19,8 @@
 //   • A guest's setup (name, exams, subjects) is written to the new profile in
 //     the same request, so switching from guest to account loses nothing.
 //
-// On success returns { ok: true, loginEmail }. The client then signs in with
+// On success returns { ok: true, loginEmail, referral } (referral: the
+// apply_referral result, or null). The client then signs in with
 // signInWithPassword({ email: loginEmail, password }) to get a session.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -131,5 +133,16 @@ export async function POST(request) {
     if (retryErr) console.error('signup profile upsert:', upsertErr, retryErr)
   }
 
-  return NextResponse.json({ ok: true, loginEmail })
+  // A referral code (from a teacher's link or typed in) links the student to the
+  // ambassador. It must never block sign-up: a wrong code, or the referral
+  // tables not existing yet, just means no referral.
+  let referral = null
+  const referralCode = typeof body.referral_code === 'string' ? body.referral_code.trim().slice(0, 20) : ''
+  if (referralCode) {
+    const { data, error } = await db.rpc('apply_referral', { p_student: userId, p_code: referralCode, p_late: false })
+    if (error) console.error('signup apply_referral:', error.message)
+    else referral = data
+  }
+
+  return NextResponse.json({ ok: true, loginEmail, referral })
 }

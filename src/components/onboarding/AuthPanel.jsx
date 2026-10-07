@@ -5,14 +5,17 @@
 //   • No name, username, exam or survey questions: those live on the profile
 //   • On success the parent sends the student straight into the app
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Zara from './Zara'
 import { phoneProblem } from '@/lib/auth/phone'
 import { signUp, signIn } from '@/lib/auth/client'
+import { cleanCode, getReferral, REFERRAL_CODE_RE } from '@/lib/referral'
 import s from './onboarding.module.css'
 
-export default function AuthPanel({ initialMode = 'signup', onAuthed, onGuest }) {
+// refParam: a code from the page URL (?ref=). Otherwise the one /r/CODE saved
+// on this device. Either way the student can edit or clear it.
+export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, onGuest }) {
   const [mode,     setMode]     = useState(initialMode)   // 'signup' | 'signin'
   const [method,   setMethod]   = useState('phone')       // 'phone' | 'email'
   const [phone,    setPhone]    = useState('')
@@ -23,6 +26,33 @@ export default function AuthPanel({ initialMode = 'signup', onAuthed, onGuest })
   const [error,    setError]    = useState(null)
   const [badField, setBadField] = useState(null)
   const [phoneTouched, setPhoneTouched] = useState(false)
+
+  // Prefilled from the link or the saved code. This panel only ever mounts in the
+  // browser (onboarding shows a loading screen while it checks the session), so
+  // reading localStorage here can't cause a hydration mismatch.
+  const [refCode, setRefCode] = useState(() => cleanCode(refParam) || getReferral() || '')
+  const [refOpen, setRefOpen] = useState(() => !!(cleanCode(refParam) || getReferral()))
+  const [refInfo, setRefInfo] = useState(null)   // { code, valid, firstName } for the code last checked
+
+  // Check the code as it's typed, so a typo shows before they submit.
+  useEffect(() => {
+    const code = cleanCode(refCode)
+    if (!REFERRAL_CODE_RE.test(code)) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/referral/check?code=${encodeURIComponent(code)}`)
+        const data = await res.json()
+        if (!cancelled) setRefInfo({ code, valid: !!data.valid, firstName: data.firstName })
+      } catch { if (!cancelled) setRefInfo(null) }
+    }, 350)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [refCode])
+
+  const cleanedRef = cleanCode(refCode)
+  const refChecked = refInfo && refInfo.code === cleanedRef ? refInfo : null
+  const refGood = !!refChecked?.valid
+  const refBad  = !!refChecked && !refChecked.valid
 
   const isSignup = mode === 'signup'
   const phoneIssue = phoneProblem(phone)
@@ -42,7 +72,7 @@ export default function AuthPanel({ initialMode = 'signup', onAuthed, onGuest })
     if (loading) return
     setLoading(true); setError(null); setBadField(null)
     const run = isSignup ? signUp : signIn
-    const result = await run({ method, phone, email, password })
+    const result = await run({ method, phone, email, password, referralCode: isSignup ? cleanedRef : undefined })
     if (!result.ok) {
       setError(result.error); setBadField(result.field ?? null); setLoading(false)
       if (result.field === 'phone') setPhoneTouched(true)
@@ -135,6 +165,31 @@ export default function AuthPanel({ initialMode = 'signup', onAuthed, onGuest })
               </button>
             </div>
           </div>
+
+          {isSignup && (
+            <div className={s.field}>
+              {refOpen ? (
+                <>
+                  <label className={s.label} htmlFor="ob-ref">Referral code (optional)</label>
+                  <div className={`${s.inputWrap} ${refBad ? s.inputBad : refGood ? s.inputGood : ''}`}>
+                    <input
+                      id="ob-ref" className={s.input} type="text" autoComplete="off" autoCapitalize="characters"
+                      spellCheck={false} placeholder="e.g. K7MQ4XZ2" value={refCode} maxLength={14}
+                      onChange={e => setRefCode(e.target.value.toUpperCase())}
+                      aria-describedby="ob-ref-hint"
+                    />
+                  </div>
+                  <p id="ob-ref-hint" className={`${s.hint} ${refBad ? s.hintBad : refGood ? s.hintGood : ''}`}>
+                    {refGood ? `Invited by ${refChecked.firstName} ✓`
+                      : refBad ? 'We don\'t recognise this code. You can still sign up.'
+                      : 'From your teacher? Enter their code.'}
+                  </p>
+                </>
+              ) : (
+                <button type="button" className={s.link} onClick={() => setRefOpen(true)}>Have a referral code?</button>
+              )}
+            </div>
+          )}
 
           <button type="submit" className={s.cta} disabled={loading}>
             {loading ? <span className={s.spinner} aria-label="Please wait" /> : isSignup ? 'Create account' : 'Sign in'}
