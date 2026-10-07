@@ -221,6 +221,7 @@ export async function destinationAfterAuth({ from, join } = {}) {
   if (user) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
     if (profile?.role === 'school_admin') return '/school/dashboard'
+    if (profile?.role === 'ambassador')   return '/partner/dashboard'
     if (profile?.role === 'admin')        return '/admin/dashboard'
     if (profile?.role === 'reviewer')     return '/reviewer'
   }
