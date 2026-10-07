@@ -491,8 +491,16 @@ end
 $$;
 
 -- ── The ambassador's dashboard, in one call ──────────────────────────────────
+-- Exams are written every year, so the numbers are viewed per year, the way the
+-- admin Students page does it (Nigerian time):
+--   p_year null  everything, all time
+--   p_year 2026  students who joined in 2026 + commissions earned in 2026
+-- A student who renews next year earns nothing (first payment only), so each
+-- year's class is a fresh set the ambassador has to win again.
+-- balance and paid_out are always all-time: money owed doesn't reset in January.
 -- Students appear as first name + last initial only, with no contact details.
-create or replace function public.ambassador_dashboard(p_user uuid)
+drop function if exists public.ambassador_dashboard(uuid);
+create or replace function public.ambassador_dashboard(p_user uuid, p_year integer default null)
 returns jsonb
 language plpgsql
 stable
@@ -500,13 +508,38 @@ security definer
 set search_path = public
 as $$
 declare
-  v_amb   public.ambassadors;
-  v_stats public.ambassador_stats;
-  v_list  jsonb;
+  v_amb    public.ambassadors;
+  v_stats  public.ambassador_stats;
+  v_from   timestamptz;
+  v_to     timestamptz;
+  v_list   jsonb;
+  v_years  jsonb;
+  v_joined integer;
+  v_paying integer;
+  v_earned integer;
 begin
   select * into v_amb from public.ambassadors where id = p_user;
   if not found then return null; end if;
   select * into v_stats from public.ambassador_stats where ambassador_id = p_user;
+
+  v_from := case when p_year is null then '-infinity'::timestamptz
+                 else make_timestamptz(p_year, 1, 1, 0, 0, 0, 'Africa/Lagos') end;
+  v_to   := case when p_year is null then 'infinity'::timestamptz
+                 else make_timestamptz(p_year + 1, 1, 1, 0, 0, 0, 'Africa/Lagos') end;
+
+  select count(*) into v_joined from public.profiles
+   where referred_by = p_user and created_at >= v_from and created_at < v_to;
+  select count(*), coalesce(sum(commission), 0) into v_paying, v_earned from public.referral_commissions
+   where ambassador_id = p_user and status = 'earned' and created_at >= v_from and created_at < v_to;
+
+  -- Years with anything in them, newest first, always including this year.
+  select coalesce(jsonb_agg(y order by y desc), '[]'::jsonb) into v_years from (
+    select extract(year from created_at at time zone 'Africa/Lagos')::int as y from public.profiles where referred_by = p_user
+    union
+    select extract(year from created_at at time zone 'Africa/Lagos')::int from public.referral_commissions where ambassador_id = p_user
+    union
+    select extract(year from now() at time zone 'Africa/Lagos')::int
+  ) t;
 
   select coalesce(jsonb_agg(row_to_json(x) order by x.joined desc), '[]'::jsonb) into v_list
   from (
@@ -529,14 +562,18 @@ begin
     from public.profiles p
     left join public.referral_commissions c on c.student_id = p.id and c.status = 'earned'
     where p.referred_by = p_user
+      and ((p.created_at >= v_from and p.created_at < v_to)
+        or (c.created_at >= v_from and c.created_at < v_to))
     order by p.created_at desc
     limit 500
   ) x;
 
   return jsonb_build_object(
     'name', v_amb.full_name, 'code', v_amb.code, 'status', v_amb.status,
-    'students', coalesce(v_stats.students, 0), 'paying', coalesce(v_stats.paying_students, 0),
-    'earned', coalesce(v_stats.earned, 0), 'paid_out', coalesce(v_stats.paid_out, 0), 'balance', coalesce(v_stats.balance, 0),
+    'year', p_year, 'years', v_years,
+    'students', v_joined, 'paying', v_paying, 'earned', v_earned,
+    'earned_all_time', coalesce(v_stats.earned, 0),
+    'paid_out', coalesce(v_stats.paid_out, 0), 'balance', coalesce(v_stats.balance, 0),
     'list', v_list);
 end
 $$;
@@ -553,7 +590,7 @@ begin
     'public.refresh_referral_commission(uuid)',
     'public.admin_update_ambassador(jsonb, uuid, text, numeric)',
     'public.admin_record_ambassador_payout(jsonb, uuid, integer, text)',
-    'public.ambassador_dashboard(uuid)'
+    'public.ambassador_dashboard(uuid, integer)'
   ] loop
     execute format('revoke execute on function %s from public', fn);
     if exists (select 1 from pg_roles where rolname = 'anon') then
