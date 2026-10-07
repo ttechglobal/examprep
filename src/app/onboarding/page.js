@@ -4,8 +4,9 @@
 // The single student entry point.
 //
 //   Signed in             → straight into the app (or back to ?from)
-//   ?mode=signup|signin   → sign-up / sign-in screen (used by every
-//                           "Create account" and "Sign in" link in the app)
+//   ?mode=signin          → sign-in screen (used by every "Sign in" link)
+//   ?mode=signup          → sign-up screen, but a first-time visitor sees the
+//                           intro slides first (the landing page's "Start practising")
 //   First visit           → intro slides, then the sign-up screen
 //   Seen the intro before → sign-up screen
 //
@@ -45,7 +46,10 @@ function Onboarding() {
         router.replace(await destinationAfterAuth({ from, join }))
         return
       }
-      if (mode === 'signup' || mode === 'signin' || join || from) setView('auth')
+      // mode=signup does NOT skip the slides: the landing page's "Start practising"
+      // sends first-time visitors here, and they should meet Zara before the form.
+      // Anyone who has seen the slides (or continued as a guest) goes straight to it.
+      if (mode === 'signin' || join || from) setView('auth')
       else setView(hasSeenIntro() ? 'auth' : 'intro')
     })()
     return () => { cancelled = true }
