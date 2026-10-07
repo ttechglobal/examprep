@@ -187,6 +187,10 @@ function Details({ student, editing, busy, error, onEdit, onCancel, onSave }) {
         <span className={s.infoIcon} aria-hidden="true">📅</span>
         <span className={s.infoBody}><span className={s.infoLabel}>Joined</span><span className={s.infoValue}>{formatDate(student.joined)}</span></span>
       </div>
+      {student.referred_by && <div className={s.info}>
+        <span className={s.infoIcon} aria-hidden="true">⭐</span>
+        <span className={s.infoBody}><span className={s.infoLabel}>Referred by</span><span className={s.infoValue}>{student.referred_by.name}</span></span>
+      </div>}
     </div>}
   </section>
 }

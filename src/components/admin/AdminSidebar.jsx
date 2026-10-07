@@ -70,6 +70,7 @@ const SECTIONS = [
     desc:   'Students, team & communications',
     items: [
       { href: '/admin/users',              label: 'Students',          icon: '👤' },
+      { href: '/admin/ambassadors',        label: 'Ambassadors',       icon: '⭐' },
       { href: '/admin/activity',           label: 'Activity Log',      icon: '🧾' },
       { href: '/admin/team',               label: 'Admin Team',        icon: '🔑' },
       { href: '/admin/early-access-leads', label: 'Early Access',      icon: '📋' },
@@ -78,7 +79,7 @@ const SECTIONS = [
       { href: '/admin/analytics',          label: 'Analytics',         icon: '📈' },
     ],
     paths: [
-      '/admin/users', '/admin/activity', '/admin/team', '/admin/early-access-leads',
+      '/admin/users', '/admin/ambassadors', '/admin/activity', '/admin/team', '/admin/early-access-leads',
       '/admin/reviewers', '/admin/notifications', '/admin/analytics',
     ],
   },

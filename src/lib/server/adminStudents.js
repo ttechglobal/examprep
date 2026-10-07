@@ -31,16 +31,30 @@ export function shapeStudent(r) {
 const STUDENT_ROW_COLUMNS = 'id, full_name, username, email, phone_number, created_at, school, state, plan_expires_at, last_paid_end, trial_ends_at'
 const SUBSCRIPTION_COLUMNS = 'id, plan_id, amount, starts_at, ends_at, status, note, source, created_at, created_by, cancelled_at, cancel_reason, school_id, schools(name)'
 
+/**
+ * Which ambassador referred this student: { id, name } or null. Best effort: it
+ * never breaks the panel (before 20261014_ambassadors.sql there is no column).
+ */
+async function referredBy(db, id) {
+  try {
+    const { data: profile } = await db.from('profiles').select('referred_by').eq('id', id).maybeSingle()
+    if (!profile?.referred_by) return null
+    const { data: ambassador } = await db.from('ambassadors').select('id, full_name').eq('id', profile.referred_by).maybeSingle()
+    return ambassador ? { id: ambassador.id, name: ambassador.full_name } : null
+  } catch { return null }
+}
+
 /** The student panel: { student, subscriptions (newest first) }, or null. */
 export async function loadStudentPanel(db, id) {
-  const [rowRes, subsRes] = await Promise.all([
+  const [rowRes, subsRes, referrer] = await Promise.all([
     db.from('admin_student_rows').select(STUDENT_ROW_COLUMNS).eq('id', id).maybeSingle(),
     db.from('subscriptions').select(SUBSCRIPTION_COLUMNS).eq('student_id', id)
       .order('starts_at', { ascending: false }).order('created_at', { ascending: false }),
+    referredBy(db, id),
   ])
   if (rowRes.error) throw rowRes.error
   if (subsRes.error) throw subsRes.error
-  return rowRes.data ? { student: shapeStudent(rowRes.data), subscriptions: subsRes.data ?? [] } : null
+  return rowRes.data ? { student: { ...shapeStudent(rowRes.data), referred_by: referrer }, subscriptions: subsRes.data ?? [] } : null
 }
 
 /**
