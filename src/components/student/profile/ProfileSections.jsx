@@ -9,8 +9,8 @@ import Link from 'next/link'
 import { useId, useState } from 'react'
 import s from './profile.module.css'
 import {
-  ArrowRight, ChevronRight, Pencil, RankMedal, HeroArt, Crown, Compass, Parents,
-  CareerArt, ReportArt, SubjectGlyph, StatBook, StatTarget, StatBolt, StatBars,
+  ArrowRight, ChevronRight, Pencil, RankMedal, HeroArt, Crown, Compass, Community,
+  CareerArt, CommunityArt, SubjectGlyph, StatBook, StatTarget, StatBolt, StatBars,
   SmallBars, GoalCap, GoalBook, GoalTarget, SetPalette, SetBell, SetGlobe, SetShield,
 } from './icons'
 import { getRankProgress, initialsOf, subjectsFor, formatDuration } from './profileModel'
@@ -86,15 +86,16 @@ export function PlanCard({ plan, onSeePlans }) {
   )
 }
 
-// ── Career Quest / Parents Report ────────────────────────────────────────────
-const FEATURE_ART = { career: CareerArt, parents: ReportArt }
-const FEATURE_ICON = { career: Compass, parents: Parents }
+// ── Career Quest / Community ─────────────────────────────────────────────────
+// Both open another site in a new tab.
+const FEATURE_ART = { career: CareerArt, community: CommunityArt }
+const FEATURE_ICON = { career: Compass, community: Community }
 
-export function FeatureCard({ kind, title, text, onOpen }) {
+export function FeatureCard({ kind, title, text, href }) {
   const Icon = FEATURE_ICON[kind]
   const Art  = FEATURE_ART[kind]
   return (
-    <button type="button" className={`${s.card} ${s.feature}`} onClick={onOpen}>
+    <a className={`${s.card} ${s.feature}`} href={href} target="_blank" rel="noopener noreferrer">
       <span className={s.featureIcon}><Icon /></span>
       <span className={s.featureBody}>
         <span className={s.featureTitle} style={{ display: 'block' }}>{title}</span>
@@ -102,7 +103,7 @@ export function FeatureCard({ kind, title, text, onOpen }) {
       </span>
       <span className={s.featureChevron}><ChevronRight /></span>
       <span className={s.featureArt}><Art /></span>
-    </button>
+    </a>
   )
 }
 

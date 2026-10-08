@@ -298,7 +298,7 @@ function SidebarBody({ admin, pathname, onLinkClick, onSignOut }) {
           }}>A</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Admin</p>
-            <p style={{ fontSize: 9, color: 'rgba(255,255,255,.22)' }}>examprep.ng</p>
+            <p style={{ fontSize: 9, color: 'rgba(255,255,255,.22)' }}>examprepa1.online</p>
           </div>
         </div>
         {admin && <SignedInAs admin={admin} />}

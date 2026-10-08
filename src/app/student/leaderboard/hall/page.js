@@ -44,7 +44,7 @@ function Spinner() {
 function FeaturedChampion({ entry }) {
   const [copied, setCopied] = useState(false)
 
-  const shareText = `🏆 ${entry.name} was ExamPrep's Monthly Champion for ${entry.month} with ${entry.xp.toLocaleString()} XP!\n\nThink you can top that? Join me on ExamPrep 👊\n👉 examprep.ng`
+  const shareText = `🏆 ${entry.name} was ExamPrep's Monthly Champion for ${entry.month} with ${entry.xp.toLocaleString()} XP!\n\nThink you can top that? Join me on ExamPrep 👊\n👉 examprepa1.online`
 
   function share() {
     if (navigator?.share) {
@@ -146,7 +146,7 @@ function FeaturedChampion({ entry }) {
             Practice smarter.<br/>Rise higher.
           </span>
           <span style={{ fontSize:10, fontWeight:800, color:'rgba(255,184,0,.5)', letterSpacing:'.04em' }}>
-            examprep.ng
+            examprepa1.online
           </span>
         </div>
       </div>

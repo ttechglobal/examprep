@@ -8,8 +8,7 @@ const BLUE  = '#1264E5'
 const GREEN = '#22c55e'
 
 // Where invites send people. Change this one value to update every invite.
-// TODO: replace with the correct sign-up URL.
-export const INVITE_URL = 'https://examprep.ng'
+export const INVITE_URL = 'https://examprepa1.online'
 
 const inviteText = `🎯 I'm building my WAEC & JAMB knowledge on ExamPrep — one practice session at a time.\n\nEvery question earns XP. Every XP climbs the leaderboard. Come practice with me and let's see who comes out on top 👊\n\n👉 ${INVITE_URL}`
 

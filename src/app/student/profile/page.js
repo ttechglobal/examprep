@@ -1,7 +1,7 @@
 'use client'
 // src/app/student/profile/page.js — v5
 // ─────────────────────────────────────────────────────────────────────────────
-// Profile page: hero, plan / career / parents cards, exams & subjects,
+// Profile page: hero, plan / Career Quest / community cards, exams & subjects,
 // activity, goals, settings.
 //
 // Profile data
@@ -18,6 +18,8 @@
 //
 // v6: the Notifications row shows whether this device is actually saved for
 //     notifications (usePushSubscription status), not just the browser permission.
+// v7: Career Quest opens careerquestapp.vercel.app; the Parents Report card is
+//     replaced by "Join our community" (WhatsApp).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
@@ -35,12 +37,13 @@ import {
   SettingsCard, Banner, ProfileSkeleton, styles as s,
 } from '@/components/student/profile/ProfileSections'
 import {
-  InfoSheet, SubjectsSheet, GoalsSheet, CareerSheet, ParentsSheet,
+  InfoSheet, SubjectsSheet, GoalsSheet,
   LanguageSheet, AccountSheet, NotificationsSheet,
 } from '@/components/student/profile/sheets'
 import { useStudentActivity } from '@/hooks/useStudentActivity'
 import { planCardModel, goalsOf, activeExamsOf } from '@/components/student/profile/profileModel'
 import { usePlan } from '@/contexts/PlanContext'
+import { CAREER_QUEST_URL, COMMUNITY_URL } from '@/lib/contact'
 
 const NOTIFICATION_LABEL = { checking: '…', on: 'On', off: 'Off', blocked: 'Blocked', failed: 'Needs attention', unsupported: 'Not available', unavailable: 'Not available' }
 
@@ -150,15 +153,13 @@ export default function ProfilePage() {
           kind="career"
           title="Career Quest"
           text="Discover your strengths. Explore future careers."
-          onOpen={() => setSheet({ type: 'career' })}
+          href={CAREER_QUEST_URL}
         />
         <FeatureCard
-          kind="parents"
-          title="Parents Report"
-          text={profile.parent_email
-            ? `Weekly reports go to ${profile.parent_email}.`
-            : 'Send weekly progress reports to your parents.'}
-          onOpen={() => setSheet({ type: 'parents' })}
+          kind="community"
+          title="Join our community"
+          text="Exam tips, scholarships and admission news on WhatsApp."
+          href={COMMUNITY_URL}
         />
       </div>
 
@@ -195,12 +196,6 @@ export default function ProfilePage() {
       )}
       {sheet?.type === 'goals' && (
         <GoalsSheet profile={profile} isGuest={isGuest} focus={sheet.focus ?? null} onClose={closeSheet} onSaved={patchProfile} />
-      )}
-      {sheet?.type === 'career' && (
-        <CareerSheet onClose={closeSheet} onSetGoals={() => setSheet({ type: 'goals', focus: 'university' })} />
-      )}
-      {sheet?.type === 'parents' && (
-        <ParentsSheet profile={profile} isGuest={isGuest} onClose={closeSheet} onSaved={patchProfile} />
       )}
       {sheet?.type === 'notifications' && (
         <NotificationsSheet status={notifications.status} onEnable={notifications.enable} onRetry={notifications.retry} onClose={closeSheet} />

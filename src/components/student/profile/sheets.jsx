@@ -7,7 +7,9 @@
 // their save logic unchanged:
 //   Auth users  → /api/student/profile PATCH or /api/student/subjects PATCH
 //   Guest users → setLocalProfile() (localStorage)
-// New in v5: CareerSheet, ParentsSheet, LanguageSheet, AccountSheet.
+// New in v5: LanguageSheet, AccountSheet.
+// v6: CareerSheet (Career Quest is now its own site) and ParentsSheet (parent
+//     reports are paused) removed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useId } from 'react'
@@ -739,78 +741,6 @@ function SignupLink() {
       style={{ display: 'block', textAlign: 'center', textDecoration: 'none', padding: '14px', borderRadius: 14, fontWeight: 900, fontSize: 15, background: `linear-gradient(135deg,${NAVY},${BLUE})`, color: '#fff', boxShadow: `0 4px 16px ${BLUE}40` }}>
       Create free account
     </Link>
-  )
-}
-
-// ── Career Quest ──────────────────────────────────────────────────────────────
-export function CareerSheet({ onClose, onSetGoals }) {
-  return (
-    <Sheet title="Career Quest" onClose={onClose}>
-      <Note>Career Quest is coming soon.</Note>
-      <p style={P}>
-        You’ll answer a few questions about what you enjoy and what you’re good at, and see
-        careers that fit, with the university courses and JAMB subjects each one needs.
-      </p>
-      <p style={P}>Already know where you’re headed? Set your university and course now so your practice lines up with it.</p>
-      <SaveButton onClick={onSetGoals} label="Set my university goal" />
-    </Sheet>
-  )
-}
-
-// ── Parents Report ────────────────────────────────────────────────────────────
-export function ParentsSheet({ profile, isGuest, onClose, onSaved }) {
-  const [email,  setEmail]  = useState(profile?.parent_email ?? '')
-  const [saving, setSaving] = useState(false)
-  const [error,  setError]  = useState(null)
-
-  async function save(value) {
-    setSaving(true)
-    setError(null)
-    try {
-      const res  = await fetch('/api/student/profile', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent_email: value }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? 'Couldn’t save the email. Check your connection and try again.')
-      const saved = value.trim().toLowerCase() || null
-      cacheAuthProfile({ ...profile, parent_email: saved })
-      onSaved({ parent_email: saved })
-      onClose()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (isGuest) {
-    return (
-      <Sheet title="Parents Report" onClose={onClose}>
-        <p style={P}>
-          Every week your parent gets an email with the days you studied, the topics you covered,
-          and how your scores changed.
-        </p>
-        <Note tone="warn">Reports need a free account so your progress can be sent from our servers.</Note>
-        <SignupLink />
-      </Sheet>
-    )
-  }
-
-  return (
-    <Sheet title="Parents Report" onClose={onClose}>
-      <p style={P}>
-        Every week your parent gets an email with the days you studied, the topics you covered,
-        and how your scores changed.
-      </p>
-      {profile?.parent_email && <Note tone="ok">Weekly reports go to {profile.parent_email}.</Note>}
-      <Field label="Parent’s email" type="email" value={email} onChange={setEmail} placeholder="parent@example.com" hint="Only used for the weekly report." />
-      {error && <p role="alert" style={{ fontSize: 12, color: RED, marginBottom: 12 }}>{error}</p>}
-      <SaveButton onClick={() => save(email)} saving={saving} label={profile?.parent_email ? 'Update email' : 'Send weekly reports'} />
-      {profile?.parent_email && (
-        <SecondaryButton onClick={() => save('')}>Stop weekly reports</SecondaryButton>
-      )}
-    </Sheet>
   )
 }
 

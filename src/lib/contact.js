@@ -12,3 +12,10 @@ export function whatsappLink(text) {
 export function whatsappTo(number, text) {
   return `https://wa.me/${number}${text ? `?text=${encodeURIComponent(text)}` : ''}`
 }
+
+/** The ExamPrep & Career Quest WhatsApp channel: exam tips, scholarships,
+ *  admissions. */
+export const COMMUNITY_URL = 'https://whatsapp.com/channel/0029VbDQICiBvvsYtfZTms1H'
+
+/** Career Quest, our careers app. */
+export const CAREER_QUEST_URL = 'https://careerquestapp.vercel.app/'

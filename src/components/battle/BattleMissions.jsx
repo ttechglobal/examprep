@@ -112,7 +112,7 @@ export default function MissionsPage() {
           <p>We’re still getting questions ready for your subjects. Battle in the meantime, and check back soon.</p></>}
     </div>}
 
-    {status === 'ready' && list.length > 0 && <section aria-label="This week’s missions">
+    {status === 'ready' && list.length > 0 && <section className={styles.panel} aria-label="This week’s missions">
       {celebrate.length > 0 && <p className={`${m.banner} ${m.celebrate}`} role="status">Mission complete! You earned +{bonus} XP.</p>}
       {open > 0 && celebrate.length === 0 && data.days_left <= NUDGE_FROM_DAYS_LEFT && <p className={`${m.banner} ${m.nudge}`}>
         {open === 1 ? '1 mission is' : `${open} missions are`} still open. Finish {open === 1 ? 'it' : 'them'} before Sunday to win your XP.

@@ -120,12 +120,11 @@ export const Compass = () => (
   </svg>
 )
 
-export const Parents = () => (
+/** WhatsApp-style chat bubble, icon of the community card. */
+export const Community = () => (
   <svg {...A} width="32" height="32" viewBox="0 0 32 32">
-    <circle cx="11" cy="10" r="5" fill="#1264E5" />
-    <path d="M2 26c0-5.5 4-9 9-9s9 3.5 9 9z" fill="#1264E5" />
-    <circle cx="22" cy="12" r="4" fill="#60A5FA" />
-    <path d="M16 26c0-4.4 2.7-7.4 6-7.4s7 3 7 7.4z" fill="#60A5FA" />
+    <path d="M16 3C8.8 3 3 8.6 3 15.5c0 2.4.7 4.6 1.9 6.5L3.4 28.6l6.9-1.8c1.7.9 3.6 1.3 5.7 1.3 7.2 0 13-5.6 13-12.5S23.2 3 16 3z" fill="#25D366" />
+    <circle cx="10.5" cy="15.5" r="1.8" fill="#fff" /><circle cx="16" cy="15.5" r="1.8" fill="#fff" /><circle cx="21.5" cy="15.5" r="1.8" fill="#fff" />
   </svg>
 )
 
@@ -145,15 +144,15 @@ export const CareerArt = () => (
   </svg>
 )
 
-/** Envelope + mini bar chart card, bottom-right of Parents Report. */
-export const ReportArt = () => (
+/** Chat bubbles + graduation cap, bottom-right of the community card. */
+export const CommunityArt = () => (
   <svg {...A} viewBox="0 0 90 64" width="84" height="60">
-    <rect x="36" y="4" width="46" height="54" rx="4" fill="var(--pf-surface, #fff)" stroke="var(--pf-line, #E2E8F0)" />
-    <rect x="46" y="34" width="6" height="14" rx="1.5" fill="#FCA5A5" />
-    <rect x="55" y="26" width="6" height="22" rx="1.5" fill="#F87171" />
-    <rect x="64" y="18" width="6" height="30" rx="1.5" fill="#EF4444" />
-    <rect x="4" y="30" width="36" height="26" rx="3" fill="#60A5FA" />
-    <path d="M4 32l18 13 18-13" stroke="#fff" strokeWidth="2.2" fill="none" strokeLinejoin="round" />
+    <path d="M40 10h40a6 6 0 016 6v20a6 6 0 01-6 6H58l-8 8v-8H40a6 6 0 01-6-6V16a6 6 0 016-6z" fill="#25D366" />
+    <rect x="42" y="20" width="30" height="4" rx="2" fill="#fff" opacity=".9" />
+    <rect x="42" y="29" width="20" height="4" rx="2" fill="#fff" opacity=".7" />
+    <path d="M8 34h26a5 5 0 015 5v12a5 5 0 01-5 5H16l-6 6v-6H8a5 5 0 01-5-5V39a5 5 0 015-5z" fill="#60A5FA" />
+    <path d="M21 39l9 4-9 4-9-4z" fill="#fff" />
+    <path d="M15 45v3c2 1.5 10 1.5 12 0v-3l-6 2.6z" fill="#fff" opacity=".85" />
   </svg>
 )
 
