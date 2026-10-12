@@ -11,6 +11,10 @@ import { useRouter } from 'next/navigation'
 import { signOut } from '@/lib/auth/client'
 import { priceLabel } from '@/lib/plans'
 import s from '../partner.module.css'
+import { PartnerBrand, PartnerIcon, partnerSupport } from '../PartnerUI'
+import { partnerReferralBase } from '@/lib/partnerUrl'
+
+const VIEWS = [{ id: 'overview', label: 'Overview' }, { id: 'referrals', label: 'Referral link' }, { id: 'students', label: 'Students' }]
 
 const STATUS = {
   subscribed: { label: 'Subscribed', cls: s.statusSubscribed },
@@ -57,6 +61,14 @@ export default function PartnerDashboardPage() {
   const [error, setError]     = useState(null)
   const [busy, setBusy]       = useState(false)
   const [qr, setQr]           = useState({ small: null, large: null })
+  const [view, setView] = useState('overview')
+  const heading = useRef(null)
+
+  function navigate(next) {
+    setView(next)
+    heading.current?.focus()
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
 
   // Show a fetch result: the dashboard, an error, or back to sign-in.
   const show = useCallback(result => {
@@ -80,7 +92,7 @@ export default function PartnerDashboardPage() {
     return () => { ignore = true }
   }, [show])
 
-  const base = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '')
+  const base = partnerReferralBase(process.env.NEXT_PUBLIC_APP_URL, typeof window !== 'undefined' ? window.location.origin : '')
   const link = data?.code ? `${base}/r/${data.code}` : ''
 
   // The QR code opens the same link. Made in the browser; nothing is uploaded.
@@ -127,20 +139,32 @@ export default function PartnerDashboardPage() {
   const yearLabel = data.year ?? 'all time'
 
   return (
-    <div className={s.page}>
-      <div className={s.shell}>
+    <div className={`${s.page} ${s.dashboardPage}`}>
+      <aside className={s.sidebar}>
+        <PartnerBrand />
+        <span className={s.navLabel}>YOUR WORKSPACE</span>
+        <nav className={s.desktopNav} aria-label="Ambassador dashboard">
+          {VIEWS.map(item => <button key={item.id} type="button" className={`${s.navItem} ${view === item.id ? s.navActive : ''}`} aria-current={view === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><PartnerIcon name={item.id} />{item.label}</button>)}
+        </nav>
+        <div className={s.sidebarHelp}><PartnerIcon name="support" /><strong>We’re here to help</strong><p>Questions about referrals or your earnings?</p><a href={partnerSupport} target="_blank" rel="noopener noreferrer">Chat on WhatsApp ↗</a></div>
+        <div className={s.sidebarAccount}><span className={s.avatar}>{firstName.slice(0, 1)}</span><div><strong>{data.name}</strong><small>Teacher Ambassador</small></div></div>
+        <button type="button" className={s.signout} onClick={logout}>Sign out ↗</button>
+      </aside>
+      <main className={s.shell}>
+        <div className={s.mobileBrand}><PartnerBrand /></div>
         <div className={s.top}>
           <div>
-            <h1 className={s.hello}>Hi, {firstName} 👋</h1>
-            <p className={s.helloSub}>Teacher Ambassador</p>
+            <p className={s.eyebrow}>YOUR AMBASSADOR WORKSPACE</p>
+            <h1 ref={heading} tabIndex={-1} className={s.hello}>{view === 'overview' ? `Hi, ${firstName} 👋` : view === 'referrals' ? 'Your referral toolkit' : 'Your students'}</h1>
+            <p className={s.helloSub}>{view === 'overview' ? 'Small encouragement. Lasting impact. Here’s how you’re doing.' : view === 'referrals' ? 'One link to bring your classroom along.' : 'See the students who joined through your referral.'}</p>
           </div>
-          <button type="button" className={s.ghost} onClick={logout}>Sign out</button>
+          <button type="button" className={`${s.ghost} ${s.mobileSignout}`} onClick={logout}>Sign out</button>
         </div>
 
         {error && <div className={s.error} role="alert">{error}</div>}
 
         {/* Referral code */}
-        <section className={s.panel}>
+        <section className={s.panel} hidden={view !== 'referrals'}>
           <h2 className={s.panelTitle}>Your referral link</h2>
           {data.status === 'paused' && (
             <div className={s.paused}>Your account is paused, so new students can’t join with your code. Contact ExamPrep A1.</div>
@@ -186,14 +210,14 @@ export default function PartnerDashboardPage() {
         </section>
 
         {/* Year */}
-        <div className={s.yearRow} role="group" aria-label="Choose a year">
+        <div className={s.yearRow} role="group" aria-label="Choose a year" hidden={view === 'referrals'}>
           {data.years.map(y => (
-            <button key={y} type="button" className={`${s.chip} ${data.year === y ? s.chipOn : ''}`} onClick={() => load(y)}>{y}</button>
+            <button key={y} type="button" className={`${s.chip} ${data.year === y ? s.chipOn : ''}`} aria-pressed={data.year === y} onClick={() => load(y)}>{y}</button>
           ))}
-          <button type="button" className={`${s.chip} ${data.year === null ? s.chipOn : ''}`} onClick={() => load('all')}>All time</button>
+          <button type="button" className={`${s.chip} ${data.year === null ? s.chipOn : ''}`} aria-pressed={data.year === null} onClick={() => load('all')}>All time</button>
         </div>
 
-        <div className={s.kpis}>
+        <div className={s.kpis} hidden={view !== 'overview'}>
           <div className={s.kpi}><div className={s.kpiNum}>{data.students}</div><div className={s.kpiLabel}>Students signed up</div></div>
           <div className={s.kpi}><div className={s.kpiNum}>{data.paying}</div><div className={s.kpiLabel}>Students subscribed</div></div>
           <div className={s.kpi}><div className={`${s.kpiNum} ${s.kpiGreen}`}>{priceLabel(data.earned)}</div><div className={s.kpiLabel}>Earned ({yearLabel})</div></div>
@@ -204,12 +228,17 @@ export default function PartnerDashboardPage() {
           </div>
         </div>
 
+        {view === 'overview' && <section className={s.inviteBanner}>
+          <div><span className={s.storyBadge}>YOUR NEXT STEP</span><h2>{data.code ? 'Your classroom is one link away.' : 'Let’s get your first students on board.'}</h2><p>{data.code ? 'Share your link or QR code and help your students start practising.' : 'Create your personal referral code, then share it with your students.'}</p></div>
+          <button type="button" className={s.bannerButton} onClick={() => navigate('referrals')}>{data.code ? 'Open referral toolkit' : 'Get my referral link'} <span aria-hidden="true">↗</span></button>
+        </section>}
+
         {/* Students */}
-        <section className={s.panel}>
+        <section className={s.panel} hidden={view === 'referrals'}>
           <h2 className={s.panelTitle}>Your students · {yearLabel}</h2>
           {data.list.length === 0 ? (
             <p className={s.empty}>
-              {data.code ? 'No students yet. Share your link or QR code and they will appear here.' : 'Generate your referral code above, then share it with your students.'}
+              {data.code ? 'No students yet. Share your link or QR code and they will appear here.' : 'Open Referral link to generate your code, then share it with your students.'}
             </p>
           ) : (
             <div className={s.rows}>
@@ -231,7 +260,11 @@ export default function PartnerDashboardPage() {
             doesn’t reset in January. Refunded payments are taken off.
           </p>
         </section>
-      </div>
+      </main>
+      <nav className={s.bottomNav} aria-label="Ambassador dashboard">
+        {VIEWS.map(item => <button key={item.id} type="button" className={`${s.bottomItem} ${view === item.id ? s.bottomActive : ''}`} aria-current={view === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><PartnerIcon name={item.id} /><span>{item.label}</span></button>)}
+        <a className={s.bottomItem} href={partnerSupport} target="_blank" rel="noopener noreferrer"><PartnerIcon name="support" /><span>Help</span></a>
+      </nav>
     </div>
   )
 }

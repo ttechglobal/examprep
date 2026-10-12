@@ -68,6 +68,10 @@ Analytics, leaderboards and notification audiences already exclude ambassadors: 
 
 ## Rollout
 
+The teacher dashboard has Overview, Referral link and Students views, with a sidebar on desktop and bottom navigation on mobile. Switching views reuses the loaded dashboard data. Support links use the shared number in `lib/contact.js` (+234 816 652 8437).
+
+Set `NEXT_PUBLIC_APP_URL` to the canonical production origin and rebuild when changing it (Next.js includes public environment variables at build time). Referral links fall back to the current browser origin when the setting is missing, invalid, or points to localhost while the teacher is on a live site. Link copying, WhatsApp sharing and QR generation use the same URL.
+
 Run the migrations in the Supabase SQL editor, in order, **before** deploying the code:
 `20261014_ambassadors.sql` → `20261015_admin_ambassadors.sql` → `20261016_ambassadors_lean.sql`. Each is safe to re-run. Until they have run, the referral box reads "We don't recognise this code" (sign-up still works) and the admin Ambassadors page shows an error.
 
@@ -75,6 +79,9 @@ Then check it end to end: sign up a test teacher, generate a code, sign up a tes
 
 ## Known limits
 
+- Phone numbers are unique across all accounts, including students and school admins. Teacher signup checks existing phone formats before creating a login and returns a `409` with `field: "phone"` for a duplicate. The database unique index also protects concurrent signups; a failed setup deletes the newly created login. If deletion fails, the response directs the teacher to support and the server logs the new user ID for investigation. Signing up does not convert an existing account into an ambassador.
 - Payments are manual today, so commission is recorded when an admin activates a plan. When online payments are added, they should call `activate_subscription` and commission follows.
 - The student list on a teacher's dashboard shows up to 500 students per view.
 - Phone and email changes aren't compared again after sign-up, so the self-referral check only catches matches at the moment a code is applied.
+
+Signup regression checks: `node --experimental-vm-modules --test tests/partner-signup.test.mjs` (isolated database/auth dependencies; no live accounts).

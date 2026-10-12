@@ -16,10 +16,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { rateLimited } from '@/lib/server/rateLimit'
-import { normalizePhone, phoneProblem } from '@/lib/auth/phone'
+import { normalizePhone, phoneProblem, phoneVariants } from '@/lib/auth/phone'
 
 const MIN_PASSWORD = 8
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+const PHONE_CONFLICT = 'This phone number is already used by another account. Use a different number to create your ambassador account.'
 
 const fail = (status, error, field) => NextResponse.json({ ok: false, error, field }, { status })
 const text = (value, max) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '')
@@ -44,6 +45,16 @@ export async function POST(request) {
   if (password.length < MIN_PASSWORD) return fail(400, `Your password needs at least ${MIN_PASSWORD} characters`, 'password')
 
   const db = supabaseAdmin()
+  // Check before creating a login. The unique index remains the backstop for
+  // simultaneous signups; older profiles may store a different phone format.
+  const { data: existing, error: lookupError } = await db
+    .from('profiles').select('id').in('phone_number', phoneVariants(phone)).limit(1)
+  if (lookupError) {
+    console.error('[partner/signup] phone lookup:', lookupError)
+    return fail(500, 'We couldn’t check your phone number. Please try again.')
+  }
+  if (existing?.length) return fail(409, PHONE_CONFLICT, 'phone')
+
   const { data: created, error: createError } = await db.auth.admin.createUser({
     email, password, email_confirm: true,
     user_metadata: { full_name: fullName, signup_method: 'ambassador' },
@@ -60,8 +71,15 @@ export async function POST(request) {
     p_user: created.user.id, p_full_name: fullName, p_email: email, p_phone: normalizePhone(phone), p_school: school,
   })
   if (rpcError) {
-    console.error('[partner/signup] create_ambassador_account:', rpcError.message)
-    await db.auth.admin.deleteUser(created.user.id)
+    console.error('[partner/signup] create_ambassador_account:', rpcError)
+    const { error: cleanupError } = await db.auth.admin.deleteUser(created.user.id)
+    if (cleanupError) {
+      console.error('[partner/signup] account cleanup:', { userId: created.user.id, error: cleanupError })
+      return fail(500, 'We couldn’t finish setting up your account. Please contact support before trying again.')
+    }
+    if (rpcError.code === '23505' && /\bprofiles_phone_number_unique\b/.test(rpcError.message ?? '')) {
+      return fail(409, PHONE_CONFLICT, 'phone')
+    }
     return fail(500, 'We couldn’t set up your account. Please try again.')
   }
   return NextResponse.json({ ok: true })

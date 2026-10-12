@@ -4,7 +4,7 @@ Run `src/supabase/migrations/20261010_xp_and_notifications.sql` and then `202610
 in the Supabase SQL editor, then deploy the app and the function:
 
 ```bash
-supabase functions deploy send-notifications --no-verify-jwt
+supabase functions deploy send-notifications --workdir src --no-verify-jwt
 ```
 
 The service worker (`public/sw.js`) updates itself the next time students open the app.
@@ -43,10 +43,14 @@ the reach, send. Everything sent is recorded in the Activity Log.
   of phones with notifications turned on. A group with no phones can't be sent to.
 - **When they tap it:** a page in the app, **the WhatsApp channel** (paste its link once: the browser remembers it,
   or set `NEXT_PUBLIC_WHATSAPP_CHANNEL_URL`), or any https link. Links to other sites open in their own tab.
-- **`{name}`** in the title or message becomes the student's first name ("there" if unknown).
+- **`{name}`** in the title or message becomes the student's first name ("there" if unknown). `{{name}}` also works, as do spaces and uppercase letters inside the braces. The preview uses the same replacement as delivery; for a single student it previews their selected name, otherwise it uses "Ada" as an example.
 - Each message has its own tag, so a new one never replaces an earlier one on a phone.
 - Templates: WhatsApp channel update, scholarship, admission update, new feature, weekend push, exam season, plan
   ending soon, come back, personal note. They live in `src/lib/notifications.js`.
+
+Personalization happens in the Supabase Edge Function, not the service worker. Deploying the Next.js app alone does not update the sender. Before sending a message containing a name token, the API makes an authenticated, read-only GET to the sender to check its personalization version. An older function returns 405; the API then reports that deployment is needed and sends nothing. Deploy the function above before deploying the updated app. No database migration is needed for the replacement changes (the existing `notification_targets` function supplies each recipient’s name).
+
+Regression checks: `node --experimental-vm-modules --test tests/notification-personalization.test.mjs tests/notification-sender.test.mjs` (isolated sender/database dependencies; sends no real notifications).
 
 ## Why notifications show the old web address
 

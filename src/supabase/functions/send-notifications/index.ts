@@ -35,6 +35,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush          from 'npm:web-push@3'
 import { buildMessage, lagosWeekday, lagosDayNumber, userKey, fillName, type Context, type Slot } from './messages.ts'
+import { PERSONALIZATION_VERSION } from './personalization.js'
 
 // ── Batching ──────────────────────────────────────────────────────────────────
 // Each invocation handles one page of subscribers, then hands the next page to
@@ -90,7 +91,7 @@ function parseAudience(raw: any): { kind: string; value: string | null } | null 
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') {
+  if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 })
   }
   const dbKey = databaseKey()
@@ -100,6 +101,14 @@ Deno.serve(async (req) => {
   }
   if (!authorized(req)) {
     return new Response('Unauthorized', { status: 401 })
+  }
+
+  // Read-only compatibility check. An older deployment returns 405 on GET;
+  // checking it must never send a notification or read student/device records.
+  if (req.method === 'GET') {
+    return new Response(JSON.stringify({ personalization_version: PERSONALIZATION_VERSION }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   // Parse body — supports scheduled slots and custom admin blasts

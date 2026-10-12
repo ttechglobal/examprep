@@ -24,6 +24,7 @@ import {
   checkMessage, checkLink, checkAudience, audienceLabel,
 } from '@/lib/notifications'
 import s from './notifications.module.css'
+import { fillName } from '@/supabase/functions/send-notifications/personalization'
 
 const CHANNEL_KEY = 'ep_whatsapp_channel_url'
 const DEFAULT_CHANNEL = process.env.NEXT_PUBLIC_WHATSAPP_CHANNEL_URL ?? ''
@@ -151,8 +152,9 @@ export default function AdminNotificationsPage() {
     } finally { setSending(false) }
   }
 
-  const previewTitle = (title.trim() || 'Notification title').replace(/\{name\}/gi, 'Ada')
-  const previewBody = (body.trim() || 'Your message appears here.').replace(/\{name\}/gi, 'Ada')
+  const previewName = audience.kind === 'user' && student ? student.fullName : 'Ada'
+  const previewTitle = fillName(title.trim() || 'Notification title', previewName)
+  const previewBody = fillName(body.trim() || 'Your message appears here.', previewName)
   const opens = useMemo(() => {
     if (linkId === 'whatsapp') return url ? 'Opens the WhatsApp channel' : 'Opens the WhatsApp channel (link needed)'
     return `Opens: ${link?.label ?? 'a link'}`
@@ -220,7 +222,7 @@ export default function AdminNotificationsPage() {
               : <>
                 <input className={s.input} value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder="Search by name, username, phone or email" aria-label="Find a student" autoComplete="off"/>
                 {studentRows.length > 0 && <div className={s.matches}>
-                  {studentRows.map(r => <button key={r.id} type="button" className={s.match} onClick={() => { setStudent({ id: r.id, name: r.name || r.username || 'Student' }); setStudentQuery(''); setConfirming(false); setResult(null) }}>
+                  {studentRows.map(r => <button key={r.id} type="button" className={s.match} onClick={() => { setStudent({ id: r.id, name: r.name || r.username || 'Student', fullName: r.name }); setStudentQuery(''); setConfirming(false); setResult(null) }}>
                     <span><span className={s.matchName}>{r.name || r.username || 'No name'}</span><span className={s.matchSub}>{[r.username && `@${r.username}`, r.phone, r.school].filter(Boolean).join(' · ')}</span></span>
                   </button>)}
                 </div>}
@@ -242,6 +244,7 @@ export default function AdminNotificationsPage() {
             </div>
           </div>
           <p className={s.opens}>{opens}</p>
+          <p className={s.hint}>{audience.kind === 'user' && student ? 'Preview uses this student’s first name, or “there” if unknown.' : 'Ada is an example. Each student receives their own first name, or “there” if unknown.'}</p>
         </div>
 
         <section className={s.card}>

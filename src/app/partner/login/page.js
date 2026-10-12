@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import s from '../partner.module.css'
+import { PartnerAuthFrame } from '../PartnerUI'
 
 export default function PartnerLoginPage() {
   const router = useRouter()
@@ -41,12 +42,7 @@ export default function PartnerLoginPage() {
   }
 
   return (
-    <div className={s.page}>
-      <div className={s.center}>
-        <Link href="/ambassador" className={s.brand}>
-          <span className={s.brandMark}>E</span>ExamPrep A1
-        </Link>
-
+    <PartnerAuthFrame>
         <div className={s.card}>
           <span className={s.badge}>★ Teacher Ambassador</span>
           <h1 className={s.title}>Welcome back</h1>
@@ -72,7 +68,6 @@ export default function PartnerLoginPage() {
         </div>
 
         <p className={s.foot}>Not an ambassador yet? <Link href="/ambassador">Learn about the program</Link></p>
-      </div>
-    </div>
+    </PartnerAuthFrame>
   )
 }

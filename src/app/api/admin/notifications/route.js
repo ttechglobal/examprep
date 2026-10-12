@@ -21,6 +21,7 @@ import { NextResponse } from 'next/server'
 import { adminContext, actorOf } from '@/lib/adminAuth'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { checkMessage, checkLink, checkAudience, audienceLabel } from '@/lib/notifications'
+import { hasNameToken, PERSONALIZATION_VERSION } from '@/supabase/functions/send-notifications/personalization'
 
 const EDGE_URL   = process.env.SUPABASE_EDGE_URL      // https://xxx.supabase.co/functions/v1/send-notifications
 const SECRET_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -46,6 +47,16 @@ export async function POST(req) {
   }
 
   try {
+    if (hasNameToken(message.title) || hasNameToken(message.body)) {
+      const capability = await fetch(EDGE_URL, {
+        method: 'GET', headers: { apikey: SECRET_KEY }, cache: 'no-store',
+      })
+      const supported = capability.ok ? await capability.json().catch(() => ({})) : {}
+      if (supported.personalization_version !== PERSONALIZATION_VERSION) {
+        return NextResponse.json({ error: 'Personalized notifications need the updated send-notifications Edge Function. Deploy it in Supabase, then try again. Nothing was sent.' }, { status: 503 })
+      }
+    }
+
     const db = supabaseAdmin()
 
     // Nobody to send to is a clear answer, not a silent "0 delivered".

@@ -59,9 +59,7 @@ export function userKey(id: string | null | undefined): number {
 }
 
 /** "{name}" in a custom message becomes the student's first name, or "there". */
-export function fillName(text: string, firstName: string | null | undefined): string {
-  return text.replace(/\{name\}/gi, firstName?.trim() || 'there')
-}
+export { fillName } from './personalization.js'
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
