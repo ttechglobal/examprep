@@ -9,6 +9,14 @@ supabase functions deploy send-notifications --workdir src --no-verify-jwt
 
 The service worker (`public/sw.js`) updates itself the next time students open the app.
 
+### Deploying in the Supabase Dashboard editor
+
+The maintained function has three files: `index.ts`, `messages.ts` and `personalization.js`. Pasting only `index.ts` fails with “Module not found” because its local imports are missing.
+
+For a single-file deployment, run `node scripts/prepare-notification-deploy.mjs` from the repository root. Open `src/supabase/deploy/send-notifications.ts`, copy its **entire contents**, and replace the contents of `index.ts` in the Dashboard's **send-notifications** function editor. Deploy with JWT verification disabled; the function checks the secret `apikey` itself. Keep the existing function secrets.
+
+The generated file includes reminders, audiences, personalization and the version check. Edit the maintained source files for future changes and regenerate this file before deploying. `node scripts/prepare-notification-deploy.mjs --check` verifies it is current. Alternatively, create all three source files in the Dashboard editor with their exact filenames.
+
 ## House rules
 
 - **No emojis**, in any notification, including the buttons on it. The admin sender refuses them.
