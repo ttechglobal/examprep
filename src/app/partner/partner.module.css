@@ -178,10 +178,20 @@
 .authStory { display: none; }
 .authMain { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; gap: 20px; }
 .authMain .mobileBrand { margin: 0 0 8px; }
-.authMain .card { padding: 30px 26px; box-shadow: 0 12px 48px #062a780a; }
+.authMain .card { padding: 24px; border: 1.5px solid var(--line); border-radius: 22px; box-shadow: 0 5px 0 #dce5f6, 0 12px 30px #062a780a; }
 .authMain .title { font-size: 29px; }
 .authMain .label { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--ink-2); }
-.authMain .input { min-height: 48px; background: #f8faff; }
+.authMain .input { min-height: 48px; background: #fff; border-radius: 14px; border-width: 2px; }
+.authMain .input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #1264e512; }
+.authGreeting { width: 100%; max-width: 440px; display: flex; align-items: flex-end; gap: 12px; }
+.authBubble { flex: 1; padding: 14px 16px; border: 1.5px solid var(--line); border-radius: 18px 18px 18px 6px; background: #fff; box-shadow: 0 4px 0 #dce5f6; }
+.authBubble strong { display: block; font-size: 15px; letter-spacing: -.025em; line-height: 1.4; }
+.authBubble p { margin: 6px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.6; }
+.supportPanel { max-width: 620px; }
+.supportSymbol { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: #edf4ff; color: var(--blue); margin-bottom: 20px; }
+.supportMessage { min-height: 140px; resize: vertical; line-height: 1.7; }
+.supportContinue { display: inline-flex; padding: 14px 20px; margin-top: 24px; border-radius: 13px; background: var(--blue); color: #fff; font-size: 13px; font-weight: 800; text-decoration: none; box-shadow: 0 4px 0 #0a3fa0; }
+.supportLink { padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .authHelp { margin: 8px 0 0; max-width: 440px; text-align: center; font-size: 12px; line-height: 1.8; color: var(--ink-3); }
 .authHelp a { color: var(--navy); font-weight: 700; text-decoration: none; }
 .storyBadge { font-size: 10px; font-weight: 800; letter-spacing: .12em; color: #ffcf53; }
@@ -216,9 +226,13 @@
 
 @media (min-width: 900px) {
   .authShell { grid-template-columns: minmax(380px, .95fr) minmax(440px, 1.05fr); }
-  .authStory { display: flex; flex-direction: column; justify-content: space-between; gap: 50px; padding: 48px clamp(32px, 5vw, 76px); background: radial-gradient(ellipse at 0 100%, #1264e54d, transparent 60%), #062a78; color: #fff; }
-  .authStory .brand { color: #fff; }
-  .authStory .brandMark { background: #ffcf53; color: #062a78; box-shadow: 0 4px 0 #c68a00; }
+  .authStory { display: flex; flex-direction: column; justify-content: space-between; gap: 50px; padding: 48px clamp(32px, 5vw, 76px); background: radial-gradient(ellipse at 0 100%, #dbeaff, transparent 65%), #f8fbff; color: var(--ink); border-right: 1px solid var(--line); }
+  .authStory .brand { color: var(--ink); }
+  .authStory .brandMark { background: var(--blue); color: #fff; box-shadow: 0 4px 0 #0a3fa0; }
+  .authStory .storyBadge { color: #966100; background: #fff2cc; border: 1px solid #f4d683; padding: 8px 12px; border-radius: 999px; display: inline-block; line-height: 1.6; }
+  .authStory .storyBody > p, .authStory .storySteps > div, .authStory .storyFoot { color: var(--ink-2); }
+  .authStory .storySteps strong { color: var(--ink); }
+  .authStory .storySteps svg { color: var(--blue); }
   .authMain { padding: 48px 32px; }
   .authMain .mobileBrand { display: none; }
   .dashboardPage { display: grid; grid-template-columns: 240px minmax(0, 1fr); }

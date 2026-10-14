@@ -68,7 +68,7 @@ Analytics, leaderboards and notification audiences already exclude ambassadors: 
 
 ## Rollout
 
-The teacher dashboard has Overview, Referral link and Students views, with a sidebar on desktop and bottom navigation on mobile. Switching views reuses the loaded dashboard data. Support links use the shared number in `lib/contact.js` (+234 816 652 8437).
+The teacher dashboard has Overview, Referral link and Students views, with a sidebar on desktop and bottom navigation on mobile. Switching views reuses the loaded dashboard data. The dashboard's Help button opens a support page with an editable draft; only “Continue to WhatsApp” opens the external chat, where the teacher still taps Send. Support uses the shared number in `lib/contact.js` (+234 816 652 8437). Teacher signup and login share the student app's Zara greeting and rounded, raised form styling in a light layout.
 
 Set `NEXT_PUBLIC_APP_URL` to the canonical production origin and rebuild when changing it (Next.js includes public environment variables at build time). Referral links fall back to the current browser origin when the setting is missing, invalid, or points to localhost while the teacher is on a live site. Link copying, WhatsApp sharing and QR generation use the same URL.
 

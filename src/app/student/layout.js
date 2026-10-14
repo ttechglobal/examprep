@@ -38,6 +38,7 @@ const CYAN = '#18B7F2'
 // (/student/battle) keeps the nav, since Battle is a main tab; only the
 // setup, the match and the 1v1 screens take over the screen.
 const SHELL_EXCLUDED = [
+  '/student/learn/flashcards/session',
   '/student/practice/session', '/student/practice/mock', '/student/learn/world',
   '/student/battle',
 ]
@@ -340,7 +341,7 @@ function StudentLayoutInner({ children }) {
       <StudentUserContext.Provider value={profile}>
       <PlanProvider profile={profile}>
         {children}
-        {!pathname.startsWith('/student/battle') && <ProfileSetupGate profile={profile} />}
+        {!pathname.startsWith('/student/battle') && !pathname.startsWith('/student/learn/flashcards/session') && <ProfileSetupGate profile={profile} />}
       </PlanProvider>
       </StudentUserContext.Provider>
     </StudentProfileUpdateContext.Provider>

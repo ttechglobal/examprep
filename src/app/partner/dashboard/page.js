@@ -11,8 +11,9 @@ import { useRouter } from 'next/navigation'
 import { signOut } from '@/lib/auth/client'
 import { priceLabel } from '@/lib/plans'
 import s from '../partner.module.css'
-import { PartnerBrand, PartnerIcon, partnerSupport } from '../PartnerUI'
+import { PartnerBrand, PartnerIcon } from '../PartnerUI'
 import { partnerReferralBase } from '@/lib/partnerUrl'
+import { whatsappLink } from '@/lib/contact'
 
 const VIEWS = [{ id: 'overview', label: 'Overview' }, { id: 'referrals', label: 'Referral link' }, { id: 'students', label: 'Students' }]
 
@@ -62,6 +63,7 @@ export default function PartnerDashboardPage() {
   const [busy, setBusy]       = useState(false)
   const [qr, setQr]           = useState({ small: null, large: null })
   const [view, setView] = useState('overview')
+  const [supportMessage, setSupportMessage] = useState('Hi, I need help with my ExamPrep A1 Teacher Ambassador account.')
   const heading = useRef(null)
 
   function navigate(next) {
@@ -146,7 +148,7 @@ export default function PartnerDashboardPage() {
         <nav className={s.desktopNav} aria-label="Ambassador dashboard">
           {VIEWS.map(item => <button key={item.id} type="button" className={`${s.navItem} ${view === item.id ? s.navActive : ''}`} aria-current={view === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><PartnerIcon name={item.id} />{item.label}</button>)}
         </nav>
-        <div className={s.sidebarHelp}><PartnerIcon name="support" /><strong>We’re here to help</strong><p>Questions about referrals or your earnings?</p><a href={partnerSupport} target="_blank" rel="noopener noreferrer">Chat on WhatsApp ↗</a></div>
+        <div className={s.sidebarHelp}><PartnerIcon name="support" /><strong>We’re here to help</strong><p>Questions about referrals or your earnings?</p><button type="button" className={s.supportLink} onClick={() => navigate('support')}>Get help ↗</button></div>
         <div className={s.sidebarAccount}><span className={s.avatar}>{firstName.slice(0, 1)}</span><div><strong>{data.name}</strong><small>Teacher Ambassador</small></div></div>
         <button type="button" className={s.signout} onClick={logout}>Sign out ↗</button>
       </aside>
@@ -155,13 +157,23 @@ export default function PartnerDashboardPage() {
         <div className={s.top}>
           <div>
             <p className={s.eyebrow}>YOUR AMBASSADOR WORKSPACE</p>
-            <h1 ref={heading} tabIndex={-1} className={s.hello}>{view === 'overview' ? `Hi, ${firstName} 👋` : view === 'referrals' ? 'Your referral toolkit' : 'Your students'}</h1>
-            <p className={s.helloSub}>{view === 'overview' ? 'Small encouragement. Lasting impact. Here’s how you’re doing.' : view === 'referrals' ? 'One link to bring your classroom along.' : 'See the students who joined through your referral.'}</p>
+            <h1 ref={heading} tabIndex={-1} className={s.hello}>{view === 'overview' ? `Hi, ${firstName} 👋` : view === 'referrals' ? 'Your referral toolkit' : view === 'support' ? 'How can we help?' : 'Your students'}</h1>
+            <p className={s.helloSub}>{view === 'overview' ? 'Small encouragement. Lasting impact. Here’s how you’re doing.' : view === 'referrals' ? 'One link to bring your classroom along.' : view === 'support' ? 'Talk to the ExamPrep A1 team about your ambassador account.' : 'See the students who joined through your referral.'}</p>
           </div>
           <button type="button" className={`${s.ghost} ${s.mobileSignout}`} onClick={logout}>Sign out</button>
         </div>
 
         {error && <div className={s.error} role="alert">{error}</div>}
+
+        {view === 'support' && <section className={`${s.panel} ${s.supportPanel}`}>
+          <span className={s.supportSymbol}><PartnerIcon name="support" /></span>
+          <h2 className={s.panelTitle}>Message our team</h2>
+          <p className={s.panelSub}>Ask about your referral link, student signups, earnings or payouts. Review your message below before opening WhatsApp.</p>
+          <label className={s.label} htmlFor="partner-support-message">Your message</label>
+          <textarea id="partner-support-message" className={`${s.input} ${s.supportMessage}`} value={supportMessage} onChange={event => setSupportMessage(event.target.value)} maxLength={2000} />
+          <p className={s.fine}>Support: +234 816 652 8437. Nothing has been sent. You’ll review the draft and tap Send in WhatsApp.</p>
+          {supportMessage.trim() ? <a className={s.supportContinue} href={whatsappLink(supportMessage.trim())} target="_blank" rel="noopener noreferrer">Continue to WhatsApp ↗</a> : <button className={s.primary} disabled>Write a message to continue</button>}
+        </section>}
 
         {/* Referral code */}
         <section className={s.panel} hidden={view !== 'referrals'}>
@@ -210,7 +222,7 @@ export default function PartnerDashboardPage() {
         </section>
 
         {/* Year */}
-        <div className={s.yearRow} role="group" aria-label="Choose a year" hidden={view === 'referrals'}>
+        <div className={s.yearRow} role="group" aria-label="Choose a year" hidden={view === 'referrals' || view === 'support'}>
           {data.years.map(y => (
             <button key={y} type="button" className={`${s.chip} ${data.year === y ? s.chipOn : ''}`} aria-pressed={data.year === y} onClick={() => load(y)}>{y}</button>
           ))}
@@ -234,7 +246,7 @@ export default function PartnerDashboardPage() {
         </section>}
 
         {/* Students */}
-        <section className={s.panel} hidden={view === 'referrals'}>
+        <section className={s.panel} hidden={view === 'referrals' || view === 'support'}>
           <h2 className={s.panelTitle}>Your students · {yearLabel}</h2>
           {data.list.length === 0 ? (
             <p className={s.empty}>
@@ -263,7 +275,7 @@ export default function PartnerDashboardPage() {
       </main>
       <nav className={s.bottomNav} aria-label="Ambassador dashboard">
         {VIEWS.map(item => <button key={item.id} type="button" className={`${s.bottomItem} ${view === item.id ? s.bottomActive : ''}`} aria-current={view === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><PartnerIcon name={item.id} /><span>{item.label}</span></button>)}
-        <a className={s.bottomItem} href={partnerSupport} target="_blank" rel="noopener noreferrer"><PartnerIcon name="support" /><span>Help</span></a>
+        <button type="button" className={`${s.bottomItem} ${view === 'support' ? s.bottomActive : ''}`} aria-current={view === 'support' ? 'page' : undefined} onClick={() => navigate('support')}><PartnerIcon name="support" /><span>Help</span></button>
       </nav>
     </div>
   )

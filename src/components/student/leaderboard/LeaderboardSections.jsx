@@ -25,7 +25,7 @@ import s from './leaderboard.module.css'
 import { ArrowRight, Trophy, Crown, NigeriaFlag, SchoolIcon, LevelBadge, RankCoin } from './icons'
 import LazyImage from '@/components/ui/LazyImage'
 import { shareInvite } from '@/components/student/InviteFriendsCard'
-import { HERO_BG, PODIUM_IMAGES, AVATAR_RIM_OFFSET, INVITE_IMAGE } from './art'
+import { HERO_BG, INVITE_IMAGE } from './art'
 import { avatarLook } from '@/lib/leaderboard/avatar'
 import JoinSchool from '@/components/student/JoinSchool'
 
@@ -137,17 +137,16 @@ const CONFETTI = [
 ]
 
 function Spot({ entry, place }) {
-  const [artShown, setArtShown] = useState(false)
+  const [artLoaded, setArtLoaded] = useState(false)
   return (
     <div className={s.spot} data-place={place}>
-      <span className={s.spotAvatar} style={{ translate: `0 ${AVATAR_RIM_OFFSET[place] ?? 0}px` }} aria-hidden="true">
+      <span className={s.spotAvatar} aria-hidden="true">
         {place === 1 && <span className={s.spotCrown}><Crown size={36} /></span>}
         {(entry?.name || '?').charAt(0).toUpperCase()}
         <span className={s.spotNum}>{place}</span>
       </span>
-      {/* The gradient pedestal stays until the pedestal art has loaded. */}
-      <div className={s.pedestal} data-art={artShown}>
-        <LazyImage src={PODIUM_IMAGES[place]} className={s.pedestalImg} onLoaded={() => setArtShown(true)} />
+      <div className={s.pedestal} data-art={artLoaded}>
+        <LazyImage src="/images/leaderboard/podium-atlas-v2.png" className={s.pedestalImg} onLoaded={() => setArtLoaded(true)} />
         <span className={s.spotName}>{entry?.name ?? '—'}</span>
         <span className={s.spotXp}>{entry ? `${entry.xp.toLocaleString()} XP` : ''}</span>
       </div>

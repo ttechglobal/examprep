@@ -235,7 +235,7 @@
   display: grid;
   grid-template-columns: 1fr 1.15fr 1fr;
   align-items: end;
-  gap: 6px;
+  gap: 0;
   width: 100%;
   max-width: 420px;
   margin: 0 auto;
@@ -244,9 +244,9 @@
 .podium[aria-busy='true'] { opacity: 0.55; }
 
 .spot { display: flex; flex-direction: column; align-items: center; min-width: 0; }
-.spot[data-place='1'] { --ring: #ffc53d; --p1: #f7c744; --p2: #c98a10; --face: linear-gradient(145deg, #f59e0b, #b45309); }
-.spot[data-place='2'] { --ring: #8fb6ff; --p1: #4f86f7; --p2: #2350c8; --face: linear-gradient(145deg, #3b82f6, #1e3a8a); }
-.spot[data-place='3'] { --ring: #ff9a5a; --p1: #e8834a; --p2: #a8481c; --face: linear-gradient(145deg, #f97316, #9a3412); }
+.spot[data-place='1'] { --ring: #ffc53d; --p1: #ffe58a; --p2: #b8790c; --rim: #fff1ad; --medal-ink: #704500; --face: linear-gradient(145deg, #f59e0b, #b45309); }
+.spot[data-place='2'] { --ring: #a8ceff; --p1: #b9daff; --p2: #3965ac; --rim: #e2efff; --medal-ink: #153b72; --face: linear-gradient(145deg, #3b82f6, #1e3a8a); }
+.spot[data-place='3'] { --ring: #ffad70; --p1: #ffc097; --p2: #9d4827; --rim: #ffddbd; --medal-ink: #75320f; --face: linear-gradient(145deg, #f97316, #9a3412); }
 
 .spotAvatar {
   position: relative;
@@ -280,35 +280,42 @@
   place-items: center;
   font-size: 15px;
   font-weight: 800;
-  color: #fff;
-  background: var(--ring);
+  color: var(--medal-ink);
+  background: linear-gradient(145deg, var(--rim), var(--ring));
   border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 3px 0 var(--p2), 0 5px 12px #0004;
 }
 
-/* Gradient pedestal; drop-in art (art.js) replaces it once it has loaded. */
+/* Cylindrical podiums share a baseline; the winner stands tallest. */
 .pedestal {
   position: relative;
   isolation: isolate;
   width: 100%;
   padding: 38px 6px 14px;                                /* clears the number badge */
-  border-radius: 50% 50% 6px 6px / 18px 18px 6px 6px;   /* rim of a cylinder */
+  border-radius: 50% 50% 0 0 / 14px 14px 0 0;
   text-align: center;
-  background: linear-gradient(180deg, var(--p1), var(--p2));
-  box-shadow: inset 0 12px 0 rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(90deg, #0002, #ffffff30 24%, transparent 52%, #0003),
+    linear-gradient(180deg, var(--p1), var(--p2) 85%);
+  box-shadow: inset 1px 0 0 #ffffff40, inset -1px 0 0 #0002;
 }
-.pedestal[data-art='true'] { background: none; box-shadow: none; }
-.pedestalImg {
+.pedestal::before {
+  content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
   z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
+  border-radius: 50%;
+  background: linear-gradient(100deg, var(--rim), var(--p1) 55%, var(--p2));
+  border: 1px solid #ffffff60;
+  box-shadow: 0 3px 6px #0002, inset 0 2px 4px #ffffff50;
   pointer-events: none;
 }
-.spot[data-place='1'] .pedestal { min-height: 112px; }
-.spot[data-place='2'] .pedestal { min-height: 94px; }
-.spot[data-place='3'] .pedestal { min-height: 88px; }
+.spot[data-place='1'] .pedestal { min-height: 132px; }
+.spot[data-place='2'] .pedestal { min-height: 110px; }
+.spot[data-place='3'] .pedestal { min-height: 96px; }
 
 .spotName {
   display: block;
@@ -317,6 +324,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 4px #0009;
 }
 .spotXp { display: block; margin-top: 6px; font-size: 14px; font-weight: 800; }
 
@@ -360,19 +368,19 @@
   .heroBtn:hover { background: rgba(255, 255, 255, 0.1); }
   .heroLink { display: none; }
   .podium {
-    grid-template-columns: 140px 170px 140px;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 0;
     align-self: end;
-    width: auto;
+    width: clamp(280px, 34vw, 466px);
     max-width: none;
     margin: 0;
   }
   .spotAvatar { width: 72px; height: 72px; font-size: 26px; }
   .spot[data-place='1'] .spotAvatar { width: 92px; height: 92px; font-size: 32px; margin-bottom: -22px; }
   .pedestal { padding-top: 40px; }
-  .spot[data-place='1'] .pedestal { min-height: 126px; padding-top: 42px; }
-  .spot[data-place='2'] .pedestal { min-height: 100px; }
-  .spot[data-place='3'] .pedestal { min-height: 92px; }
+  .spot[data-place='1'] .pedestal { min-height: 150px; padding-top: 42px; }
+  .spot[data-place='2'] .pedestal { min-height: 124px; }
+  .spot[data-place='3'] .pedestal { min-height: 108px; }
   .spotName { font-size: 15px; }
   .spotXp { font-size: 16px; }
   .heroEmpty { width: 412px; padding-bottom: 40px; text-align: center; }
@@ -514,7 +522,7 @@
   .hero { padding: 24px 28px 0; gap: 16px; }
   .heroTitle { font-size: 28px; gap: 10px; }
   .heroSub { font-size: 15px; }
-  .podium { grid-template-columns: 112px 136px 112px; gap: 6px; }
+  .podium { grid-template-columns: 112px 136px 112px; gap: 0; }
   .spotAvatar { width: 60px; height: 60px; font-size: 22px; }
   .spot[data-place='1'] .spotAvatar { width: 74px; height: 74px; font-size: 26px; margin-bottom: -20px; }
   .spotName { font-size: 13px; }
@@ -625,3 +633,11 @@
 @media (min-width: 900px) {
   .invite { padding: 14px 18px; font-size: 16px; }
 }
+
+.pedestal { overflow: hidden; }
+.pedestalImg { position: absolute; width: 300%; max-width: none; height: 125%; top: -16%; left: 0; object-fit: fill; z-index: -1; pointer-events: none; }
+.spot[data-place='1'] .pedestalImg { left: -100%; }
+.spot[data-place='3'] .pedestalImg { left: -200%; }
+.pedestal[data-art='true'] { background: none; box-shadow: none; }
+.pedestal[data-art='true']::before { display: none; }
+.spot[data-place='1'] .spotAvatar { box-shadow: 0 0 0 4px #ffd96a22, 0 0 30px #ffc53d55; }

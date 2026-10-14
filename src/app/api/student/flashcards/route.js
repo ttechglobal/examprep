@@ -32,10 +32,11 @@ export async function GET(request) {
   if (subjectName && !topicId) {
     // Resolve subject ids (WAEC + JAMB variants)
     const base = subjectName.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i, '').trim()
-    const { data: subjects } = await db
+    const { data: subjects, error: subjectsError } = await db
       .from('subjects')
       .select('id, name')
       .eq('is_active', true)
+    if (subjectsError) return NextResponse.json({ error: 'Could not load subjects' }, { status: 500 })
 
     const subjectIds = (subjects ?? [])
       .filter(s => s.name.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i, '').trim() === base)
@@ -46,23 +47,25 @@ export async function GET(request) {
     }
 
     // Get topics for this subject
-    const { data: topics } = await db
+    const { data: topics, error: topicsError } = await db
       .from('topics')
       .select('id, name, order_index, subject_id')
       .in('subject_id', subjectIds)
       .order('order_index', { nullsLast: true })
       .order('name')
+    if (topicsError) return NextResponse.json({ error: 'Could not load topics' }, { status: 500 })
 
     if (!topics?.length) return NextResponse.json({ topics: [] })
 
     const topicIds = topics.map(t => t.id)
 
     // Get card counts per topic
-    const { data: cards } = await db
+    const { data: cards, error: countsError } = await db
       .from('flashcards')
       .select('topic_id')
       .in('topic_id', topicIds)
       .eq('is_active', true)
+    if (countsError) return NextResponse.json({ error: 'Could not load card counts' }, { status: 500 })
 
     const countByTopic = {}
     for (const c of (cards ?? [])) {
@@ -80,7 +83,7 @@ export async function GET(request) {
         .filter(x => x.name.trim().toLowerCase() === key)
         .reduce((sum, x) => sum + (countByTopic[x.id] ?? 0), 0)
       if (count > 0) {
-        deduped.push({ id: t.id, name: t.name, card_count: count })
+        deduped.push({ id: t.id, name: t.name, card_count: count, topic_ids: topics.filter(x => x.name.trim().toLowerCase() === key && countByTopic[x.id] > 0).map(x => x.id) })
       }
     }
 
@@ -89,10 +92,14 @@ export async function GET(request) {
 
   // ── Mode 2: get flashcards for a specific topic ────────────────────────────
   if (topicId) {
+    const requested = searchParams.get('topicIds')?.split(',') ?? [topicId]
+    if (!UUID_RE.test(topicId) || requested.length > 100 || requested.some(id => !UUID_RE.test(id))) {
+      return NextResponse.json({ error: 'Invalid topic' }, { status: 400 })
+    }
     const { data: cards, error } = await db
       .from('flashcards')
       .select('id, front_text, back_text, hint, mnemonic, difficulty, svg_code')
-      .eq('topic_id', topicId)
+      .in('topic_id', [...new Set(requested)])
       .eq('is_active', true)
       .order('created_at')
 
@@ -113,21 +120,23 @@ export async function GET(request) {
   }
 
   // ── Mode 3: get all subjects that have flashcards ──────────────────────────
-  const { data: allCards } = await db
+  const { data: allCards, error: allCardsError } = await db
     .from('flashcards')
     .select('subject_id')
     .eq('is_active', true)
+  if (allCardsError) return NextResponse.json({ error: 'Could not load flashcards' }, { status: 500 })
 
   const subjectIdSet = new Set((allCards ?? []).map(c => c.subject_id).filter(Boolean))
 
   if (!subjectIdSet.size) return NextResponse.json({ subjects: [] })
 
-  const { data: allSubjects } = await db
+  const { data: allSubjects, error: allSubjectsError } = await db
     .from('subjects')
     .select('id, name')
     .in('id', [...subjectIdSet])
     .eq('is_active', true)
     .order('name')
+  if (allSubjectsError) return NextResponse.json({ error: 'Could not load subjects' }, { status: 500 })
 
   // Deduplicate by base name
   const seenNames = new Set()

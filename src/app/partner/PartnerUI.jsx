@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { whatsappLink } from '@/lib/contact'
 import s from './partner.module.css'
+import Zara from '@/components/onboarding/Zara'
 
 export const partnerSupport = whatsappLink('Hi, I need help with my ExamPrep A1 Teacher Ambassador account.')
 
@@ -36,6 +37,7 @@ export function PartnerAuthFrame({ children }) {
     </aside>
     <main className={s.authMain}>
       <div className={s.mobileBrand}><PartnerBrand /></div>
+      <div className={s.authGreeting}><Zara size={76} /><div className={s.authBubble}><strong>A little support. A bigger impact.</strong><p>Welcome, teacher. Let’s help your students go further.</p></div></div>
       {children}
       <p className={s.authHelp}>Need a hand? <a href={partnerSupport} target="_blank" rel="noopener noreferrer">Chat with us on WhatsApp ↗</a></p>
     </main>
