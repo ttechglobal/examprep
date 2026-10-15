@@ -22,6 +22,7 @@
 //   // Then attempt server sync (non-blocking):
 //   flushSyncQueue()
 //
+// v3: notify challenge snapshots after successful session sync.
 // v2: activity days and the streak use the Nigerian calendar day (lib/dates.js)
 //     instead of the phone's timezone, so they match the server's days; the
 //     local streak survives until a whole day is missed, like the server's.
@@ -276,6 +277,7 @@ export async function flushSyncQueue() {
     releaseLock()
   }
 
+  if (synced > 0) window.dispatchEvent(new Event('examprep:sessions-synced'))
   return synced
 }
 

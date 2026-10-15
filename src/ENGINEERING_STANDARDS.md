@@ -3,7 +3,7 @@
 **Read this before changing any code.** It applies to every contributor, human or AI, in every chat and every session.
 If a request conflicts with this document, say so before writing code.
 
-Last updated: 28 Sep 2026 (one service worker, shared cards, recent sessions) · Owner: tech lead
+Last updated: 15 Oct 2026 (offline shell refresh and independent Practice challenges) · Owner: tech lead
 
 ---
 
@@ -59,7 +59,8 @@ Small changes still follow the steps. They're just quicker.
 | School data access | `lib/server/schoolStats.js` (`requireSchoolAdmin`, aggregates) | All school endpoints go through it |
 | Admin session | `lib/adminSession.js`, enforced in `middleware.js` | Every `/api/admin/*` route is gated automatically |
 | Offline and guest practice | `lib/localSessionSync.js` | Save locally first, sync in the background, idempotent by `session_id` |
-| App opening offline, cached code and images | `public/sw.js` | Pages network-first with a saved copy; `/_next/static`, `/images`, `/icons` cache-first. Never cache `/api/*` or admin/school pages |
+| App opening offline, cached code and images | `public/sw.js` | Saved student pages first, refreshed with their required code in the background; static images/code cache-first. Never cache `/api/*` or admin/school pages |
+| Weekly Practice challenges | `hooks/usePracticeChallenges.js`, `/api/student/practice/challenges`, `practice_challenge_sets` / `practice_challenges` | Independent of Battle missions; progress/rewards are verified in SQL, device snapshots are account/week scoped |
 | Decorative images | `components/ui/LazyImage.jsx` | The page renders complete without the image; images load lazily and fade in |
 | A student's week / month activity | `hooks/useStudentActivity.js` | Home, Practice and Profile read it. Don't recompute activity per screen |
 | A student's subjects for one exam, with ids | `hooks/useExamSubjects.js` | The exam decides the subjects: never reuse one exam's subject ids for the other |

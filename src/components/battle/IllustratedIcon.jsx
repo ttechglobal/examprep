@@ -1,3 +1,5 @@
+import SubjectIllustration from '@/components/ui/SubjectIllustration'
+
 // The supplied design sheets are retained unchanged. CSS sprite windows render
 // their original illustrations without replacing them with platform emoji.
 const ROOT = '/images/battle/design/'
@@ -56,19 +58,12 @@ export function topicArt(name = '', subject = '') {
 }
 
 export function subjectArt(name = '') {
-  const n = name.toLowerCase()
-  if (n.includes('math')) return 'mathematics'
-  if (n.includes('chem')) return 'chemistry'
-  if (n.includes('phys')) return 'physics'
-  if (n.includes('bio') || n.includes('agric')) return 'biology'
-  if (n.includes('lit')) return 'literature'
-  if (n.includes('gov')) return 'government'
-  if (n.includes('econ') || n.includes('commerce') || n.includes('account')) return 'economics'
-  return 'english'
+  return `subject:${name ?? ''}`
 }
 
 // size: width in px, or null to size it from CSS (the height follows the art).
 export default function IllustratedIcon({ name, size = 60, className = '' }) {
+  if (name?.startsWith('subject:')) return <SubjectIllustration name={name.slice(8)} size={size} className={className} />
   const [file, x, y, width, height] = ART[name] ?? ART.english
   return <span className={className} aria-hidden="true" style={{
     display: 'inline-block', flexShrink: 0, width: size ?? undefined, aspectRatio: `${width} / ${height}`,

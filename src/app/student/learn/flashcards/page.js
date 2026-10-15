@@ -38,10 +38,10 @@ export default function FlashcardsPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All subjects')
   const request = useRef(0)
-  async function loadSubjects() {
+  async function loadSubjects({ refresh = false } = {}) {
     const id = ++request.current
     setLoading(true); setError(null)
-    try { const data = await getData(); if (id === request.current) setSubjects(data.subjects || []) }
+    try { const data = await getData('', { refresh }); if (id === request.current) setSubjects(data.subjects || []) }
     catch (e) { if (id === request.current) setError(e.message) }
     finally { if (id === request.current) setLoading(false) }
   }
@@ -80,7 +80,7 @@ export default function FlashcardsPage() {
     {view === 'subjects' && <>
       <header className={s.hero}><div><span className={s.eyebrow}>QUICK RECALL · LASTING CONFIDENCE</span><h1>Flashcards</h1><h2>Remember faster. Forget less.</h2><p>Short recall sessions, one topic at a time. Pick a subject and put your memory to work.</p></div><div className={s.heroArt} aria-hidden="true"><span>✦</span><div>✧</div><b>QUICK<br />RECALL</b></div></header>
       {recent && !loading && subjects.some(item => item.name === recent.subjectName) && <section className={s.continueBanner} style={{ '--accent': subjectColor(recent.subjectName) }}><SubjectArt name={recent.subjectName} /><div><span className={s.eyebrow}>PICK UP WHERE YOU LEFT OFF</span><h2>Continue your study</h2><p>{recent.subjectName} · {recent.topicName}</p><Meter value={subjectProgress({ recent }, recent.subjectName, recent.total).percent} label="Saved Got it progress" /><small>{recent.done || 0} / {recent.total} marked Got it · Saved on this device</small></div><button onClick={() => openTopic(recent.topicObj, recent.subjectObj)}>Continue studying →</button></section>}
-      <div className={s.sectionHead}><div><h2>Explore your subjects</h2><p>Available flashcards across the subject library.</p></div><span className={s.count}>{subjects.length} subjects</span></div>
+      <div className={s.sectionHead}><div><h2>Explore your subjects</h2><p>Available flashcards across the subject library.</p></div><div className={s.libraryActions}><span className={s.count}>{subjects.length} subjects</span><button className={s.textLink} disabled={loading} onClick={() => loadSubjects({ refresh: true })}>Refresh library</button></div></div>
       {!loading && subjects.length > 0 && <div className={s.filters}><div className={s.categories} role="group" aria-label="Subject category">{categories.map(item => <button key={item} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div><input aria-label="Search subjects" placeholder="Search subjects…" value={search} onChange={e => setSearch(e.target.value)} /></div>}
       {loading ? <p className={s.loading} role="status">Loading your flashcard library…</p> : error ? <Empty title="We couldn’t load your subjects" retry={loadSubjects}>{error}</Empty> : !subjects.length ? <Empty title="No flashcards available yet">Your subject library will appear here when cards are added. Explore lessons or practise questions in the meantime.</Empty> : !visibleSubjects.length ? <Empty title="No matching subjects">Try another category or a shorter search.</Empty> : <div className={s.subjectGrid}>{visibleSubjects.map(item => {
         const studied = subjectProgress(progress, item.name, item.card_count)

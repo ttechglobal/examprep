@@ -1,19 +1,10 @@
 export const FLASHCARD_PROGRESS_KEY = 'ep_fc_progress'
-export function subjectArtwork(name) {
-  if (/biology|agric/i.test(name)) return { url: '/images/flashcards/subjects-science-v1.png', position: '0% 0%' }
-  if (/chemistry/i.test(name)) return { url: '/images/flashcards/subjects-science-v1.png', position: '100% 0%' }
-  if (/economics|commerce|account|business/i.test(name)) return { url: '/images/flashcards/subjects-science-v1.png', position: '0% 100%' }
-  if (/physics/i.test(name)) return { url: '/images/flashcards/subjects-science-v1.png', position: '100% 100%' }
-  if (/math|computer/i.test(name)) return { url: '/images/flashcards/subjects-other-v1.png', position: '0% 0%' }
-  if (/english|literature|french|yoruba|igbo|hausa|arabic/i.test(name)) return { url: '/images/flashcards/subjects-other-v1.png', position: '100% 0%' }
-  if (/geography/i.test(name)) return { url: '/images/flashcards/subjects-other-v1.png', position: '100% 100%' }
-  return { url: '/images/flashcards/subjects-other-v1.png', position: '0% 100%' }
-}
+export { getSubjectArtwork as subjectArtwork } from './subjectArtwork.js'
 export function subjectCategory(name) {
   if (/math|physics|chemistry|biology|agric|computer|geography/i.test(name)) return 'Science & maths'
   if (/economics|commerce|account|business/i.test(name)) return 'Business'
   if (/english|literature|french|yoruba|igbo|hausa|arabic/i.test(name)) return 'Languages'
-  if (/government|history|relig|civic|social|islam|christian|\bcrs\b|\birs\b/i.test(name)) return 'Humanities'
+  if (/government|history|relig|civic|social|islam|christian|\bcr[sk]\b|\bir[sk]\b/i.test(name)) return 'Humanities'
   return 'Other subjects'
 }
 export function subjectColor(name) {

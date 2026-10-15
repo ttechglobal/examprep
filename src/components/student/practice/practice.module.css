@@ -1,4 +1,5 @@
 /* src/components/student/practice/practice.module.css
+   v18: reference proportions, stacked desktop heading and gold title accents.
    Practice page. One markup for every width:
      • phones: single column (hero, Topic + Mock cards, more modes as three
        tiles, recent sessions, practice streak)
@@ -104,6 +105,7 @@
 
 .titleWide   { display: none; }
 .titleNarrow { display: block; }
+.gold { color: #ffcc08; }
 
 .sub {
   margin: 10px 0 0;
@@ -117,7 +119,7 @@
    empty); wider: it sits on the right. */
 .heroArt {
   position: absolute;
-  left: -6px;
+  left: 40%;
   right: -10px;
   bottom: -16px;          /* tucks behind the top of the cards */
   height: 190px;
@@ -140,15 +142,17 @@
 .sparkle2 { top: 30%; right: 2%; font-size: 14px; }
 
 @media (min-width: 768px) {
-  .hero { --art-w: clamp(300px, 46%, 560px); min-height: 190px; padding: 0 0 26px; }
+  .hero { --art-w: clamp(300px, 53%, 640px); min-height: 254px; padding: 0 0 12px; }
   .heroArt { left: auto; width: var(--art-w); }
   .heroText { max-width: calc(100% - var(--art-w) + 40px); }
   .tags { display: flex; gap: 8px; flex-wrap: wrap; }
-  .title { margin-top: 16px; font-size: clamp(40px, 4.3vw, 60px); }
+  .title { margin-top: 10px; font-size: clamp(56px, 6vw, 86px); }
   .titleWide   { display: block; }
   .titleNarrow { display: none; }
   .sub { font-size: 18px; margin-top: 12px; }
-  .heroArt { right: 0; bottom: -18px; height: 250px; }
+  .heroArt { right: 0; bottom: -18px; height: 290px; }
+  .heroText { max-width: 57%; }
+  .tag { border: 0; background: transparent; text-transform: uppercase; padding-left: 0; }
 }
 
 /* ── More practice modes ──────────────────────────────────────────────────── */
@@ -219,7 +223,7 @@
 }
 
 .headActions { display: inline-flex; align-items: center; gap: 18px; }
-.toggleWide   { display: none; }
+
 
 @media (min-width: 768px) {
   .toggleWide   { display: inline-flex; }
@@ -237,7 +241,7 @@
     gap: 16px;
     padding: 16px 44px 16px 16px;
   }
-  .modeIcon { width: 64px; height: 64px; }
+  .modeIcon { width: 74px; height: 74px; border-radius: 28px; }
   .modeTitle { font-size: 17px; }
   .modeDesc { font-size: 14px; }
   .chevron { top: 50%; right: 16px; transform: translateY(-50%); }

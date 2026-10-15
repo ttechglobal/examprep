@@ -1,6 +1,7 @@
 // src/components/student/home/art.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Home page artwork. Drop the files into /public and the page picks them up.
+// v2: reference-quality practice and battle backgrounds ship as versioned WebP.
 // Until a file exists (or while it downloads) each slot shows its fallback,
 // so the page always looks finished. Set a value to null to use no image.
 //
@@ -24,11 +25,11 @@
 export const HERO_IMAGE = '/images/home/hero-student.webp'
 
 export const PRACTICE_CARD = {
-  image:    '/images/home/practice-card.webp',
-  fallback: 'linear-gradient(135deg, #E4430A 0%, #F2700F 50%, #FFA726 100%)',
+  image:    '/images/home/practice-card-v1.webp',
+  fallback: 'linear-gradient(135deg, #B8340B 0%, #F2700F 55%, #FF941B 100%)',
 }
 
 export const BATTLE_CARD = {
-  image:    '/images/home/battle-card.webp',
+  image:    '/images/home/battle-card-v1.webp',
   fallback: 'linear-gradient(135deg, #24177E 0%, #3F24C4 50%, #6D35E8 100%)',
 }

@@ -1,0 +1,14 @@
+/* The mobile header shares the cards' rounded forms and crisp small symbols. */
+.bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; position:sticky; top:0; z-index:50; background:color-mix(in srgb,var(--bg-base) 94%,transparent); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
+.brand { display:flex; align-items:center; gap:8px; color:var(--text-prim); text-decoration:none; min-width:0; }
+.mark { display:grid; place-items:center; flex-shrink:0; height:44px; width:44px; background:#fff; border:1px solid #dde4f5; border-radius:15px; box-shadow:0 3px 12px #062a7809; }
+.mark img { width:40px; height:40px; object-fit:contain; }
+.brand strong { display:block; font-size:17px; font-weight:800; line-height:1.2; letter-spacing:-.04em; }
+.brand small { display:block; margin-top:3px; font-size:10px; font-weight:600; color:var(--text-sec); max-width:145px; }
+.controls { display:flex; align-items:center; gap:7px; flex-shrink:0; }
+.xp { display:flex; align-items:center; gap:6px; min-height:44px; padding:5px 10px 5px 5px; border-radius:16px; background:linear-gradient(140deg,#fff2ca,#ffdf83); border:1px solid #f4cc64; color:#795000; text-decoration:none; font-size:14px; font-weight:800; }
+.xp small { display:block; font-size:8px; line-height:1; letter-spacing:.12em; margin-top:3px; }
+.bolt { display:grid; place-items:center; width:28px; height:30px; color:#b36b00; }
+.theme { width:44px; height:44px; display:grid; place-items:center; border-radius:15px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-sec); cursor:pointer; }
+.brand:focus-visible,.theme:focus-visible,.xp:focus-visible { outline:3px solid #1264e5; outline-offset:2px; }
+@media (max-width:359px) { .bar { padding-inline:10px; gap:6px; } .brand small { display:none; } .brand strong { font-size:15px; } .mark { width:38px; height:40px; } .xp { padding-right:7px; font-size:12px; } .controls { gap:5px; } }

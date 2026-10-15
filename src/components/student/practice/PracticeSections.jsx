@@ -4,15 +4,16 @@
 // The sections of the Practice page (app/student/practice/page.js):
 //   PracticeHero · PrimaryModes · MoreModes · RecentSessions · NoSubjects
 // Styles: ./practice.module.css. Artwork: ./art.js.
+// v18: reference artwork, stacked greeting and gold card titles; modes stay visible.
 // Every section renders complete without its images.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import LazyImage from '@/components/ui/LazyImage'
 import ArtCard, { ArtCardRow } from '@/components/ui/ArtCard'
 import SubjectIcon from '@/components/ui/SubjectIcon'
 import PlayfulTitle from '@/components/ui/PlayfulTitle'
+import { playfulFont } from '@/lib/fonts'
 import { getSubjectAccent } from '@/lib/subjectAccents'
 import { appDay, addDays } from '@/lib/dates'
 import { HERO_IMAGE, TOPIC_CARD, MOCK_CARD } from './art'
@@ -22,8 +23,8 @@ import s from './practice.module.css'
 const cx = (...names) => names.filter(Boolean).join(' ')
 
 // ── Hero ─────────────────────────────────────────────────────────────────────
-// Phones: "Let's / practice!". Wider: "Golden, let's practice!" with tags.
-export function PracticeHero({ name }) {
+// Stacked reference greeting at every width.
+export function PracticeHero() {
   return (
     <section className={s.hero} aria-label="Practice">
       <div className={s.heroArt} aria-hidden="true">
@@ -35,10 +36,9 @@ export function PracticeHero({ name }) {
       <div className={s.heroText}>
         <div className={s.tags} aria-hidden="true">
           <span className={s.tag}>📘 Practice</span>
-          <span className={s.tag}>🧩 Master Topics</span>
         </div>
         <PlayfulTitle className={`${s.title} ${s.titleNarrow}`} stacked lead="Let's" accent="practice!" />
-        <PlayfulTitle className={`${s.title} ${s.titleWide}`} lead={`${name},`} accent="let's practice!" />
+        <PlayfulTitle className={`${s.title} ${s.titleWide}`} stacked lead="Let's" accent="practice!" />
         <p className={s.sub}>Choose a mode, pick a topic, and keep improving. 🎯</p>
       </div>
     </section>
@@ -50,16 +50,16 @@ export function PrimaryModes({ onTopic, onMock }) {
   return (
     <ArtCardRow>
       <ArtCard
-        onClick={onTopic} art={TOPIC_CARD} tall={240}
+        onClick={onTopic} art={TOPIC_CARD} tall={256} variant="practice"
         chipBoxed chipIcon={<OpenBookIcon />} chip="Topic practice"
-        title="Drill a Specific Topic"
+        title={<span className={playfulFont.className}>Drill a Specific<br /><span className={s.gold}>Topic</span></span>}
         desc="Pick a subject and topic, then practise only questions from that topic."
         cta="Choose Topic" ctaStyle="white" ctaInk="#1D4ED8"
       />
       <ArtCard
-        onClick={onMock} art={MOCK_CARD} tall={240}
+        onClick={onMock} art={MOCK_CARD} tall={256} variant="practice"
         chipBoxed chipIcon={<PaperIcon />} chip="Mock exam" badge={<PlanBadge feature="mock" />}
-        title="Full Exam Simulation"
+        title={<span className={playfulFont.className}>Full Exam<br /><span className={s.gold}>Simulation</span></span>}
         desc="Timed, no peeking. Experience the real exam feel and boost your confidence."
         cta="Start Mock" ctaStyle="white" ctaInk="#6D28D9"
       />
@@ -69,7 +69,7 @@ export function PrimaryModes({ onTopic, onMock }) {
 
 // ── More practice modes ──────────────────────────────────────────────────────
 // "See all" opens the full mode picker (Speed Round lives only there). Wide
-// screens can also hide the row (remembered on this device).
+// screens retain the same three modes as the reference.
 // feature: the Free plan limit it shares (lib/plans.js); Study is Custom
 // Practice with instant explanations.
 const MORE_MODES = [
@@ -77,17 +77,8 @@ const MORE_MODES = [
   { key: 'custom', title: 'Custom Practice', short: 'Choose exam, subject & number',     desc: 'Choose exam, subject, number of questions.', tone: '#7C3AED', icon: <ShuffleIcon />, feature: 'custom' },
   { key: 'study',  title: 'Study Practice',  short: 'Practice with instant explanations', desc: 'Practice with instant explanations.',        tone: '#1264E5', icon: <LayersIcon />, feature: 'custom' },
 ]
-const HIDE_KEY = 'ep_practice_modes_hidden'
 
 export function MoreModes({ onPick, onSeeAll }) {
-  const [hidden, setHidden] = useState(false)
-  useEffect(() => { try { setHidden(localStorage.getItem(HIDE_KEY) === '1') } catch {} }, [])
-  function toggle() {
-    setHidden(h => {
-      try { localStorage.setItem(HIDE_KEY, h ? '0' : '1') } catch {}
-      return !h
-    })
-  }
 
   return (
     <section aria-label="More practice modes">
@@ -95,16 +86,9 @@ export function MoreModes({ onPick, onSeeAll }) {
         <h2 className={s.sectionTitle}>More Practice Modes</h2>
         <span className={s.headActions}>
           <button type="button" className={s.headLink} onClick={onSeeAll}>See all →</button>
-          <button type="button" className={cx(s.headLink, s.toggleWide)} onClick={toggle} aria-expanded={!hidden}>
-            {hidden ? 'Show modes' : 'Hide modes'}
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: hidden ? 'rotate(180deg)' : 'none' }}>
-              <path d="M3 9l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
         </span>
       </div>
-      {/* Hidden only on wide screens: phones always show the three tiles. */}
-      <div className={s.modes} data-hidden={hidden || undefined}>
+      <div className={s.modes}>
         {MORE_MODES.map(m => (
           <button key={m.key} type="button" className={s.mode} onClick={() => onPick(m.key)} style={{ '--tone': m.tone }}>
             <span className={s.modeIcon} aria-hidden="true">{m.icon}</span>

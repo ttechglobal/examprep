@@ -1,5 +1,6 @@
 // src/components/student/practice/art.js
 // ─────────────────────────────────────────────────────────────────────────────
+// v2: generated reference-matched v1 WebP assets shipped with the page.
 // Practice page artwork. Drop the files into /public and the page picks them
 // up. Until a file exists (or while it downloads) each slot shows its
 // fallback, so the page always looks finished. Set a value to null for none.
@@ -20,15 +21,15 @@
 //   gradient at the left edge so the fade-in is seamless.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const HERO_IMAGE = '/images/practice/hero-student.webp'
+export const HERO_IMAGE = '/images/practice/hero-student-v1.webp'
 
 export const TOPIC_CARD = {
-  image:    '/images/practice/topic-card.webp',
+  image:    '/images/practice/topic-card-v1.webp',
   fallback: 'linear-gradient(135deg, #1238C9 0%, #1D5BF0 55%, #2F7BFF 100%)',
 }
 
 export const MOCK_CARD = {
-  image:    '/images/practice/mock-card.webp',
+  image:    '/images/practice/mock-card-v1.webp',
   fallback: 'linear-gradient(135deg, #4A1FC4 0%, #6331E6 55%, #7F4BF5 100%)',
 }
 

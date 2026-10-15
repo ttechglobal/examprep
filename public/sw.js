@@ -1,12 +1,13 @@
-// public/sw.js — ExamPrep A1 Service Worker v6
+// public/sw.js — ExamPrep A1 Service Worker v7
+// v7: saved screens open immediately; refreshes warm their code before saving.
+// Home/Practice art is warmed proactively; cached images survive this update.
 // Notifications are server-driven (pg_cron → Edge Function → Web Push).
 // This worker saves the app on the phone so it opens offline, receives push
 // events and handles notification clicks.
 //
 // Caching
-//   • Pages (student app, onboarding, /offline): network first, so students
-//     get the latest version online; the saved copy opens when the network is
-//     missing or slow (no answer in 4 s). The main pages, and the code they
+//   • Pages (student app, onboarding, /offline): saved copy first, refreshed
+//     in the background together with its code. The main pages, and the code they
 //     load, are saved at install, so they open offline before the first visit.
 //   • /_next/static (content-hashed code), /images, /icons, /audio and the
 //     optimized images (/_next/image?url=/images/…): saved on first use and
@@ -14,7 +15,7 @@
 //     replace a file in /images, /icons or /audio in place: use a new name.
 //   • Never cached: /api/*, other sites (Supabase), admin / reviewer / school
 //     pages. Questions, scores and battles stay live.
-//   • Bump VERSION to throw every cache away.
+//   • Bump VERSION to replace page/code caches; versioned artwork stays reusable.
 //
 // v6.1 (Oct 2026)
 //   • Notifications carry no emojis (default text and the action buttons).
@@ -40,11 +41,13 @@
 //   • Launch-splash images and app icons cached; notifications use the proper
 //     icon and a monochrome badge.
 
+// Keep compatible offline snapshots across this worker upgrade. Versioned
+// asset URLs and savePageWithCode handle refreshes without deleting downloads.
 const VERSION  = 'v6'
 const CACHES = {
   pages:  `ep-pages-${VERSION}`,
   code:   `ep-code-${VERSION}`,
-  images: `ep-images-${VERSION}`,
+  images: 'ep-images-v6',
 }
 const LIMITS   = { pages: 40, code: 400, images: 300 }
 const OUR_CACHE = /^ep-/                     // every cache this worker has ever made
@@ -58,9 +61,11 @@ const PRECACHE_PAGES = [
 ]
 const PRECACHE_IMAGES = [
   '/icons/launch-splash.webp', '/icons/launch-mark.webp', '/icons/icon-192.png', '/icons/badge-96.png',
+  '/images/home/practice-card-v1.webp', '/images/home/battle-card-v1.webp',
+  '/images/practice/topic-card-v1.webp', '/images/practice/mock-card-v1.webp',
+  '/images/practice/hero-student-v1.webp',
 ]
 const CACHEABLE_PAGE     = /^\/(student|onboarding|offline)(\/|$)/
-const NETWORK_TIMEOUT_MS = 4000
 
 const NOTIFY_ICON  = '/icons/icon-192.png'
 const NOTIFY_BADGE = '/icons/badge-96.png'   // Android uses only its alpha channel
@@ -82,15 +87,7 @@ async function precachePages() {
     try {
       const res = await fetch(path, { credentials: 'same-origin' })
       if (!isSavablePage(res)) { discard(res); continue }
-      const html = await res.clone().text()
-      await pages.put(path, res)
-      const assets = [...new Set(html.match(/\/_next\/static\/[^"'\s)\\]+/g) ?? [])]
-      await inBatches(assets, 4, async url => {
-        if (await code.match(url)) return
-        const asset = await fetch(url)
-        if (asset.ok) await code.put(url, asset)
-        else discard(asset)
-      })
+      try { await savePageWithCode(pages, code, path, res) } finally { discard(res) }
     } catch { /* offline or failed: the page is saved on its next visit */ }
   }
 }
@@ -98,6 +95,7 @@ async function precachePages() {
 async function precacheImages() {
   const images = await caches.open(CACHES.images)
   await inBatches(PRECACHE_IMAGES, 4, async url => {
+    if (await images.match(url)) return
     const res = await fetch(url)
     if (res.ok) await images.put(url, res)
     else discard(res)
@@ -137,12 +135,18 @@ self.addEventListener('fetch', event => {
     event.respondWith(CACHEABLE_PAGE.test(url.pathname) ? savedPage(event) : livePage(request))
     return
   }
+  if (request.headers.get('RSC') === '1' && CACHEABLE_PAGE.test(url.pathname)) {
+    // Next interprets a non-Flight response as a document navigation. The
+    // navigate handler can then supply the saved HTML without mixing RSC builds.
+    event.respondWith(fetch(request).catch(() => new Response('', { headers: { 'Content-Type': 'text/html' } })))
+    return
+  }
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(cacheFirst(request, CACHES.code, LIMITS.code))
     return
   }
   if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/audio/') ||
-      (url.pathname === '/_next/image' && (url.searchParams.get('url') ?? '').startsWith('/images/'))) {
+      (url.pathname === '/_next/image' && /^\/(images|icons)\//.test(url.searchParams.get('url') ?? ''))) {
     event.respondWith(cacheFirst(request, CACHES.images, LIMITS.images))
   }
   // Anything else (API calls, in-app page data, other files) goes to the network
@@ -154,31 +158,45 @@ function isSavablePage(res) {
   return res.ok && !res.redirected && (res.headers.get('content-type') ?? '').includes('text/html')
 }
 
-// Student pages: latest when the network answers in time, saved copy otherwise.
+// Store HTML only once its referenced immutable code is available offline.
+async function savePageWithCode(pages, code, key, res) {
+  const html = await res.clone().text()
+  const assets = [...new Set(html.match(/\/_next\/static\/[^"'\s)\\]+/g) ?? [])]
+  // Every required asset must succeed; do not replace a working offline shell
+  // with one that references code the device never downloaded.
+  for (let i=0; i<assets.length; i+=4) {
+    await Promise.all(assets.slice(i,i+4).map(async url => {
+      if (await code.match(url)) return
+      const asset = await fetch(url)
+      if (!asset.ok) { discard(asset); throw new Error('Page asset unavailable') }
+      await code.put(url, asset)
+    }))
+  }
+  await pages.put(key, res)
+  await trim(CACHES.pages, LIMITS.pages)
+}
+
+// Saved shell immediately, latest HTML/code prepared quietly in the background.
 async function savedPage(event) {
   const { request } = event
-  const cache = await caches.open(CACHES.pages)
-  const key   = new URL(request.url).pathname          // ?query doesn't change the page
-
-  const network = fetch(request).then(async res => {
-    if (isSavablePage(res)) {
-      await cache.put(key, res.clone())
-      await trim(CACHES.pages, LIMITS.pages)
-    }
-    return res
-  })
-  event.waitUntil(network.catch(() => {}))            // keep refreshing the saved copy
-
-  const timeout = new Promise(resolve => setTimeout(resolve, NETWORK_TIMEOUT_MS, null))
-  const fast = await Promise.race([network.catch(() => null), timeout])
-  if (fast) return fast
-
+  let cache, code
+  try {
+    cache = await caches.open(CACHES.pages)
+    code = await caches.open(CACHES.code)
+  } catch { return livePage(request) }
+  const url = new URL(request.url)
+  const key = url.pathname + url.search
+  const network = fetch(request).then(res => ({ page: res, saved: res.clone() }))
+  event.waitUntil(network.then(async ({ saved: res }) => {
+    try { if (isSavablePage(res)) await savePageWithCode(cache, code, key, res) }
+    finally { discard(res) }
+  }).catch(() => {}))
   const saved = await cache.match(key)
-  if (saved) {
-    network.then(discard, () => {})                  // the page never reads this one
-    return saved
-  }
-  try { return await network } catch { return offlineFallback(key) }
+  if (saved) { network.then(({ page }) => discard(page), () => {}); return saved }
+  try {
+    // The background task owns its own clone, so the page can consume this one.
+    return (await network).page
+  } catch { return offlineFallback(key) }
 }
 
 // Every other page (landing, admin, school…) is never saved.
@@ -188,9 +206,11 @@ async function livePage(request) {
 
 async function offlineFallback(path) {
   // An installed app launching at "/" offline goes straight to the app.
-  if (path === '/' && await caches.match(APP_HOME)) return Response.redirect(APP_HOME, 302)
-  const offlinePage = await caches.match('/offline')
-  if (offlinePage) return offlinePage
+  try {
+    if (path === '/' && await caches.match(APP_HOME)) return Response.redirect(APP_HOME, 302)
+    const offlinePage = await caches.match('/offline')
+    if (offlinePage) return offlinePage
+  } catch { /* Private mode may disable the Cache API altogether. */ }
   return new Response(
     '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<body style="margin:0;height:100vh;display:grid;place-items:center;background:#062A78;color:#fff;font-family:system-ui;text-align:center;padding:24px">' +
@@ -200,13 +220,16 @@ async function offlineFallback(path) {
 }
 
 async function cacheFirst(request, cacheName, limit) {
-  const cache = await caches.open(cacheName)
+  let cache
+  try { cache = await caches.open(cacheName) } catch { return fetch(request) }
   const saved = await cache.match(request, { ignoreVary: true })
   if (saved) return saved
   const res = await fetch(request)
   if (res.ok) {                                        // a failed response must not stick
-    await cache.put(request, res.clone())
-    trim(cacheName, limit)
+    try {
+      await cache.put(request, res.clone())
+      await trim(cacheName, limit)
+    } catch { /* Storage can be full or disabled; the network image/code still works. */ }
   }
   return res
 }
@@ -215,7 +238,27 @@ async function cacheFirst(request, cacheName, limit) {
 async function trim(cacheName, limit) {
   const cache = await caches.open(cacheName)
   const keys  = await cache.keys()
-  await Promise.all(keys.slice(0, Math.max(0, keys.length - limit)).map(key => cache.delete(key)))
+  if (keys.length <= limit) return
+  const protectedUrls = new Set()
+  if (cacheName === CACHES.code) {
+    // Never evict code still referenced by a saved offline page.
+    const pages = await caches.open(CACHES.pages)
+    for (const request of await pages.keys()) {
+      const page = await pages.match(request)
+      const html = await page.text()
+      for (const path of html.match(/\/_next\/static\/[^"'\s)\\]+/g) ?? []) {
+        protectedUrls.add(new URL(path, self.location.origin).href)
+      }
+    }
+  }
+  const candidates = keys.filter(key => {
+    if (protectedUrls.has(key.url)) return false
+    if (cacheName !== CACHES.images) return true
+    const url = new URL(key.url)
+    const original = url.pathname === '/_next/image' ? url.searchParams.get('url') : url.pathname
+    return !PRECACHE_IMAGES.includes(original)
+  })
+  await Promise.all(candidates.slice(0, Math.max(0, keys.length - limit)).map(key => cache.delete(key)))
 }
 
 // ── Push: receive server-sent notification ────────────────────────────────────

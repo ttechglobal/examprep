@@ -1,4 +1,5 @@
 /* src/components/student/home/home.module.css
+   v2: gold mode-card accents and a full-row JAMB target on combined-exam phones.
    Student home. One set of markup for every width:
      • phones / narrow: a single column, in reading order (see `order` below)
      • ≥1300px: main column + 300px side column (This Week, Leaderboard)
@@ -169,6 +170,7 @@
 
 /* ── Mode cards: components/ui/ArtCard. The wrapper only places them. ───── */
 .modesWrap { position: relative; z-index: 1; }   /* above the hero character */
+.gold { color: #ffdc38; }
 
 /* ── Exam Targets ─────────────────────────────────────────────────────────── */
 .targets { display: flex; flex-direction: column; gap: 10px; }
@@ -215,6 +217,11 @@
   font-weight: 800;
   color: var(--h-blue);
   letter-spacing: -0.02em;
+}
+
+/* Only combined exam targets expand the score, and only on phones. */
+@media (max-width: 767px) {
+  .combinedGoals .jambGoal { grid-column: 1 / -1; }
 }
 
 .chips {

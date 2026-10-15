@@ -1,15 +1,13 @@
 'use client'
-// src/app/student/home/page.js — v6
+// src/app/student/home/page.js — v7: independent Practice challenges replace This Week.
 // ─────────────────────────────────────────────────────────────────────────────
-// Student home: greeting, Practice / Battle cards, this week's activity,
+// Student home: greeting, Practice / Battle cards, independent weekly challenges,
 // exam targets and the national leaderboard. Sections and styles live in
 // components/student/home/.
 //
 // Data (nothing here blocks on the network):
 //   profile   useStudentUser() — loaded once by the layout
-//   XP        PointsContext
-//   activity  useStudentActivity('week') — device + last server reply first,
-//             refreshed in the background
+//   challenges WeeklyChallenges — account-scoped device snapshot + server refresh
 //   board     useBoard() — same cache as the leaderboard page, so opening
 //             either one fills the other
 //
@@ -20,13 +18,10 @@
 //     Nigerian day.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { usePoints }          from '@/contexts/PointsContext'
 import { useStudentUser }     from '@/app/student/layout'
-import { useStudentActivity } from '@/hooks/useStudentActivity'
 import { useBoard }           from '@/components/student/leaderboard/useLeaderboard'
-import { appDay }             from '@/lib/dates'
 import { Hero, ModeCards, ExamTargets, BoardCard, GuestNudge } from '@/components/student/home/HomeSections'
-import WeekActivityCard from '@/components/student/WeekActivityCard'
+import WeeklyChallenges from '@/components/student/home/WeeklyChallenges'
 import s from '@/components/student/home/home.module.css'
 
 const cap = str => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '')
@@ -55,13 +50,11 @@ function boardRows(leaderboard, me) {
 }
 
 export default function HomePage() {
-  const { totalPoints: xp } = usePoints()
   const profile = useStudentUser()
   const ready   = profile !== null
   const isGuest = !!profile?.isGuest
   const userId  = profile?.id ?? null
 
-  const activity = useStudentActivity('week', { userId, isGuest, ready })
   const board    = useBoard({ scope: 'national', period: 'week', userId, ready })
 
   if (!ready) return <HomeSkeleton />
@@ -78,11 +71,7 @@ export default function HomePage() {
       <div className={s.side}>
         {isGuest && <GuestNudge />}
         <div className={s.week}>
-          <WeekActivityCard
-            title="This Week" link={{ href: '/student/progress', label: 'Progress →' }}
-            days={activity.days} today={appDay()}
-            questions={activity.stats.questions} streak={activity.stats.streak} xp={xp || 0}
-          />
+          <WeeklyChallenges profile={profile} />
         </div>
         <BoardCard rows={boardRows(board.leaderboard, board.me)} loading={board.loading} allTime={board.fallback} />
       </div>

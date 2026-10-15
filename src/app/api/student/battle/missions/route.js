@@ -1,4 +1,5 @@
 // src/app/api/student/battle/missions/route.js
+// v2: registered-subject lookup extracted without changing Battle progress or rewards.
 // GET → this week's battle missions for the signed-in student.
 //   ?waec=Maths,Physics&jamb=…   the subjects on the student's phone, used only
 //                                when their account has none saved (the app keeps
@@ -21,6 +22,7 @@
 
 import { createClient }  from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
+import { registeredSubjects } from '@/lib/server/registeredSubjects'
 import { getTopicFrequency } from '@/lib/server/topicFrequency'
 import { getRankProgress } from '@/lib/ranks'
 import { NextResponse }  from 'next/server'
@@ -28,9 +30,6 @@ import {
   MISSION_XP, RECENT_WEEKS, HISTORY_WEEKS, missionTarget, missionCountFor, pickMissions,
 } from '@/lib/missions'
 
-const EXAMS = ['WAEC', 'JAMB']
-// WAEC "English Language" and JAMB "Use of English" may be stored under either name.
-const ALIASES = { 'Use of English': 'English Language', 'English Language': 'Use of English' }
 
 // A subject's ranking only changes when questions are imported, so a server
 // keeps it for an hour instead of re-querying for every student.
@@ -58,35 +57,6 @@ const lagosToday = () => isoDate(new Date(Date.now() + 3600_000))
 function nameList(value) {
   if (typeof value !== 'string') return []
   return [...new Set(value.split(',').map(n => n.trim().slice(0, 60)).filter(Boolean))].slice(0, 15)
-}
-
-// The student's registered subject rows, per exam they sit. The account's own
-// subjects win; the phone's list is used for an exam the account has none for.
-async function registeredSubjects(db, profile, hints) {
-  const saved = exam => {
-    const list = exam === 'WAEC' ? profile.subjects_waec : profile.subjects_jamb
-    return Array.isArray(list) && list.length ? list : null
-  }
-  const primary = (profile.exam_types?.length ? profile.exam_types : [profile.exam_type]).filter(e => EXAMS.includes(e))
-  const out = []
-  for (const exam of EXAMS) {
-    const names = saved(exam)
-      ?? (primary.includes(exam) && Array.isArray(profile.subjects) && profile.subjects.length ? profile.subjects : null)
-      ?? hints[exam] ?? []
-    if (!names.length) continue
-    const queryNames = [...new Set(names.flatMap(n => [n, ALIASES[n]].filter(Boolean)))]
-    const { data: rows, error } = await db.from('subjects')
-      .select('id, name').in('name', queryNames).eq('exam_type', exam).eq('is_active', true)
-    if (error) throw error
-    const seen = new Set()
-    for (const row of rows ?? []) {
-      const name = names.includes(row.name) ? row.name : ALIASES[row.name] ?? row.name
-      if (seen.has(name)) continue
-      seen.add(name)
-      out.push({ subject: { id: row.id, name }, exam })
-    }
-  }
-  return out
 }
 
 // Makes this week's missions. → null when made, else why not: 'no_subjects' | 'no_topics'.

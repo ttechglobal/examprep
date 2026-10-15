@@ -5,6 +5,9 @@
 //   Hero · ModeCards · ExamTargets · BoardCard · GuestNudge
 // (The week chart is components/student/WeekActivityCard.jsx.)
 // Styles: ./home.module.css. Artwork: ./art.js.
+// v3: crisp SVG mode icons replace tiny emoji.
+// v2: illustrated home cards preview practice and computer battles; combined
+// exam targets give the JAMB score its own full mobile row.
 //
 // Every section renders complete without its images; the artwork loads
 // lazily on top (components/ui/LazyImage.jsx).
@@ -12,7 +15,9 @@
 
 import Link from 'next/link'
 import LazyImage from '@/components/ui/LazyImage'
+import AppIcon from '@/components/ui/AppIcon'
 import ArtCard, { ArtCardRow } from '@/components/ui/ArtCard'
+import { playfulFont } from '@/lib/fonts'
 import { avatarLook } from '@/lib/leaderboard/avatar'
 import { appHour } from '@/lib/dates'
 import { HERO_IMAGE, PRACTICE_CARD, BATTLE_CARD } from './art'
@@ -54,16 +59,18 @@ export function ModeCards() {
     <div className={s.modesWrap}>
       <ArtCardRow>
         <ArtCard
-          href="/student/practice" art={PRACTICE_CARD}
-          chipIcon="📘" chip="Practice mode" title="Start Practising"
-          desc="Answer questions, track your progress and master each topic."
-          cta="Start Practising"
+          href="/student/practice" art={PRACTICE_CARD} variant="home" tall={280}
+          chipBoxed chipIcon={<AppIcon name="book" size={22}/>} chip="Practice mode"
+          title={<span className={playfulFont.className}>Start<br /><span className={s.gold}>Practising</span></span>}
+          desc="Master each topic and build exam confidence."
+          cta="Start Practising" ctaStyle="white" ctaInk="#b63708"
         />
         <ArtCard
-          href="/student/battle" art={BATTLE_CARD}
-          chipIcon="🎮" chip="Battle mode" title="Battle Now"
-          desc="Play against the computer or challenge your friends."
-          cta="Go to Battle"
+          href="/student/battle" art={BATTLE_CARD} variant="home" tall={280}
+          chipBoxed chipIcon={<AppIcon name="controller" size={22}/>} chip="Quiz battle"
+          title={<span className={playfulFont.className}>Ready to<br /><span className={s.gold}>Battle?</span></span>}
+          desc="Beat the computer in quick quiz rounds."
+          cta="Go to Battle" ctaStyle="white" ctaInk="#6331e6"
         />
       </ArtCardRow>
     </div>
@@ -79,9 +86,9 @@ function gradeColor(grade = '') {
   return '#dc2626'
 }
 
-function Goal({ icon, label, value, children }) {
+function Goal({ icon, label, value, children, className }) {
   return (
-    <div className={cx(s.panel, s.goal)}>
+    <div className={cx(s.panel, s.goal, className)}>
       <span className={s.goalIcon} aria-hidden="true">{icon}</span>
       <div style={{ minWidth: 0 }}>
         <div className={s.caps}>{label}</div>
@@ -112,11 +119,11 @@ export function ExamTargets({ university, course, jamb, waec }) {
       ) : (
         <>
           {(university || course || jamb) && (
-            <div className={s.goalRow}>
+            <div className={cx(s.goalRow, jamb && waec.length > 0 && s.combinedGoals)}>
               {university && <Goal icon={<CapIcon />} label="University" value={university} />}
               {course && <Goal icon={<BookIcon />} label="Course" value={course} />}
               {jamb && (
-                <Goal icon={<TargetIcon />} label="JAMB target" value="UTME score">
+                <Goal icon={<TargetIcon />} label="JAMB target" value="UTME score" className={s.jambGoal}>
                   <span className={s.jambScore}>{jamb}</span>
                 </Goal>
               )}

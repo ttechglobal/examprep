@@ -1,5 +1,6 @@
 'use client'
 // src/components/ui/ArtCard.jsx
+// v3: Home and Practice opt into the same illustrated card treatment.
 // Big illustrated action cards, used on Home (Practice / Battle) and Practice
 // (Topic / Mock). Styles: ./ArtCard.module.css.
 //
@@ -15,7 +16,8 @@
 // Props: href (link) or onClick (button) · art { image, fallback } ·
 //        chip, chipIcon, chipBoxed (icon in a white tile) · title · desc · cta ·
 //        ctaStyle 'gold' | 'white' · ctaInk (text colour of a white button) ·
-//        tall (height when side by side, default 280) · badge (corner chip).
+//        tall (height when side by side, default 280) · badge (corner chip) ·
+//        variant ('practice' | 'home', optional illustrated treatment).
 
 import Link from 'next/link'
 import LazyImage from '@/components/ui/LazyImage'
@@ -27,13 +29,14 @@ export function ArtCardRow({ children }) {
 
 export default function ArtCard({
   href, onClick, art, chip, chipIcon, chipBoxed = false, badge = null,
-  title, desc, cta, ctaStyle = 'gold', ctaInk, tall,
+  title, desc, cta, ctaStyle = 'gold', ctaInk, tall, variant,
 }) {
   const style = {
     background: art.fallback,
     ...(ctaInk && { '--cta-ink': ctaInk }),
     ...(tall && { '--card-tall': `${tall}px` }),
   }
+  const cardClass = [s.card, (variant === 'practice' || variant === 'home') && s.illustrated, variant === 'home' && s.home].filter(Boolean).join(' ')
   const content = (
     <>
       <LazyImage src={art.image} className={s.art} />
@@ -57,6 +60,6 @@ export default function ArtCard({
   )
 
   return href
-    ? <Link href={href} className={s.card} style={style}>{content}</Link>
-    : <button type="button" onClick={onClick} className={s.card} style={style}>{content}</button>
+    ? <Link href={href} className={cardClass} style={style}>{content}</Link>
+    : <button type="button" onClick={onClick} className={cardClass} style={style}>{content}</button>
 }

@@ -1,7 +1,8 @@
+import SubjectIllustration from '@/components/ui/SubjectIllustration'
 // src/components/student/profile/icons.jsx
 // ─────────────────────────────────────────────────────────────────────────────
 // Duotone icons + small illustrations for the profile page.
-// SVG rather than emoji so they render identically on every device.
+// Subject illustrations come from the shared registry; other glyphs are SVG.
 // All decorative: callers pair them with visible text, so aria-hidden.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -162,61 +163,9 @@ const S = (children) => (
   <svg {...A} width="1em" height="1em" viewBox="0 0 24 24">{children}</svg>
 )
 
-const SUBJECT_ICONS = {
-  'English Language': () => S(<>
-    <path d="M2 5.5C5 4.5 8.5 4.6 12 6.5v13c-3.5-1.9-7-2-10-1z" fill="#3B82F6" />
-    <path d="M22 5.5c-3-1-6.5-.9-10 1v13c3.5-1.9 7-2 10-1z" fill="#60A5FA" />
-    <path d="M12 6.5v13" stroke="#1D4ED8" strokeWidth="1" />
-  </>),
-  'Mathematics': () => S(<>
-    <rect x="4" y="2" width="16" height="20" rx="3" fill="#6366F1" />
-    <rect x="6.5" y="4.5" width="11" height="4.5" rx="1" fill="#E0E7FF" />
-    {[0, 1, 2].map(r => [0, 1, 2].map(c => (
-      <rect key={`${r}${c}`} x={6.5 + c * 4} y={11 + r * 3.6} width="3" height="2.4" rx=".6" fill="#fff" />
-    )))}
-  </>),
-  'Physics': () => S(<path d="M13.5 1.5L4 13.5h7l-1.5 9L20 10h-7z" fill="#F97316" />),
-  'Chemistry': () => S(<>
-    <path d="M9 2h6v2h-1v5l6.2 10A2 2 0 0118.5 22h-13a2 2 0 01-1.7-3L10 9V4H9z" fill="#10B981" />
-    <path d="M6.3 15h11.4l2.5 4A2 2 0 0118.5 22h-13a2 2 0 01-1.7-3z" fill="#047857" />
-  </>),
-  'Biology': () => S(<>
-    <path d="M20 3C9 3 4 8.5 4 15c0 2.5.8 4.4 1.6 5.4C8 12 13 9 17 7.5 12 11 8.5 15 7 21c1 .5 2.5 1 4 1 7 0 10-8 9-19z" fill="#22C55E" />
-  </>),
-  'Further Mathematics': () => S(<>
-    <path d="M3 21V3l18 18z" fill="#FB923C" />
-    <path d="M7 17V12l5 5z" fill="#FFF7ED" />
-    <path d="M3 21V3l18 18z" fill="none" stroke="#EA580C" strokeWidth="1" />
-  </>),
-  'Accounting': () => S(<>
-    <rect x="3" y="3" width="18" height="18" rx="3" fill="#EF4444" />
-    <rect x="5.5" y="5.5" width="13" height="3.5" rx="1" fill="#FEE2E2" />
-    {[0, 1].map(r => [0, 1, 2].map(c => (
-      <rect key={`${r}${c}`} x={5.5 + c * 4.5} y={11 + r * 4} width="3.5" height="2.8" rx=".6" fill={c === 2 ? '#FDE68A' : '#fff'} />
-    )))}
-  </>),
-  'Economics': () => S(<>
-    <rect x="3"  y="12" width="4.5" height="10" rx="1" fill="#F59E0B" />
-    <rect x="9.75" y="6" width="4.5" height="16" rx="1" fill="#3B82F6" />
-    <rect x="16.5" y="9" width="4.5" height="13" rx="1" fill="#22C55E" />
-  </>),
-  'Government': () => S(<>
-    <path d="M12 2l10 5H2z" fill="#8B5CF6" />
-    <rect x="2" y="19" width="20" height="3" rx="1" fill="#8B5CF6" />
-    {[4, 9, 14, 18.5].map(x => <rect key={x} x={x} y="8.5" width="2.2" height="9.5" fill="#A78BFA" />)}
-  </>),
-}
-SUBJECT_ICONS['Use of English'] = SUBJECT_ICONS['English Language']
-
-const FallbackSubject = () => S(<>
-  <rect x="4" y="2" width="16" height="20" rx="2.5" fill="#64748B" />
-  <rect x="7" y="6" width="10" height="2" rx="1" fill="#E2E8F0" />
-  <rect x="7" y="10" width="7" height="2" rx="1" fill="#E2E8F0" />
-</>)
-
-export function SubjectGlyph({ name }) {
-  const Icon = SUBJECT_ICONS[name] ?? FallbackSubject
-  return <Icon />
+// Compatibility export for existing profile lists and subject pickers.
+export function SubjectGlyph({ name, size = '1.35em' }) {
+  return <SubjectIllustration name={name} size={size} />
 }
 
 // ── Activity stats ───────────────────────────────────────────────────────────

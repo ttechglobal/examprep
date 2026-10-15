@@ -1,5 +1,23 @@
 # Home, Practice, practice setup + mock, Leaderboard, practice session redesign; Battle tab; offline app — 27–28 Sep 2026
 
+## 15 Oct 2026 — Independent Practice challenges and offline polish
+
+Home's This Week chart is replaced by independent weekly Practice challenges.
+Battle progress and rewards stay separate. Mobile header/nav and small mode-card
+icons are refreshed. Saved pages now open immediately; new artwork is proactively
+cached and existing downloads retained. Migration/deployment instructions, reward
+rules, offline limits and verification are in `docs/weekly-challenges.md`.
+
+## 14 Oct 2026 — Homepage card artwork and combined exam targets
+
+- Shipped `public/images/home/practice-card-v1.webp` and `battle-card-v1.webp`: warm orange books/target artwork and a violet quiz arena with the existing battle student and robot characters. Both are optimized versioned assets served locally.
+- Home opts into the shared illustrated ArtCard treatment used by Practice, with playful white/gold headings, white pill actions, reserved copy space, and a clear computer-quiz description. Both cards retain their existing destinations.
+- On screens below 768px, the JAMB target spans the full row only when a JAMB target and WAEC targets are both present. Desktop and JAMB-only targets retain their existing grid behavior.
+- No migrations, profile changes, or battle-flow changes. The temporary component preview used sample data and is removed after QA.
+- Validation: targeted ESLint passed; component preview checked at 390px and 1440px in light and dark appearances. Measured combined-mobile score width equals its row width; JAMB-only and desktop use automatic columns. Google Fonts DNS failures and an EPERM error creating generated Next types prevented a successful production build. Existing localhost cached development chunks caused stale client markup on reload; fresh-origin server markup confirmed the final copy and width styles. Full integrated profile testing was not performed.
+
+Artwork provenance: built-in imagegen. Final prompt set: (1) glossy 3D open book, blue/purple textbooks, yellow pencil, blue study target and gold sparkles on a warm orange pedestal/background, right-aligned with left copy space; (2) recognizable existing goggle-wearing battle student versus blue/white robot, friendly quiz arena, gold trophy/lightning and neon violet/cyan accents, right-aligned with left copy space. Both use the approved Practice card artwork as a quality reference, landscape 2:1, without UI text or buttons. Original prompts require fully framed props/characters, polished surfaces and no watermark.
+
 ## Why
 
 - Home and Practice move to the new designs (desktop + phone mockups).
@@ -163,3 +181,14 @@
 - React hydration warning (#418) on Practice and Profile in production builds, present before these changes;
   Battle now shows it too because it's inside the app shell. Likely text read from the device during the
   first render (e.g. the student name in the desktop top bar). Worth its own fix.
+
+## 14 Oct 2026 — Practice reference artwork
+
+- Added versioned Topic Practice (books, checklist and bulb), Mock Exam (stopwatch and checklist), and transparent student hero WebP artwork under `public/images/practice/`.
+- Matched the stacked greeting, white/gold card headings, rounded buttons and card proportions to the supplied dashboard. The student hero is page-specific; the original app mascot remains available.
+- Added an opt-in `practice` ArtCard variant so Home retains its styling. More modes remain visible, matching the reference.
+- No database migrations or practice-flow changes. Weekly challenges are deferred to the next discussion.
+- Validation: targeted ESLint passed. Browser opened successfully, but existing guest onboarding (subjects not selected) prevents full practice-page visual verification.
+
+Artwork provenance: built-in imagegen, using the supplied dashboard as reference. Final prompt set: (1) landscape 2:1 blue card, glossy books/checklist/glowing bulb in right 45%, left 55% empty, no UI text; (2) landscape 2:1 violet card, glossy stopwatch/checklist/pencil in right 45%, left 55% empty, no UI text except EXAM; (3) transparent wide cutout of the reference student in blue hoodie writing beside books and purple laptop, no UI or speech bubble. Versioned final files: `topic-card-v1.webp`, `mock-card-v1.webp`, `hero-student-v1.webp`.
+- Final checks: targeted ESLint and `git diff --check` passed. Production build was attempted but did not complete in this session; no successful production build is claimed. Full desktop/mobile/dark-mode layout verification remains outstanding behind guest onboarding.

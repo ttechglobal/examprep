@@ -1,4 +1,5 @@
 /* src/components/ui/ArtCard.module.css
+   v3: shared illustrated treatment for Home and Practice.
    Big illustrated action cards (Home: Practice / Battle; Practice: Topic /
    Mock). The row is a size container: cards stack, then sit side by side once
    the row is ≥700px wide, and grow into their tall layout. */
@@ -150,6 +151,32 @@
   .title { font-size: clamp(24px, 3.2cqi, 32px); }
   .desc { font-size: 14px; }
   .cta { margin-top: auto; padding: 12px 20px; font-size: 15px; }
+}
+
+/* Shared reference treatment, explicitly enabled by Home and Practice. */
+.illustrated { border-radius: 20px; box-shadow: 0 5px 12px rgba(30, 70, 150, .08); }
+.illustrated .body { max-width: 61%; gap: 6px; }
+.illustrated .title { font-size: clamp(25px, 6cqi, 34px); line-height: .95; }
+.illustrated .chipIcon { background: #08b8df; color: white; border-radius: 50%; }
+.illustrated:nth-child(2) .chipIcon { background: #a735ff; }
+.illustrated .cta { min-height: 44px; justify-content: center; min-width: 160px; box-shadow: none; }
+@container (min-width: 700px) {
+  .illustrated .body { max-width: 59%; padding: 18px 26px 14px; }
+  .illustrated .title { font-size: clamp(28px, 3.5cqi, 40px); }
+  .illustrated .desc { font-size: 16px; line-height: 1.35; }
+  .illustrated .chipIcon { width: 38px; height: 38px; }
+  .illustrated .chipBoxed { padding: 0 12px 0 0; }
+  .illustrated .cta { min-width: 186px; padding: 11px 24px; font-size: 17px; }
+}
+
+/* Home artwork keeps its full composition as cards change aspect ratio. */
+.home .art { object-fit: fill; }
+.home:first-child .chipIcon { background: #ffb41f; }
+.home .body { max-width: 60%; }
+.home .desc { max-width: 145px; }
+.home .cta { min-width: 0; max-width: 100%; }
+@container (min-width: 700px) {
+  .home .desc { max-width: 200px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -5,6 +5,7 @@
 //
 // Every page also gets the student's plan (usePlan, contexts/PlanContext).
 //
+// v3: extracted mobile header with brand mark, live gold XP and theme control.
 // v2: Battle is a main tab, so /student/battle keeps the shell (only its
 //     setup, match and 1v1 screens are full screen). Phone top bar follows the
 //     new design (brand on Home and Practice). Rank names come from lib/ranks.js instead of
@@ -21,6 +22,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cacheAuthProfile } from '@/lib/localProfile'
 import Link from 'next/link'
 import NotificationScheduler from '@/components/ui/NotificationScheduler'
+import MobileTopbar from '@/components/student/MobileTopbar'
 import ProfileSetupGate from '@/components/student/ProfileSetupGate'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { endLaunchSplash } from '@/lib/launchSplash'
@@ -129,48 +131,6 @@ function DesktopTopbar({ name }) {
           {dark
             ? <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
             : <svg width="15" height="15" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          }
-        </button>
-      </div>
-    </div>
-  )
-}
-
-const BRAND_TOPBAR = new Set(['home', 'practice'])
-
-// ── Mobile Topbar ─────────────────────────────────────────────────────────────
-// Home and Practice show the brand (their greeting is the page's heading);
-// every other tab shows its own name. Profile is a bottom tab, so it has no
-// button here.
-function MobileTopbar({ activeId, pageTitle }) {
-  const { dark, toggle }    = useTheme()
-  const { totalPoints: xp } = usePoints()
-  const showBrand = BRAND_TOPBAR.has(activeId)
-
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 10px', position:'sticky', top:0, zIndex:50, background:dark?'rgba(10,13,28,.92)':'rgba(249,250,255,.92)', backdropFilter:'blur(16px)', borderBottom:'1px solid var(--border)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
-        <div style={{ width:showBrand?38:30, height:showBrand?38:30, borderRadius:showBrand?11:9, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-          <span style={{ fontSize:showBrand?14:11, fontWeight:900, color:GOLD }}>EX</span>
-        </div>
-        {showBrand ? (
-          <div style={{ minWidth:0 }}>
-            <div style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', lineHeight:1.05 }}>ExamPrep</div>
-            <div style={{ fontSize:11, fontWeight:600, color:'var(--text-tert)', marginTop:2 }}>EXL Learning World</div>
-          </div>
-        ) : (
-          <span style={{ fontSize:17, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.03em' }}>{pageTitle}</span>
-        )}
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', borderRadius:999, background:dark?'rgba(255,184,0,.12)':'rgba(255,184,0,.12)', border:`1px solid ${GOLD}33` }}>
-          <span style={{ fontSize:14 }}>⚡</span>
-          <span suppressHydrationWarning style={{ fontSize:13, fontWeight:900, color:dark?GOLD:'#D98E00' }}>{(xp||0).toLocaleString()} XP</span>
-        </div>
-        <button onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} style={{ width:40, height:40, borderRadius:12, background:'var(--bg-card)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {dark
-            ? <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="4" stroke="var(--text-tert)" strokeWidth="2"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round"/></svg>
-            : <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M20 14.5A9 9 0 017.5 2a9 9 0 1012.5 12.5z" stroke="var(--text-tert)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           }
         </button>
       </div>
