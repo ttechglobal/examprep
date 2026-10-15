@@ -1,6 +1,8 @@
 'use client'
-// Home's independent Practice challenges. Battle missions use separate data.
+// Shared Home/Practice challenges. Battle missions use separate data.
 import Link from 'next/link'
+import { useState, useEffect } from 'react'
+import PracticeSetupSheet from '@/components/student/practice/PracticeSetupSheet'
 import { useRouter } from 'next/navigation'
 import AppIcon from '@/components/ui/AppIcon'
 import SubjectIcon from '@/components/ui/SubjectIcon'
@@ -10,18 +12,33 @@ import s from './WeeklyChallenges.module.css'
 export default function WeeklyChallenges({ profile }) {
   const state = usePracticeChallenges(profile)
   const router = useRouter()
+  const [selected, setSelected] = useState(null)
+  const [launchError, setLaunchError] = useState(null)
+  useEffect(() => {
+    const close = () => setSelected(null)
+    window.addEventListener('popstate', close)
+    return () => window.removeEventListener('popstate', close)
+  }, [])
   function start(item) {
     if (!navigator.onLine) {
       state.reportError('Connect to the internet to load questions. Your saved challenge progress is still here.')
       return
     }
-    // The standard session endpoint enforces plan access and checks every answer.
-    sessionStorage.setItem('practice_config', JSON.stringify({ subjects: [item.subject_name],
-      subject_id: item.subject_id, examType: item.exam, topic_id: item.topic_id,
-      topicName: item.topic_name, count: item.target, mode: 'practice', sessionType: 'practice', ref: crypto.randomUUID() }))
-    router.push('/student/practice/session')
+    window.history.pushState(null, '', window.location.href)
+    setLaunchError(null)
+    setSelected(item)
   }
-  return <WeeklyChallengesView {...state} onStart={start} />
+  function launch(config) {
+    if (!navigator.onLine) { setLaunchError('Connect to the internet to load questions.'); return }
+    sessionStorage.setItem('practice_config', JSON.stringify({ ...config, ref: crypto.randomUUID() }))
+    setSelected(null)
+    router.replace('/student/practice/session')
+  }
+  return <><WeeklyChallengesView {...state} onStart={start} />
+    {selected && <PracticeSetupSheet profile={profile} initialScreen="topic-prefs"
+      initialTopic={{ exam: selected.exam, subject: { id: selected.subject_id, name: selected.subject_name }, topic: { id: selected.topic_id, name: selected.topic_name } }}
+      startError={launchError} onStart={launch} onClose={() => window.history.back()} />}
+  </>
 }
 
 export function WeeklyChallengesView({ data, loading, stale, error, refresh, unlock, unlocking, onStart }) {
@@ -31,7 +48,7 @@ export function WeeklyChallengesView({ data, loading, stale, error, refresh, unl
   return <section className={s.card} aria-label="Weekly challenges">
     <header className={s.header}>
       <span className={s.medal}><AppIcon name="trophy" size={25} /></span>
-      <div><p className={s.kicker}>A LITTLE EVERY DAY</p><h2>Weekly Challenges</h2></div>
+      <div><h2>Weekly Challenges</h2></div>
       {data?.days_left && <span className={s.deadline}>{data.days_left === 1 ? 'Ends today' : `${data.days_left} days left`}</span>}
     </header>
     {loading && !data && <div className={s.message} aria-busy="true">Getting your challenges ready…</div>}
@@ -44,11 +61,12 @@ export function WeeklyChallengesView({ data, loading, stale, error, refresh, unl
     {set && <>
       <div className={s.overview}><span>{done} of {items.length} complete{set.number > 1 ? ' · Extra set' : ''}</span><strong>+{items.reduce((n,x) => n+x.xp,0)} XP</strong></div>
       <ul className={s.list}>{items.map(item => <li key={item.id}>
-        <button className={`${s.challenge} ${item.done ? s.done : ''}`} disabled={item.done} onClick={() => onStart(item)} aria-label={`${item.topic_name}: ${item.progress} of ${item.target} questions${item.done ? ', complete' : ', start practice'}`}>
+        <button className={`${s.challenge} ${item.done ? s.done : ''}`} disabled={item.done} onClick={() => onStart(item)} aria-label={`${item.topic_name}: complete ${item.target} questions, ${item.progress} completed${item.done ? ', complete' : ', set up practice'}`}>
           <span className={s.subject}><SubjectIcon name={item.subject_name} size={24} color="currentColor" /></span>
           <span className={s.details}><strong>{item.topic_name}</strong><small>{item.subject_name} · {item.exam}</small>
             <span className={s.track} role="progressbar" aria-label={item.topic_name} aria-valuemin={0} aria-valuemax={item.target} aria-valuenow={Math.min(item.progress,item.target)}><span style={{width:`${Math.min(100,item.progress/item.target*100)}%`}} /></span>
-            <small>{item.done ? 'Complete' : `${item.progress}/${item.target} questions`}</small>
+            <small>Complete {item.target} questions</small>
+            <small>{item.done ? 'Completed' : `${item.progress} of ${item.target} completed`}</small>
           </span>
           <span className={s.reward}>{item.done ? <AppIcon name="check" size={20}/> : <>+{item.xp}<small>XP</small></>}</span>
         </button>
@@ -64,7 +82,6 @@ export function WeeklyChallengesView({ data, loading, stale, error, refresh, unl
       </details>)}
       {stale && <p className={s.note} role="status">Saved progress · updates when connected</p>}
       {error && <p className={s.note} role="status">{error} <button onClick={refresh}>Retry</button></p>}
-      <p className={s.note}>Practice and mock questions count. Battle missions are separate.</p>
     </>}
   </section>
 }

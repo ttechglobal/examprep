@@ -1,5 +1,6 @@
 'use client'
 // src/app/student/practice/session/page.js — v3
+// v4: ordinary topic sessions can opt into the existing per-question countdown.
 // ─────────────────────────────────────────────────────────────────────────────
 // A practice session: loads questions, tracks answers, saves the result
 // locally (then syncs), and shows the summary and review.
@@ -29,6 +30,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { usePoints } from '@/contexts/PointsContext'
 import { usePlan } from '@/contexts/PlanContext'
 import { practiceFeature } from '@/lib/plans'
+import { questionTimeLimit } from '@/lib/topicSession'
 import { saveSessionLocally, flushSyncQueue, readLocalStreak } from '@/lib/localSessionSync'
 import { computeSessionXP } from '@/lib/xp'
 
@@ -332,7 +334,7 @@ export default function PracticeSessionPage() {
             key={`${attempt}-${q.id}-${qIndex}`}
             question={q} qIndex={qIndex}
             sessionType={sessionType}
-            speedSecs={isSpeed ? (config?.speedSecs ?? 30) : null}
+            speedSecs={questionTimeLimit(config)}
             onSpeedTimeUp={onSpeedTimeUp}
             alreadyAnswered={answer}
             onAnswerChange={a => setAnswer(qIndex, a)}

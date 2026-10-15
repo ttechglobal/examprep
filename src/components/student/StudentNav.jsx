@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 import { usePoints } from '@/contexts/PointsContext'
 import { getRankProgress } from '@/lib/ranks'
 import n from './StudentNav.module.css'
+import { StudentBrand } from './MobileTopbar'
 
 const NAVY   = '#062A78'
 const BLUE   = '#1264E5'
@@ -83,14 +84,8 @@ export function StudentSidebar({ active = 'home', dark }) {
       padding: '22px 14px 18px 16px',
       backdropFilter: 'blur(16px)',
     }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, margin:'0 0 26px 4px' }}>
-        <div style={{ width:40, height:40, borderRadius:12, background:NAVY, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-          <span style={{ fontSize:15, fontWeight:900, color:GOLD, letterSpacing:'-.02em' }}>EX</span>
-        </div>
-        <div>
-          <div style={{ fontSize:15, fontWeight:900, color:'var(--text-prim)', letterSpacing:'-.02em', lineHeight:1 }}>ExamPrep</div>
-          <div style={{ fontSize:10, fontWeight:600, color:'var(--text-tert)', marginTop:3 }}>EXL Learning World</div>
-        </div>
+      <div style={{ margin:'0 0 26px 4px' }}>
+        <StudentBrand/>
       </div>
 
       <nav aria-label="Main" style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto' }}>

@@ -1,12 +1,12 @@
 'use client'
 // src/app/student/practice/page.js — v17
 // ─────────────────────────────────────────────────────────────────────────────
-// Practice: pick a way to practise, see recent sessions and this week's streak.
+// Practice: pick a way to practise, see recent sessions and weekly challenges.
 // Local-first: works for guests and signed-in students. The profile comes from
 // the layout (useStudentUser); subjects resolve from the device cache first.
 //
 //   Hero · Topic Practice + Mock Exam cards · More Practice Modes (Quick 5,
-//   Custom, Study) · Recent Sessions · Practice Streak
+//   Custom, Study) · Recent Sessions · Weekly Challenges
 // Sections: components/student/practice/. The mode + subject picker is
 // components/student/practice/PracticeSetupSheet.jsx.
 //
@@ -25,12 +25,12 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useStudentUser } from '@/app/student/layout'
 import { useTheme } from '@/contexts/ThemeContext'
 import { usePlan } from '@/contexts/PlanContext'
-import { usePoints } from '@/contexts/PointsContext'
+
 import { examSubjectNames } from '@/hooks/useExamSubjects'
-import { appDay } from '@/lib/dates'
-import { useStudentActivity } from '@/hooks/useStudentActivity'
+
+
 import { useRecentSessions } from '@/hooks/useRecentSessions'
-import WeekActivityCard from '@/components/student/WeekActivityCard'
+import WeeklyChallenges from '@/components/student/home/WeeklyChallenges'
 import PracticeSetupSheet from '@/components/student/practice/PracticeSetupSheet'
 import { PracticeHero, PrimaryModes, MoreModes, RecentSessions, NoSubjects } from '@/components/student/practice/PracticeSections'
 import s from '@/components/student/practice/practice.module.css'
@@ -43,7 +43,7 @@ export default function PracticePage() {
   const router       = useRouter()
   const { dark }     = useTheme()
   const plan         = usePlan()
-  const { totalPoints: xp } = usePoints()
+
   const searchParams = useSearchParams()
 
   // ── Profile: read from layout context (already handles guest + auth) ─────────
@@ -52,7 +52,7 @@ export default function PracticePage() {
   const isReady  = profile !== null  // layout has finished its auth check
   const userId   = profile?.id ?? null
 
-  const activity = useStudentActivity('week', { userId, isGuest, ready: isReady })
+
   const recent   = useRecentSessions(RECENT_LIMIT, { userId, isGuest, ready: isReady })
 
   // The setup sheet: null, or { screen, sessionType }. Opening it adds one
@@ -120,14 +120,7 @@ export default function PracticePage() {
           />
           <div className={s.bottom}>
             <RecentSessions sessions={recent.sessions} loading={recent.loading} dark={dark} />
-            <div className={s.streak}>
-              <WeekActivityCard
-                title="Practice Streak" link={{ href: '/student/progress', label: 'This Week' }}
-                days={activity.days} today={appDay()}
-                questions={activity.stats.questions} questionsLabel="Questions This Week"
-                streak={activity.stats.streak} xp={xp || 0}
-              />
-            </div>
+            <WeeklyChallenges profile={profile} />
           </div>
         </>
       )}

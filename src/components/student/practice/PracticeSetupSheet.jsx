@@ -1,11 +1,13 @@
 'use client'
-// src/components/student/practice/PracticeSetupSheet.jsx — v3
+// src/components/student/practice/PracticeSetupSheet.jsx — v4
+// v4: topic options support question count and optional seconds per question;
+// challenges enter the same options screen with their topic preselected.
 // ─────────────────────────────────────────────────────────────────────────────
 // "How do you want to practice?" and the short setup for each mode, opened
 // from the Practice page. Styles: ./setupSheet.module.css.
 //
 //   Mode           Screens                                         Taps to start*
-//   Topic          exam + subject → topic                          2
+//   Topic          exam + subject → topic → questions, timer       3
 //   Custom         exam + subject → questions, mode, timer         2
 //   Quick 5        exam + subject                                  1
 //   Speed Round    exam + subject, questions, seconds each         1
@@ -21,6 +23,7 @@
 //   profile       the student (useStudentUser)
 //   initialScreen 'modes' | 'topic' | 'custom' | 'quick5' | 'timed'
 //   initialSessionType  'practice' | 'study' (Custom)
+//   initialTopic  preselected exam, subject and topic for a challenge
 //   onStart(config)  a practice config for /student/practice/session
 //   onMock()  onBattle()  onClose()
 //
@@ -42,6 +45,8 @@ import { useExamSubjects } from '@/hooks/useExamSubjects'
 import { usePlan } from '@/contexts/PlanContext'
 import PlanBadge from '@/components/plan/PlanBadge'
 import { SETUP_MASCOT } from './art'
+import TopicSessionOptions from './TopicSessionOptions'
+import { topicSessionConfig } from '@/lib/topicSession'
 import s from './setupSheet.module.css'
 
 const cx = (...names) => names.filter(Boolean).join(' ')
@@ -66,9 +71,10 @@ const MODE_FEATURE = { custom: 'custom', timed: 'custom', mock: 'mock', battle: 
 
 const TITLES = {
   modes: 'Practice Mode', topic: 'Topic Practice', 'topic-pick': 'Topic Practice',
+  'topic-prefs': 'Session Options',
   custom: 'Custom Practice', 'custom-prefs': 'Custom Practice', quick5: 'Quick 5', timed: 'Speed Round',
 }
-const STEPS = { topic: '1 of 2', 'topic-pick': '2 of 2', custom: '1 of 2', 'custom-prefs': '2 of 2' }
+const STEPS = { topic: '1 of 3', 'topic-pick': '2 of 3', 'topic-prefs': '3 of 3', custom: '1 of 2', 'custom-prefs': '2 of 2' }
 
 const CUSTOM_COUNTS = [5, 10, 20, 30, 50]
 const CUSTOM_TIMERS = [0, 5, 10, 20, 30]                // minutes; 0 = no timer
@@ -86,7 +92,7 @@ function defaultSubject(subjects) {
   return subjects.find(x => x.name === last) ?? subjects[0] ?? null
 }
 
-export default function PracticeSetupSheet({ profile, initialScreen = 'modes', initialSessionType = 'practice', onStart, onMock, onBattle, onClose }) {
+export default function PracticeSetupSheet({ profile, initialScreen = 'modes', initialSessionType = 'practice', initialTopic = null, startError = null, onStart, onMock, onBattle, onClose }) {
   const { dark } = useTheme()
   const plan = usePlan()
   const [stack, setStack] = useState([initialScreen])
@@ -94,21 +100,22 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
   const mode   = screen.split('-')[0]                    // 'topic-pick' → 'topic'
   const tone   = TONE[mode] ?? TONE.topic
 
-  const [exam, setExam] = useState(() => profile?.exam_types?.[0] ?? profile?.exam_type ?? 'WAEC')
+  const [exam, setExam] = useState(() => initialTopic?.exam ?? profile?.exam_types?.[0] ?? profile?.exam_type ?? 'WAEC')
   const { subjects, loading: subjectsLoading, hasAny } = useExamSubjects(profile, exam)
-  const [subject, setSubject] = useState(null)
+  const [subject, setSubject] = useState(initialTopic?.subject ?? null)
 
-  const [topic,        setTopic]        = useState(null)
+  const [topic,        setTopic]        = useState(initialTopic?.topic ?? null)
   const [count,        setCount]        = useState(10)
   const [sessionType,  setSessionType]  = useState(initialSessionType)
   const [timerMins,    setTimerMins]    = useState(0)
   const [speedCount,   setSpeedCount]   = useState(20)
   const [speedSecs,    setSpeedSecs]    = useState(30)
+  const [perQuestionSecs, setPerQuestionSecs] = useState(0)
 
   // Keep a valid subject picked as the exam or its subjects change.
   useEffect(() => {
-    setSubject(current => subjects.find(x => x.name === current?.name) ?? defaultSubject(subjects))
-  }, [subjects])
+    if (!initialTopic) setSubject(current => subjects.find(x => x.name === current?.name) ?? defaultSubject(subjects))
+  }, [subjects, initialTopic])
 
   // Escape closes, like the × button.
   useEffect(() => {
@@ -120,6 +127,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
   const go   = next => setStack(st => [...st, next])
   // Back steps through the screens, then to the mode list; × closes.
   const back = () => {
+    if (initialTopic && stack.length === 1) return onClose()
     if (stack.length > 1) setStack(st => st.slice(0, -1))
     else if (screen !== 'modes') setStack(['modes'])
     else onClose()
@@ -141,9 +149,12 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
   function start() {
     // Checked again here: the day's free session may have gone since the mode
     // was picked (another tab, another device).
-    if (screen === 'topic-pick' && !plan.gateTopic(topic)) return
+    if (screen === 'topic-prefs' && !plan.gateTopic(topic)) return
     if ((screen === 'custom-prefs' || screen === 'timed') && !plan.gate('custom')) return
-    if (screen === 'topic-pick') return onStart({ ...base(), count: 20, mode: 'practice', sessionType: 'practice', topic_id: topic.id, topicName: topic.name })
+    if (screen === 'topic-prefs') {
+      rememberSubject(subject)
+      return onStart(topicSessionConfig({ subject, topic, exam, count, perQuestionSecs }))
+    }
     if (screen === 'quick5')     return onStart({ ...base(), count: 5, mode: 'quick5', sessionType: 'practice', answerMode: 'instant' })
     if (screen === 'timed')      return onStart({ ...base(), count: speedCount, mode: 'timed', sessionType: 'practice', speedSecs })
     if (screen === 'custom-prefs') {
@@ -153,7 +164,8 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
 
   const footer = {
     topic:          { label: 'Choose Topic',       action: () => go('topic-pick'),   enabled: ready },
-    'topic-pick':   { label: 'Start Topic Practice', action: start,                   enabled: !!topic },
+    'topic-pick':   { label: 'Session Options', action: () => go('topic-prefs'),       enabled: !!topic },
+    'topic-prefs':  { label: 'Start Practice', action: start, enabled: ready && !!topic },
     custom:         { label: 'Next',               action: () => go('custom-prefs'), enabled: ready },
     'custom-prefs': { label: 'Start Practice',     action: start,                     enabled: ready },
     quick5:         { label: 'Start Quick 5',      action: start,                     enabled: ready },
@@ -175,7 +187,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
           </button>
           <div className={s.barTitle} id="setup-title">
             {TITLES[screen]}
-            {STEPS[screen] && <span className={s.step}>Step {STEPS[screen]}</span>}
+            {!initialTopic && STEPS[screen] && <span className={s.step}>Step {STEPS[screen]}</span>}
           </div>
           <button type="button" className={cx(s.barBtn, s.barClose)} onClick={onClose} aria-label="Close">×</button>
         </div>
@@ -213,6 +225,12 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
             <TopicPicker exam={exam} subject={subject} selected={topic} onSelect={setTopic} onChangeSubject={back} dark={dark} />
           )}
 
+          {screen === 'topic-prefs' && topic && <>
+            <h2 className={s.heading}>{topic.name}</h2>
+            <p className={s.hint}>{subject?.name} · {exam}</p>
+            <TopicSessionOptions count={count} onCount={setCount} perQuestionSecs={perQuestionSecs} onTime={setPerQuestionSecs}/>
+          </>}
+
           {screen === 'custom-prefs' && (
             <>
               <h2 className={s.heading}>Set up your session</h2>
@@ -241,6 +259,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
 
         {footer && (
           <div className={s.footer}>
+            {startError && <p className={s.ctaNote} role="alert">{startError}</p>}
             {waitingForSubjects && <p className={s.ctaNote}>Loading your subjects…</p>}
             {offlineNoIds && <p className={s.ctaNote}>Connect to the internet once to load your subjects.</p>}
             <button type="button" className={s.cta} onClick={footer.action} disabled={!footer.enabled}>

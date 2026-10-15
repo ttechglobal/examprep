@@ -99,3 +99,22 @@ no-store`, while a foreign-origin POST returns 403. The origin check accounts
 for the public Host and forwarded protocol when Next normalizes its internal URL.
 Final targeted verification: 22 tests passed (6 PostgreSQL, 10 worker/cache,
 3 Battle navigation and 3 subject-icon regressions).
+
+## Topic setup and shared placement (15 October 2026)
+
+Home and Practice display the same ordinary-practice challenge card. Battle
+missions remain separate. Challenge clicks open the topic session options sheet
+before starting: 5, 10, 20, 30 or 50 questions, with no timer by default or
+15–120 seconds per question. Ordinary topic practice uses the same options.
+When a countdown expires, the session keeps the selected answer and advances.
+This remains normal topic practice, including its existing access rules.
+
+Goals now say “Complete 10 questions”, with completion progress separately.
+The kicker and internal counting explanation were removed. Challenge counting,
+weekly targets and rewards have not changed. The existing database migration
+is still required to enable challenge records in a deployment.
+
+Home illustrations retain their 2:1 proportions at every breakpoint. The mobile
+and desktop headers share ExamPrep A1 branding and accessible XP/theme controls.
+Verification: 25 targeted tests passed; browser checks confirmed count/timer
+selection reaches the session config and the cards/options fit a 390px viewport.

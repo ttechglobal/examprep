@@ -170,7 +170,7 @@
 }
 
 /* Home artwork keeps its full composition as cards change aspect ratio. */
-.home .art { object-fit: fill; }
+.home .art { top:auto; bottom:0; left:auto; right:0; height:auto; max-height:100%; object-fit:contain; object-position:right bottom; mask-image:linear-gradient(to bottom,transparent,#000 12%); }
 .home:first-child .chipIcon { background: #ffb41f; }
 .home .body { max-width: 60%; }
 .home .desc { max-width: 145px; }

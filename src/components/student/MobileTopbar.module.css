@@ -3,7 +3,7 @@
 .brand { display:flex; align-items:center; gap:8px; color:var(--text-prim); text-decoration:none; min-width:0; }
 .mark { display:grid; place-items:center; flex-shrink:0; height:44px; width:44px; background:#fff; border:1px solid #dde4f5; border-radius:15px; box-shadow:0 3px 12px #062a7809; }
 .mark img { width:40px; height:40px; object-fit:contain; }
-.brand strong { display:block; font-size:17px; font-weight:800; line-height:1.2; letter-spacing:-.04em; }
+.brand strong { display:block; font-size:17px; font-weight:800; line-height:1.2; letter-spacing:-.04em; white-space:nowrap; }
 .brand small { display:block; margin-top:3px; font-size:10px; font-weight:600; color:var(--text-sec); max-width:145px; }
 .controls { display:flex; align-items:center; gap:7px; flex-shrink:0; }
 .xp { display:flex; align-items:center; gap:6px; min-height:44px; padding:5px 10px 5px 5px; border-radius:16px; background:linear-gradient(140deg,#fff2ca,#ffdf83); border:1px solid #f4cc64; color:#795000; text-decoration:none; font-size:14px; font-weight:800; }
@@ -12,3 +12,12 @@
 .theme { width:44px; height:44px; display:grid; place-items:center; border-radius:15px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-sec); cursor:pointer; }
 .brand:focus-visible,.theme:focus-visible,.xp:focus-visible { outline:3px solid #1264e5; outline-offset:2px; }
 @media (max-width:359px) { .bar { padding-inline:10px; gap:6px; } .brand small { display:none; } .brand strong { font-size:15px; } .mark { width:38px; height:40px; } .xp { padding-right:7px; font-size:12px; } .controls { gap:5px; } }
+.desktopBar { display:flex; align-items:center; gap:20px; padding-bottom:18px; margin-bottom:22px; border-bottom:1px solid var(--border); }
+.search { flex:1; min-width:100px; max-width:420px; padding:12px 16px; border-radius:15px; border:1px solid var(--border); background:var(--bg-subtle); color:var(--text-prim); font:inherit; font-size:13px; }
+.desktopBar .controls { margin-left:auto; }
+.profile { display:flex; align-items:center; gap:8px; min-height:44px; padding:5px 12px 5px 5px; border:1px solid var(--border); border-radius:16px; background:var(--bg-card); color:var(--text-prim); text-decoration:none; }
+.avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:12px; background:linear-gradient(135deg,#062a78,#1264e5); color:#ffd978; font-size:12px; font-weight:800; }
+.profileName strong,.profileName small { display:block; font-size:11px; }
+.profileName small { font-size:10px; color:var(--text-sec); margin-top:2px; }
+.profile:focus-visible,.search:focus-visible { outline:3px solid #1264e5; outline-offset:2px; }
+@media (max-width:1250px) { .desktopBar { gap:12px; } .profileName { display:none; } .profile { padding-right:5px; } }
