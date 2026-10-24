@@ -1,8 +1,8 @@
-// src/app/api/admin/sdash/tag/route.js
+// src/app/api/admin/questions/tag/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // AI-Powered Topic Tagger
 //
-// POST /api/admin/sdash/tag
+// POST /api/admin/questions/tag
 //
 // For a batch of untagged questions, uses Claude to suggest the top-3 closest
 // matching topics (and optionally subtopics) from the subject's curriculum.

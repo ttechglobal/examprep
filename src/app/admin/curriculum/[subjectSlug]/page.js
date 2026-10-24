@@ -7,7 +7,7 @@ import Link from 'next/link'
 const EXAM_STYLE = {
   WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
   JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
-  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+  NECO: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
 }
 
 function ExamBadge({ exam }) {

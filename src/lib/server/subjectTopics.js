@@ -23,7 +23,7 @@ export async function listSubjectTopics(db, subjectId, exam) {
   for (const c of countsRes.data ?? []) countMap[c.topic_id] = Number(c.question_count) || 0
 
   return (topicsRes.data ?? [])
-    .filter(t => !t.exam_type || t.exam_type === exam || t.exam_type === 'BOTH')
+    .filter(t => !t.exam_type || t.exam_type === exam)
     .filter(t => (countMap[t.id] ?? 0) > 0)
     .map((t, position) => ({
       id:             t.id,

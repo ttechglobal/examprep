@@ -1,24 +1,21 @@
-// src/lib/constants.js
-
-// Exam types — no BOTH. Students select each exam independently.
-// Multi-exam students (e.g. WAEC + IGCSE) have separate subject entries per exam.
-// Topics and questions carry an exam_types[] array (e.g. ['WAEC'], ['JAMB'], ['WAEC','JAMB'], ['IGCSE'])
-// so content shared across exams is naturally represented without a magic "BOTH" value.
+// Admin content catalogue. Student availability is configured separately below.
 export const EXAM_TYPES = {
   WAEC:  'WAEC',
   JAMB:  'JAMB',
-  IGCSE: 'IGCSE',
+  NECO: 'NECO',
 }
 
 // Human-readable labels for UI display
 export const EXAM_LABELS = {
   WAEC:  'WAEC',
   JAMB:  'JAMB / UTME',
-  IGCSE: 'Cambridge IGCSE',
+  NECO: 'NECO',
 }
 
 // All supported exams as an ordered array — add new exams here only
-export const ALL_EXAMS = ['WAEC', 'JAMB', 'IGCSE']
+export const ALL_EXAMS = ['WAEC', 'JAMB', 'NECO']
+
+export const STUDENT_EXAMS = ['WAEC', 'JAMB']
 
 export const ROLES = {
   SUPERADMIN:   'superadmin',

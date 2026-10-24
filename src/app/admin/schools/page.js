@@ -78,7 +78,7 @@ export default function AdminSchoolsPage() {
   return <div className={s.page}>
     <div className={s.head}>
       <div>
-        <h1 className={s.title}>Schools</h1>
+        <h1 className={s.title}>Schools (Web)</h1>
         <p className={s.sub}>Manage partner schools and their Premium slots.</p>
       </div>
       <label className={s.year}>

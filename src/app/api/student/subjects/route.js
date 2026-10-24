@@ -1,3 +1,4 @@
+import { STUDENT_EXAMS } from '@/lib/constants'
 // src/app/api/student/subjects/route.js — v8
 // GET  /api/student/subjects?exam=WAEC&names=Math,Physics
 //   → Returns subject rows for the given names + exam.
@@ -28,6 +29,7 @@ function svc() {
 export async function GET(request) {
   const url       = new URL(request.url)
   const examParam = (url.searchParams.get('exam') ?? 'WAEC').toUpperCase()
+  if (!STUDENT_EXAMS.includes(examParam)) return NextResponse.json({ error: 'Exam is not available' }, { status: 400 })
   const namesParam = url.searchParams.get('names') // comma-separated subject names
 
   // ── Path C: catalog — every active subject for an exam (profile editor) ────

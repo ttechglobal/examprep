@@ -35,9 +35,9 @@ const SECTIONS = [
     desc:    'Source & manage the question bank',
     items: [
       { href: '/admin/questions/upload',          label: 'Upload Questions',   icon: '📤' },
-      { href: '/admin/questions/import',          label: 'Import via Sdash',   icon: '⬆' },
       { href: '/admin/questions/myquest-import',  label: 'Import via MyQuest', icon: '⬆' },
       { href: '/admin/questions',                 label: 'Question Bank',      icon: '🔍' },
+      { href: '/admin/questions/review',          label: 'Review Drafts',      icon: '📋' },
       { href: '/admin/past-questions',            label: 'Past Questions',     icon: '🗃' },
       { href: '/admin/coverage',                  label: 'Year Coverage',      icon: '📅' },
       { href: '/admin/frequency',                 label: 'Topic Frequency',    icon: '🔥' },
@@ -90,9 +90,10 @@ const SECTIONS = [
     accent: '#f97316',
     desc:   'Partner schools & performance',
     items: [
-      { href: '/admin/schools', label: 'Schools', icon: '🏫' },
+      { href: '/admin/schools', label: 'Schools (Web)', icon: '🏫' },
+      { href: '/admin/school-devices', label: 'Schools (Desktop)', icon: '🖥️' },
     ],
-    paths: ['/admin/schools'],
+    paths: ['/admin/schools', '/admin/school-devices'],
   },
 ]
 
@@ -112,6 +113,7 @@ function getSection(key) {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 function isActive(href, pathname) {
+  if (href === '/admin/questions') return pathname === href
   if (href === '/admin/dashboard') return pathname === href
   return pathname === href || pathname.startsWith(href + '/')
 }

@@ -1,3 +1,4 @@
+import { STUDENT_EXAMS } from '@/lib/constants'
 // src/app/api/student/profile/route.js
 // GET  — fetch full student profile
 // PATCH — update editable fields
@@ -97,6 +98,10 @@ export async function PATCH(request) {
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
+  if ((body.exam_type !== undefined && !STUDENT_EXAMS.includes(body.exam_type)) ||
+      (body.exam_types !== undefined && (!Array.isArray(body.exam_types) || body.exam_types.some(exam => !STUDENT_EXAMS.includes(exam))))) {
+    return NextResponse.json({ error: 'Exam is not available' }, { status: 400 })
+  }
   const updates = {}
   for (const key of ALLOWED_PATCH) {
     if (body[key] !== undefined) updates[key] = body[key]

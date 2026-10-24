@@ -10,7 +10,7 @@ import Link from 'next/link'
 const EXAM_STYLE = {
   WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
   JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
-  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+  NECO: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
 }
 
 function ExamBadge({ exam }) {
@@ -89,7 +89,7 @@ function CurriculumPreview({ data }) {
   const tagColors = {
     WAEC: 'bg-blue-100 text-blue-700',
     JAMB: 'bg-purple-100 text-purple-700',
-    IGCSE: 'bg-green-100 text-green-700',
+    NECO: 'bg-green-100 text-green-700',
   }
 
   return (

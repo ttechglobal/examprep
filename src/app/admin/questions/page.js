@@ -3,6 +3,10 @@
 
 import { useState, useEffect, useCallback, memo, useRef } from 'react'
 import Link from 'next/link'
+import { SourceField } from '@/components/admin/ImportContentReview'
+import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
+import QuestionReviewPreview from '@/components/admin/QuestionReviewPreview'
+import { allReviewIssues } from '@/lib/questionReview'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function Badge({ children, color = 'gray' }) {
@@ -27,139 +31,6 @@ function Spinner({ size = 'md' }) {
   return <div className={`${sz} border-indigo-500 border-t-transparent rounded-full animate-spin`} />
 }
 
-// ── Student-facing explanation renderer ───────────────────────────────────────
-function ExplanationPreview({ explanation, options, correctAnswer, question }) {
-  const [picked, setPicked] = useState(null)
-  const expl = typeof explanation === 'string' ? null : explanation
-  const plainText = typeof explanation === 'string' ? explanation : explanation?.correct ?? null
-
-  return (
-    <div className="space-y-3">
-      {/* Question text */}
-      <p className="text-sm font-medium text-gray-800 leading-relaxed">{question}</p>
-
-      {/* Options — interactive */}
-      <div className="space-y-1.5">
-        {Object.entries(options ?? {}).map(([k, v]) => {
-          let cls = 'flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm border cursor-pointer transition-colors'
-          if (picked) {
-            if (k === picked && k === correctAnswer)  cls += ' bg-green-50 border-green-300 text-green-800'
-            else if (k === picked)                    cls += ' bg-red-50 border-red-300 text-red-800'
-            else if (k === correctAnswer)             cls += ' bg-green-50 border-green-200 text-green-700 opacity-70'
-            else                                      cls += ' bg-gray-50 border-gray-100 text-gray-500'
-          } else {
-            cls += ' bg-gray-50 border-gray-100 text-gray-700 hover:bg-indigo-50 hover:border-indigo-200'
-          }
-          return (
-            <div key={k} className={cls} onClick={() => !picked && setPicked(k)}>
-              <span className="font-black text-xs w-5 flex-shrink-0 mt-0.5">{k}.</span>
-              <span className="leading-relaxed flex-1">{v}</span>
-              {picked && k === correctAnswer && <span className="text-green-600 text-xs font-black flex-shrink-0 ml-auto">✓</span>}
-              {picked && k === picked && k !== correctAnswer && <span className="text-red-500 text-xs font-black flex-shrink-0 ml-auto">✗</span>}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Reset */}
-      {picked && (
-        <button onClick={() => setPicked(null)}
-          className="text-xs text-gray-400 hover:text-gray-600 underline">
-          Reset answer
-        </button>
-      )}
-
-      {/* Result banner */}
-      {picked && (
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border ${
-          picked === correctAnswer
-            ? 'bg-green-50 border-green-200 text-green-800'
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
-          {picked === correctAnswer ? '✓ Correct!' : `✗ Wrong — the answer is ${correctAnswer}`}
-        </div>
-      )}
-
-      {/* Explanation sections — only shown after answering */}
-      {picked && expl && (
-        <div className="space-y-2 pt-1">
-          {/* Concept */}
-          {expl.concept && (
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
-              <span className="text-indigo-500 text-base flex-shrink-0">💡</span>
-              <p className="text-xs text-indigo-800 font-medium leading-relaxed">{expl.concept}</p>
-            </div>
-          )}
-
-          {/* Why picked option is wrong */}
-          {picked !== correctAnswer && expl.wrong_options?.[picked] && (
-            <div className="px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
-              <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">Why {picked} is wrong</p>
-              <p className="text-xs text-amber-900 leading-relaxed">{expl.wrong_options[picked]}</p>
-            </div>
-          )}
-
-          {/* Correct explanation */}
-          {expl.correct && (
-            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">
-                {picked === correctAnswer ? "Why you're right" : `Why ${correctAnswer} is correct`}
-              </p>
-              <p className="text-xs text-gray-800 leading-relaxed">{expl.correct}</p>
-            </div>
-          )}
-
-          {/* Workings */}
-          {expl.workings?.length > 0 && (
-            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-2">Workings</p>
-              <div className="space-y-1.5">
-                {expl.workings.map((step, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">{i+1}</span>
-                    <span className="text-xs font-mono text-gray-700 leading-relaxed">{step}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Other wrong options */}
-          {expl.wrong_options && (
-            <div className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-2">Why other options are wrong</p>
-              <div className="space-y-2">
-                {Object.entries(expl.wrong_options)
-                  .filter(([k]) => k !== correctAnswer)
-                  .map(([k, reason]) => (
-                    <div key={k} className={`flex items-start gap-2 px-2 py-1.5 rounded-lg ${k === picked ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
-                      <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-black flex items-center justify-center flex-shrink-0">{k}</span>
-                      <span className="text-xs text-gray-700 leading-relaxed">{reason}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Fallback plain text explanation */}
-      {picked && !expl && plainText && (
-        <div className="px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-          <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide mb-1">Explanation</p>
-          <p className="text-xs text-blue-800 leading-relaxed">{plainText}</p>
-        </div>
-      )}
-
-      {/* No explanation */}
-      {picked && !expl && !plainText && (
-        <p className="text-xs text-gray-400 italic">No explanation saved for this question yet.</p>
-      )}
-    </div>
-  )
-}
-
-// ── Topic tagger panel ────────────────────────────────────────────────────────
 function TopicTagger({ question, onSave, onCancel }) {
   const [topics,      setTopics]      = useState([])
   const [loading,     setLoading]     = useState(false)
@@ -186,7 +57,7 @@ function TopicTagger({ question, onSave, onCancel }) {
       .then(tree => {
         setTopics(Array.isArray(tree) ? tree : [])
         // Get AI suggestions
-        return fetch('/api/admin/sdash/tag', {
+        return fetch('/api/admin/questions/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -324,8 +195,12 @@ function TopicTagger({ question, onSave, onCancel }) {
 
 // ── Question drawer ───────────────────────────────────────────────────────────
 // Replaces the old modal. Right-side slide-in with two tabs: Preview + Tag.
-function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
+function QuestionDrawer({ question: initialQ, onClose, onUpdated, onDeleted }) {
   const [q,    setQ]    = useState(initialQ)
+  const [reviewNote, setReviewNote] = useState('')
+  const [reviewError, setReviewError] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [tab,  setTab]  = useState('preview') // 'preview' | 'tag'
   const [saved, setSaved] = useState(false)
 
@@ -344,7 +219,6 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const opts = q.options ?? {}
   const diffColor = q.difficulty === 'hard' ? 'red' : q.difficulty === 'easy' ? 'green' : 'amber'
   const sourceLabel = q.source === 'past_paper' ? 'Past Paper' : 'AI'
   const sourceColor = q.source === 'past_paper' ? 'indigo' : 'violet'
@@ -379,7 +253,7 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
                   method:'PATCH', headers:{'Content-Type':'application/json'},
                   body: JSON.stringify({ is_active: newVal }),
                 })
-                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) }
+                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) } else { const error = await res.json(); setReviewError(error.error ?? 'Update failed') }
               }}
               className={`px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors ${q.is_active === false ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100' : 'border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100'}`}>
               {q.is_active === false ? '✓ Reactivate' : '⊘ Remove'}
@@ -387,11 +261,13 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
             <button
               title={q.is_flagged ? 'Unflag' : 'Flag for review (missing instruction, unclear, etc.)'}
               onClick={async () => {
+                const reason = q.is_flagged ? null : window.prompt('What needs checking? Describe the affected word, passage, option or answer and the problem you noticed.')
+                if (!q.is_flagged && !reason?.trim()) return
                 const res = await fetch(`/api/admin/questions/${q.id}`, {
                   method:'PATCH', headers:{'Content-Type':'application/json'},
-                  body: JSON.stringify({ is_flagged: !q.is_flagged }),
+                  body: JSON.stringify({ is_flagged: !q.is_flagged, ...(!q.is_flagged ? { explanation: { ...(q.explanation ?? {}), content_review: { status: 'needs_review', issues: [reason.trim()], created_at: new Date().toISOString() } } } : {}) }),
                 })
-                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) }
+                if (res.ok) { const u = await res.json(); setQ(u); onUpdated?.(u) } else { const error = await res.json(); setReviewError(error.error ?? 'Update failed') }
               }}
               className={`px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors ${q.is_flagged ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
               {q.is_flagged ? '🚩 Flagged' : '⚑ Flag'}
@@ -411,7 +287,7 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}>
-            👁 Student preview
+            👁 Content preview
           </button>
           <button onClick={() => setTab('tag')}
             className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors ${
@@ -425,13 +301,54 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated }) {
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {q.is_flagged && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>What to check</strong>{allReviewIssues(q).length ? <ul className="mt-2 list-disc pl-5 space-y-2">{allReviewIssues(q).map(issue => <li key={issue}>{issue}</li>)}</ul> : <p className="mt-2">This flag has no recorded reason. Check the question, passage, options, answer key and explanation before resolving it.</p>}</div>}
+          {reviewError && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{reviewError}</p>}
+          {q.is_flagged && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+            <p className="font-semibold">Review this question</p>
+            <p className="mt-1">Check the question, passage, options and correct answer below. If everything is correct, approve it for students. If unusable, delete it.</p>
+            <label className="mt-3 block">Review note (optional)<textarea value={reviewNote} onChange={event => setReviewNote(event.target.value)} rows={2} className="mt-1 block w-full rounded-lg border p-2" placeholder="Why is this question correct?" /></label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" disabled={reviewBusy} className="rounded-lg bg-green-700 px-3 py-2 font-semibold text-white disabled:opacity-40" onClick={async () => {
+                setReviewBusy(true); setReviewError('')
+                try {
+                  const response = await fetch(`/api/admin/questions/${q.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_action: 'approve', review_note: reviewNote, question_text: q.question_text, instruction_text: q.instruction_text, passage_text: q.passage_text, passage_image_url: q.passage_image_url, options: q.options, correct_answer: q.correct_answer, explanation: q.explanation }) })
+                  const data = await response.json()
+                  if (!response.ok) throw new Error(data.error ?? 'Approval failed')
+                  onUpdated?.(data); onClose()
+                } catch (error) { setReviewError(error.message) } finally { setReviewBusy(false) }
+              }}>{reviewBusy ? 'Saving…' : 'Mark correct and activate'}</button>
+              <button type="button" disabled={reviewBusy} onClick={() => setConfirmDelete(true)} className="rounded-lg border border-red-300 px-3 py-2 font-semibold text-red-700">Delete question</button>
+            </div>
+            {confirmDelete && <div className="mt-3 rounded-lg border border-red-200 bg-white p-3">
+              <p>Delete this question? It will be archived, removed from student sessions and cleared from this review queue. You can find it under Inactive.</p>
+              <div className="mt-2 flex gap-3"><button type="button" disabled={reviewBusy} className="font-semibold text-red-700 disabled:opacity-40" onClick={async () => {
+                setReviewBusy(true); setReviewError('')
+                try {
+                  const response = await fetch(`/api/admin/questions/${q.id}`, { method: 'DELETE' })
+                  const data = await response.json()
+                  if (!response.ok) throw new Error(data.error ?? 'Deletion failed')
+                  onDeleted?.(q.id); onClose()
+                } catch (error) { setReviewError(error.message) } finally { setReviewBusy(false) }
+              }}>Confirm delete</button><button type="button" disabled={reviewBusy} onClick={() => setConfirmDelete(false)}>Cancel</button></div>
+            </div>}
+          </div>}
+          {q.is_flagged && <details className="mb-4 rounded-xl border border-amber-200 p-4 text-sm"><summary className="cursor-pointer font-semibold">Correct and resolve this review</summary>
+            {['instruction_text', 'passage_text', 'passage_image_url', 'question_text'].map(field => <SourceField key={field} label={{ instruction_text: 'Instruction', passage_text: 'Passage / extract', passage_image_url: 'Passage image URL', question_text: 'Question' }[field]} value={q[field] ?? ''} onChange={value => setQ(prev => ({ ...prev, [field]: value }))} rows={field === 'passage_text' ? 6 : 3} />)}
+            {Object.entries(q.options ?? {}).map(([letter, text]) => <SourceField key={letter} label={`Option ${letter}`} value={text} onChange={value => setQ(prev => ({ ...prev, options: { ...prev.options, [letter]: value } }))} rows={2} />)}
+            <label className="mt-4 block">Correct answer<select className="ml-3 rounded border p-2" value={q.correct_answer} onChange={event => setQ(prev => ({ ...prev, correct_answer: event.target.value }))}>{Object.keys(q.options ?? {}).map(key => <option key={key} value={key}>{key}</option>)}</select></label>
+            <SourceField label="Correct-answer explanation" value={q.explanation?.answer_note ?? q.explanation?.correct ?? ''} onChange={value => setQ(prev => ({ ...prev, explanation: { ...(prev.explanation ?? {}), answer_note: value, correct: value } }))} rows={4} />
+            <label className="mt-4 block font-semibold">Source/reference and resolution<textarea className="mt-2 block w-full rounded-lg border p-3 font-normal" rows={3} value={reviewNote} onChange={event => setReviewNote(event.target.value)} /></label>
+            <button type="button" disabled={!reviewNote.trim()} className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white disabled:opacity-40" onClick={async () => {
+              const explanation = { ...(q.explanation ?? {}), content_review: { ...(q.explanation?.content_review ?? {}), status: 'reviewed', issues: [], note: reviewNote, reviewed_at: new Date().toISOString() } }
+              const response = await fetch(`/api/admin/questions/${q.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question_text: q.question_text, instruction_text: q.instruction_text, passage_text: q.passage_text, passage_image_url: q.passage_image_url, options: q.options, correct_answer: q.correct_answer, explanation, is_flagged: false }) })
+              const data = await response.json()
+              if (!response.ok) { setReviewError(data.error ?? 'Review could not be saved'); return }
+              setQ(data); onUpdated?.(data); setReviewError(''); setReviewNote('')
+            }}>Save corrections and mark reviewed</button>
+            <p className="mt-2 text-xs text-gray-500">A draft remains inactive after review. Publish it separately when ready.</p>
+          </details>}
           {tab === 'preview' ? (
-            <ExplanationPreview
-              question={q.question_text}
-              options={opts}
-              correctAnswer={q.correct_answer}
-              explanation={q.explanation}
-            />
+            <QuestionReviewPreview question={q} />
           ) : (
             <TopicTagger
               question={q}
@@ -522,7 +439,7 @@ function BatchHistory() {
 }
 
 // ── Question list ─────────────────────────────────────────────────────────────
-function QuestionList({ source, subjects }) {
+function QuestionList({ source, subjects, reviewOnly = false }) {
   const [questions,      setQuestions]      = useState([])
   const [total,          setTotal]          = useState(0)
   const [loading,        setLoading]        = useState(true)
@@ -536,7 +453,7 @@ function QuestionList({ source, subjects }) {
   const [filterYear,     setFilterYear]     = useState('')
   const [filterUntagged, setFilterUntagged] = useState(false)
   const [filterInactive, setFilterInactive] = useState(false)
-  const [filterFlagged,  setFilterFlagged]  = useState(false)
+  const [filterFlagged,  setFilterFlagged]  = useState(reviewOnly)
   const PER_PAGE = 25
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
@@ -552,7 +469,7 @@ function QuestionList({ source, subjects }) {
   const load = useCallback(() => {
     setLoading(true)
     const p = new URLSearchParams()
-    p.set('source',  source)
+    if (source) p.set('source', source)
     p.set('page',    String(page))
     p.set('perPage', String(PER_PAGE))
     if (filterExam)     p.set('examType',   filterExam)
@@ -574,7 +491,8 @@ function QuestionList({ source, subjects }) {
 
   // When a question gets tagged, refresh that row in state
   function handleUpdated(updated) {
-    setQuestions(qs => qs.map(q => q.id === updated.id ? updated : q))
+    setQuestions(qs => qs.map(q => q.id === updated.id ? updated : q).filter(q => !filterFlagged || q.is_flagged))
+    if (filterFlagged && !updated.is_flagged) load()
     setSelected(updated)
   }
 
@@ -586,7 +504,7 @@ function QuestionList({ source, subjects }) {
   useEffect(() => {
     if (!filterSubject || !filterExam) { setYearCounts({}); return }
     const p = new URLSearchParams()
-    p.set('source', source)
+    if (source) p.set('source', source)
     p.set('subjectId', filterSubject)
     p.set('examType', filterExam)
     p.set('yearCounts', 'true')
@@ -633,6 +551,7 @@ function QuestionList({ source, subjects }) {
 
   return (
     <>
+      {filterFlagged && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Review drafts and flagged questions</strong><p className="mt-1">Questions marked Inactive are saved for review and do not appear in student sessions. Open a question to see its review reasons and make corrections.</p></div>}
       {/* Delete confirmation modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -706,7 +625,7 @@ function QuestionList({ source, subjects }) {
           <option value="">All exams</option>
           <option value="WAEC">WAEC</option>
           <option value="JAMB">JAMB</option>
-          <option value="BOTH">BOTH</option>
+          <option value="NECO">NECO</option>
         </select>
 
         <select value={filterSubject} onChange={e => { setFilterSubject(e.target.value); setFilterTopic(''); setPage(1) }}
@@ -822,6 +741,7 @@ function QuestionList({ source, subjects }) {
           question={selected}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}
+          onDeleted={() => load()}
         />
       )}
     </>
@@ -829,8 +749,8 @@ function QuestionList({ source, subjects }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function QuestionsPage() {
-  const [tab,      setTab]      = useState('past')
+export default function QuestionsPage({ initialReview = false }) {
+  const [tab,      setTab]      = useState(initialReview ? 'review' : 'past')
   const [subjects, setSubjects] = useState([])
 
   useEffect(() => {
@@ -842,6 +762,7 @@ export default function QuestionsPage() {
   const tabs = [
     { id: 'past',    label: '📝 Past Questions' },
     { id: 'bank',    label: '🤖 AI Generated'   },
+    { id: 'review', label: 'Review Drafts' },
     { id: 'history', label: '📦 Upload History' },
   ]
 
@@ -860,7 +781,7 @@ export default function QuestionsPage() {
         </Link>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors whitespace-nowrap ${
@@ -879,7 +800,7 @@ export default function QuestionsPage() {
               Click any question to preview it or tag it to a topic.
             </p>
           </div>
-          <QuestionList source="past_paper" subjects={subjects} />
+          <QuestionList key="past" source="past_paper" subjects={subjects} />
         </div>
       )}
 
@@ -891,9 +812,11 @@ export default function QuestionsPage() {
               Click any question to preview it or tag it to a topic.
             </p>
           </div>
-          <QuestionList source="ai_generated" subjects={subjects} />
+          <QuestionList key="bank" source="ai_generated" subjects={subjects} />
         </div>
       )}
+
+      {tab === 'review' && <QuestionList key="review" subjects={subjects} reviewOnly />}
 
       {tab === 'history' && (
         <div className="space-y-4">

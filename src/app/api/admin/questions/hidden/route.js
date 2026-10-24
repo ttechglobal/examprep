@@ -1,3 +1,4 @@
+import { contentIssues, contentText, safeContentImage } from '@/lib/questionContent'
 import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/hidden/route.js
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,7 +78,11 @@ export async function POST(request) {
   const { data, error } = await db
     .from('hidden_questions')
     .insert({
-      question_text: question_text.trim(),
+      question_text: contentText(question_text),
+      passage_text: contentText(body.passage_text) || null,
+      instruction_text: contentText(body.instruction_text) || null,
+      passage_image_url: safeContentImage(body.passage_image_url),
+      content_review_issues: [...contentIssues(body), ...(Array.isArray(body.content_review_issues) ? body.content_review_issues : [])],
       options:       options ?? {},
       correct_answer: (correct_answer ?? '').toUpperCase().trim(),
       explanation:   explanation ?? null,
@@ -167,6 +172,9 @@ export async function PATCH(request) {
   // Merge any edits the admin made (updates overrides stored values)
   const merged = { ...hq, ...(updates ?? {}) }
 
+  const issues = [...contentIssues(merged), ...(merged.content_review_issues ?? [])]
+  if (issues.length) return NextResponse.json({ error: `Resolve content review before restoring: ${issues.join(' ')}` }, { status: 400 })
+
   // Insert into main questions table
   const { data: saved, error: insertErr } = await db
     .from('questions')
@@ -175,7 +183,10 @@ export async function PATCH(request) {
       exam_type:      merged.exam_type,
       source:         'past_paper',
       year:           merged.year,
-      question_text:  merged.question_text,
+      question_text:  contentText(merged.question_text),
+      passage_text: contentText(merged.passage_text) || null,
+      instruction_text: contentText(merged.instruction_text) || null,
+      passage_image_url: safeContentImage(merged.passage_image_url),
       options:        merged.options,
       correct_answer: merged.correct_answer,
       explanation:    merged.explanation,

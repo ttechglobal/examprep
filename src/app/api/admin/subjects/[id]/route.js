@@ -1,5 +1,5 @@
 // src/app/api/admin/subjects/[id]/route.js
-// exam_type is a single string: 'WAEC' | 'JAMB' | 'IGCSE'
+// exam_type is a single string: 'WAEC' | 'JAMB' | 'NECO'
 // exam_types column does NOT exist — never write or select it.
 // Called by: app/admin/subjects-manager/page.js
 //

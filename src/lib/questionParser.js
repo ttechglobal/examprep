@@ -8,16 +8,17 @@
 //      for ALL math. Previous version said "NO LaTeX" which was wrong.
 //   3. parseQuestions() — runs cleanLatex() on every string field after parse
 //   4. question_type removed from validation (column dropped from DB)
-//   5. buildSdashEnrichPrompt() — v3: subject-module architecture.
+//   5. buildImportEnrichPrompt() — v3: subject-module architecture.
 //      Prompt is assembled from subjectModules.js (subject-specific) + core.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { normalizeQuestionContent, contentIssues } from './questionContent.js'
 import { getSubjectModule } from './subjectModules.js'
 
 // ── Image-reference detection ─────────────────────────────────────────────────
 const IMAGE_TEXT_PATTERNS = [
   /\bdiagram\b/i,
-  /\bfigure\b/i,
+  /\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b/i,
   /\billustration\b/i,
   /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
   /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
@@ -161,7 +162,7 @@ export function buildQuestionPrompt(examType, subjectName) {
   const examContext = {
     WAEC:  'Nigerian WAEC (West African Senior School Certificate Examination)',
     JAMB:  'Nigerian JAMB/UTME (Joint Admissions and Matriculation Board)',
-    IGCSE: 'Cambridge IGCSE',
+    NECO: 'NECO',
   }
   const ctx = examContext[examType] ?? examType
 
@@ -568,7 +569,7 @@ export function buildImageQuestionPrompt(examType, subjectName) {
   const examContext = {
     WAEC:  'Nigerian WAEC',
     JAMB:  'Nigerian JAMB/UTME',
-    IGCSE: 'Cambridge IGCSE',
+    NECO: 'NECO',
   }
   const ctx = examContext[examType] ?? examType
 
@@ -838,7 +839,7 @@ function stringSimilarity(a, b) {
 // ── SdashAPI Enrichment Prompt ────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 // ── SdashAPI Enrichment Prompt ────────────────────────────────────────────────
-// buildSdashEnrichPrompt — v3 (subject-module architecture)
+// buildImportEnrichPrompt — v3 (subject-module architecture)
 //
 // The prompt is now assembled from a focused subject module + a shared core.
 // Each module (subjectModules.js) contains ONLY what is relevant to that subject:
@@ -852,11 +853,11 @@ function stringSimilarity(a, b) {
 //   - Tone & language, topic tagging, output JSON schema
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topics = []) {
+export function buildImportEnrichPrompt(rawQuestions, examType, subjectName, topics = []) {
   const examContext = {
     WAEC:  'Nigerian WAEC (West African Examinations Council)',
     JAMB:  'Nigerian JAMB/UTME (Joint Admissions and Matriculation Board)',
-    IGCSE: 'Cambridge IGCSE',
+    NECO: 'NECO',
   }
   const ctx = examContext[examType] ?? examType
 
@@ -868,14 +869,15 @@ export function buildSdashEnrichPrompt(rawQuestions, examType, subjectName, topi
   const mod = getSubjectModule(subjectName)
 
   // ── Format questions inline — NO answer shown, Claude solves independently ──
-  const questionLines = rawQuestions.map((q, i) => {
+  const questionLines = rawQuestions.map((raw, i) => {
+    const q = normalizeQuestionContent(raw)
     const opts = Object.entries(q.option ?? {})
       .map(([k, v]) => `   ${k.toUpperCase()}. ${v}`)
       .join('\n')
     // We deliberately do NOT include the source answer here.
     // Claude must determine the correct answer independently.
     // The source answer is stored separately and compared after.
-    return `Q${i + 1}. ${(q.question ?? '').trim()}\n${opts}`
+    return `SOURCE_ID: ${q.id ?? `index_${i + 1}`}\nInstruction: ${q.instruction_text ?? '(none supplied)'}\nPassage / extract (preserve every line):\n${q.section ?? '(none supplied)'}\nPassage image: ${q.passage_image_url ?? '(none supplied)'}\nContent review issues: ${contentIssues(q).join('; ') || 'none detected'}\nQ${i + 1}. ${(q.question ?? '').trim()}\n${opts}`
   }).join('\n\n')
 
   // Build a map of source answers for reference (used in merge, not in prompt)
@@ -892,9 +894,33 @@ ${rawQuestions.length} questions follow. Process ALL of them.
 YOU MUST DETERMINE THE CORRECT ANSWER YOURSELF.
 No answer key is provided. Solve each question from first principles.
 
+CONTENT INTEGRITY — applies to every subject:
+  Include "source_id" copied EXACTLY from SOURCE_ID, and "context_status": "complete" or "missing".
+  Include "instruction_text": copy the supplied instruction verbatim, or null.
+  Never invent a passage, quotation, source attribution, or underline target.
+  Preserve <u>underline</u>, <strong>bold</strong>, <em>italic</em>, <sup> and <sub> marks.
+  Source *word or phrase* and **word or phrase** markers identify the target when the
+  instruction asks about an underlined word, phrase or letters. Treat paired markers
+  as supplied context, not missing context. Elsewhere single asterisks may mark italics,
+  especially in literary passages. Never reinterpret a poem's italics as an underline.
+  Evaluate context against the FULL source, not the shortened question_snippet used for matching.
+  An image URL is a reference, not evidence that you can see the image. If essential
+  content is unavailable or an underline target is unknown, set context_status to "missing",
+  verified_answer to "", confidence to "unsure", and explain the missing material.
+  Include "context_reason" naming the exact missing field or material and why it is
+  required (for example: "The question refers to a passage above, but no passage was supplied").
+  Do not report only "missing context". When complete, context_reason may be null.
+  This missing-context rule overrides all instructions below to guess an answer.
+  If the source question combines an extract and a question, include "source_content":
+    {"passage_text": "EXACT source extract/prefix, with original lines", "question_text": "EXACT trailing question"}.
+  Only split at a clear boundary. The two strings joined must reproduce the entire
+  original question exactly apart from whitespace. Do not omit attribution or instructions.
+  Otherwise omit source_content and report missing context when the extract is absent.
+  Do not rewrite the question, passage or options. Do not infer a missing target from an answer.
+
 MATCHING RULE — each output object MUST include "question_snippet":
   Copy the first 15 words of that question EXACTLY as written.
-  This is the primary key used to match your output back to the question.
+  source_id is the primary key. The snippet is an additional integrity check.
   If question_snippet does not match, the explanation will be rejected.
   Do NOT paraphrase. Do NOT shorten below 15 words if the question is that long.
 
@@ -1066,7 +1092,7 @@ OUTPUT — JSON ARRAY ONLY
 ═══════════════════════════════════════
 
 Return ONLY a valid JSON array. No markdown fences, no text before or after.
-One object per question. Order does not matter — matching is done by question_snippet.
+One object per question. Order does not matter — matching is done by source_id, checked against question_snippet.
 EXACTLY ${rawQuestions.length} objects — one for every question above.
 
 USE THE CORRECT SHAPE FOR EACH QUESTION:
@@ -1074,6 +1100,9 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
 ── SHAPE A: RECALL question (identification / definition / naming — no arithmetic) ──
 {
   "index": 1,
+  "source_id": "COPY SOURCE_ID exactly",
+  "context_status": "complete",
+  "instruction_text": null,
   "question_snippet": "COPY the first 15 words of Q1 here exactly",
   "verified_answer": "D",
   "confidence": "certain",
@@ -1102,6 +1131,9 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
 ── SHAPE B: CALCULATION question (has numbers; requires formula and arithmetic) ──
 {
   "index": 2,
+  "source_id": "COPY SOURCE_ID exactly",
+  "context_status": "complete",
+  "instruction_text": null,
   "question_snippet": "COPY the first 15 words of Q2 here exactly",
   "verified_answer": "C",
   "confidence": "certain",
@@ -1160,48 +1192,38 @@ FINAL CHECK before submitting:
 //   • _mismatch: now only means "this enrichment object may belong to a different
 //     question" — it no longer conflates question-matching with answer-checking.
 // ─────────────────────────────────────────────────────────────────────────────
-export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, subjectName) {
+export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, subjectName) {
   const allEnrichments = enrichments ?? []
 
-  // ── Snippet matcher ─────────────────────────────────────────────────────────
-  // Normalises both strings to alphanumeric lowercase and checks prefix overlap.
-  // 15-word snippets → 60–80 chars after normalisation → very low false-match rate.
-  function snippetMatch(qText, snippet) {
-    if (!snippet || !qText) return false
-    const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const a = norm(qText).slice(0, 60)
-    const b = norm(snippet).slice(0, 60)
-    // Accept if b is a prefix of a, or vice versa (handles snippet slightly longer than question start)
-    return a.length > 12 && b.length > 12 && (a.startsWith(b.slice(0, 50)) || b.startsWith(a.slice(0, 50)))
+  // Compare complete prefixes; ignore inline styling, but retain Unicode and math symbols.
+  const norm = value => String(value ?? '').normalize('NFKC').replace(/<[^>]*>/g, '')
+    .replace(/[*_`]/g, '').toLowerCase().replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ').trim()
+  const snippetMatch = (text, snippet) => {
+    const a = norm(text), b = norm(snippet)
+    return !!a && !!b && (a === b || (b.length >= 12 && a.startsWith(b) && /[\s.,;:!?)]|^$/.test(a.slice(b.length, b.length + 1))))
   }
 
-  // Build index map as fallback
-  const byIndex = {}
-  for (const e of allEnrichments) {
-    if (e.index != null) byIndex[Number(e.index)] = e
-  }
-
-  return fetchedQuestions.map((q, i) => {
+  return fetchedQuestions.map((raw, i) => {
+    const q = normalizeQuestionContent(raw)
     const qText = (q.question ?? '').trim()
-
-    // ── PRIMARY MATCH: find enrichment by question_snippet ──────────────────
-    let e = allEnrichments.find(en =>
-      en.question_snippet && snippetMatch(qText, en.question_snippet)
-    )
-
-    // ── FALLBACK: index-based match ─────────────────────────────────────────
-    if (!e) e = byIndex[i + 1]
-
-    // Still nothing — empty object, question will save without enrichment
-    if (!e) e = {}
-
-    // ── QUESTION MATCHING INTEGRITY CHECK ───────────────────────────────────
-    // If we matched by index and the enrichment has a snippet that doesn't match,
-    // the AI returned things out of order — flag it.
-    let _mismatch = false
-    if (e.question_snippet && !snippetMatch(qText, e.question_snippet)) {
-      _mismatch = true
-    }
+    const sourceId = String(q.id ?? `index_${i + 1}`)
+    const idMatches = allEnrichments.filter(en => String(en.source_id ?? '') === sourceId)
+    const snippetMatches = allEnrichments.filter(en => !en.source_id && en.question_snippet
+      && snippetMatch(qText, en.question_snippet)
+      && fetchedQuestions.filter(other => snippetMatch(normalizeQuestionContent(other).question, en.question_snippet)).length === 1)
+    const candidates = idMatches.length ? idMatches : snippetMatches
+    const e = candidates.length === 1 ? candidates[0] : {}
+    const snippetValid = !e.question_snippet || snippetMatch(qText, e.question_snippet)
+      || (!!e.source_content?.question_text && snippetMatch(qText, [e.source_content.passage_text, e.source_content.question_text].join(' '))
+        && snippetMatch(e.source_content.question_text, e.question_snippet))
+    const duplicateSourceId = fetchedQuestions.filter((other, index) => String(other.id ?? `index_${index + 1}`) === sourceId).length !== 1
+    const _mismatch = duplicateSourceId || candidates.length !== 1 || !snippetValid
+    const reason = duplicateSourceId ? 'Multiple source questions use this source identity; regenerate with unique identities before publishing.'
+      : candidates.length > 1 ? 'Multiple enrichment responses use this source identity; match one response before publishing.'
+      : candidates.length === 0 ? 'No unique enrichment response was found for this source question. This does not establish that the question itself is faulty.'
+      : !snippetValid ? 'The response source ID matches, but its question snippet differs. Compare the source and explanation before accepting.' : null
+    const _matching = { sourceId, responseId: e.source_id ?? null, sourceSnippet: qText.split(/\s+/).slice(0, 15).join(' '), responseSnippet: e.question_snippet ?? '', method: idMatches.length ? 'source_id' : 'unique_snippet', reason, responseFound: !duplicateSourceId && candidates.length === 1 }
 
     // ── ANSWER VERIFICATION ─────────────────────────────────────────────────
     // verified_answer = Claude's independently-determined answer (source of truth)
@@ -1210,6 +1232,12 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
     const verifiedAnswer = (e.verified_answer ?? '').toUpperCase().trim()
     const sdashAnswer    = (q.answer ?? '').toUpperCase().trim()
     const confidence     = e.confidence ?? 'unknown'
+    const split = e.source_content
+    const compact = text => String(text ?? '').replace(/\s+/g, ' ').trim()
+    const validSplit = split && !q.section && typeof split.passage_text === 'string' && typeof split.question_text === 'string'
+      && split.passage_text.trim() && split.question_text.trim()
+      && compact(split.passage_text + ' ' + split.question_text) === compact(qText)
+    const invalidSplit = !!split && !validSplit
 
     // Use Claude's answer as correct_answer.
     // If Claude returned nothing (no match at all), fall back to Sdash's answer
@@ -1225,8 +1253,15 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
       exam:          examType,
       subject:       subjectName,
       year:          q.examyear ?? '',
-      passage_text:  q.section  ?? null,
-      question_text: qText,
+      passage_text:  validSplit ? split.passage_text.trim() : q.section ?? null,
+      passage_image_url: q.passage_image_url,
+      instruction_text: q.instruction_text,
+      _sourceQuestion: { source_id: sourceId, question_text: qText, passage_text: q.section, instruction_text: q.instruction_text, options: q.option, passage_image_url: q.passage_image_url },
+      _layoutUnverified: !!(validSplit && split.passage_text.includes('\n') && !qText.includes('\n')),
+      _contextStatus: invalidSplit ? 'missing' : e.context_status ?? null,
+      _contextReason: invalidSplit ? 'The returned passage/question split does not reproduce the full source exactly. Restore the original wording and attribution before regenerating enrichment.' : e.context_reason ?? null,
+      sdash_id: q.id != null ? `mq_${q.id}` : null,
+      question_text: validSplit ? split.question_text.trim() : qText,
       has_image:     !!(q.image),
       image_description: '',
       options: {
@@ -1267,6 +1302,7 @@ export function mergeSdashEnrichment(fetchedQuestions, enrichments, examType, su
           },
       topic_title:           e.topic_title    ?? '',
       subtopic_title:        e.subtopic_title ?? '',
+      _matching,
       _mismatch,             // true = enrichment object may belong to wrong question
       _answerDisagreement,   // true = Claude's answer ≠ Sdash's answer → admin must decide
     }
@@ -1356,7 +1392,7 @@ export function parseEnrichment(rawText) {
     const hasExplanation = e.explanation?.answer_note?.trim() || e.explanation?.correct?.trim()
     if (!hasExplanation)              errors.push(`Question ${n}: explanation.answer_note (or correct) is empty`)
     if (!e.topic_title?.trim())       errors.push(`Question ${n}: topic_title is missing`)
-    if (!e.verified_answer?.trim())   errors.push(`Question ${n}: verified_answer is missing — Claude must determine the answer independently`)
+    if (e.context_status !== 'missing' && !e.verified_answer?.trim())   errors.push(`Question ${n}: verified_answer is missing — Claude must determine the answer independently`)
     if (!e.question_snippet?.trim())  errors.push(`Question ${n}: question_snippet is missing — required for safe matching`)
   })
 

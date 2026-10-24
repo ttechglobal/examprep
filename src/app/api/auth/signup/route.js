@@ -6,6 +6,7 @@
 //   method:   'phone' | 'email',
 //   phone?:   string,            // any common Nigerian format
 //   email?:   string,
+//   full_name: string,          // required, 2–80 characters
 //   password: string,            // 6+ characters
 //   guest?:   { full_name, exam_types, subjects_waec, subjects_jamb }
 //   referral_code?: string       // an ambassador's code; ignored if it isn't valid
@@ -25,6 +26,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js'
+import { rateLimited } from '@/lib/server/rateLimit'
 import { NextResponse } from 'next/server'
 import { normalizePhone, phoneProblem, phoneToAuthEmail, phoneVariants } from '@/lib/auth/phone'
 
@@ -69,6 +71,8 @@ function isDuplicateUserError(error) {
 }
 
 export async function POST(request) {
+  const limited = rateLimited(request, 'student-signup', 10, 60 * 60_000)
+  if (limited) return limited
   let body
   try { body = await request.json() } catch { return fail(400, 'Something went wrong. Please try again.') }
 
@@ -78,11 +82,15 @@ export async function POST(request) {
     return fail(400, `Your password needs at least ${MIN_PASSWORD} characters.`, 'password')
   }
 
+  const fullName = typeof body.full_name === 'string' ? body.full_name.trim().replace(/\s+/g, ' ') : ''
+  if (fullName.length < 2 || fullName.length > 80) return fail(400, 'Enter your name (2–80 characters).', 'full_name')
+
   const db = admin()
   let loginEmail
   let phone = null
 
   if (method === 'phone') {
+    if (typeof body.phone !== 'string') return fail(400, 'Enter your phone number.', 'phone')
     const problem = phoneProblem(body.phone)
     if (problem) return fail(400, problem, 'phone')
     phone = normalizePhone(body.phone)
@@ -92,7 +100,8 @@ export async function POST(request) {
     // added to their profile before phone sign-up existed)?
     const { data: taken, error: lookupErr } = await db
       .from('profiles').select('id').in('phone_number', phoneVariants(body.phone)).limit(1)
-    if (!lookupErr && taken?.length) {
+    if (lookupErr) return fail(500, 'We couldn’t check your phone number. Please try again.')
+    if (taken?.length) {
       return fail(409, 'This phone number is already used by another account. Sign in instead.', 'phone')
     }
   } else {
@@ -106,7 +115,7 @@ export async function POST(request) {
     email: loginEmail,
     password,
     email_confirm: true,
-    user_metadata: { signup_method: method, ...(phone ? { phone } : {}) },
+    user_metadata: { full_name: fullName, signup_method: method, ...(phone ? { phone } : {}) },
   })
 
   if (createErr || !created?.user) {
@@ -119,18 +128,26 @@ export async function POST(request) {
     return fail(500, 'We couldn\'t create your account. Please try again.')
   }
 
-  // Write the profile. Try the full set of fields first; if the database
-  // rejects a column that doesn't exist yet, fall back to the essentials.
-  // A profile failure never undoes the account: the student can finish setup
-  // from their profile page, which the app will ask them to do anyway.
+  // Required identity must persist before signup can succeed. Only missing
+  // optional schema columns justify falling back to the essentials.
   const userId = created.user.id
-  const guest  = cleanGuest(body.guest)
-  const full   = { id: userId, ...(phone ? { phone_number: phone } : {}), ...guest }
-  const { error: upsertErr } = await db.from('profiles').upsert(full, { onConflict: 'id' })
-  if (upsertErr) {
-    const minimal = { id: userId, ...(guest.full_name ? { full_name: guest.full_name } : {}), ...(phone ? { phone_number: phone } : {}) }
-    const { error: retryErr } = await db.from('profiles').upsert(minimal, { onConflict: 'id' })
-    if (retryErr) console.error('signup profile upsert:', upsertErr, retryErr)
+  const essentials = { id: userId, full_name: fullName, email: loginEmail, ...(phone ? { phone_number: phone } : {}) }
+  const full = { ...cleanGuest(body.guest), ...essentials }
+  let { error: profileError } = await db.from('profiles').upsert(full, { onConflict: 'id' })
+  if (profileError && ['42703', 'PGRST204'].includes(profileError.code)) {
+    ;({ error: profileError } = await db.from('profiles').upsert(essentials, { onConflict: 'id' }))
+  }
+  if (profileError) {
+    console.error('signup profile save:', profileError)
+    const { error: cleanupError } = await db.auth.admin.deleteUser(userId)
+    if (cleanupError) {
+      console.error('signup cleanup:', { userId, error: cleanupError })
+      return fail(500, 'We couldn’t finish setting up your account. Please contact support before trying again.')
+    }
+    if (profileError.code === '23505' && /profiles_phone_number_unique/.test(profileError.message ?? '')) {
+      return fail(409, 'This phone number is already used by another account. Sign in instead.', 'phone')
+    }
+    return fail(500, 'We couldn’t save your account details. Please try again.')
   }
 
   // A referral code (from a teacher's link or typed in) links the student to the

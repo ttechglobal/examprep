@@ -6,7 +6,7 @@
 
 import { isPhoneAuthEmail, toNationalNumber } from '@/lib/auth/phone'
 
-export const FILTERS = ['all', 'free', 'trial', 'paid', 'two_months', 'annual', 'expiring', 'expired']
+export const FILTERS = ['anonymous', 'all', 'free', 'trial', 'paid', 'two_months', 'annual', 'expiring', 'expired']
 export const SORTS   = ['newest', 'oldest', 'name', 'expiry']
 
 /** A row of admin_student_rows → what the Students page shows. */

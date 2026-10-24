@@ -1,4 +1,6 @@
 'use client'
+
+import { ALL_EXAMS } from '@/lib/constants'
 // src/app/admin/coverage/page.js
 // Question bank coverage register — subject × year matrix.
 // Shows every subject as a row, every year as a column.
@@ -8,7 +10,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
-const EXAM_TYPES = ['WAEC', 'JAMB', 'NECO', 'IGCSE', 'ALL']
+const EXAM_TYPES = [...ALL_EXAMS, 'ALL']
 
 function Spinner() {
   return (
@@ -100,7 +102,7 @@ export default function CoveragePage() {
             Refresh
           </button>
           <Link
-            href="/admin/questions/import"
+            href="/admin/questions/myquest-import"
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-500 transition-colors shadow-sm"
           >
             ⬆ Import questions
@@ -273,7 +275,7 @@ export default function CoveragePage() {
                             return (
                               <td key={y} className="px-1 py-1.5 text-center">
                                 <Link
-                                  href={`/admin/questions/import?subject=${encodeURIComponent(s.name)}&examType=${s.exam_type}&year=${y}`}
+                                  href={`/admin/questions/myquest-import?subject=${encodeURIComponent(s.name)}&examType=${s.exam_type}&year=${y}`}
                                   title={count > 0
                                     ? `${s.name} ${s.exam_type} ${y} — ${count} questions`
                                     : `Import ${s.name} ${s.exam_type} ${y}`

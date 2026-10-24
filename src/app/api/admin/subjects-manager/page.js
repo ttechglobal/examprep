@@ -1,13 +1,15 @@
 'use client'
 
+import { ALL_EXAMS } from '@/lib/constants'
+
 import { useState, useEffect } from 'react'
 
-const EXAM_TYPES = ['WAEC', 'JAMB', 'BOTH']
+const EXAM_TYPES = ALL_EXAMS
 
 const EXAM_COLORS = {
   WAEC: 'bg-blue-100 text-blue-700',
   JAMB: 'bg-purple-100 text-purple-700',
-  BOTH: 'bg-indigo-100 text-indigo-700',
+  NECO: 'bg-indigo-100 text-indigo-700',
 }
 
 function SubjectRow({ subject, onUpdate, onDelete }) {
@@ -161,7 +163,7 @@ export default function SubjectsManagerPage() {
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newExamType, setNewExamType] = useState('BOTH')
+  const [newExamType, setNewExamType] = useState('WAEC')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
   const [filter, setFilter] = useState('all')
@@ -190,7 +192,7 @@ export default function SubjectsManagerPage() {
       if (data.error) { setAddError(data.error); return }
       setSubjects(prev => [...prev, { ...data, topic_count: 0, subtopic_count: 0, lessons_published: 0 }])
       setNewName('')
-      setNewExamType('BOTH')
+      setNewExamType('WAEC')
       setShowAddForm(false)
     } catch {
       setAddError('Failed to add subject')
@@ -212,7 +214,7 @@ export default function SubjectsManagerPage() {
     if (filter === 'inactive') return !s.is_active
     if (filter === 'WAEC') return s.exam_type === 'WAEC'
     if (filter === 'JAMB') return s.exam_type === 'JAMB'
-    if (filter === 'BOTH') return s.exam_type === 'BOTH'
+    if (filter === 'NECO') return s.exam_type === 'NECO'
     return true
   })
 
@@ -317,7 +319,7 @@ export default function SubjectsManagerPage() {
 
       {/* Filter */}
       <div className="flex gap-2 flex-wrap">
-        {['all', 'active', 'inactive', 'WAEC', 'JAMB', 'BOTH'].map(f => (
+        {['all', 'active', 'inactive', 'WAEC', 'JAMB', 'NECO'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}

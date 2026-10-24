@@ -2,7 +2,7 @@
 // src/components/onboarding/AuthPanel.jsx
 // The one sign-up / sign-in screen for students.
 //   • Phone number + password (default) or email + password
-//   • No name, username, exam or survey questions: those live on the profile
+//   • Name is required at signup; exams and subjects live on the profile
 //   • On success the parent sends the student straight into the app
 
 import { useEffect, useState } from 'react'
@@ -22,6 +22,7 @@ const refCache = new Map()   // code → { code, valid, firstName }
 export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, onGuest }) {
   const [mode,     setMode]     = useState(initialMode)   // 'signup' | 'signin'
   const [method,   setMethod]   = useState('phone')       // 'phone' | 'email'
+  const [fullName, setFullName] = useState('')
   const [phone,    setPhone]    = useState('')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -81,7 +82,7 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
     if (loading) return
     setLoading(true); setError(null); setBadField(null)
     const run = isSignup ? signUp : signIn
-    const result = await run({ method, phone, email, password, referralCode: isSignup ? cleanedRef : undefined })
+    const result = await run({ method, phone, email, password, full_name: fullName, referralCode: isSignup ? cleanedRef : undefined })
     if (!result.ok) {
       setError(result.error); setBadField(result.field ?? null); setLoading(false)
       if (result.field === 'phone') setPhoneTouched(true)
@@ -125,6 +126,15 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
           </div>
 
           {error && <div className={s.error} role="alert">{error}</div>}
+
+          {isSignup && <div className={s.field}>
+            <label className={s.label} htmlFor="ob-name">Your name</label>
+            <div className={`${s.inputWrap} ${inputState('full_name')}`}>
+              <input id="ob-name" className={s.input} autoComplete="name" value={fullName} maxLength={80}
+                placeholder="Your full name" aria-invalid={badField === 'full_name'}
+                onChange={e => { setFullName(e.target.value); if (badField === 'full_name') { setBadField(null); setError(null) } }} />
+            </div>
+          </div>}
 
           {method === 'phone' ? (
             <div className={s.field}>

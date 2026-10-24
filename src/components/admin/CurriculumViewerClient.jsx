@@ -7,7 +7,7 @@ import { buildSingleTopicPrompt, parseSingleTopic } from '@/lib/curriculumParser
 const EXAM_COLORS = {
   WAEC: 'bg-blue-100 text-blue-700 border-blue-200',
   JAMB: 'bg-purple-100 text-purple-700 border-purple-200',
-  BOTH: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  NECO: 'bg-indigo-100 text-indigo-700 border-indigo-200',
 }
 
 const STATUS_COLORS = {
@@ -271,7 +271,7 @@ export default function CurriculumViewerClient({ subject, topics: initialTopics 
             <option value="ALL">All exams</option>
             <option value="WAEC">WAEC only</option>
             <option value="JAMB">JAMB only</option>
-            <option value="BOTH">Both</option>
+            <option value="NECO">NECO</option>
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value="all">All status</option>

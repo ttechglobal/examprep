@@ -1,63 +1,46 @@
-# Admin Analytics
+# Admin analytics
 
-Analytics answers how ExamPrep is used. It's separate from Students (individual accounts) and Schools (partner schools and slots). Every number answers a product question.
+The page has three views sharing one dataset: Summary, Student activity and Learning. Plans and payments link to Students; school computer usage remains on Schools (Desktop).
 
-| Tab | Question | What's on it |
-|---|---|---|
-| Overview | How is ExamPrep doing? | Active today and this week, questions answered, new students, Premium students (each with change vs the previous period); daily active students; new vs returning by week; feature usage; most practised subjects and topics; completion rate; Premium conversion; top upgrade triggers |
-| Engagement | Are students coming back and studying? | Active students, study days, sessions and questions per student; daily activity and questions; new vs returning; this week's habits (1 / 2 / 3+ study days, one-time users); retention by join week |
-| Features | What do students value? | Per feature: students, sessions, % of active students, started, completed, completion rate |
-| Learning | What are they studying and struggling with? | Subjects (questions, students, accuracy, share); WAEC vs JAMB; most practised topics; most difficult topics |
-| Conversion | Is free → paid working? | Trials started / active / ended / converted, Trial → Premium; students by plan; upgrade sheet views and WhatsApp taps; upgrade triggers and the purchases that followed |
+## Setup
 
-The filters sit in one row and apply to every tab:
-- Last 7, 30 or 90 days
-- Exam (WAEC / JAMB)
-- Plan (the student's plan **now**)
-- School
+Run `src/supabase/migrations/20261022_shared_analytics.sql` in the shared Supabase project after the desktop account progress tables exist. The owner reported success on 22 October 2026; the live service-role snapshot and browser were subsequently verified. Deploy the web changes to publish the new page and web session attribution.
 
-## Definitions
+## Definitions and coverage
 
-- **Active student (on a day):** did something meaningful that day. That means answering a question (practice, battle, mock or daily challenge), starting a session, or opening a flashcard deck. Opening the app alone doesn't count.
-- **New students:** accounts created in the period.
-- **Returning students (in a week):** active that week and joined before it.
-- **Feature:** what a session was.
-  - Topic Practice: one topic chosen.
-  - Quick 5, Mock Exam, Battle vs Computer, Speed Round.
-  - Custom Practice: a whole subject, including Study Practice, which is saved the same way.
-  - Battle vs Friends, Daily Challenge and Flashcards (decks opened).
-  - The rule lives in two places, `lib/analytics.js` and `analytics_session_feature()` in SQL; keep them the same.
-- **Sessions:** finished sessions (`practice_sessions`). These include everything saved before this release.
-- **Started / completed:** recorded from this release on, in `student_events`.
-  - A start is the session's first questions being served.
-  - A completion is the same session being saved.
-  - Retries and reloads count once.
-- **Trial → Premium:** of students whose free trial ended in the period, the share who have bought a plan.
-- **Upgrade triggers:** what made the upgrade sheet appear, for example Mock Exam locked, Battle daily limit or Topic locked. Each counts once per student per trigger per day. "Bought" means an admin activated a plan within 30 days of the student first seeing that trigger.
-- **Retention:** of students who joined in a 7-day week, the share active in each of the following 4 weeks. "…" means that week isn't over yet.
+- Active student: a registered student account with at least one recorded answer during the period. Overall totals count each account once.
+- Questions and accuracy combine web question attempts and native topic summaries. Native summaries are excluded when question attempts already represent the same student/session. Correct answers are weighted by answer count.
+- Completed sessions come from saved practice sessions plus one session per registered participant with recorded answers in a completed online PvP battle. Answers without a completed session can therefore exist.
+- Web includes phone browsers. Mobile / installed app identifies native sync, which also includes the personal Windows app. It is not an operating-system breakdown.
+- The owner confirmed pre-mobile history was web usage. The refinement migration treats unattributed activity before 22 October 2026 (Lagos midnight) as Web, while preserving native evidence. New activity without trustworthy attribution remains Unknown. Platform student counts overlap when an account uses more than one source.
+- Offline practice uses its original occurrence date once uploaded. Unsynced activity is not visible yet.
+- Anonymous accounts, nonstudent roles and the two explicitly confirmed native integration test accounts are excluded. No broad email-pattern exclusion is used.
+- First-practice follow-up means recent accounts older than 24 hours without a completed session. Return follow-up means accounts with answers in the selected period but none in the last seven days. These are bounded review lists, not inactivity notifications.
+- Older native sessions do not preserve detailed practice modes. Lesson views and flashcard opens are not inferred from question sessions.
+- Difficult topics require at least 20 answers from three students. This describes recorded practice, not a population-wide learning assessment.
 
-## What isn't measured
+## Requests and scale
 
-- **Guests.** Their practice stays on their phone until they sign up.
-- **Lessons.** Nothing records lesson progress yet.
-- **Smart Focus.** It isn't a feature in the app yet. When it ships, give it a mode, add it to the feature rule and it will appear.
-- **Flashcard progress.** It stays on the phone; Analytics counts decks opened.
+Filters are rolling 24 hours, or 7, 30 or 90 Lagos calendar days and optional WAEC/JAMB. Changing views uses the same response without another request. Each cache miss makes one service-only `admin_analytics_snapshot` RPC; no raw event history is downloaded.
 
-## How it's built
+The browser caches each filter for five minutes. The server coalesces concurrent loads and caches bounded entries for five minutes per warm instance. Explicit refresh has a 30-second server cooldown. There is no polling. Admin authorization runs before cache access, HTTP responses are private/no-store, and errors remain errors rather than becoming zero figures.
 
-- **SQL** (`20261008_analytics.sql`): `analytics_*` functions count everything in Postgres, one round trip per section. The page asks only for its tab's sections. Indexes on the `created_at` of answers, sessions, profiles, matches and subscriptions keep range scans fast.
-- **Events** (`lib/server/studentEvents.js`): written after the response is sent (Next.js `after()`), so recording never slows a student down. A lost event is logged and never breaks practice. Writers:
-  - `/api/student/questions`: session start
-  - `/api/student/questions/session/save`: completion
-  - `/api/student/flashcards`: deck opened
-  - `/api/student/events`: upgrade sheet shown, WhatsApp tapped
-- **Page** (`app/admin/analytics`, `components/admin/analytics`):
-  - plain SVG charts that draw at their real width
-  - hover or keyboard crosshair and tooltips
-  - a "Show data" table under each chart
-  - colours from the validated data-viz palette
-  - change arrows that pair an icon with the number, not colour alone
+SQL bounds date windows, indexes principal lookup paths, materializes shared filtered facts and limits student/topic lists. The API aborts after 12 seconds. These measures reduce work; production query plans and load should still be monitored as data grows.
 
-## Deploy
+Schools (Desktop) registry reads cache for 60 seconds per warm instance; usage summaries cache for five minutes per period. Successful administration actions invalidate that instance's school cache. Other instances can retain registry data for up to 60 seconds.
 
-Run `20261008_analytics.sql` after `20261007` and before deploying. It checks the live column types it relies on. Started vs completed, flashcards and upgrade triggers fill in from the day it goes live.
+## Validation
+
+Eleven focused Node/SQL tests pass, covering reconciliation, deduplication, platform capture, historical dates, exclusions, permissions, bounded payloads, cache coalescing, failure handling and school usage boundaries. Focused lint and browser verification cover the changed page and routes.
+
+A live 30-day snapshot on 22 October returned 427 answers; daily, platform and subject totals reconciled. The response was approximately 8.3 KB and took 736 ms including network in one sample. This is a correctness check, not a load benchmark.
+
+## 24-hour and usage refinement
+
+Run `src/supabase/migrations/20261022_analytics_usage_refinements.sql` after the original shared analytics migration and existing desktop activation backend. It includes school usage tables if the earlier school usage migration was not applied. This follow-up is not deployed by editing the source.
+
+Last 24 hours is a rolling timestamp window, compared with the preceding 24 hours, not today since midnight. Green upward arrows mark positive changes; zero baselines show an absolute increase rather than an invented percentage.
+
+School averages use a fixed rolling 90-day denominator including quiet days: sessions, questions and minutes per day; weekly is seven times that daily average, monthly is thirty times it. They cover the whole school fleet, independent of the selected reporting filter. They are observed rates, not forecasts. Newly installed schools do not yet have a full reporting history.
+
+School reports can now accept signed `friend_battle` events alongside `practice`, `computer_battle` and `feedback`. The desktop producer must enqueue that event at completion, with the same idempotent event ID on retries. Backend acceptance alone does not make missing client reports appear. Learn/flashcard events should be designed at feature launch (lesson/deck identity, start/completion, duration, original occurrence time, idempotent reference) and reported in batches, without a request per card or click. They should have separate engagement metrics rather than counting as question sessions.

@@ -1,3 +1,6 @@
+import { reviewIssues, acceptedReviewIssues } from '@/lib/questionReview'
+import { contentText, safeContentImage, normalizeQuestionTargets } from '@/lib/questionContent'
+import { ALL_EXAMS } from '@/lib/constants'
 import { requireAdmin } from '@/lib/adminAuth'
 // src/app/api/admin/questions/route.js
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,9 +56,7 @@ export async function GET(request) {
     let q = db.from('questions').select('year').eq('is_active', true)
     q = q.eq('subject_id', subjectId)
     if (examType && examType !== 'ALL') {
-      q = examType === 'BOTH'
-        ? q.eq('exam_type', 'BOTH')
-        : q.in('exam_type', [examType, 'BOTH'])
+      q = q.eq('exam_type', examType)
     }
     if (source) q = q.eq('source', source)
     const { data, error } = await q.limit(50000)
@@ -68,7 +69,7 @@ export async function GET(request) {
   }
 
   const selectClause = `
-    id, question_text, correct_answer, difficulty,
+    id, question_text, instruction_text, passage_text, passage_image_url, correct_answer, difficulty,
     has_image, image_url, image_description,
     year, exam_type, source, is_active, is_flagged, created_at,
     topic_id, subtopic_id, subject_id,
@@ -81,9 +82,11 @@ export async function GET(request) {
   let query = db
     .from('questions')
     .select(selectClause, { count: 'exact' })
-    .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
+
+  if (inactive === 'true') query = query.eq('is_active', false)
+  else if (flagged !== 'true') query = query.eq('is_active', true)
 
   if (subjectId)             query = query.eq('subject_id', subjectId)
   if (topicId)               query = query.eq('topic_id', topicId)
@@ -101,9 +104,7 @@ export async function GET(request) {
   }
 
   if (examType && examType !== 'ALL') {
-    query = examType === 'BOTH'
-      ? query.eq('exam_type', 'BOTH')
-      : query.in('exam_type', [examType, 'BOTH'])
+    query = query.eq('exam_type', examType)
   }
 
   let { data, error, count } = await query
@@ -129,7 +130,7 @@ export async function POST(request) {
   if (authError) return authError
 
   const db = svc()
-  const { questions, examType, subjectId, batchId, defaultYear } = await request.json()
+  const { questions, examType, subjectId, batchId, defaultYear, reviewOnly = false } = await request.json()
 
   if (!Array.isArray(questions) || questions.length === 0) {
     return NextResponse.json({ error: 'questions array is required' }, { status: 400 })
@@ -138,34 +139,44 @@ export async function POST(request) {
     return NextResponse.json({ error: 'subjectId is required' }, { status: 400 })
   }
 
+  if (!ALL_EXAMS.includes(examType)) return NextResponse.json({ error: 'Invalid examType' }, { status: 400 })
+  const { data: subject, error: subjectError } = await db.from('subjects').select('exam_type,name').eq('id', subjectId).single()
+  if (subjectError || !subject) return NextResponse.json({ error: 'Subject not found' }, { status: 404 })
+  if (subject.exam_type !== examType) return NextResponse.json({ error: 'Exam must match the selected subject' }, { status: 400 })
+
   const saved  = []
   const errors = []
 
   for (const q of questions) {
     try {
+      const issues = reviewIssues({ ...q, subject_name: subject.name ?? q.subject })
+      if (issues.length && !reviewOnly) { errors.push(`Q "${q.question_text?.slice(0, 40)}": ${issues.join(' ')}`); continue }
       const row = {
-        question_text:      q.question_text?.trim() ?? '',
-        options:            q.options ?? {},
+        question_text:      normalizeQuestionTargets(q.question_text, q.instruction_text),
+        options:            Object.fromEntries(Object.entries(q.options ?? {}).map(([k, v]) => [k, contentText(v)])),
         correct_answer:     q.correct_answer ?? '',
-        explanation:        q.explanation ?? {},
+        explanation:        reviewOnly ? { ...(q.explanation ?? {}), content_review: { status: 'needs_review', issues: issues.length ? issues : ['Flagged by an administrator for source verification.'], source: q._sourceQuestion ?? null, created_at: new Date().toISOString() } } : acceptedReviewIssues(q).length ? { ...(q.explanation ?? {}), content_review: { status: 'reviewed', issues: [], accepted_issues: acceptedReviewIssues(q), note: q._reviewDecision.note.trim(), reviewed_at: new Date().toISOString() } } : q.explanation ?? {},
         difficulty:         q.difficulty ?? 'medium',
 
-        passage_text:       q.passage_text      ?? null,
-        passage_image_url:  q.passage_image_url  ?? null,
+        passage_text:       contentText(q.passage_text) || null,
+        instruction_text:  contentText(q.instruction_text) || null,
+        passage_image_url:  safeContentImage(q.passage_image_url),
 
         has_image:          q.has_image          ?? false,
         image_url:          q.image_url          ?? null,
         image_description:  q.image_description  ?? null,
 
         exam_type:    examType,
+        exam_types:   [examType],
         subject_id:   subjectId,
         topic_id:     q.topic_id    ?? null,
         subtopic_id:  q.subtopic_id ?? null,
         year:         q.year || defaultYear || null,
         source:       q.source ?? 'past_paper',
+        ...(q.sdash_id ? { sdash_id: q.sdash_id } : {}),
 
-        is_active:  true,
-        is_flagged: false,
+        is_active:  !reviewOnly,
+        is_flagged: !!reviewOnly,
       }
 
       const { data, error } = await db
@@ -189,7 +200,7 @@ export async function POST(request) {
   // increment_coverage() Postgres function once per bucket.
   // This is a single DB round-trip per unique (year, examType) pair —
   // no race condition, no manual SQL needed after importing.
-  if (saved.length > 0) {
+  if (saved.length > 0 && !reviewOnly) {
     const buckets = {}
     for (const { year, examType: et } of saved) {
       if (!year || !et) continue
@@ -221,6 +232,7 @@ export async function POST(request) {
 
   return NextResponse.json({
     saved:  saved.length,
+    flagged: reviewOnly ? saved.length : 0,
     ids:    saved.map(s => s.id),
     errors,
   })

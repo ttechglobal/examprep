@@ -476,7 +476,7 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
         topicName:    topic.name,
         subtopicName: subtopic.name,
         objectives:   subtopic.objectives ?? [],
-        examTag:      subtopic.exam_type ?? subject.exam_type ?? 'BOTH',
+        examTag:      subtopic.exam_type ?? subject.exam_type ?? 'WAEC',
       })
     } catch (err) {
       console.error('[LessonEditorClient] buildLessonPrompt failed:', err.message)
@@ -554,7 +554,7 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
   // ── Save ────────────────────────────────────────────────────────────────────
   const buildLesson = () => ({
     title:    lessonTitle || subtopic?.name || '',
-    exam_tag: subtopic?.exam_type ?? subject?.exam_type ?? 'BOTH',
+    exam_tag: subtopic?.exam_type ?? subject?.exam_type ?? 'WAEC',
     slides,
   })
 
@@ -614,7 +614,7 @@ export default function LessonEditorClient({ subject, topic, subtopic }) {
             ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
             : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
         }`}>
-          {subtopic.exam_type ?? 'BOTH'}
+          {subtopic.exam_type ?? 'WAEC'}
         </span>
       </div>
 

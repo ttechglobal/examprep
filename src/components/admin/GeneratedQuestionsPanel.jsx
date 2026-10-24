@@ -7,6 +7,7 @@
 // Now wrapped in try/catch with a user-visible error state.
 
 import { useState, useCallback, useMemo } from 'react'
+import QuestionReviewPreview from './QuestionReviewPreview'
 import { buildGeneratedQuestionsPrompt, parseGeneratedQuestions } from '@/lib/prerequisitePrompt'
 
 const DIFFICULTY_COLORS = {
@@ -26,7 +27,6 @@ const QTYPE_COLORS = {
 // ── Single question preview card ──────────────────────────────────────────────
 function QuestionCard({ question, index }) {
   const [expanded, setExpanded] = useState(false)
-  const wrongKeys = Object.keys(question.options ?? {}).filter(k => k !== question.correct_answer)
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -54,53 +54,7 @@ function QuestionCard({ question, index }) {
 
       {expanded && (
         <div className="border-t border-gray-100 p-4 space-y-3 bg-gray-50">
-          {/* Options */}
-          <div className="space-y-1.5">
-            {Object.entries(question.options ?? {}).map(([key, text]) => (
-              <div
-                key={key}
-                className={`text-xs px-3 py-2 rounded-xl flex gap-2 ${
-                  key === question.correct_answer
-                    ? 'bg-green-50 border border-green-200 text-green-800'
-                    : 'bg-white border border-gray-200 text-gray-700'
-                }`}
-              >
-                <span className="font-black flex-shrink-0">{key}.</span>
-                <span>{text}</span>
-                {key === question.correct_answer && (
-                  <span className="ml-auto font-black flex-shrink-0">✓</span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Correct explanation */}
-          {question.correct_explanation && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-              <p className="text-xs font-black text-green-700 mb-1">
-                Why {question.correct_answer} is correct
-              </p>
-              <p className="text-xs text-green-800 leading-relaxed">
-                {question.correct_explanation}
-              </p>
-            </div>
-          )}
-
-          {/* Wrong explanations */}
-          {wrongKeys.length > 0 && (
-            <div className="space-y-1.5">
-              {wrongKeys.map(k =>
-                question.wrong_explanations?.[k] ? (
-                  <div key={k} className="bg-red-50 border border-red-100 rounded-xl p-3">
-                    <p className="text-xs font-black text-red-600 mb-0.5">Why {k} is wrong</p>
-                    <p className="text-xs text-red-700 leading-relaxed">
-                      {question.wrong_explanations[k]}
-                    </p>
-                  </div>
-                ) : null
-              )}
-            </div>
-          )}
+          <QuestionReviewPreview question={question} />
         </div>
       )}
     </div>
@@ -124,7 +78,7 @@ export default function GeneratedQuestionsPanel({ subject, topic, subtopic }) {
         subjectName:  subject.name,
         topicName:    topic.name,
         subtopicName: subtopic.name,
-        examType:     subtopic.exam_type ?? subject.exam_type ?? 'BOTH',
+        examType:     subtopic.exam_type ?? subject.exam_type ?? 'WAEC',
         objectives:   subtopic.objectives ?? [],
       })
     } catch {
@@ -168,7 +122,7 @@ export default function GeneratedQuestionsPanel({ subject, topic, subtopic }) {
           subtopicId: subtopic.id,
           topicId:    topic.id,
           subjectId:  subject.id,
-          examType:   subtopic.exam_type ?? subject.exam_type ?? 'BOTH',
+          examType:   subtopic.exam_type ?? subject.exam_type ?? 'WAEC',
         }),
       })
 

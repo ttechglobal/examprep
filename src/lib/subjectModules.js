@@ -1,6 +1,6 @@
 // src/lib/subjectModules.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Subject-specific prompt modules for buildSdashEnrichPrompt and buildQuestionPrompt.
+// Subject-specific prompt modules for buildImportEnrichPrompt and buildQuestionPrompt.
 // Each module returns ONLY what is unique to that subject group.
 // The core prompt (ordering, KaTeX, tone, output schema) is assembled separately.
 //

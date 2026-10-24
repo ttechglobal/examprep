@@ -43,9 +43,9 @@ const PILLARS = [
         primary: true,
       },
       {
-        href: '/admin/questions/import',
+        href: '/admin/questions/myquest-import',
         icon: '⬆',
-        label: 'Import via Sdash API',
+        label: 'Import via MyQuest',
         desc: 'Pull questions straight from an external source',
       },
       {
@@ -129,8 +129,14 @@ const PILLARS = [
       {
         href: '/admin/schools',
         icon: '🏫',
-        label: 'Schools',
+        label: 'Schools (Web)',
         desc: 'Partner schools and their Premium slots',
+      },
+      {
+        href: '/admin/school-devices',
+        icon: '🖥️',
+        label: 'Schools (Desktop)',
+        desc: 'School computers, activation requests and usage',
       },
       {
         href: '/admin/activity',
@@ -277,7 +283,7 @@ export default async function AdminDashboardPage() {
         {[
           { label: 'Questions',   value: totalQs.toLocaleString(),       sub: `+${newThisWeek} this week`,     color: '#6366f1', href: '/admin/questions' },
           { label: 'Students',    value: totalStudents.toLocaleString(),  sub: `+${newStudents} this week`,     color: '#10b981', href: '/admin/users' },
-          { label: 'Schools',     value: totalSchools.toLocaleString(),   sub: 'partner schools',               color: '#0ea5e9', href: '/admin/schools' },
+          { label: 'Schools (Web)', value: totalSchools.toLocaleString(),   sub: 'partner schools',               color: '#0ea5e9', href: '/admin/schools' },
           { label: 'Subjects',    value: totalSubjects.toLocaleString(),  sub: 'WAEC + JAMB',                   color: '#f59e0b', href: '/admin/subjects-manager' },
           { label: 'Success Rate',value: `${successRate}%`,               sub: `${totalAttempts.toLocaleString()} attempts`, color: '#ec4899', href: '/admin/analytics' },
         ].map(s => (

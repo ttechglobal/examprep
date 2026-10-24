@@ -1,3 +1,4 @@
+import { ALL_EXAMS } from '@/lib/constants'
 // src/app/api/admin/questions/generated/route.js
 // Updated: exam_type string → exam_types[] array
 // v2 (29 Sep 2026): admin auth is requireAdmin() only. Removed the extra Supabase-login check, which returned 401 to admins signed in with the admin password (see ADMIN_AUTH_FIX.md).
@@ -12,8 +13,7 @@ const service = () => createServiceClient(
 )
 
 const toExamTypes = (raw) => {
-  if (raw === 'BOTH') return ['WAEC', 'JAMB']
-  if (raw === 'WAEC' || raw === 'JAMB') return [raw]
+  if (ALL_EXAMS.includes(raw)) return [raw]
   return ['WAEC']
 }
 
@@ -31,6 +31,10 @@ export async function POST(request) {
   }
 
   const db = service()
+  const { data: subject } = await db.from('subjects').select('exam_type').eq('id', subjectId).single()
+  if (!subject || !ALL_EXAMS.includes(examType) || subject.exam_type !== examType) {
+    return NextResponse.json({ error: 'Exam must match the selected subject' }, { status: 400 })
+  }
   const results = { saved: 0, errors: [] }
   const examTypes = toExamTypes(examType ?? 'WAEC')
 
@@ -45,6 +49,7 @@ export async function POST(request) {
       subject_id:   subjectId,
       topic_id:     topicId    ?? null,
       subtopic_id:  subtopicId,
+      exam_type:    examTypes[0],
       exam_types:   examTypes,
       year:         null,
       question_text:  q.question_text,

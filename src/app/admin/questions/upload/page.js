@@ -1,4 +1,6 @@
 'use client'
+
+import { ALL_EXAMS } from '@/lib/constants'
 // src/app/admin/questions/upload/page.js
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -11,7 +13,7 @@ import Link from 'next/link'
 const EXAM_STYLE = {
   WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
   JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
-  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+  NECO: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
 }
 
 function ExamBadge({ exam }) {
@@ -545,7 +547,7 @@ export default function QuestionUploadPage() {
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">Exam</label>
             <div className="grid grid-cols-3 gap-3">
-              {['WAEC', 'JAMB', 'IGCSE'].map(e => (
+              {ALL_EXAMS.map(e => (
                 <button
                   key={e}
                   onClick={() => setExamType(e)}

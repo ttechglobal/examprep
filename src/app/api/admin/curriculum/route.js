@@ -1,3 +1,4 @@
+import { ALL_EXAMS } from '@/lib/constants'
 import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
@@ -65,12 +66,16 @@ export async function POST(request) {
 
   const { data: subject, error: subjectError } = await db
     .from('subjects')
-    .select('id, name')
+    .select('id, name, exam_type')
     .eq('id', subjectId)
     .single()
 
   if (subjectError || !subject) {
     return NextResponse.json({ error: 'Subject not found' }, { status: 404 })
+  }
+
+  if (!ALL_EXAMS.includes(examType) || subject.exam_type !== examType) {
+    return NextResponse.json({ error: 'Exam must match the selected subject' }, { status: 400 })
   }
 
   const saveResult = await saveCurriculumDirectly(db, subjectId, topics, examType, replaceExisting)
@@ -125,9 +130,7 @@ async function saveCurriculumDirectly(db, subjectId, topics, examType, replaceEx
     }
 
     const topicSlug = slugify(topicTitle)
-    const topicExamType = ['WAEC', 'JAMB', 'IGCSE'].includes((topic.exam_tag ?? '').toUpperCase())
-      ? topic.exam_tag.toUpperCase()
-      : examType
+    const topicExamType = examType
 
     // Check if topic already exists (by slug OR by name)
     const existingTopic =
@@ -215,9 +218,7 @@ async function saveCurriculumDirectly(db, subjectId, topics, examType, replaceEx
         continue
       }
 
-      const subExamType = ['WAEC', 'JAMB', 'IGCSE'].includes((sub.exam_tag ?? '').toUpperCase())
-        ? sub.exam_tag.toUpperCase()
-        : examType
+      const subExamType = examType
 
       const { error: subError } = await db
         .from('subtopics')

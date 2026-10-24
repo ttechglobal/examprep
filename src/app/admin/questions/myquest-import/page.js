@@ -1,4 +1,5 @@
 'use client'
+import QuestionReviewPreview from '@/components/admin/QuestionReviewPreview'
 // src/app/admin/questions/myquest-import/page.js
 // ─────────────────────────────────────────────────────────────────────────────
 // MyQuest API Import Engine — Admin UI
@@ -12,7 +13,6 @@
 //   5. Save to the same question bank
 //
 // Only what changes vs. S-Dash:
-//   • API calls go to /api/admin/myquest/* instead of /api/admin/sdash/*
 //   • Exam, year and subject are MyQuest's own values from /api/admin/myquest/meta,
 //     sent back unchanged (e.g. subject "Government", not a slug we invent)
 //
@@ -24,7 +24,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
-import { buildSdashEnrichPrompt, parseEnrichment, mergeSdashEnrichment, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
+import ImportContentReview, { SourceField } from '@/components/admin/ImportContentReview'
+import ImportReviewDecision from '@/components/admin/ImportReviewDecision'
+import { reviewIssues } from '@/lib/questionReview'
+import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
+import { normalizeQuestionContent, contentIssues } from '@/lib/questionContent'
+import { buildImportEnrichPrompt, parseEnrichment, mergeImportEnrichment, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
 import { MathText } from '@/lib/mathRenderer'
 import { heldQuestionsStore } from '@/lib/heldQuestionsStore'
 import { ALL_EXAMS } from '@/lib/constants'
@@ -77,8 +82,8 @@ function yearLabelOf(item) {
   return m ? m[0] : item.label
 }
 
-// ── Normalize a raw MyQuest question to the shape mergeSdashEnrichment expects ─
-// mergeSdashEnrichment reads q.option.a / q.option.A / q.answer.
+// ── Normalize a raw MyQuest question to the shape mergeImportEnrichment expects ─
+// mergeImportEnrichment reads q.option.a / q.option.A / q.answer.
 // MyQuest may return options under different key shapes — normalize them all
 // to lowercase {a, b, c, d} so the shared enrichment pipeline works correctly.
 function normalizeMyQuestQuestion(q, year) {
@@ -99,8 +104,8 @@ function normalizeMyQuestQuestion(q, year) {
   }
 
   return {
-    ...q,
-    option: normalized,          // always {a, b, c, d} shape after normalization
+    ...normalizeQuestionContent(q),
+    option: normalizeQuestionContent({ option: normalized }).option,          // always {a, b, c, d} shape after normalization
     examyear: q.year ?? q.examyear ?? year,  // ensure year is on the object
   }
 }
@@ -111,7 +116,7 @@ function normalizeMyQuestQuestion(q, year) {
 // field — we catch those too so they are auto-hidden at import time.
 const MQ_IMAGE_TEXT_PATTERNS = [
   /\bdiagram\b/i,
-  /\bfigure\b/i,
+  /\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b/i,
   /\billustration\b/i,
   /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
   /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
@@ -202,41 +207,7 @@ function QuestionPreviewCard({ q, year, examType }) {
         <span className="text-[11px] text-gray-400 ml-auto">ID #{q.id}</span>
       </div>
 
-      {q.section && (
-        <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-[11px] font-black text-gray-400 uppercase tracking-wide mb-1">Passage</p>
-          <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{q.section}</p>
-        </div>
-      )}
-
-      <p className="text-sm text-gray-900 font-medium leading-relaxed">{q.question}</p>
-
-      {hasOptions ? (
-        <div className="grid grid-cols-2 gap-1.5">
-          {Object.entries(options).map(([key, val]) => (
-            <div
-              key={key}
-              className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-xs ${
-                String(key).toLowerCase() === String(q.answer ?? '').toLowerCase()
-                  ? 'border-green-300 bg-green-50 text-green-800 font-medium'
-                  : 'border-gray-100 bg-white text-gray-600'
-              }`}
-            >
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5 ${
-                String(key).toLowerCase() === String(q.answer ?? '').toLowerCase()
-                  ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
-              }`}>{String(key).toUpperCase()}</span>
-              <span className="leading-snug">{String(val)}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <p className="text-xs text-amber-700">
-            Options not found in expected field. Raw keys: <code className="font-mono">{JSON.stringify(Object.keys(q))}</code>
-          </p>
-        </div>
-      )}
+      <QuestionReviewPreview question={normalizeQuestionContent(q)} answerLabel="Provider answer (reference)" />
       {/* Solution from MyQuest is intentionally not displayed — explanations come from Claude */}
     </div>
   )
@@ -253,7 +224,7 @@ function ImportResult({ result }) {
       </Alert>
     )
   }
-  const { fetched, new: isNew, duplicate, saved, errors } = result
+  const { fetched, new: isNew, duplicate, saved, flagged, errors } = result
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -277,6 +248,7 @@ function ImportResult({ result }) {
           to tag them to topics.
         </Alert>
       )}
+      {flagged > 0 && <Alert type="warning">{flagged} questions saved as flagged drafts. They are not published. <Link href="/admin/questions/review" className="underline font-bold">Open review queue</Link></Alert>}
       {duplicate > 0 && (
         <Alert type="info">
           ℹ️ {duplicate} duplicate{duplicate !== 1 ? 's' : ''} detected and skipped — already in your database.
@@ -290,7 +262,7 @@ function ImportResult({ result }) {
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {errors.map((e, i) => (
               <p key={i} className="text-xs text-red-600 font-mono">
-                {e.id ? `[ID ${e.id}] ` : ''}{e.reason}
+                {typeof e === 'string' ? e : `${e.id ? `[ID ${e.id}] ` : ''}${e.reason}`}
               </p>
             ))}
           </div>
@@ -453,6 +425,7 @@ export default function MyQuestImportPage() {
   const pasteRef = useRef(null)
 
   // Per-question review state
+  const [reviewFilter, setReviewFilter] = useState('all')
   const [hiddenIndexes,   setHiddenIndexes]   = useState(new Set())
   const [previewQuestion, setPreviewQuestion] = useState(null)
   const [editingTopicIdx, setEditingTopicIdx] = useState(null)
@@ -636,7 +609,7 @@ export default function MyQuestImportPage() {
       }
 
       // Build enrichment prompt — reuse same function as S-Dash (same output format)
-      const prompt = buildSdashEnrichPrompt(
+      const prompt = buildImportEnrichPrompt(
         cleanQs,
         examType,
         selectedSubject?.name ?? 'Unknown Subject',
@@ -656,7 +629,7 @@ export default function MyQuestImportPage() {
     setParseError(null)
     const result = parseEnrichment(pasteText)
     if (!result.valid) { setParseError(result.errors.join('\n')); return }
-    const merged = mergeSdashEnrichment(
+    const merged = mergeImportEnrichment(
       fetchedQuestions,
       result.enrichments,
       examType,
@@ -669,7 +642,7 @@ export default function MyQuestImportPage() {
       // ── Option count mismatch check ──────────────────────────────────────
       // MyQuest sometimes returns 3 or 5 options; the enriched options object
       // should have the same count as what the raw question had.
-      const rawOptKeys = Object.keys(rawQ.option ?? {})
+      const rawOptKeys = Object.keys(normalizeQuestionContent(rawQ).option)
       const enrichOptKeys = Object.keys(q.options ?? {}).filter(k => (q.options[k] ?? '').trim())
       const _optionCountMismatch =
         rawOptKeys.length > 0 &&
@@ -690,6 +663,7 @@ export default function MyQuestImportPage() {
       }
     })
 
+    setReviewFilter('all')
     setParsedQuestions(withMatches)
     setHiddenIndexes(autoHidden)
     setSvgDrafts({})
@@ -697,7 +671,14 @@ export default function MyQuestImportPage() {
   }
 
   // ── Save ────────────────────────────────────────────────────────────────────
-  async function handleSave(questionsToSave) {
+  async function handleSave(questionsToSave, reviewOnly = false) {
+    const blocked = questionsToSave.flatMap((q, i) => reviewIssues(q).map(issue => `Q${i + 1}: ${issue}`))
+    if (blocked.length && !reviewOnly) { setParseError(`Resolve content issues or hide these questions before saving:\n${blocked.join('\n')}`); return }
+    if (!reviewOnly && parsedQuestions.some((q, i) => !hiddenIndexes.has(i) && reviewIssues(q).length > 0)) {
+      setParseError('Before publishing, accept, correct, skip or save a draft for every question still needing review. This keeps unresolved questions from being left behind when the batch closes.')
+      return
+    }
+    setParseError(null)
     setSaving(true)
     try {
       const questionsWithIds = questionsToSave.map(q => {
@@ -731,6 +712,7 @@ export default function MyQuestImportPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           questions:   questionsWithIds,
+          reviewOnly,
           examType,
           subjectId,
           defaultYear: year,
@@ -741,6 +723,14 @@ export default function MyQuestImportPage() {
       const saveData = await saveRes.json()
       if (!saveRes.ok) throw new Error(saveData.error ?? 'Save failed')
 
+      if (reviewOnly) {
+        if (saveData.errors?.length) throw new Error(saveData.errors.join('\n'))
+        const savedIndexes = new Set(questionsToSave.map(q => q._importIdx))
+        setParsedQuestions(prev => prev.map(q => savedIndexes.has(q._importIdx) ? { ...q, _draftSaved: true } : q))
+        setHiddenIndexes(prev => new Set([...prev, ...questionsToSave.map(q => q._importIdx).filter(i => i != null)]))
+        setParseError(null)
+        return
+      }
       setEnrichStep(5)
       setImportResult({ saved: saveData.saved, errors: saveData.errors ?? [] })
     } catch (err) {
@@ -785,6 +775,7 @@ export default function MyQuestImportPage() {
 
     let totalSaved = 0
     let totalDupe  = 0
+    let totalFlagged = 0
 
     // The subject list is per year: a year that doesn't have this subject
     // comes back as "no questions" and is logged as such.
@@ -801,10 +792,11 @@ export default function MyQuestImportPage() {
         if (!res.ok) throw new Error(data.error ?? 'Import failed')
         totalSaved += data.saved ?? 0
         totalDupe  += data.duplicate ?? 0
+        totalFlagged += data.flagged ?? 0
         setImportLog(prev => prev.map(e => e.year === yr
           ? data.noData
             ? { year: yr, status: 'nodata' }
-            : { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, duplicate: data.duplicate, errors: data.errors?.length ?? 0, truncated: data.truncated }
+            : { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, flagged: data.flagged ?? 0, duplicate: data.duplicate, errors: data.errors?.length ?? 0, truncated: data.truncated }
           : e
         ))
       } catch (err) {
@@ -816,7 +808,7 @@ export default function MyQuestImportPage() {
       if (i < yearsToImport.length - 1) await new Promise(r => setTimeout(r, 700))
     }
 
-    setImportResult({ fetched: yearsToImport.length, new: totalSaved, duplicate: totalDupe, saved: totalSaved, errors: [], isBulk: true })
+    setImportResult({ fetched: yearsToImport.length, new: totalSaved, duplicate: totalDupe, saved: totalSaved, flagged: totalFlagged, errors: [], isBulk: true })
     setImporting(false)
   }
 
@@ -846,7 +838,7 @@ export default function MyQuestImportPage() {
   }
 
   function buildHeldPrompt(group) {
-    const prompt = buildSdashEnrichPrompt(group.questions, group.exam, group.subject, topics)
+    const prompt = buildImportEnrichPrompt(group.questions, group.exam, group.subject, topics)
     setHeldSendPrompt(prompt)
     setHeldSendGroupKey(group.key)
     setHeldSendStep('prompt')
@@ -860,20 +852,23 @@ export default function MyQuestImportPage() {
     setHeldParseError(null)
     const result = parseEnrichment(heldPasteText)
     if (!result.valid) { setHeldParseError(result.errors.join('\n')); return }
-    const merged = mergeSdashEnrichment(group.questions, result.enrichments, group.exam, group.subject)
+    const merged = mergeImportEnrichment(group.questions, result.enrichments, group.exam, group.subject)
     const withMatches = merged.map(q => ({ ...q, _topicMatch: matchTopicSubtopic(q, topics) }))
     setHeldParsedQs(withMatches)
     setHeldSendStep('review')
   }
 
   async function handleHeldSave(group) {
+    const issues = heldParsedQs.flatMap(contentIssues)
+    if (issues.length) { setHeldParseError(issues.join('\n')); return }
     setHeldSaving(true)
     try {
       const matchedSubject = subjects.find(s =>
         s.name.toLowerCase().includes(group.subject?.toLowerCase?.() ?? '') &&
         s.exam_type === group.exam
-      ) ?? subjects.find(s => s.exam_type === group.exam)
-      const saveSubjectId = matchedSubject?.id ?? subjectId
+      )
+      const saveSubjectId = matchedSubject?.id
+      if (!saveSubjectId) throw new Error('Select a matching subject for this held group; no unrelated subject will be used.')
       if (!saveSubjectId) throw new Error('Cannot find subject ID')
 
       const batchRes = await fetch('/api/admin/questions/batch', {
@@ -892,7 +887,8 @@ export default function MyQuestImportPage() {
       const saveData = await saveRes.json()
       if (!saveRes.ok) throw new Error(saveData.error ?? 'Save failed')
 
-      deleteHeldGroup(group.key)
+      if (saveData.errors?.length || saveData.saved !== heldParsedQs.length) throw new Error(`Saved ${saveData.saved ?? 0} questions. Queue retained: ${(saveData.errors ?? []).join('; ')}`)
+      await deleteHeldGroup(group.key)
       setHeldSendStep(null)
       setHeldSendGroupKey(null)
       setHeldParsedQs([])
@@ -906,19 +902,9 @@ export default function MyQuestImportPage() {
 
   const totalHeld = heldGroups.reduce((sum, g) => sum + (g.questions?.length ?? 0), 0)
 
-  async function hideQuestion(q, index) {
+  function hideQuestion(q, index) {
+    // Skipping only removes the question from this import; drafts are explicit.
     setHiddenIndexes(prev => new Set([...prev, index]))
-    try {
-      await fetch('/api/admin/questions/hidden', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question_text: q.question_text, options: q.options, correct_answer: q.correct_answer,
-          explanation: q.explanation, subject_name: selectedSubject?.name, exam_type: examType,
-          year: q.year || year, topic_title: q.topic_title ?? '', subtopic_title: q.subtopic_title ?? '',
-          hide_reason: 'manual_review', sdash_id: q.sdash_id ?? null,
-        }),
-      })
-    } catch {}
   }
 
   function unhideQuestion(index) {
@@ -949,46 +935,18 @@ export default function MyQuestImportPage() {
   // ── Preview Modal ──────────────────────────────────────────────────────────
   function PreviewModal({ q, onClose }) {
     if (!q) return null
-    const opts = q.options ?? {}
-    const exp  = q.explanation ?? {}
-    const steps = Array.isArray(exp.steps) ? exp.steps
-                : Array.isArray(exp.workings) ? exp.workings.map((w, i) => ({ title: `Step ${i+1}`, lines: [typeof w === 'string' ? w : w?.instruction ?? ''] }))
-                : []
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
         <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-0.5 rounded-full">Student View</span>
+              <span className="text-xs font-black text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-0.5 rounded-full">Content preview</span>
               <span className="text-xs text-gray-400">{examType} · {q.year || year}</span>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">×</button>
           </div>
           <div className="p-5 space-y-5">
-            {q.passage_text && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <p className="text-[11px] font-black text-gray-400 uppercase tracking-wide mb-2">Passage</p>
-                <p className="text-sm text-gray-700 leading-relaxed">{q.passage_text}</p>
-              </div>
-            )}
-            <MathText text={q.question_text} as="p" className="text-base font-semibold text-gray-900 leading-relaxed" />
-            <div className="space-y-2">
-              {Object.entries(opts).map(([k, v]) => {
-                const isCorrect = k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
-                return (
-                  <div key={k} className={`flex items-start gap-3 px-4 py-3 rounded-xl border-2 text-sm ${isCorrect ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5 ${isCorrect ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'}`}>{k.toUpperCase()}</span>
-                    <MathText text={String(v)} as="span" className={`leading-snug ${isCorrect ? 'text-green-800 font-medium' : 'text-gray-700'}`} />
-                    {isCorrect && <span className="ml-auto text-green-600 font-black flex-shrink-0">✓</span>}
-                  </div>
-                )
-              })}
-            </div>
-            {(exp.answer_note || exp.correct) && (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                <MathText text={exp.answer_note ?? exp.correct} as="p" className="text-sm text-green-800 leading-relaxed" />
-              </div>
-            )}
+            <QuestionReviewPreview question={q} />
             <div className="border-t border-gray-100 pt-3 text-xs text-gray-400">
               Topic: <span className="text-gray-600 font-medium">{q.topic_title || '—'}</span>
               {q.subtopic_title && <> → <span className="text-gray-600 font-medium">{q.subtopic_title}</span></>}
@@ -1011,8 +969,8 @@ export default function MyQuestImportPage() {
               ← Past Questions
             </Link>
             <span className="text-gray-300">·</span>
-            <Link href="/admin/questions/import" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-              SdashAPI Import
+            <Link href="/admin/questions/upload" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              Upload Questions
             </Link>
           </div>
           <div className="flex items-center gap-3">
@@ -1021,7 +979,7 @@ export default function MyQuestImportPage() {
           </div>
           <p className="text-sm text-gray-500 mt-1">
             Fetch past questions from MyQuest API into your question bank.
-            Same flow as SdashAPI — same enrichment, same database, same deduplication.
+            Review, enrich, and save questions under their original exam.
           </p>
         </div>
       </div>
@@ -1258,7 +1216,7 @@ export default function MyQuestImportPage() {
                         <span className="text-sm font-bold text-gray-700">{entry.year}</span>
                         <div className="flex items-center gap-2">
                           {entry.status === 'fetching' && <><Spinner size="sm" /><span className="text-xs text-gray-500">Fetching…</span></>}
-                          {entry.status === 'done' && <><span className="text-xs text-green-600 font-bold">✓ {entry.saved} of {entry.fetched} saved</span>{entry.duplicate > 0 && <span className="text-xs text-amber-600">({entry.duplicate} dupes)</span>}{entry.truncated && <span className="text-xs text-red-600">(paper cut off at 500)</span>}</>}
+                          {entry.status === 'done' && <><span className="text-xs text-green-600 font-bold">✓ {entry.saved} published · {entry.flagged ?? 0} flagged</span>{entry.duplicate > 0 && <span className="text-xs text-amber-600">({entry.duplicate} dupes)</span>}{entry.truncated && <span className="text-xs text-red-600">(paper cut off at 500)</span>}</>}
                           {entry.status === 'nodata' && <span className="text-xs text-gray-400">No questions on MyQuest</span>}
                           {entry.status === 'error' && <span className="text-xs text-red-600 font-bold">⚠ {entry.error}</span>}
                         </div>
@@ -1379,8 +1337,10 @@ export default function MyQuestImportPage() {
           {/* ── STEP 4 (review): QUESTION REVIEW PANEL ──────────────────── */}
           {enrichStep === 4 && parsedQuestions.length > 0 && (() => {
             const visibleQs       = parsedQuestions.filter((_, i) => !hiddenIndexes.has(i))
+            const readyQs = visibleQs.filter(q => reviewIssues(q).length === 0)
+            const flaggedQs = visibleQs.filter(q => reviewIssues(q).length > 0)
             const autoHiddenCount = parsedQuestions.filter((q, i) => hiddenIndexes.has(i) && (questionHasImage(q) || mqQuestionReferencesImage(fetchedQuestions[i] ?? {}))).length
-            const mismatchCount   = parsedQuestions.filter(q => q._mismatch).length
+            const mismatchCount   = visibleQs.filter(q => q._mismatch && reviewIssues(q).length > 0).length
             const allMismatch     = mismatchCount > 0 && mismatchCount === parsedQuestions.length
 
             return (
@@ -1394,19 +1354,41 @@ export default function MyQuestImportPage() {
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {hiddenIndexes.size > 0 && `${hiddenIndexes.size} hidden · `}
-                        {visibleQs.length} will be saved
+                        {readyQs.length} ready to publish · {flaggedQs.length} need review
                       </p>
                     </div>
                     <button
-                      onClick={() => handleSave(visibleQs)}
-                      disabled={saving || visibleQs.length === 0}
+                      onClick={() => handleSave(readyQs)}
+                      disabled={saving || readyQs.length === 0}
                       className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white text-sm font-black rounded-xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-sm"
                     >
-                      {saving ? <><Spinner size="sm" /> Saving…</> : `✓ Save all ${visibleQs.length} questions`}
+                      {saving ? <><Spinner size="sm" /> Saving…</> : `Publish ${readyQs.length} ready questions`}
                     </button>
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p>Review both columns before publishing. Original text, instructions, passage and options remain visible together. Flagged drafts stay out of student sessions.</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button type="button" disabled={saving || !flaggedQs.length} onClick={() => handleSave(flaggedQs, true)} className="rounded-lg bg-amber-700 px-4 py-2 font-semibold text-white disabled:opacity-40">Save {flaggedQs.length} flagged drafts for review</button>
+                    <Link href="/admin/questions/review" className="font-semibold underline">Open saved review queue</Link>
+                  </div>
+                </div>
+                {parseError && <Alert type="error"><pre className="whitespace-pre-wrap text-sm">{parseError}</pre></Alert>}
+                <div className="sticky top-0 z-20 rounded-xl border border-blue-200 bg-white p-3 shadow-sm space-y-3">
+                  <div className="flex flex-wrap gap-2" aria-label="Filter import questions">
+                    {[['all', 'All'], ['review', `Needs review (${flaggedQs.length})`], ['ready', `Ready (${readyQs.length})`], ['skipped', `Skipped / drafts (${hiddenIndexes.size})`]].map(([value, label]) => <button type="button" key={value} onClick={() => setReviewFilter(value)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${reviewFilter === value ? 'bg-[#062A78] text-white' : 'bg-gray-100 text-gray-700'}`}>{label}</button>)}
+                  </div>
+                  <label className="flex items-center gap-3 text-xs font-semibold">Jump to a question
+                    <select defaultValue="" className="min-w-0 flex-1 rounded-lg border p-2" onChange={event => {
+                      const index = Number(event.target.value)
+                      setReviewFilter('all')
+                      requestAnimationFrame(() => document.getElementById(`import-question-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+                      event.target.value = ''
+                    }}><option value="" disabled>Select question / review reason</option>{parsedQuestions.map((item, i) => <option key={i} value={i}>Q{i + 1} · {hiddenIndexes.has(i) ? 'Skipped / saved draft' : reviewIssues(item)[0] ?? 'Ready'}</option>)}</select>
+                  </label>
+                  {flaggedQs.length > 0 && <details className="text-xs"><summary className="cursor-pointer font-semibold">Why these questions were flagged</summary><ul className="mt-2 space-y-1">{[...new Set(flaggedQs.flatMap(reviewIssues))].map(reason => <li key={reason}>{flaggedQs.filter(item => reviewIssues(item).includes(reason)).length} question(s): {reason}</li>)}</ul></details>}
+                </div>
                 {/* Auto-hidden notice */}
                 {autoHiddenCount > 0 && (
                   <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
@@ -1416,9 +1398,9 @@ export default function MyQuestImportPage() {
                         {autoHiddenCount} question{autoHiddenCount !== 1 ? 's' : ''} auto-hidden — image reference detected
                       </p>
                       <p className="text-xs text-amber-700 mt-1">
-                        These questions reference a diagram, figure, or image that we don't have yet.
-                        They've been hidden automatically. You can unhide and review them individually,
-                        or leave them hidden — they won't be saved in this batch.
+                        These questions reference a diagram, figure, or image that we don&apos;t have yet.
+                        They&apos;ve been hidden automatically. You can unhide and review them individually,
+                        or leave them hidden — they won&apos;t be saved in this batch.
                       </p>
                     </div>
                   </div>
@@ -1430,12 +1412,12 @@ export default function MyQuestImportPage() {
                     <span className="text-xl flex-shrink-0">⚠️</span>
                     <div className="flex-1">
                       <p className="text-sm font-black text-red-700">
-                        {mismatchCount} possible explanation mismatch{mismatchCount !== 1 ? 'es' : ''} detected
+                        {mismatchCount} enrichment matching check{mismatchCount !== 1 ? 'es' : ''} detected
                       </p>
                       <p className="text-xs text-red-600 mt-1">
                         {allMismatch
-                          ? 'All explanations appear mismatched — the AI likely returned them in the wrong order. Go back and re-send the prompt to Claude.'
-                          : 'Questions highlighted in red may have the wrong explanation. The AI may have returned answers out of order. Review each carefully before saving.'}
+                          ? 'Each question has an unresolved matching check. Inspect the source ID and returned snippet on each card; regenerate responses where no unique match exists.'
+                          : 'Inspect each matching check below. A missing response, duplicate identity or different snippet has a different remedy; it does not automatically mean the question is faulty.'}
                       </p>
                       {allMismatch && (
                         <button
@@ -1452,6 +1434,8 @@ export default function MyQuestImportPage() {
                 {/* Per-question cards */}
                 {parsedQuestions.map((q, index) => {
                   const isHidden  = hiddenIndexes.has(index)
+                  const pendingReview = reviewIssues(q).length > 0
+                  if (reviewFilter === 'review' && (isHidden || !pendingReview) || reviewFilter === 'ready' && (isHidden || pendingReview) || reviewFilter === 'skipped' && !isHidden) return null
                   const match     = q._topicMatch
                   const hasTopic  = !!(q.topic_title || match?.topic?.name)
                   const isEditing = editingTopicIdx === index
@@ -1461,15 +1445,11 @@ export default function MyQuestImportPage() {
                   const isAutoHid = isHidden && (questionHasImage(q) || mqQuestionReferencesImage(rawQ))
 
                   return (
-                    <div key={index} className={`bg-white rounded-2xl shadow-sm overflow-hidden transition-opacity border-2 ${
+                    <div id={`import-question-${index}`} key={index} className={`scroll-mt-24 bg-white rounded-2xl shadow-sm overflow-hidden transition-opacity border-2 ${
                       isHidden
                         ? 'opacity-40 border-gray-200'
-                        : q._mismatch
+                        : reviewIssues(q).length > 0
                         ? 'border-red-400'
-                        : q._answerDisagreement
-                        ? 'border-amber-400'
-                        : q._optionCountMismatch
-                        ? 'border-orange-400'
                         : 'border-gray-200'
                     }`}>
                       {/* Card header */}
@@ -1486,39 +1466,41 @@ export default function MyQuestImportPage() {
                           {needsSvg && (
                             <Badge color="violet">🎨 {svgCode.trim().toLowerCase().startsWith('<svg') ? 'SVG ready' : 'Needs diagram'}</Badge>
                           )}
-                          {q._mismatch && !isHidden && <Badge color="red">⚠ Mismatch</Badge>}
-                          {q._answerDisagreement && !isHidden && <Badge color="amber">🔍 Answer conflict</Badge>}
-                          {q._optionCountMismatch && !isHidden && <Badge color="amber">⚠ Option count</Badge>}
+                          {reviewIssues(q).length > 0 && <Badge color="red">Needs review · {reviewIssues(q).length}</Badge>}
+                          {q._mismatch && pendingReview && !isHidden && <Badge color="red">⚠ Mismatch</Badge>}
+                          {q._answerDisagreement && pendingReview && !isHidden && <Badge color="amber">🔍 Answer conflict</Badge>}
+                          {q._optionCountMismatch && pendingReview && !isHidden && <Badge color="amber">⚠ Option count</Badge>}
+                          {q._draftSaved && <Badge color="amber">Saved in review queue</Badge>}
                           {isAutoHid && <Badge color="amber">🖼️ Auto-hidden</Badge>}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setPreviewQuestion(q)} className="text-xs text-gray-400 hover:text-gray-600 border border-gray-100 rounded-lg px-2 py-1">👁 Preview</button>
                           {isHidden
-                            ? <button onClick={() => unhideQuestion(index)} className="text-xs text-green-600 hover:text-green-700 border border-green-100 rounded-lg px-2 py-1">↩ Unhide</button>
-                            : <button onClick={() => hideQuestion(q, index)} className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">🚫 Hide</button>
+                            ? <button disabled={q._draftSaved} onClick={() => unhideQuestion(index)} className="text-xs text-green-600 hover:text-green-700 border border-green-100 rounded-lg px-2 py-1">↩ Include again</button>
+                            : <button onClick={() => hideQuestion(q, index)} className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">Skip this import</button>
                           }
                         </div>
                       </div>
 
                       {/* Per-question mismatch banner */}
-                      {q._mismatch && !isHidden && (
+                      {q._mismatch && pendingReview && !isHidden && (
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border-b border-red-200">
                           <span className="text-base">⚠️</span>
                           <div>
-                            <span className="text-xs font-black text-red-700">Explanation mismatch detected</span>
-                            <p className="text-xs text-red-600 mt-0.5">The explanation below may belong to a different question. Review carefully or hide this question.</p>
+                            <span className="text-xs font-black text-red-700">Enrichment matching needs review</span>
+                            <p className="text-xs text-red-600 mt-0.5">{q._matching?.reason ?? 'Compare the source and explanation before publishing.'}</p>
                           </div>
                         </div>
                       )}
 
                       {/* Option count mismatch banner */}
-                      {q._optionCountMismatch && !isHidden && (
+                      {q._optionCountMismatch && pendingReview && !isHidden && (
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 border-b border-orange-200">
                           <span className="text-base">🔢</span>
                           <div>
                             <span className="text-xs font-black text-orange-700">Option count mismatch</span>
                             <p className="text-xs text-orange-600 mt-0.5">
-                              MyQuest returned {Object.keys(rawQ.option ?? {}).length} options but the enrichment has {Object.keys(q.options ?? {}).filter(k => (q.options[k] ?? '').trim()).length}.
+                              MyQuest returned {Object.keys(normalizeQuestionContent(rawQ).option).length} options but the enrichment has {Object.keys(q.options ?? {}).filter(k => (q.options[k] ?? '').trim()).length}.
                               Verify the options are correct before saving.
                             </p>
                           </div>
@@ -1527,21 +1509,28 @@ export default function MyQuestImportPage() {
 
                       {!isHidden && (
                         <div className="p-5 space-y-4">
-                          {/* Question text */}
-                          <MathText text={q.question_text} as="p" className="text-sm text-gray-900 font-medium leading-relaxed" />
-
-                          {/* Options */}
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {Object.entries(q.options ?? {}).map(([k, v]) => {
-                              const isCorrect = k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
-                              return (
-                                <div key={k} className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-xs ${isCorrect ? 'border-green-300 bg-green-50 text-green-800 font-medium' : 'border-gray-100 bg-gray-50 text-gray-600'}`}>
-                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5 ${isCorrect ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{k.toUpperCase()}</span>
-                                  <MathText text={String(v)} as="span" className="leading-snug" />
-                                </div>
-                              )
+                          <ImportReviewDecision question={q} onChange={updated => setParsedQuestions(prev => prev.map((item, i) => i === index ? updated : item))} />
+                          <details className="border rounded-lg p-3 text-xs"><summary className="cursor-pointer font-semibold">Review / correct source content</summary>
+                            <p className="my-2">Compare with the original source. Use &lt;u&gt;word or letters&lt;/u&gt; for underlines, &lt;strong&gt; for bold and &lt;em&gt; for italics. Preserve poem line breaks. Never guess a missing passage or target.</p>
+                            {['instruction_text', 'passage_text', 'passage_image_url', 'question_text'].map(field => <SourceField key={field} label={{ instruction_text: 'Answer instruction', passage_text: 'Passage or extract', passage_image_url: 'Passage image URL', question_text: 'Question' }[field]} value={q[field] ?? ''} rows={field === 'passage_text' ? 8 : 3} onChange={value => setParsedQuestions(prev => prev.map((item, i) => i === index ? { ...item, [field]: value, _contextStatus: 'missing' } : item))} />)}
+                            {Object.entries(q.options ?? {}).map(([letter, text]) => <SourceField key={letter} label={`Option ${letter}`} value={text} rows={2} onChange={value => setParsedQuestions(prev => prev.map((item, i) => i === index ? { ...item, options: { ...item.options, [letter]: value }, _contextStatus: 'missing' } : item))} />)}
+                            <button type="button" className="mt-3 text-indigo-700 font-semibold" onClick={() => {
+                              const reviewed = parsedQuestions.map((item, i) => ({ ...fetchedQuestions[i], question: item.question_text, option: item.options, section: item.passage_text, instruction_text: item.instruction_text, passage_image_url: item.passage_image_url }))
+                              setFetchedQuestions(reviewed)
+                              setEnrichPrompt(buildImportEnrichPrompt(reviewed, examType, selectedSubject?.name ?? 'Unknown Subject', topics))
+                              setEnrichStep(2)
+                            }}>Rebuild enrichment prompt with reviewed content</button>
+                            <p className="mt-2">Changes to context require fresh enrichment before saving an answer. Missing-context and matching failures cannot be cleared by editing text.</p>
+                          </details>
+                          <ImportContentReview source={rawQ} question={q} />
+                          <div className="flex flex-wrap gap-3 text-xs font-semibold text-blue-800">
+                            {['Previous', 'Next'].map(direction => {
+                              const indexes = parsedQuestions.map((item, i) => !hiddenIndexes.has(i) && reviewIssues(item).length > 0 ? i : -1).filter(i => direction === 'Next' ? i > index : i >= 0 && i < index)
+                              const target = direction === 'Next' ? indexes[0] : indexes.at(-1)
+                              return <button key={direction} type="button" disabled={target == null} className="rounded-lg border border-blue-200 px-3 py-2 disabled:opacity-30" onClick={() => { setReviewFilter('all'); requestAnimationFrame(() => document.getElementById(`import-question-${target}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }}>{direction} question needing review</button>
                             })}
                           </div>
+                          <button type="button" disabled={saving} onClick={() => handleSave([q], true)} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900">Flag and save draft for review</button>
 
                           {/* Answer disagreement panel */}
                           {q._answerDisagreement && (
@@ -1557,7 +1546,7 @@ export default function MyQuestImportPage() {
                                   <p className="text-sm font-black text-amber-900">{q.sdash_answer}</p>
                                 </div>
                               </div>
-                              <p className="text-[11px] text-amber-700">Claude's answer is saved by default. Override below if MyQuest is correct.</p>
+                              <p className="text-[11px] text-amber-700">Review the answer and explanation together. Selecting a letter alone does not resolve a conflicting explanation; edit the source and regenerate enrichment when needed.</p>
                               <div className="flex gap-1.5 mt-2 flex-wrap">
                                 {Object.keys(q.options ?? {}).map(k => (
                                   <button
@@ -1580,7 +1569,7 @@ export default function MyQuestImportPage() {
                           {(q.explanation?.correct || q.explanation?.intro) && (
                             <div className={`rounded-xl p-3 border ${q._mismatch ? 'bg-red-50 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>
                               <p className="text-[11px] font-black uppercase tracking-wide mb-1">{q._mismatch ? '⚠️ Explanation (possibly mismatched)' : '💡 Explanation'}</p>
-                              <p className="text-xs leading-relaxed line-clamp-3">
+                              <p className="text-sm leading-7 whitespace-pre-wrap">
                                 {q.explanation?.intro ?? q.explanation?.correct}
                               </p>
                             </div>
@@ -1665,9 +1654,9 @@ export default function MyQuestImportPage() {
                         q.explanation?.illustration_prompt &&
                         !(svgDrafts[q._importIdx ?? 0] ?? '').trim().toLowerCase().startsWith('<svg')
                       )
-                      const mismatchedVisible    = visibleQs.filter(q => q._mismatch)
-                      const disagreementsVisible = visibleQs.filter(q => q._answerDisagreement)
-                      const optMismatchVisible   = visibleQs.filter(q => q._optionCountMismatch)
+                      const mismatchedVisible    = visibleQs.filter(q => q._mismatch && reviewIssues(q).length > 0)
+                      const disagreementsVisible = visibleQs.filter(q => q._answerDisagreement && reviewIssues(q).length > 0)
+                      const optMismatchVisible   = visibleQs.filter(q => q._optionCountMismatch && reviewIssues(q).length > 0)
                       if (!pendingIllustrations.length && !mismatchedVisible.length && !disagreementsVisible.length && !optMismatchVisible.length) return null
                       return (
                         <div className="space-y-1.5">
@@ -1676,7 +1665,7 @@ export default function MyQuestImportPage() {
                               <span className="text-base flex-shrink-0">🔍</span>
                               <div>
                                 <p className="font-black text-amber-800">{disagreementsVisible.length} unresolved answer disagreement{disagreementsVisible.length !== 1 ? 's' : ''}</p>
-                                <p className="text-amber-700 mt-0.5">Scroll up to review each one. Claude's answer is saved by default — override where MyQuest is correct.</p>
+                                <p className="text-amber-700 mt-0.5">Scroll up to review each one. Claude&apos;s answer is saved by default — override where MyQuest is correct.</p>
                               </div>
                             </div>
                           )}
@@ -1684,8 +1673,8 @@ export default function MyQuestImportPage() {
                             <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 border border-red-300 rounded-xl text-xs">
                               <span className="text-base flex-shrink-0">⚠️</span>
                               <div>
-                                <p className="font-black text-red-700">{mismatchedVisible.length} question{mismatchedVisible.length !== 1 ? 's' : ''} have explanation mismatches</p>
-                                <p className="text-red-600 mt-0.5">These are highlighted red above. Review them before saving or hide the ones you're not sure about.</p>
+                                <p className="font-black text-red-700">{mismatchedVisible.length} question{mismatchedVisible.length !== 1 ? 's' : ''} need enrichment matching review</p>
+                                <p className="text-red-600 mt-0.5">These are highlighted red above. Review them before saving or hide the ones you&apos;re not sure about.</p>
                               </div>
                             </div>
                           )}
@@ -1714,11 +1703,11 @@ export default function MyQuestImportPage() {
                       )
                     })()}
                     <button
-                      onClick={() => handleSave(visibleQs)}
-                      disabled={saving}
+                      onClick={() => handleSave(readyQs)}
+                      disabled={saving || readyQs.length === 0}
                       className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-green-600 text-white text-sm font-black rounded-2xl hover:bg-green-500 disabled:opacity-40 transition-colors shadow-lg"
                     >
-                      {saving ? <><Spinner size="sm" /> Saving…</> : `✓ Save all ${visibleQs.length} questions`}
+                      {saving ? <><Spinner size="sm" /> Saving…</> : `Publish ${readyQs.length} ready questions`}
                     </button>
                   </div>
                 )}
@@ -1900,9 +1889,9 @@ export default function MyQuestImportPage() {
             {[
               { step: '1', title: 'Select exam → year → subject', body: 'The exam, year and subject lists come straight from MyQuest, so you can only pick combinations MyQuest has (subjects differ by exam and year). The values are sent back to MyQuest exactly as it returned them. Then pick the ExamPrep subject to save into — it is suggested by name, but check it.' },
               { step: '2', title: 'Preview before committing', body: 'Click "Preview 5 questions" to verify what MyQuest returns before running a full fetch.' },
-              { step: '3', title: 'Fetch & build enrichment prompt', body: 'Fetches every page of the paper (MyQuest sends 50 per page). Questions with image references are held back. The rest go into the enrichment prompt — the same prompt format used by SdashAPI, since you\'re sending to the same Claude pipeline.' },
+              { step: '3', title: 'Fetch & build enrichment prompt', body: 'Fetches every page of the paper (MyQuest sends 50 per page). Questions with image references are held back. The rest go into the enrichment prompt for review.' },
               { step: '4', title: 'Copy prompt → Claude → paste response', body: 'Copy the generated prompt and paste it into Claude.ai. Claude returns a JSON array with topic tags, explanations, and difficulty. Paste it back here.' },
-              { step: '5', title: 'Review & save', body: 'Review the enriched questions. Edit topic assignments if needed. Save — questions go into the same database as SdashAPI imports, with full deduplication.' },
+              { step: '5', title: 'Review & save', body: 'Review the enriched questions. Edit topic assignments if needed. Save questions to the question bank with deduplication.' },
               { step: '6', title: 'Bulk import (no enrichment)', body: 'Use year-range mode to import multiple years at once without going through enrichment. Questions are saved without AI-generated explanations — useful for quickly filling the question bank.' },
             ].map(({ step, title, body }) => (
               <div key={step} className="flex gap-4">

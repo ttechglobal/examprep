@@ -6,18 +6,18 @@
 //
 // UI model: subjects are GROUPED by name.
 //   Each group shows all exam variants as sibling badges.
-//   "Add exam" button on a group lets you add WAEC/JAMB/IGCSE to that name quickly.
+//   "Add exam" button on a group lets you add WAEC/JAMB/NECO to that name quickly.
 //   "+ New Subject" creates a brand-new name.
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 
-const ALL_EXAMS = ['WAEC', 'JAMB', 'IGCSE']
+import { ALL_EXAMS } from '@/lib/constants'
 
 const EXAM_STYLE = {
   WAEC:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', dark: '#1e40af' },
   JAMB:  { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', dark: '#6d28d9' },
-  IGCSE: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', dark: '#166534' },
+  NECO: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', dark: '#166534' },
 }
 
 function ExamBadge({ exam, size = 'sm' }) {

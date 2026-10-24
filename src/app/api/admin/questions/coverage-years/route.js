@@ -51,7 +51,7 @@ export async function GET(request) {
 
   // ── Build query helper — tries array column, falls back to string column ──
   const legacyValues = examType && examType !== 'ALL'
-    ? [examType, 'BOTH']
+    ? [examType]
     : null
 
   const buildQuery = (useArrayCol) => {
@@ -76,7 +76,7 @@ export async function GET(request) {
   // ── Fetch with fallback ───────────────────────────────────────────────────
   let rows = []
   {
-    const { data, error } = await buildQuery(true)
+    const { data, error } = await buildQuery(false)
     if (!error && data?.length) {
       rows = data
     } else {

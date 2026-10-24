@@ -159,16 +159,16 @@ export function getRandomNudge(type, ...args) {
   return typeof fn === 'function' ? fn(...args) : fn
 }
 
-// ─── Exam type badge colors — used wherever WAEC/JAMB/BOTH badges appear ─────
+// ─── Exam type badge colors — used wherever WAEC/JAMB/NECO badges appear ─────
 // These are used inline (not subject cards), so we use border + bg + text combos.
 export const EXAM_BADGE_COLORS = {
   WAEC: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
   JAMB: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-  BOTH: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+  NECO: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
 }
 
 export function getExamBadgeColor(examType) {
-  return EXAM_BADGE_COLORS[examType] ?? EXAM_BADGE_COLORS.BOTH
+  return EXAM_BADGE_COLORS[examType] ?? EXAM_BADGE_COLORS.WAEC
 }
 
 // ─── Difficulty badge colors ──────────────────────────────────────────────────

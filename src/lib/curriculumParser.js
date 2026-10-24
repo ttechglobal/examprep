@@ -5,10 +5,9 @@
 // PURPOSE: topic mapping for past questions — NOT lesson generation.
 //
 // Key changes from previous version:
-//   • No BOTH exam tag — topics carry exam_types: string[] (e.g. ['WAEC','JAMB'])
 //   • No objectives field — we don't build lessons
 //   • No lesson_status, lesson_generated fields
-//   • Supports WAEC, JAMB, IGCSE (and any future exam type)
+//   • Supports WAEC, JAMB, NECO (and any future exam type)
 //   • buildCurriculumPrompt() updated to match new structure
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,15 +47,12 @@ function safeParse(cleaned) {
 }
 
 // ── Normalise exam_types field ────────────────────────────────────────────────
-// AI may return: string 'WAEC', array ['WAEC','JAMB'], or legacy 'BOTH'
 // We normalise to string[] of valid exam codes.
 function normaliseExamTypes(val, parentExamTypes = null) {
   const valid = new Set(ALL_EXAMS)
 
   if (!val) return parentExamTypes ?? []
 
-  // Legacy 'BOTH' from old data → expand to all exams that make sense
-  if (val === 'BOTH') return ['WAEC', 'JAMB']
 
   // String: single exam
   if (typeof val === 'string') {
@@ -185,7 +181,7 @@ export function parseCurriculum(rawText) {
 // ── Curriculum prompt — generates topic/subtopic tree for question tagging ────
 // This is the admin prompt they copy into Claude/Gemini.
 export function buildCurriculumPrompt(subject, examTypes) {
-  // examTypes is string[] e.g. ['WAEC'] or ['WAEC','JAMB'] or ['IGCSE']
+  // examTypes is string[] e.g. ['WAEC'] or ['WAEC','JAMB'] or ['NECO']
   const exams = Array.isArray(examTypes) ? examTypes : [examTypes]
   const examLabel = exams.length === 1
     ? exams[0]

@@ -99,3 +99,15 @@
 @media (max-width: 1000px) {
   .grid2, .gridHalf { grid-template-columns: 1fr; }
 }
+
+.refreshButton { border: 1px solid var(--line); border-radius: 9px; padding: 9px 14px; background: #fff; color: #24558e; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.refreshButton:disabled { opacity: .5; cursor: default; }
+.businessLink { margin-left: auto; align-self: center; padding: 10px; color: #496589; font-size: 12px; white-space: nowrap; }
+.coverageNote { font-size: 12px; color: #64748b; line-height: 1.6; margin: 14px 0 0; }
+.coverage { font-size: 12px; color: #64748b; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 22px; line-height: 1.7; }
+.coverage summary { cursor: pointer; font-weight: 650; }
+.textButton { border: 0; padding: 10px 0; background: none; color: #1264e5; font: inherit; font-size: 13px; cursor: pointer; }
+.inlineLink { display: block; padding-top: 10px; color: #1264e5; font-size: 13px; }
+
+.trendUp { color: #137a45; font-weight: 650; }
+.trendDown { color: #a43c30; }

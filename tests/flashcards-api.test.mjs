@@ -47,7 +47,19 @@ test('combined exam topic counts include the IDs used to load the complete deck'
   assert.deepEqual(result.data.topics[0].topic_ids, [FIRST, SECOND])
 })
 test('a deck request fetches all included exam variants and rejects malformed IDs', async () => {
-  const result = await request(`?topicId=${FIRST}&topicIds=${FIRST},${SECOND}`, {})
-  assert.deepEqual(result.calls.find(call => call[1] === 'in'), ['flashcards', 'in', 'topic_id', [FIRST, SECOND]])
+  const result = await request(`?topicId=${FIRST}&topicIds=${FIRST},${SECOND}`, {
+    topics: { data: [{ id: FIRST }, { id: SECOND }] },
+  })
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.calls.find(call => call[0] === 'flashcards' && call[1] === 'in'), ['flashcards', 'in', 'topic_id', [FIRST, SECOND]])
+  assert.ok(result.calls.some(call => call[0] === 'topics' && call[1] === 'in' && call[2] === 'subjects.exam_type'))
   assert.equal((await request(`?topicId=${FIRST}&topicIds=invalid`, {})).status, 400)
+})
+
+test('a deck cannot include a topic outside released exams', async () => {
+  const result = await request(`?topicId=${FIRST}&topicIds=${FIRST},${SECOND}`, {
+    topics: { data: [{ id: FIRST }] },
+  })
+  assert.equal(result.status, 400)
+  assert.ok(!result.calls.some(call => call[0] === 'flashcards'))
 })

@@ -4,7 +4,7 @@
 // functions; they never talk to supabase.auth directly. That keeps phone
 // accounts, guest data and post-login routing consistent everywhere.
 //
-//   signUp({ method, phone, email, password })  → { ok, error, field }
+//   signUp({ method, phone, email, password, full_name })  → { ok, error, field }
 //   signIn({ method, phone, email, password })  → { ok, error, field }
 //   signOut()                                    → clears device state
 //   continueAsGuest()                            → starts a device-only profile
@@ -134,7 +134,9 @@ function flushPracticeQueue() {
 }
 
 // ── Sign up ───────────────────────────────────────────────────────────────────
-export async function signUp({ method, phone, email, password, referralCode }) {
+export async function signUp({ method, phone, email, password, full_name, referralCode }) {
+  const name = typeof full_name === 'string' ? full_name.trim() : ''
+  if (name.length < 2 || name.length > 80) return { ok: false, error: 'Enter your name (2–80 characters).', field: 'full_name' }
   const invalid = validateCredentials({ method, phone, email, password })
   if (invalid) return { ok: false, ...invalid }
   const guestToken = await battleGuestToken()   // read before the new login replaces it
@@ -144,7 +146,7 @@ export async function signUp({ method, phone, email, password, referralCode }) {
     res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method, phone, email, password, guest: guestSetupForMigration(), referral_code: referralCode || undefined }),
+      body: JSON.stringify({ method, phone, email, password, full_name, guest: guestSetupForMigration(), referral_code: referralCode || undefined }),
     })
     data = await res.json()
   } catch {

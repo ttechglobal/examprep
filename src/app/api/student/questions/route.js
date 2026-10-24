@@ -1,3 +1,4 @@
+import { STUDENT_EXAMS } from '@/lib/constants'
 // src/app/api/student/questions/route.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/student/questions — the question feed for every practice mode.
@@ -8,7 +9,7 @@
 // 20-question session, ~240 for a JAMB mock.
 //
 // PARAMETERS
-//   exam        'WAEC' | 'JAMB' | 'IGCSE'
+//   exam        'WAEC' | 'JAMB'
 //   subjects    comma-separated subject names   OR
 //   subject_id  single subject uuid
 //   count       number of questions (default 20, max 100)
@@ -38,7 +39,7 @@ import { recordAfterResponse } from '@/lib/server/studentEvents'
 import { analyticsFeature } from '@/lib/analytics'
 
 const UUID_RE     = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const EXAMS       = new Set(['WAEC', 'JAMB', 'IGCSE'])
+const EXAMS       = new Set(STUDENT_EXAMS)
 const MAX_EXCLUDE = 200
 
 function shuffle(arr) {
@@ -106,7 +107,8 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const examParam  = (searchParams.get('exam') ?? 'WAEC').toUpperCase()
-    const exam       = EXAMS.has(examParam) ? examParam : 'WAEC'
+    if (!EXAMS.has(examParam)) return NextResponse.json({ error: 'Exam is not available' }, { status: 400 })
+    const exam = examParam
     const count      = Math.min(Math.max(parseInt(searchParams.get('count') ?? '20', 10) || 20, 1), 100)
     const mode       = searchParams.get('mode') ?? 'mixed'
     const ref        = searchParams.get('ref')

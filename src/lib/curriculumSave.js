@@ -1,3 +1,4 @@
+import { ALL_EXAMS } from '@/lib/constants'
 // src/lib/curriculumSave.js
 // Helper used by /api/admin/curriculum POST route.
 // Replaces all exam_type string writes with exam_types[] array writes.
@@ -7,14 +8,10 @@
 
 /**
  * Convert a single exam_type string to exam_types array.
- * Handles legacy 'BOTH' and any future exam codes.
  */
 export function toExamTypesArray(raw) {
   if (!raw) return ['WAEC']
-  if (raw === 'BOTH') return ['WAEC', 'JAMB']
-  // Could be comma-separated in future: 'WAEC,IGCSE'
-  if (raw.includes(',')) return raw.split(',').map(s => s.trim())
-  return [raw]
+  return String(raw).split(',').map(s => s.trim().toUpperCase()).filter(exam => ALL_EXAMS.includes(exam))
 }
 
 /**

@@ -321,7 +321,7 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble:
 
 {
   "title": "${subtopicName}",
-  "exam_tag": "${examTag ?? 'BOTH'}",
+  "exam_tag": "${examTag ?? 'WAEC'}",
   "slides": [
     {
       "type": "hook",

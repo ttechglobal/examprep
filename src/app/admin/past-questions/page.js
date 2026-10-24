@@ -1,4 +1,6 @@
 'use client'
+
+import { ALL_EXAMS } from '@/lib/constants'
 // src/app/admin/past-questions/page.js — v2
 // ─────────────────────────────────────────────────────────────────────────────
 // IMPROVEMENTS OVER v1:
@@ -29,6 +31,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { questionReadingLayout } from '@/lib/questionPassage'
+import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
 import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 
 const INDIGO = '#4F46E5'
@@ -258,7 +262,7 @@ function QuestionCard({ question: initialQ, topics, onDeleted, onUpdated }) {
           {/* Question text + tag info */}
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:13, color:'#1E293B', lineHeight:1.6, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
-              <MathText text={question.question_text ?? ''} as="span" className=""/>
+              <ContentText text={questionReadingLayout(question).question_text} />
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'wrap', marginTop:4 }}>
               {question.topics?.name && <span style={{ fontSize:11, color:'#94A3B8' }}>{question.topics.name}</span>}
@@ -266,6 +270,7 @@ function QuestionCard({ question: initialQ, topics, onDeleted, onUpdated }) {
                 <><span style={{ fontSize:11, color:'#CBD5E1' }}>→</span>
                 <span style={{ fontSize:11, color:'#94A3B8' }}>{question.subtopics.name}</span></>
               )}
+              {(questionReadingLayout(question).passage_text || question.passage_image_url) && <Badge color="amber">Passage / extract</Badge>}
               {!question.topic_id && <Badge color="red">Untagged</Badge>}
               {hasSvg && <Badge color="green">✓ SVG</Badge>}
               {!hasSvg && expl.illustration_prompt && <Badge color="amber">📋 Prompt</Badge>}
@@ -284,6 +289,8 @@ function QuestionCard({ question: initialQ, topics, onDeleted, onUpdated }) {
       {expanded && (
         <div style={{ padding:'0 16px 16px', display:'flex', flexDirection:'column', gap:12 }}>
 
+          <QuestionContent question={question} />
+
           {/* Options */}
           <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
             {optionKeys.map(key => {
@@ -294,7 +301,7 @@ function QuestionCard({ question: initialQ, topics, onDeleted, onUpdated }) {
                     {isCorrect ? '✓' : key}
                   </div>
                   <span style={{ fontSize:13, color: isCorrect ? '#166534' : '#374151', fontWeight: isCorrect ? 600 : 400, lineHeight:1.5 }}>
-                    <MathText text={String(opts[key] ?? '')} as="span" className=""/>
+                    <ContentText text={String(opts[key] ?? '')} />
                   </span>
                 </div>
               )
@@ -671,11 +678,12 @@ export default function PastQuestionsPage() {
             <h1 style={{ fontSize:22, fontWeight:900, color:'#0F172A', margin:0 }}>Past Questions</h1>
             <p style={{ fontSize:13, color:SLATE, marginTop:3 }}>Browse, tag, and manage your question bank.</p>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <Link href="/admin/questions/review" style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 14px', border:'1.5px solid #FDE68A', background:'#FFFBEB', color:'#92400E', borderRadius:11, fontSize:12, fontWeight:800, textDecoration:'none' }}>⚑ Review drafts</Link>
             <Link href="/admin/coverage" style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 14px', border:'1.5px solid #E2E8F0', background:'#fff', color:SLATE, borderRadius:11, fontSize:12, fontWeight:800, textDecoration:'none' }}>
               📊 Coverage
             </Link>
-            <Link href="/admin/questions/import" style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 14px', background:INDIGO, color:'#fff', borderRadius:11, fontSize:12, fontWeight:800, textDecoration:'none' }}>
+            <Link href="/admin/questions/myquest-import" style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 14px', background:INDIGO, color:'#fff', borderRadius:11, fontSize:12, fontWeight:800, textDecoration:'none' }}>
               ⬆ Import
             </Link>
           </div>
@@ -696,7 +704,7 @@ export default function PastQuestionsPage() {
           <div>
             <label style={{ display:'block', fontSize:11, fontWeight:800, color:SLATE, marginBottom:5, textTransform:'uppercase', letterSpacing:'.05em' }}>Exam</label>
             <div style={{ display:'flex', gap:2, background:'#F1F5F9', padding:3, borderRadius:11 }}>
-              {['WAEC', 'JAMB', 'ALL'].map(et => (
+              {[...ALL_EXAMS, 'ALL'].map(et => (
                 <button key={et} onClick={() => { setExamType(et); setPage(1); setFilterYear('') }} style={{ padding:'6px 13px', borderRadius:8, border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:800, background: examType===et ? '#fff' : 'transparent', color: examType===et ? INDIGO : SLATE, boxShadow: examType===et ? '0 1px 3px rgba(0,0,0,.08)' : 'none', transition:'all .12s' }}>
                   {et}
                 </button>
@@ -791,7 +799,7 @@ export default function PastQuestionsPage() {
                     {hasFilters ? 'No questions match these filters.' : `No questions for ${selectedSubj?.name ?? 'this subject'}.`}
                   </p>
                   {!hasFilters && (
-                    <Link href="/admin/questions/import" style={{ color:INDIGO, fontSize:13, fontWeight:700 }}>Import past questions →</Link>
+                    <Link href="/admin/questions/myquest-import" style={{ color:INDIGO, fontSize:13, fontWeight:700 }}>Import past questions →</Link>
                   )}
                 </div>
               ) : (

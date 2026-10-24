@@ -118,7 +118,7 @@ export default function VideoLessonsClient({ subjects, topics, published, draft 
           <option value="">All exams</option>
           <option value="WAEC">WAEC</option>
           <option value="JAMB">JAMB</option>
-          <option value="BOTH">BOTH</option>
+          <option value="NECO">NECO</option>
         </select>
         <select
           value={filterSubject}

@@ -11,6 +11,7 @@ const TZ = 'Africa/Lagos'
 
 /** state → badge label and tone (admin/list/adminList.module.css .tone-*) */
 export const STATE_BADGE = {
+  anonymous:  { label: 'Anonymous guest', tone: 'grey' },
   free:       { label: 'Free',     tone: 'grey'   },
   trial:      { label: 'Trial',    tone: 'sky'    },
   two_months: { label: '2 Months', tone: 'blue'   },
@@ -31,6 +32,7 @@ export const FILTER_CHIPS = [
   { id: 'annual',     label: 'Annual' },
   { id: 'expiring',   label: 'Expiring Soon' },
   { id: 'expired',    label: 'Expired' },
+  { id: 'anonymous',  label: 'Anonymous Guests' },
 ]
 
 export const SORT_OPTIONS = [

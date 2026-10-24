@@ -21,6 +21,7 @@ import { resolveSubjectColors } from '@/lib/subjectTheme'
 import { useIsDark } from '@/lib/useIsDark'
 import QuestionCard from '@/components/quiz/QuestionCard'
 import { scoreQuestion } from '@/lib/mathRenderer'
+import QuestionReviewPreview from './QuestionReviewPreview'
 
 // ── QA Score badge ────────────────────────────────────────────────────────────
 function QABadge({ score, issues }) {
@@ -92,6 +93,7 @@ export default function QuestionStudentPreview({ question, showRawTab = true }) 
 
   return (
     <div className="space-y-4">
+      <QuestionReviewPreview question={question} />
       {/* ── Header bar ────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">

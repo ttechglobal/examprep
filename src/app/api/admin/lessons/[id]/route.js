@@ -156,7 +156,7 @@ async function generateQuestionsInBackground(svc, subtopic) {
 
   if (!subject) return
 
-  const examType = subtopic.exam_type ?? subject.exam_type ?? 'BOTH'
+  const examType = subtopic.exam_type ?? subject.exam_type ?? 'WAEC'
   const prompt   = buildGeneratedQuestionsPrompt({
     subjectName:  subject.name,
     topicName:    topic.name,

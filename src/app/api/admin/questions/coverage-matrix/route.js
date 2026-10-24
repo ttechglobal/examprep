@@ -1,3 +1,5 @@
+
+import { ALL_EXAMS } from '@/lib/constants'
 // src/app/api/admin/questions/coverage-matrix/route.js
 // GET /api/admin/questions/coverage-matrix?examType=WAEC&_t=...
 //
@@ -22,7 +24,7 @@ const svc = () => createServiceClient(
 )
 
 const ALL_YEARS  = Array.from({ length: 2026 - 2001 + 1 }, (_, i) => String(2026 - i))
-const EXAM_TYPES = ['WAEC', 'JAMB', 'NECO', 'IGCSE']
+const EXAM_TYPES = ALL_EXAMS
 const NO_CACHE   = { headers: { 'Cache-Control': 'no-store' } }
 
 export async function GET(request) {
@@ -66,8 +68,7 @@ export async function GET(request) {
     .gt('count', 0)                // skip zero-count rows
 
   if (examType !== 'ALL') {
-    // Include questions tagged as 'BOTH' — they belong to all exams
-    summaryQuery = summaryQuery.in('exam_type', [examType, 'BOTH'])
+    summaryQuery = summaryQuery.in('exam_type', [examType])
   }
 
   const { data: summaryRows, error: sumErr } = await summaryQuery
@@ -86,7 +87,6 @@ export async function GET(request) {
   for (const row of summaryRows ?? []) {
     const y = String(row.year)
     if (!matrix[row.subject_id]) continue
-    // If a question is tagged 'BOTH', count it under whichever exam we're viewing
     matrix[row.subject_id][y] = (matrix[row.subject_id][y] ?? 0) + row.count
   }
 
@@ -123,7 +123,7 @@ export async function GET(request) {
 // Used only if coverage_summary doesn't exist yet.
 // Still has the 1,000-row problem — run the SQL migration to fix permanently.
 async function fallbackDirectCount(db, subjects, subjectIds, examType, NO_CACHE) {
-  const legacyValues = examType !== 'ALL' ? [examType, 'BOTH'] : null
+  const legacyValues = examType !== 'ALL' ? [examType] : null
 
   const buildQ = (useArray) => {
     let q = db
@@ -142,7 +142,7 @@ async function fallbackDirectCount(db, subjects, subjectIds, examType, NO_CACHE)
   }
 
   let qRows = []
-  const { data, error } = await buildQ(true)
+  const { data, error } = await buildQ(false)
   if (!error && data?.length) {
     qRows = data
   } else {
@@ -176,7 +176,7 @@ async function fallbackDirectCount(db, subjects, subjectIds, examType, NO_CACHE)
       subjects: subjectsWithTotals,
       years,
       matrix,
-      examTypes: ['WAEC', 'JAMB', 'NECO', 'IGCSE'],
+      examTypes: ALL_EXAMS,
       _source: 'fallback_direct_count',   // admin knows SQL migration is needed
       _rows:   qRows.length,
     },

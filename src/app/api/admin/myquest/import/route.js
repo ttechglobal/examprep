@@ -1,3 +1,5 @@
+import { reviewIssues } from '@/lib/questionReview'
+import { normalizeQuestionContent } from '@/lib/questionContent'
 // src/app/api/admin/myquest/import/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // MyQuest API — Bulk Import (raw, no enrichment)
@@ -40,7 +42,8 @@ function inferDifficulty(q) {
 }
 
 // ── Map MyQuest question → ExamPrep schema ────────────────────────────────────
-function mapQuestion(mq, { subjectId, examType, year }) {
+function mapQuestion(raw, { subjectId, examType, year }) {
+  const mq = normalizeQuestionContent(raw)
   // MyQuest options shape varies — normalise to {a,b,c,d} object
   const options = {}
   if (mq.option && typeof mq.option === 'object') {
@@ -65,6 +68,7 @@ function mapQuestion(mq, { subjectId, examType, year }) {
   return {
     subject_id:     subjectId,
     exam_type:      examType,
+    exam_types:     [examType],
     source:         'past_paper',
     year:           mq.year ?? mq.examyear ?? year,
     question_text:  String(mq.question ?? '').trim(),
@@ -74,7 +78,9 @@ function mapQuestion(mq, { subjectId, examType, year }) {
     difficulty:     inferDifficulty(mq),
     has_image:      hasImage,
     image_url:      hasImage ? mq.image : null,
-    passage_text:   mq.section ? String(mq.section).trim() : null,
+    passage_text:   mq.section,
+    instruction_text: mq.instruction_text,
+    passage_image_url: mq.passage_image_url,
     // Use MyQuest's id for deduplication (stored in myquest_id column if it exists,
     // otherwise we rely on text-based dedup)
     sdash_id:       mq.id ? `mq_${String(mq.id)}` : null,
@@ -87,42 +93,27 @@ function mapQuestion(mq, { subjectId, examType, year }) {
 
 // ── Deduplication (same logic as sdash import) ────────────────────────────────
 async function deduplicateQuestions(db, questions, subjectId, examType) {
-  if (!questions.length) return { newQuestions: [], duplicates: 0 }
-
-  const sdashIds = questions.map(q => q.sdash_id).filter(Boolean)
-  let existingIds = new Set()
-
-  if (sdashIds.length) {
-    const { data: existing } = await db
-      .from('questions')
-      .select('sdash_id')
-      .eq('subject_id', subjectId)
-      .eq('exam_type', examType)
-      .in('sdash_id', sdashIds)
-    existingIds = new Set((existing ?? []).map(r => r.sdash_id))
+  const unique = []
+  const seen = new Set()
+  let duplicates = 0
+  for (const row of questions) {
+    const fingerprint = JSON.stringify([row.year, row.question_text, row.passage_text, row.instruction_text, row.options])
+    if (seen.has(fingerprint)) { duplicates++; continue }
+    seen.add(fingerprint)
+    // IDs in current MyQuest payloads restart at 1 for each paper/year.
+    // Only active records from the same subject, exam and year can block reimport.
+    const { data, error } = await db.from('questions')
+      .select('id,sdash_id,question_text,passage_text,instruction_text,options')
+      .eq('subject_id', subjectId).eq('exam_type', examType).eq('year', row.year)
+      .eq('is_active', row.is_active).in('question_text', [row.question_text])
+    if (error) throw new Error(`Duplicate check failed: ${error.message}`)
+    const duplicate = (data ?? []).some(existing =>
+      JSON.stringify([existing.passage_text ?? null, existing.instruction_text ?? null, existing.options]) ===
+      JSON.stringify([row.passage_text ?? null, row.instruction_text ?? null, row.options]))
+    if (duplicate) duplicates++
+    else unique.push(row)
   }
-
-  const withoutId = questions.filter(q => !q.sdash_id || !existingIds.has(q.sdash_id))
-  let existingTexts = new Set()
-
-  if (withoutId.length) {
-    const prefixes = withoutId.map(q => q.question_text.slice(0, 120))
-    const { data: textMatches } = await db
-      .from('questions')
-      .select('question_text')
-      .eq('subject_id', subjectId)
-      .eq('exam_type', examType)
-      .in('question_text', prefixes)
-    existingTexts = new Set((textMatches ?? []).map(r => r.question_text.slice(0, 120)))
-  }
-
-  const newQuestions = questions.filter(q => {
-    if (q.sdash_id && existingIds.has(q.sdash_id)) return false
-    if (existingTexts.has(q.question_text.slice(0, 120))) return false
-    return true
-  })
-
-  return { newQuestions, duplicates: questions.length - newQuestions.length }
+  return { newQuestions: unique, duplicates }
 }
 
 // ── POST handler ──────────────────────────────────────────────────────────────
@@ -145,6 +136,10 @@ export async function POST(request) {
   if (!ALL_EXAMS.includes(examType)) return NextResponse.json({ error: `examType must be one of: ${ALL_EXAMS.join(', ')}` }, { status: 400 })
 
   const db = svc()
+  const { data: subject } = await db.from('subjects').select('exam_type').eq('id', subjectId).single()
+  if (!subject || subject.exam_type !== examType || (ALL_EXAMS.includes(String(exam).toUpperCase()) && String(exam).toUpperCase() !== examType)) {
+    return NextResponse.json({ error: 'Provider exam and selected subject must match' }, { status: 400 })
+  }
   const errors = []
 
   // 1. Fetch from MyQuest
@@ -167,17 +162,25 @@ export async function POST(request) {
 
   // 2. Map to ExamPrep schema
   const mapped = []
-  for (const raw of fetchResult.questions) {
+  for (const source of fetchResult.questions) {
+    const raw = normalizeQuestionContent(source)
     try {
       if (!raw.question || !raw.answer) {
         errors.push({ id: raw.id, reason: 'Missing question text or answer' })
         continue
       }
-      if (!raw.option || Object.keys(raw.option).length < 2) {
+      if (Object.keys(normalizeQuestionContent(raw).option).length < 2) {
         errors.push({ id: raw.id, reason: 'Fewer than 2 options' })
         continue
       }
-      mapped.push(mapQuestion(raw, { subjectId, examType, year }))
+      const row = mapQuestion(raw, { subjectId, examType, year })
+      const issues = reviewIssues({ ...row, subject_name: mqSubject })
+      if (issues.length) {
+        row.is_active = false
+        row.is_flagged = true
+        row.explanation = { ...(row.explanation ?? {}), content_review: { status: 'needs_review', issues, source: raw, created_at: new Date().toISOString() } }
+      }
+      mapped.push(row)
     } catch (err) {
       errors.push({ id: raw.id, reason: err.message })
     }
@@ -187,10 +190,12 @@ export async function POST(request) {
   const { newQuestions, duplicates } = await deduplicateQuestions(db, mapped, subjectId, examType)
 
   // 4. Dry run
+  const flaggedCount = newQuestions.filter(q => q.is_flagged).length
   if (dryRun) {
     return NextResponse.json({
       fetched: fetchResult.questions.length,
-      new: newQuestions.length,
+      new: newQuestions.filter(q => q.is_active).length,
+      flagged: flaggedCount,
       duplicate: duplicates,
       saved: 0,
       errors,
@@ -202,6 +207,7 @@ export async function POST(request) {
 
   // 5. Bulk insert
   let saved = 0
+  let flagged = 0
   const CHUNK = 25
   for (let i = 0; i < newQuestions.length; i += CHUNK) {
     const chunk = newQuestions.slice(i, i + CHUNK)
@@ -209,7 +215,14 @@ export async function POST(request) {
     if (insertError) {
       errors.push({ reason: `Batch insert failed at offset ${i}: ${insertError.message}` })
     } else {
-      saved += chunk.length
+      saved += chunk.filter(q => q.is_active).length
+      flagged += chunk.filter(q => q.is_flagged).length
+      const activeYears = new Map()
+      for (const row of chunk.filter(q => q.is_active)) activeYears.set(row.year, (activeYears.get(row.year) ?? 0) + 1)
+      for (const [paperYear, count] of activeYears) {
+        const result = await db.rpc('increment_coverage', { p_subject_id: subjectId, p_exam_type: examType, p_year: Number(paperYear), p_delta: count })
+        if (result.error) errors.push({ reason: `Questions saved but coverage refresh failed: ${result.error.message}` })
+      }
     }
   }
 
@@ -226,9 +239,10 @@ export async function POST(request) {
 
   return NextResponse.json({
     fetched: fetchResult.questions.length,
-    new: newQuestions.length,
+    new: newQuestions.filter(q => q.is_active).length,
     duplicate: duplicates,
     saved,
+    flagged,
     errors,
     truncated: fetchResult.truncated,
   })

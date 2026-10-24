@@ -34,6 +34,7 @@ export async function GET(request) {
     const base = subjectName.replace(/\s*(WAEC|JAMB|IGCSE|NECO)\s*$/i, '').trim()
     const { data: subjects, error: subjectsError } = await db
       .from('subjects')
+      .in('exam_type', ['WAEC', 'JAMB'])
       .select('id, name')
       .eq('is_active', true)
     if (subjectsError) return NextResponse.json({ error: 'Could not load subjects' }, { status: 500 })
@@ -96,6 +97,11 @@ export async function GET(request) {
     if (!UUID_RE.test(topicId) || requested.length > 100 || requested.some(id => !UUID_RE.test(id))) {
       return NextResponse.json({ error: 'Invalid topic' }, { status: 400 })
     }
+    const { data: allowedTopics, error: topicError } = await db.from('topics')
+      .select('id, subjects!inner(exam_type)').in('id', [...new Set(requested)])
+      .in('subjects.exam_type', ['WAEC', 'JAMB'])
+    if (topicError) return NextResponse.json({ error: 'Could not load topics' }, { status: 500 })
+    if (allowedTopics?.length !== new Set(requested).size) return NextResponse.json({ error: 'Topic is not available' }, { status: 400 })
     const { data: cards, error } = await db
       .from('flashcards')
       .select('id, front_text, back_text, hint, mnemonic, difficulty, svg_code')
@@ -132,6 +138,7 @@ export async function GET(request) {
 
   const { data: allSubjects, error: allSubjectsError } = await db
     .from('subjects')
+      .in('exam_type', ['WAEC', 'JAMB'])
     .select('id, name')
     .in('id', [...subjectIdSet])
     .eq('is_active', true)

@@ -1,7 +1,7 @@
 import { requireAdmin } from '@/lib/adminAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { normaliseExamType } from '@/lib/curriculumMerger'
+import { ALL_EXAMS } from '@/lib/constants'
 
 const service = () => createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -26,6 +26,14 @@ export async function POST(request) {
   }
 
   const db = service()
+  const { data: subject } = await db.from('subjects').select('exam_type').eq('id', subjectId).single()
+  if (!subject || !ALL_EXAMS.includes(examType) || subject.exam_type !== examType) {
+    return NextResponse.json({ error: 'Exam must match the selected subject' }, { status: 400 })
+  }
+  if (topicId) {
+    const { data: topic } = await db.from('topics').select('id').eq('id', topicId).eq('subject_id', subjectId).single()
+    if (!topic) return NextResponse.json({ error: 'Topic does not belong to subject' }, { status: 400 })
+  }
   const topicSlug = slugify(topicTitle)
 
   // Upsert topic
@@ -36,7 +44,7 @@ export async function POST(request) {
       subject_id: subjectId,
       slug: topicSlug,
       name: topicTitle,
-      exam_type: normaliseExamType(examType),
+      exam_type: examType,
       order_index: orderIndex ?? 99,
     }, { onConflict: topicId ? 'id' : 'subject_id,slug' })
     .select('id, name')
@@ -67,7 +75,7 @@ export async function POST(request) {
         topic_id: savedTopic.id,
         slug: subSlug,
         name: subTitle,
-        exam_type: normaliseExamType(sub.exam_tag ?? examType),
+        exam_type: examType,
         order_index: si + 1,
         objectives: Array.isArray(sub.objectives) ? sub.objectives : [],
         exam_frequency: 3,

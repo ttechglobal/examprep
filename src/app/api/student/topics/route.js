@@ -1,3 +1,4 @@
+import { STUDENT_EXAMS } from '@/lib/constants'
 // src/app/api/student/topics/route.js — v3
 // GET /api/student/topics?subject_id=<uuid>&exam=WAEC
 // Topics for a subject that have at least one active question for this exam,
@@ -16,14 +17,15 @@ import { NextResponse }  from 'next/server'
 import { listSubjectTopics } from '@/lib/server/subjectTopics'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const EXAMS   = new Set(['WAEC', 'JAMB', 'IGCSE'])
+const EXAMS   = new Set(STUDENT_EXAMS)
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const subjectId = searchParams.get('subject_id')
     const examParam = (searchParams.get('exam') ?? 'WAEC').toUpperCase()
-    const exam      = EXAMS.has(examParam) ? examParam : 'WAEC'
+    if (!EXAMS.has(examParam)) return NextResponse.json({ error: 'Exam is not available' }, { status: 400 })
+    const exam = examParam
 
     if (!subjectId || !UUID_RE.test(subjectId)) {
       return NextResponse.json({ error: 'subject_id required' }, { status: 400 })

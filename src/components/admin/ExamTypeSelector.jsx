@@ -1,5 +1,5 @@
 // src/components/admin/ExamTypeSelector.jsx
-// Replaces every place in the admin UI that had a WAEC / JAMB / BOTH dropdown.
+// Replaces every place in the admin UI that had a exam dropdown.
 //
 // Usage (single select — for filters, profile settings):
 //   <ExamTypeSelector value={examType} onChange={setExamType} />
@@ -13,11 +13,10 @@
 
 'use client'
 
-const EXAMS = [
-  { id: 'WAEC', label: 'WAEC', color: 'indigo' },
-  { id: 'JAMB', label: 'JAMB', color: 'violet' },
-  // Future: { id: 'IGCSE', label: 'IGCSE', color: 'emerald' },
-]
+import { ALL_EXAMS } from '@/lib/constants'
+
+const EXAM_COLORS = { WAEC: 'indigo', JAMB: 'violet', NECO: 'emerald' }
+const EXAMS = ALL_EXAMS.map(id => ({ id, label: id, color: EXAM_COLORS[id] }))
 
 const COLORS = {
   indigo: {
@@ -87,8 +86,7 @@ export default function ExamTypeSelector({ value, onChange, multi = false, class
  */
 export function legacyToArray(examType) {
   if (!examType) return ['WAEC']
-  if (examType === 'BOTH') return ['WAEC', 'JAMB']
-  return [examType]
+  return ALL_EXAMS.includes(examType) ? [examType] : []
 }
 
 /**

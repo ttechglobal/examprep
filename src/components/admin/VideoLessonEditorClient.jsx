@@ -1,5 +1,7 @@
 'use client'
 
+import { ALL_EXAMS } from '@/lib/constants'
+
 // src/components/admin/VideoLessonEditorClient.jsx
 // Full admin editor for creating and editing video lesson packages.
 // Workflow: set metadata → generate prompt → copy to Claude → paste JSON back → add video URL → publish
@@ -409,7 +411,7 @@ export default function VideoLessonEditorClient({ mode, subjects, allTopics, exi
               Exam Type <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-2">
-              {['WAEC', 'JAMB', 'BOTH'].map(ex => (
+              {ALL_EXAMS.map(ex => (
                 <button
                   key={ex}
                   onClick={() => setExamType(ex)}

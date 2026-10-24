@@ -17,10 +17,11 @@
 // v3: replaces v2's analytics list (XP, streak, accuracy) with plan management.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import StudentPanel from '@/components/admin/students/StudentPanel'
 import {
-  STATE_BADGE, FILTER_CHIPS, SORT_OPTIONS, expiryCell, displayPhone,
+  STATE_BADGE, FILTER_CHIPS, SORT_OPTIONS, expiryCell, displayPhone, formatDate,
 } from '@/components/admin/students/studentPlan'
 import s from '@/components/admin/list/adminList.module.css'
 
@@ -43,6 +44,15 @@ function useDebounced(value, ms) {
 }
 
 const initial = name => (name || '?').trim()[0]?.toUpperCase() ?? '?'
+
+function StudentFromAnalytics({ onSelect }) {
+  const params = useSearchParams()
+  const id = params.get('student')
+  useEffect(() => {
+    if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) Promise.resolve().then(() => onSelect(id))
+  }, [id, onSelect])
+  return null
+}
 
 export default function AdminStudentsPage() {
   const [year, setYear]       = useState(String(THIS_YEAR))
@@ -96,6 +106,7 @@ export default function AdminStudentsPage() {
   const years = summary.years ?? [THIS_YEAR + 1, THIS_YEAR]
 
   return <div className={s.page}>
+    <Suspense fallback={null}><StudentFromAnalytics onSelect={setSelected} /></Suspense>
     <div className={s.head}>
       <div>
         <h1 className={s.title}>Students</h1>
@@ -136,7 +147,7 @@ export default function AdminStudentsPage() {
     </div>
 
     <div className={s.toolbar}>
-      <span className={s.count}>{data ? `${total.toLocaleString()} student${total === 1 ? '' : 's'}` : ' '}</span>
+      <span className={s.count}>{data ? `${total.toLocaleString()} ${filter === 'anonymous' ? 'anonymous guest identities' : 'students'}` : ' '}</span>
       <div className={s.selects}>
         <select className={s.select} value={school} onChange={e => choose(setSchool)(e.target.value)} aria-label="School">
           <option value="">All Schools</option>
@@ -148,32 +159,35 @@ export default function AdminStudentsPage() {
       </div>
     </div>
 
+    {filter === 'anonymous' && <p className={s.sub}>These are guest identities, not registered students or a count of unique people. Contact details may be unavailable.</p>}
+
     <div className={s.tableWrap}>
       {state.error ? <p className={s.problem}>{state.error}</p>
         : !data ? <p className={s.loading}>Loading students…</p>
         : !data.students.length ? <p className={s.empty}>No students match this view.</p>
         : <table className={s.table} style={{ opacity: state.loading ? .6 : 1 }}>
-          <thead><tr><th>Student</th><th>Phone</th><th>School</th><th>Plan</th><th>Expiry</th><th aria-label="Actions"/></tr></thead>
+          <thead><tr><th>Student</th><th>Contact</th><th>School</th><th>Plan</th><th>Expiry</th><th aria-label="Actions"/></tr></thead>
           <tbody>
             {data.students.map(student => {
               const badge = STATE_BADGE[student.state] ?? STATE_BADGE.free
               const expiry = expiryCell(student)
-              return <tr key={student.id} className={`${s.row} ${selected === student.id ? s.rowOn : ''}`} onClick={() => setSelected(student.id)}>
+              return <tr key={student.id} className={`${s.row} ${selected === student.id ? s.rowOn : ''}`} onClick={() => { if (student.state !== 'anonymous') setSelected(student.id) }}>
                 <td><div className={s.who}>
                   <span className={s.avatar} aria-hidden="true">{initial(student.name || student.username)}</span>
                   <span style={{ minWidth: 0 }}>
-                    <span className={s.name}>{student.name || <span className={s.muted}>No name</span>}</span>
+                    <span className={s.name}>{student.name || <span className={s.muted}>{student.state === 'anonymous' ? 'Anonymous guest' : 'Name not added'}</span>}</span>
                     {student.username && <span className={s.handle}>@{student.username}</span>}
+                    {student.state === 'anonymous' && <span className={s.handle}>First seen {formatDate(student.joined)}</span>}
                   </span>
                 </div></td>
-                <td>{displayPhone(student.phone) ?? <span className={s.muted}>—</span>}</td>
+                <td>{displayPhone(student.phone)}{student.email && <span className={s.handle}>{student.email}</span>}{!student.phone && !student.email && <span className={s.muted}>No contact supplied</span>}{student.state === 'anonymous' && <span className={s.handle}>Guest ID: {student.id}</span>}</td>
                 <td>{student.school ?? <span className={s.muted}>—</span>}</td>
                 <td><span className={`${s.badge} ${s[`tone-${badge.tone}`]}`}>{badge.label}</span></td>
                 <td>{expiry ? <>
                   {expiry.date}
                   <span className={`${s.expiryNote} ${s[expiry.tone] ?? s.muted}`}>{expiry.note}</span>
                 </> : <span className={s.muted}>—</span>}</td>
-                <td><button type="button" className={s.manage} onClick={e => { e.stopPropagation(); setSelected(student.id) }}>Manage →</button></td>
+                <td>{student.state !== 'anonymous' && <button type="button" className={s.manage} onClick={e => { e.stopPropagation(); setSelected(student.id) }}>Manage →</button>}</td>
               </tr>
             })}
           </tbody>

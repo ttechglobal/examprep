@@ -6,7 +6,7 @@ import Link from 'next/link'
 const EXAM_COLORS = {
   WAEC: 'bg-blue-100 text-blue-700 border-blue-200',
   JAMB: 'bg-purple-100 text-purple-700 border-purple-200',
-  BOTH: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  NECO: 'bg-indigo-100 text-indigo-700 border-indigo-200',
 }
 
 const STATUS_COLORS = {

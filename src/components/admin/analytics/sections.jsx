@@ -51,9 +51,9 @@ export function OverviewKpis({ k, days }) {
 }
 
 // ── Activity charts ──────────────────────────────────────────────────────────
-export function DailyActive({ daily }) {
+export function DailyActive({ daily, hint = 'answered a question, started a session or opened flashcards' }) {
   const points = daily.map(d => ({ key: d.day, value: d.active, short: day(d.day, { day: 'numeric', month: 'short' }), long: day(d.day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) }))
-  return <Card title="Daily Active Students" hint="answered a question, started a session or opened flashcards">
+  return <Card title="Daily Active Students" hint={hint}>
     {daily.some(d => d.active) ? <LineChart points={points} label="Daily active students" valueLabel="active students"/> : <p className={s.empty}>No activity in this period.</p>}
     <DataTable caption="Daily active students" rows={daily.map(d => ({ day: day(d.day, { day: 'numeric', month: 'short' }), active: d.active, questions: d.questions }))}
       columns={[{ key: 'day', label: 'Day' }, { key: 'active', label: 'Active students' }, { key: 'questions', label: 'Questions' }]}/>

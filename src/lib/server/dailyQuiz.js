@@ -83,7 +83,7 @@ export function pickQuestionId(db, subjectName, seed, excludeId, day) {
     if (subjectName) {
       // Same name can exist under WAEC and JAMB; any active one will do.
       const { data: subjectRows } = await db
-        .from('subjects').select('id').eq('name', subjectName).eq('is_active', true)
+        .from('subjects').select('id').in('exam_type', ['WAEC', 'JAMB']).eq('name', subjectName).eq('is_active', true)
         .order('id').limit(1)
       const subjectId = subjectRows?.[0]?.id
       if (subjectId) {
@@ -95,7 +95,7 @@ export function pickQuestionId(db, subjectName, seed, excludeId, day) {
       }
     }
     return questionAtSeed(db, q => {
-      q = q.eq('is_active', true)
+      q = q.in('exam_type', ['WAEC', 'JAMB']).eq('is_active', true)
       return excludeId ? q.neq('id', excludeId) : q
     }, seed)
   })

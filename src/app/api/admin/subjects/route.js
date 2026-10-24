@@ -1,5 +1,5 @@
 // src/app/api/admin/subjects/route.js
-// exam_type: single string 'WAEC' | 'JAMB' | 'IGCSE' — one row per exam per subject.
+// exam_type: single string 'WAEC' | 'JAMB' | 'NECO' — one row per exam per subject.
 // Multiple exams for same subject name = multiple rows (e.g. Maths WAEC + Maths JAMB).
 // Called by: app/admin/subjects-manager/page.js and most admin pickers (GET).
 //

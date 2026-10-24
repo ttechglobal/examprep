@@ -130,9 +130,9 @@ export async function POST(request) {
       p_xp: xp,
     })
     if (saveErr) throw saveErr
-    if (typeof body.ref === 'string' && SESSION_ID_RE.test(body.ref)) recordAfterResponse({
-      studentId: user.id, event: 'session_complete', ref: body.ref,
-      feature: analyticsFeature({ mode, topic: body.topic_name }), detail: { exam, mode },
+    recordAfterResponse({
+      studentId: user.id, event: 'session_complete', ref: typeof body.ref === 'string' && SESSION_ID_RE.test(body.ref) ? body.ref : sessionId,
+      feature: analyticsFeature({ mode, topic: body.topic_name }), detail: { exam, mode, source: 'web', session_id: sessionId },
     })
 
     return NextResponse.json({
