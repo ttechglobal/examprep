@@ -7,6 +7,10 @@
 /* Tokens: on the frame, and on anything that can render outside it
    (ExplanationBlock in the battle review and the demo). */
 .frame, .tokens {
+  --student-question-font: 19px;
+  --student-question-weight: 700;
+  --student-question-leading: 1.45;
+  --student-question-tracking: -0.01em;
   --s-ink: var(--text-prim);
   --s-ink-2: var(--text-sec);
   --s-muted: var(--text-tert);
@@ -917,6 +921,7 @@
   .aside > .card { padding: 20px; }
 
   .qText { font-size: 26px; margin: 22px 0 24px; }
+  .frame, .tokens { --student-question-font: 22px; }
   .option { min-height: 68px; padding: 12px 18px; }
   .optText { font-size: 17px; }
   .expTrigger { display: none; }
@@ -935,6 +940,7 @@
   .body[data-aside] { grid-template-columns: 240px minmax(0, 1fr) minmax(340px, 0.9fr); }
   .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .qText { font-size: 22px; }
+  .frame, .tokens { --student-question-font: 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

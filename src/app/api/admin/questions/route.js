@@ -1,4 +1,6 @@
 import { reviewIssues, acceptedReviewIssues } from '@/lib/questionReview'
+import { insertQuestionsWithSourceId } from '@/lib/questionUpdates'
+import { questionDiagramMetadata, questionDiagram } from '@/lib/questionDiagrams'
 import { contentText, safeContentImage, normalizeQuestionTargets } from '@/lib/questionContent'
 import { ALL_EXAMS } from '@/lib/constants'
 import { requireAdmin } from '@/lib/adminAuth'
@@ -149,11 +151,16 @@ export async function POST(request) {
 
   for (const q of questions) {
     try {
+      const diagram = questionDiagram(q)
+      if (diagram.required && !diagram.ready) {
+        errors.push(`Q "${q.question_text?.slice(0, 40)}": Add and check the source diagram before saving this question. Keep it in the Held queue until then.`)
+        continue
+      }
       const issues = reviewIssues({ ...q, subject_name: subject.name ?? q.subject })
       if (issues.length && !reviewOnly) { errors.push(`Q "${q.question_text?.slice(0, 40)}": ${issues.join(' ')}`); continue }
       const row = {
         question_text:      normalizeQuestionTargets(q.question_text, q.instruction_text),
-        options:            Object.fromEntries(Object.entries(q.options ?? {}).map(([k, v]) => [k, contentText(v)])),
+        options:            Object.fromEntries(Object.entries(q.options ?? {}).map(([k, v]) => [k, contentText(v) || (/<img\b/i.test(String(v)) ? `See option ${k.toUpperCase()} in the source diagram.` : '')])),
         correct_answer:     q.correct_answer ?? '',
         explanation:        reviewOnly ? { ...(q.explanation ?? {}), content_review: { status: 'needs_review', issues: issues.length ? issues : ['Flagged by an administrator for source verification.'], source: q._sourceQuestion ?? null, created_at: new Date().toISOString() } } : acceptedReviewIssues(q).length ? { ...(q.explanation ?? {}), content_review: { status: 'reviewed', issues: [], accepted_issues: acceptedReviewIssues(q), note: q._reviewDecision.note.trim(), reviewed_at: new Date().toISOString() } } : q.explanation ?? {},
         difficulty:         q.difficulty ?? 'medium',
@@ -178,12 +185,18 @@ export async function POST(request) {
         is_active:  !reviewOnly,
         is_flagged: !!reviewOnly,
       }
+      if (questionDiagram(q).required) {
+        row.has_image = true
+        row.image_url = questionDiagram(q).image_url
+        row.image_description = questionDiagram(q).description
+        row.explanation = { ...(row.explanation ?? {}), question_diagram: questionDiagramMetadata(q) }
+      }
 
-      const { data, error } = await db
+      const { data, error } = await insertQuestionsWithSourceId(changes => db
         .from('questions')
-        .insert(row)
+        .insert(changes)
         .select('id')
-        .single()
+        .single(), row)
 
       if (error) {
         errors.push(`Q "${q.question_text?.slice(0, 40)}…": ${error.message}`)

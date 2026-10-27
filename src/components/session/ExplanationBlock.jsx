@@ -24,7 +24,9 @@
 
 import { useEffect, useState } from 'react'
 import { MathText } from '@/lib/mathRenderer'
-import { safeSvg } from '@/lib/safeSvg'
+import QuestionFigure from '@/components/ui/QuestionFigure'
+import ContentText from '@/components/ui/ContentText'
+import { explanationObject } from '@/lib/studentQuestionContent'
 import LazyImage from '@/components/ui/LazyImage'
 import { LETTERS, normaliseOptions, correctIndex } from './SessionUtils'
 import { CORRECT_ANSWER_ART } from './art'
@@ -33,16 +35,7 @@ import s from './session.module.css'
 
 // **bold** and *italic* inside explanation text, one paragraph per line.
 function RichText({ text }) {
-  if (!text) return null
-  return String(text).split(/\n+/).filter(Boolean).map((para, pi) => (
-    <span key={pi}>
-      {pi > 0 && <br />}
-      {para.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, i) =>
-        part.startsWith('**') ? <strong key={i}>{part.slice(2, -2)}</strong>
-          : part.startsWith('*') && part.length > 2 ? <em key={i}>{part.slice(1, -1)}</em>
-          : part)}
-    </span>
-  ))
+  return <ContentText text={text} emphasis="bold" />
 }
 
 // Some bank entries start each reason with its letter ("A — …") or the
@@ -51,19 +44,19 @@ const LETTER_PREFIX = /^\s*[A-E]\s*[—–-]\s*/
 
 
 // ── The explanation ──────────────────────────────────────────────────────────
-export function ExplanationBlock({ question, explanation = question?.explanation, isCorrect, selectedKey, onClose, headerless = false, alwaysLight = false }) {
+export function ExplanationBlock({ question, explanation: rawExplanation = question?.explanation, isCorrect, selectedKey, onClose, headerless = false, alwaysLight = false }) {
   const [wrongOpen, setWrongOpen] = useState(true)
-  if (!explanation) return null
+  const explanation = explanationObject(rawExplanation)
 
   const options  = normaliseOptions(question?.options)
   const right    = correctIndex(options, question?.correct_answer)
-  const note     = explanation.answer_note ?? explanation.correct ?? ''
-  const wrong    = Object.entries(explanation.wrong_options ?? {})
+  const note     = explanation.answer_note || explanation.correct || ''
+  const wrong = Object.entries(explanation.wrong_options ?? {}).map(([key, value]) => [key.toUpperCase(), value]).filter(([key]) => key !== LETTERS[right])
     .sort(([a], [b]) => (a === selectedKey ? -1 : b === selectedKey ? 1 : a.localeCompare(b)))
-  const steps    = (Array.isArray(explanation.steps) ? explanation.steps : [])
-    .filter(st => st && (st.title || st.lines?.length))
-  const vars     = (explanation.variables_key ?? []).filter(Boolean)
-  const svg      = safeSvg(explanation.svg_diagram)
+  const steps = (Array.isArray(explanation.steps) && explanation.steps.length ? explanation.steps : Array.isArray(explanation.workings) ? explanation.workings : []).filter(Boolean).map(step => typeof step === 'string' ? { lines: [step] } : step)
+  const vars = (Array.isArray(explanation.variables_key) ? explanation.variables_key : []).filter(Boolean).map(value => typeof value === 'string' ? value : [value.symbol ?? value.name ?? value.key, value.meaning ?? value.description ?? value.value].filter(Boolean).join(' — '))
+  const svg = explanation.svg_diagram
+  const hasWork = !!(note || explanation.intro || steps.length || svg || explanation.formula_box || wrong.length || explanation.study_tip)
 
   return (
     <div className={`${s.tokens} ${s.exp} ${alwaysLight ? s.light : ''}`}>
@@ -74,11 +67,13 @@ export function ExplanationBlock({ question, explanation = question?.explanation
           </span>
           <div className={s.expTitle}>
             <strong>Explanation</strong>
-            <span>{explanation.concept || (isCorrect ? 'You got this one right' : 'Here’s how to get it right')}</span>
+            <span>{explanation.concept || (selectedKey === null ? 'This question was not answered' : isCorrect ? 'You got this one right' : 'Here’s how to get it right')}</span>
           </div>
           {onClose && <button type="button" className={s.expClose} onClick={onClose} aria-label="Close explanation"><Close /></button>}
         </div>
       )}
+
+      {selectedKey !== undefined && <section className={s.intro} aria-label="Your answer"><strong>Your answer: </strong>{selectedKey == null ? 'Not answered' : <><strong>{selectedKey} — </strong><ContentText text={options[LETTERS.indexOf(selectedKey)] ?? 'Option unavailable'} /></>}</section>}
 
       {(right >= 0 || note) && (
         <section className={s.answer} aria-label="Correct answer">
@@ -87,12 +82,13 @@ export function ExplanationBlock({ question, explanation = question?.explanation
           {right >= 0 && (
             <div className={s.answerRow}>
               <span className={s.answerLetter}>{LETTERS[right]}</span>
-              <span className={s.answerText}><MathText text={String(options[right] ?? '')} as="span" /></span>
+              <span className={s.answerText}><ContentText text={String(options[right] ?? '')} /></span>
             </div>
           )}
           {note && <p className={s.answerNote}><RichText text={note} /></p>}
         </section>
       )}
+      {!hasWork && <p className={s.intro}>A worked explanation has not been added for this question yet.</p>}
 
       {explanation.intro && <p className={s.intro}><RichText text={explanation.intro} /></p>}
 
@@ -106,7 +102,7 @@ export function ExplanationBlock({ question, explanation = question?.explanation
         </section>
       )}
 
-      {svg && <div className={s.diagram} dangerouslySetInnerHTML={{ __html: svg }} />}
+      {svg && <QuestionFigure question={{ svg_diagram: svg }} label="Solution illustration" className={s.diagram} />}
 
       {steps.length > 0 && (
         <ol className={s.steps} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -146,7 +142,7 @@ export function ExplanationBlock({ question, explanation = question?.explanation
                     <span className={s.wrongLetter}>{key}</span>
                     <div style={{ minWidth: 0 }}>
                       {mine && <span className={s.mine}>Your answer</span>}
-                      {lead && <><b><MathText text={String(text)} as="span" /></b> — </>}
+                      {lead && <><b><ContentText text={String(text)} /></b> — </>}
                       <RichText text={reason} />
                     </div>
                   </div>
@@ -200,15 +196,15 @@ export function ExplanationSheet({ question, isCorrect, selectedKey, position, o
 }
 
 export function ExplanationTrigger({ question, isCorrect, onOpen }) {
-  if (!question?.explanation) return null
+  if (!question) return null
   return (
     <button type="button" className={s.expTrigger} onClick={onOpen}>
       <span className={s.expIcon} data-ok={isCorrect || undefined} style={{ width: 40, height: 40, borderRadius: 12 }} aria-hidden="true">
         {isCorrect ? <Check size={20} width={3} /> : <Cross size={20} width={3} />}
       </span>
       <span>
-        <strong>See the explanation</strong>
-        <span>{question.explanation.concept || 'Why this is the answer'}</span>
+        <strong>{question.explanation ? 'See the explanation' : 'Review the answer'}</strong>
+        <span>{explanationObject(question.explanation).concept || 'Why this is the answer'}</span>
       </span>
       <ArrowRight />
     </button>

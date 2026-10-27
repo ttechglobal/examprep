@@ -24,7 +24,7 @@ $handoffDocs = Join-Path $projectRoot 'docs/flutter-handoff'
 foreach ($name in @('README.md', 'AGENTS.md', 'START-HERE-PROMPT.md')) {
     Copy-Item -LiteralPath (Join-Path $handoffDocs $name) -Destination $packageRoot
 }
-foreach ($name in @('architecture.md', 'visual-parity.md', 'backend-contracts.md')) {
+foreach ($name in @('architecture.md', 'visual-parity.md', 'backend-contracts.md', 'question-rendering-update-2026-10-26.md', 'question-rendering-examples-2026-10-26.json')) {
     Copy-Item -LiteralPath (Join-Path $handoffDocs $name) -Destination (Join-Path $packageRoot 'docs')
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/flutter-product-prd.md') -Destination (Join-Path $packageRoot 'docs/product-prd.md')

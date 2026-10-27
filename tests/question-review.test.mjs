@@ -38,6 +38,14 @@ test('approval cannot accept missing essential content', async () => {
   assert.equal(api.writes(), 0)
 })
 
+test('mark-correct cannot publish an unresolved source diagram', async () => {
+  const api = await patchRoute({ id: 'q', question_text: 'Find angle ABC.', options: { A: '70', B: '40' }, correct_answer: 'A', image_description: 'Triangle ABC with angle A = 40 degrees.', explanation: {} })
+  const res = await api.patch({ json: async () => ({ review_action: 'approve' }) }, { params: Promise.resolve({ id: 'q' }) })
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error, /Source diagram needs review/)
+  assert.equal(api.writes(), 0)
+})
+
 async function patchRoute(existing, allowWrites = false) {
   let writes = 0
   const db = { from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: existing }) }) }), update: changes => {

@@ -1,4 +1,6 @@
+import * as questionDiagrams from '../src/lib/questionDiagrams.js'
 import * as questionReview from '../src/lib/questionReview.js'
+import * as questionUpdates from '../src/lib/questionUpdates.js'
 import * as questionContent from '../src/lib/questionContent.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -51,6 +53,8 @@ async function saveQuestions(examType, subjectExam, questions = null, reviewOnly
   }
   const deps = {
     '@/lib/questionReview': questionReview,
+    '@/lib/questionUpdates': questionUpdates,
+    '@/lib/questionDiagrams': questionDiagrams,
     '@/lib/questionContent': questionContent,
     '@/lib/constants': exams,
     '@/lib/adminAuth': { requireAdmin: async () => null },
@@ -75,6 +79,25 @@ test('admin saves actual NECO questions under NECO with aligned exam fields', as
   assert.equal((await response.json()).saved, 1)
   assert.equal(inserted[0].exam_type, 'NECO')
   assert.deepEqual(Array.from(inserted[0].exam_types), ['NECO'])
+})
+
+test('source diagram descriptions cannot save without a checked diagram, even in draft mode', async () => {
+  const question = { question_text: 'Find angle ABC.', options: { A: '70', B: '40' }, correct_answer: 'A', image_description: 'Triangle ABC with AB = AC and angle A = 40 degrees.' }
+  const blocked = await saveQuestions('NECO', 'NECO', [question])
+  assert.equal((await blocked.response.json()).saved, 0)
+  assert.equal(blocked.inserted.length, 0)
+  const draft = await saveQuestions('NECO', 'NECO', [question], true)
+  const result = await draft.response.json()
+  assert.equal(result.saved, 0)
+  assert.match(result.errors.join(' '), /Add and check the source diagram/)
+  assert.equal(draft.inserted.length, 0)
+  assert.equal(draft.coverageCalls.length, 0)
+  const checked = { ...question, explanation: { question_diagram: { required: true, reviewed: true, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="5" y="20">ABC</text></svg>' } } }
+  checked.explanation.question_diagram.signature = questionDiagrams.sourceDiagramSignature(checked)
+  const ready = await saveQuestions('NECO', 'NECO', [checked])
+  assert.equal((await ready.response.json()).saved, 1)
+  assert.equal(ready.inserted[0].has_image, true)
+  assert.equal(ready.inserted[0].explanation.question_diagram.reviewed, true)
 })
 
 test('admin rejects legacy shared exam tags and mismatched subject exams', async () => {

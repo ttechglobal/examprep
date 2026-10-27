@@ -12,25 +12,13 @@
 //      Prompt is assembled from subjectModules.js (subject-specific) + core.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { normalizeQuestionContent, contentIssues } from './questionContent.js'
+import { normalizeQuestionContent, contentIssues, contentText } from './questionContent.js'
 import { getSubjectModule } from './subjectModules.js'
+import { questionDiagram, questionDiagramMetadata, explanationIllustrationRules } from './questionDiagrams.js'
 
 // ── Image-reference detection ─────────────────────────────────────────────────
-const IMAGE_TEXT_PATTERNS = [
-  /\bdiagram\b/i,
-  /\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b/i,
-  /\billustration\b/i,
-  /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
-  /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
-  /\busing the (information|data) (in|from) the (table|graph|chart)\b/i,
-  /\bfrom the graph\b/i,
-  /\bas shown (in|above|below)\b/i,
-]
-
 export function questionHasImage(q) {
-  if (q.has_image === true) return true
-  const text = (q.question_text ?? '').toLowerCase()
-  return IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
+  return questionDiagram(q).required
 }
 
 // ── HTML entity decoder ───────────────────────────────────────────────────────
@@ -412,39 +400,12 @@ resulting SVG code could be dropped into a page and render correctly without any
 human editing.
 
 WHEN TO INCLUDE:
-  Generate ONLY when a diagram genuinely helps the student understand the concept.
-  Test: "Would a student who read the explanation still be confused without seeing it?"
-  If yes — write the prompt. If no — leave "".
+${explanationIllustrationRules}
 
-  INCLUDE (diagram changes understanding):
-    • Geometry: labelled shapes with specific measurements (cylinder, triangle, circle)
-    • Force/vector diagrams: arrows, angles, resultant labelled
-    • Ray diagrams: refraction, reflection, lenses
-    • Electric circuits: components in series/parallel
-    • Coordinate geometry: graph with plotted points, lines, intercepts
-    • Chemical apparatus: titration, distillation, electrolysis set-up
-    • Biological structures: labelled cell, organ, or system diagram
-    • Economics: demand/supply curves, shifts, equilibrium point labelled
 
-  EXCLUDE — leave "" (do not generate a prompt):
-    • Pure number calculations: simultaneous equations, quadratics, indices,
-      fractions, percentages, profit/loss, interest, logs, sequences, probability
-    • Recall and definition questions
-    • English, literature, government, commerce, history, CRK, IRK
-    • Economics recall (no chart needed — just a definition or explanation)
-    • Chemistry recall (naming compounds, equations without apparatus)
-    • Any question where the written steps fully explain the concept
-    • When in doubt — always default to ""
-
-  MATHEMATICS RULE: the vast majority of maths questions get "". Only include
-  for geometry (shapes with labelled measurements), coordinate geometry (plotted
-  points/lines on a grid), and trigonometry (right-angled triangle with sides
-  labelled). Algebra, number, statistics, logs — always "".
-
-VALUES RULE: every measurement in the brief must match the values in your steps —
-  not the raw question. If your steps found r = 4 cm, the brief must say r = 4 cm.
-  Never copy values from the question text if your steps changed them (e.g. diameter
-  halved to find radius).
+VALUES RULE: use given source values or verified solution values and label what each represents.
+  If your steps found r = 4 cm from a diameter of 8 cm, label the radius 4 cm; do not label it 8 cm.
+  Qualitative diagrams do not require invented numerical values.
 
 SVG BRIEF FORMAT — write a precise code specification, not a vague description.
   The AI receiving this will generate SVG code, so specify everything:
@@ -877,7 +838,7 @@ export function buildImportEnrichPrompt(rawQuestions, examType, subjectName, top
     // We deliberately do NOT include the source answer here.
     // Claude must determine the correct answer independently.
     // The source answer is stored separately and compared after.
-    return `SOURCE_ID: ${q.id ?? `index_${i + 1}`}\nInstruction: ${q.instruction_text ?? '(none supplied)'}\nPassage / extract (preserve every line):\n${q.section ?? '(none supplied)'}\nPassage image: ${q.passage_image_url ?? '(none supplied)'}\nContent review issues: ${contentIssues(q).join('; ') || 'none detected'}\nQ${i + 1}. ${(q.question ?? '').trim()}\n${opts}`
+    return `SOURCE_ID: ${q.id ?? `index_${i + 1}`}\nInstruction: ${q.instruction_text ?? '(none supplied)'}\nPassage / extract (preserve every line):\n${q.section ?? '(none supplied)'}\nSource diagram description: ${questionDiagram(q).description || "(none supplied)"}\nSource diagram image: ${questionDiagram(q).image_url || "(none supplied)"}\nSource diagram status: ${questionDiagram(q).status}\nReviewed source diagram SVG (given geometry/labels only, not a solution): ${questionDiagram(q).ready ? questionDiagram(q).svg || "(use the inspected original image)" : "(not reviewed)"}\nPassage image: ${q.passage_image_url ?? '(none supplied)'}\nContent review issues: ${contentIssues(q).join('; ') || 'none detected'}\nQ${i + 1}. ${(q.question ?? '').trim()}\n${opts}`
   }).join('\n\n')
 
   // Build a map of source answers for reference (used in merge, not in prompt)
@@ -916,6 +877,12 @@ CONTENT INTEGRITY — applies to every subject:
   Only split at a clear boundary. The two strings joined must reproduce the entire
   original question exactly apart from whitespace. Do not omit attribution or instructions.
   Otherwise omit source_content and report missing context when the extract is absent.
+  Literature questions often intentionally supply only a short quotation or a few lines.
+  A short extract is valid context; do not require the whole poem, chapter or literary work.
+  Reading material may remain embedded in the question stem. Separating it into fields
+  is optional formatting, not a condition for a complete question. If the split is unclear,
+  omit source_content and solve using the full original stem. Report missing context only
+  when specific material needed to answer is actually absent, not because the extract is short.
   Do not rewrite the question, passage or options. Do not infer a missing target from an answer.
 
 MATCHING RULE — each output object MUST include "question_snippet":
@@ -1029,23 +996,7 @@ ${mod.hintGuide}
 
 ⚠️ ILLUSTRATION DECISION GATE — run this check FIRST, before writing anything:
 
-  QUESTION 1: "Would a student who has read the full explanation still be confused
-               without seeing a diagram?"
-    NO  → illustration_prompt: ""   Stop here. Do not write a prompt.
-    YES → continue to Question 2.
-
-  QUESTION 2: "Am I 100% certain of every element I would draw —
-               every label, measurement, direction, shape, and scientific name?"
-    NO  → illustration_prompt: ""   Stop here. A wrong diagram is worse than none.
-    YES → continue to Question 3.
-
-  QUESTION 3: "Does this question type appear in the WHEN TO GENERATE list below?"
-    NO  → illustration_prompt: ""   Stop here.
-    YES → write the illustration prompt using the AHA/CONTAINMENT/FLOW format below.
-
-  DEFAULT IS EMPTY. Only generate when all three gates pass.
-  Lazy illustrations — generic shapes with no labelled values from your steps — are BANNED.
-  Every measurement in the diagram MUST come from your computed steps, not the raw question.
+${explanationIllustrationRules}
 
 ${mod.illustration}
 
@@ -1117,6 +1068,7 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
     "answer_note": "The correct answer is **D — Metallic bonding**. In this type of bonding, metal cations sit in a shared sea of delocalised electrons that holds the structure together.",
     "hint": "Which type of bonding involves a lattice of positive ions surrounded by freely moving electrons?",
     "study_tip": "The sea of electrons explains three key metal properties: electrical conductivity, thermal conductivity, and malleability.",
+    "illustration_reason": "Text is sufficient; a visual would not clarify an additional relationship.",
     "illustration_title": "",
     "illustration_prompt": "",
     "wrong_options": {
@@ -1158,6 +1110,7 @@ USE THE CORRECT SHAPE FOR EACH QUESTION:
     "answer_note": "The correct answer is **C — 352 cm²**. Using CSA = 2πrh with r = 4 cm and h = 14 cm gives 352 cm².",
     "hint": "Start by identifying the formula for curved surface area of a cylinder.",
     "study_tip": "Always find the radius (diameter ÷ 2) before substituting into the formula.",
+    "illustration_reason": "A labelled cylinder clarifies the radius-height relationship used in the solution.",
     "illustration_title": "Cylinder — Radius 4 cm, Height 14 cm",
     "illustration_prompt": "SVG code brief: viewBox 0 0 400 300. White background rect. Cylinder centred: top ellipse cx=200 cy=95 rx=85 ry=26; bottom ellipse cx=200 cy=225 rx=85 ry=26. Vertical lines (115,95)→(115,225) and (285,95)→(285,225) stroke #1f2937 w2. Dashed radius (200,95)→(285,95) stroke #4f46e5 dasharray 6 3. Label 'r = 4 cm' at (290,90) fill #4f46e5 font-size 14. Arrow (300,95)→(300,225) stroke #1f2937. Label 'h = 14 cm' at (312,162) font-size 14. Title 'Cylinder' at (200,285) text-anchor middle fill #6b7280 font-size 13. Generate SVG code.",
     "wrong_options": {
@@ -1173,9 +1126,9 @@ FINAL CHECK before submitting:
   • verified_answer = the letter YOU determined is correct — after running the silent self-check
   • answer_note opens with "The correct answer is **X — [option text]**." — BOTH letter and text bold
   • steps: [] for every recall/definition question; steps must arrive at the same letter as verified_answer
-  • illustration_prompt: "" unless ALL THREE illustration gates passed
+  • illustration_reason explains why a supported visual helps or why text is sufficient
   • illustration_title filled if and only if illustration_prompt is filled — never one without the other
-  • Every number in the illustration brief comes from your computed steps, never raw question values`
+  • Every quantity in a brief is supplied by the source or verified in the solution; qualitative visuals need no invented numbers`
 }
 
 //
@@ -1238,6 +1191,10 @@ export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, s
       && split.passage_text.trim() && split.question_text.trim()
       && compact(split.passage_text + ' ' + split.question_text) === compact(qText)
     const invalidSplit = !!split && !validSplit
+    const comparable = text => contentText(text).replace(/<\/?(?:u|strong|em|sup|sub)>/g, '')
+      .replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\s+/g, ' ').trim()
+    const splitMatchesSource = split && typeof split.passage_text === 'string' && typeof split.question_text === 'string'
+      && comparable(split.passage_text + ' ' + split.question_text) === comparable([q.section, qText].filter(Boolean).join(' '))
 
     // Use Claude's answer as correct_answer.
     // If Claude returned nothing (no match at all), fall back to Sdash's answer
@@ -1258,12 +1215,14 @@ export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, s
       instruction_text: q.instruction_text,
       _sourceQuestion: { source_id: sourceId, question_text: qText, passage_text: q.section, instruction_text: q.instruction_text, options: q.option, passage_image_url: q.passage_image_url },
       _layoutUnverified: !!(validSplit && split.passage_text.includes('\n') && !qText.includes('\n')),
-      _contextStatus: invalidSplit ? 'missing' : e.context_status ?? null,
-      _contextReason: invalidSplit ? 'The returned passage/question split does not reproduce the full source exactly. Restore the original wording and attribution before regenerating enrichment.' : e.context_reason ?? null,
+      _contextStatus: e.context_status ?? null,
+      _contextReason: e.context_reason ?? null,
+      _sourceSplitIssue: invalidSplit && !splitMatchesSource ? 'The enrichment proposed a passage/question split with different source wording. The proposed split was ignored and the original source retained. Compare the explanation with the original extract; this does not mean the full literary work is missing.' : null,
       sdash_id: q.id != null ? `mq_${q.id}` : null,
       question_text: validSplit ? split.question_text.trim() : qText,
-      has_image:     !!(q.image),
-      image_description: '',
+      has_image: questionDiagram(q).required,
+      image_description: questionDiagram(q).description,
+      image_url: questionDiagram(q).image_url,
       options: {
         A: q.option?.a ?? q.option?.A ?? '',
         B: q.option?.b ?? q.option?.B ?? '',
@@ -1277,6 +1236,7 @@ export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, s
       hint:            e.explanation?.hint ?? '',
       explanation: e.explanation
         ? {
+            question_diagram: questionDiagramMetadata(q),
             concept:              e.explanation.concept              ?? '',
             formula_box:          e.explanation.formula_box          ?? '',
             variables_key:        e.explanation.variables_key        ?? [],
@@ -1286,6 +1246,7 @@ export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, s
             hint:                 e.explanation.hint                 ?? '',
             study_tip:            e.explanation.study_tip            ?? '',
             wrong_option_note:    e.explanation.wrong_option_note    ?? '',
+            illustration_reason: e.explanation.illustration_reason ?? '',
             illustration_title:   e.explanation.illustration_title   ?? '',
             illustration_prompt:  e.explanation.illustration_prompt  ?? '',
             // Legacy compat
@@ -1297,6 +1258,7 @@ export function mergeImportEnrichment(fetchedQuestions, enrichments, examType, s
             concept: '', formula_box: '', variables_key: [],
             intro: '', steps: [], answer_note: q.solution?.trim() ?? '',
             hint: '', study_tip: '', wrong_option_note: '',
+            question_diagram: questionDiagramMetadata(q),
             illustration_title: '', illustration_prompt: '',
             correct: q.solution?.trim() ?? '', wrong_options: {},
           },

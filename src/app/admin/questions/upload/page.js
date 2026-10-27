@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseQuestions, buildQuestionPrompt, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
 import { uploadQuestionImage, buildImageImprovementPrompt } from '@/lib/questionImageUpload'
 import QuestionStudentPreview from '@/components/admin/QuestionStudentPreview'
+import SourceDiagramReview from '@/components/admin/SourceDiagramReview'
+import { questionDiagram } from '@/lib/questionDiagrams'
 import Link from 'next/link'
 
 
@@ -521,7 +523,7 @@ export default function QuestionUploadPage() {
   }
 
   const untaggedCount = taggedQuestions.filter(q => !q.subtopic_id).length
-  const missingImages = taggedQuestions.filter(q => q._hasImage && !q.image_url).length
+  const missingImages = taggedQuestions.filter(q => questionDiagram(q).required && !questionDiagram(q).ready).length
   const canProceed    = untaggedCount === 0 && missingImages === 0
 
   const prompt = selectedSubject && examType
@@ -766,7 +768,7 @@ export default function QuestionUploadPage() {
           {missingImages > 0 && (
             <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
               <p className="text-sm font-bold text-violet-800">
-                {missingImages} question{missingImages > 1 ? 's' : ''} need images
+                {missingImages} question{missingImages > 1 ? 's' : ''} need attached and checked source diagrams
               </p>
               <p className="text-xs text-violet-600 mt-0.5">Expand each flagged question to upload the diagram.</p>
             </div>
@@ -788,8 +790,8 @@ export default function QuestionUploadPage() {
           ) : (
             <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
               {taggedQuestions.map(q => (
+                <div key={q._index} className="space-y-3">
                 <QuestionPreviewCard
-                  key={q._index}
                   question={q}
                   topics={topics}
                   examType={examType}
@@ -798,6 +800,10 @@ export default function QuestionUploadPage() {
                   onRemove={handleRemoveQuestion}
                   onImageUploaded={handleImageUploaded}
                 />
+                {questionDiagram(q).required && <SourceDiagramReview key={`${q._index}-${q.image_url ?? ''}-${JSON.stringify(q.explanation?.question_diagram ?? {})}`} question={q} subject={selectedSubject?.name} onSave={async updated => {
+                  setTaggedQuestions(previous => previous.map(item => item._index === q._index ? updated : item))
+                }} />}
+                </div>
               ))}
             </div>
           )}

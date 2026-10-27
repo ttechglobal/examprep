@@ -1,4 +1,6 @@
 'use client'
+import SourceDiagramReview from '@/components/admin/SourceDiagramReview'
+import { questionDiagram } from '@/lib/questionDiagrams'
 import QuestionReviewPreview from '@/components/admin/QuestionReviewPreview'
 // src/app/admin/questions/myquest-import/page.js
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +31,7 @@ import ImportReviewDecision from '@/components/admin/ImportReviewDecision'
 import { reviewIssues } from '@/lib/questionReview'
 import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
 import { normalizeQuestionContent, contentIssues } from '@/lib/questionContent'
-import { buildImportEnrichPrompt, parseEnrichment, mergeImportEnrichment, matchTopicSubtopic, questionHasImage } from '@/lib/questionParser'
+import { buildImportEnrichPrompt, parseEnrichment, mergeImportEnrichment, matchTopicSubtopic } from '@/lib/questionParser'
 import { MathText } from '@/lib/mathRenderer'
 import { heldQuestionsStore } from '@/lib/heldQuestionsStore'
 import { ALL_EXAMS } from '@/lib/constants'
@@ -114,21 +116,9 @@ function normalizeMyQuestQuestion(q, year) {
 // MyQuest sets q.image when the question has an attached image file.
 // But some questions also have text like "refer to the diagram" with no image
 // field — we catch those too so they are auto-hidden at import time.
-const MQ_IMAGE_TEXT_PATTERNS = [
-  /\bdiagram\b/i,
-  /\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b/i,
-  /\billustration\b/i,
-  /\bthe (image|picture|graph|chart|table) (above|below|shown|given)\b/i,
-  /\brefer(ring)? to (the )?(image|diagram|figure|table)\b/i,
-  /\busing the (information|data) (in|from) the (table|graph|chart)\b/i,
-  /\bfrom the graph\b/i,
-  /\bas shown (in|above|below)\b/i,
-]
-
 function mqQuestionReferencesImage(q) {
-  if (q.image) return true
-  const text = (q.question ?? q.question_text ?? '').toLowerCase()
-  return MQ_IMAGE_TEXT_PATTERNS.some(pat => pat.test(text))
+  const diagram = questionDiagram(q)
+  return diagram.required && !diagram.ready
 }
 
 function baseSubjectName(name) {
@@ -224,7 +214,7 @@ function ImportResult({ result }) {
       </Alert>
     )
   }
-  const { fetched, new: isNew, duplicate, saved, flagged, errors } = result
+  const { fetched, new: isNew, duplicate, saved, flagged, held, errors } = result
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -249,6 +239,7 @@ function ImportResult({ result }) {
         </Alert>
       )}
       {flagged > 0 && <Alert type="warning">{flagged} questions saved as flagged drafts. They are not published. <Link href="/admin/questions/review" className="underline font-bold">Open review queue</Link></Alert>}
+      {held > 0 && <Alert type="warning">{held} diagram questions kept in the Held tab in this browser. They were not saved to the question bank. Add and check their diagrams, then enrich and save.</Alert>}
       {duplicate > 0 && (
         <Alert type="info">
           ℹ️ {duplicate} duplicate{duplicate !== 1 ? 's' : ''} detected and skipped — already in your database.
@@ -658,7 +649,7 @@ export default function MyQuestImportPage() {
     const autoHidden = new Set()
     withMatches.forEach((q, idx) => {
       const rawQ = fetchedQuestions[idx] ?? {}
-      if (questionHasImage(q) || mqQuestionReferencesImage(rawQ)) {
+      if (mqQuestionReferencesImage(q) || mqQuestionReferencesImage(rawQ)) {
         autoHidden.add(idx)
       }
     })
@@ -776,6 +767,7 @@ export default function MyQuestImportPage() {
     let totalSaved = 0
     let totalDupe  = 0
     let totalFlagged = 0
+    let totalDiagramHeld = 0
 
     // The subject list is per year: a year that doesn't have this subject
     // comes back as "no questions" and is logged as such.
@@ -793,10 +785,14 @@ export default function MyQuestImportPage() {
         totalSaved += data.saved ?? 0
         totalDupe  += data.duplicate ?? 0
         totalFlagged += data.flagged ?? 0
+        if (data.held_questions?.length) {
+          totalDiagramHeld += data.held_questions.length
+          setHeldGroups(await heldStore.putGroup({ key: `mq_${mqSubject}_${mqExam}_${yearItem.value}`, subject: selectedSubject?.name, exam: examType, year: yr, questions: data.held_questions, savedAt: new Date().toISOString() }))
+        }
         setImportLog(prev => prev.map(e => e.year === yr
           ? data.noData
             ? { year: yr, status: 'nodata' }
-            : { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, flagged: data.flagged ?? 0, duplicate: data.duplicate, errors: data.errors?.length ?? 0, truncated: data.truncated }
+            : { year: yr, status: 'done', fetched: data.fetched, saved: data.saved, flagged: data.flagged ?? 0, held: data.held ?? 0, duplicate: data.duplicate, errors: data.errors?.length ?? 0, truncated: data.truncated }
           : e
         ))
       } catch (err) {
@@ -808,7 +804,7 @@ export default function MyQuestImportPage() {
       if (i < yearsToImport.length - 1) await new Promise(r => setTimeout(r, 700))
     }
 
-    setImportResult({ fetched: yearsToImport.length, new: totalSaved, duplicate: totalDupe, saved: totalSaved, flagged: totalFlagged, errors: [], isBulk: true })
+    setImportResult({ fetched: yearsToImport.length, new: totalSaved, duplicate: totalDupe, saved: totalSaved, flagged: totalFlagged, held: totalDiagramHeld, errors: [], isBulk: true })
     setImporting(false)
   }
 
@@ -838,6 +834,10 @@ export default function MyQuestImportPage() {
   }
 
   function buildHeldPrompt(group) {
+    if (group.questions.some(q => mqQuestionReferencesImage(q))) {
+      alert('Finish and check each source diagram in this group before enrichment. Questions remain held until then.')
+      return
+    }
     const prompt = buildImportEnrichPrompt(group.questions, group.exam, group.subject, topics)
     setHeldSendPrompt(prompt)
     setHeldSendGroupKey(group.key)
@@ -859,7 +859,7 @@ export default function MyQuestImportPage() {
   }
 
   async function handleHeldSave(group) {
-    const issues = heldParsedQs.flatMap(contentIssues)
+    const issues = heldParsedQs.flatMap(reviewIssues)
     if (issues.length) { setHeldParseError(issues.join('\n')); return }
     setHeldSaving(true)
     try {
@@ -1339,7 +1339,7 @@ export default function MyQuestImportPage() {
             const visibleQs       = parsedQuestions.filter((_, i) => !hiddenIndexes.has(i))
             const readyQs = visibleQs.filter(q => reviewIssues(q).length === 0)
             const flaggedQs = visibleQs.filter(q => reviewIssues(q).length > 0)
-            const autoHiddenCount = parsedQuestions.filter((q, i) => hiddenIndexes.has(i) && (questionHasImage(q) || mqQuestionReferencesImage(fetchedQuestions[i] ?? {}))).length
+            const autoHiddenCount = parsedQuestions.filter((q, i) => hiddenIndexes.has(i) && (mqQuestionReferencesImage(q) || mqQuestionReferencesImage(fetchedQuestions[i] ?? {}))).length
             const mismatchCount   = visibleQs.filter(q => q._mismatch && reviewIssues(q).length > 0).length
             const allMismatch     = mismatchCount > 0 && mismatchCount === parsedQuestions.length
 
@@ -1442,7 +1442,7 @@ export default function MyQuestImportPage() {
                   const svgCode   = svgDrafts[q._importIdx ?? index] ?? ''
                   const needsSvg  = q.explanation?.illustration_prompt
                   const rawQ      = fetchedQuestions[index] ?? {}
-                  const isAutoHid = isHidden && (questionHasImage(q) || mqQuestionReferencesImage(rawQ))
+                  const isAutoHid = isHidden && (mqQuestionReferencesImage(q) || mqQuestionReferencesImage(rawQ))
 
                   return (
                     <div id={`import-question-${index}`} key={index} className={`scroll-mt-24 bg-white rounded-2xl shadow-sm overflow-hidden transition-opacity border-2 ${
@@ -1753,7 +1753,7 @@ export default function MyQuestImportPage() {
         <div className="space-y-4">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
             <h2 className="text-sm font-black text-gray-900 mb-1">Held — questions with diagram references</h2>
-            <p className="text-xs text-gray-500">These questions were fetched but held back because they reference external diagram images. Add the diagram manually, then send them through enrichment.</p>
+            <p className="text-xs text-gray-500">These questions need a source diagram in any subject. Descriptions and source IDs are retained in this browser. Copy a recreation prompt, paste the SVG or attach an image, check it against the source, then enrich and import.</p>
           </div>
 
           {heldGroups.length === 0 && (
@@ -1810,7 +1810,8 @@ export default function MyQuestImportPage() {
 
                 {heldSendStep === 'review' && heldParsedQs.length > 0 && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-600">{heldParsedQs.length} questions ready to save.</p>
+                    <p className="text-sm text-gray-600">{heldParsedQs.length} questions to review. Unresolved diagrams, answer checks and content issues block publication.</p>
+                    {heldParsedQs.map((question, index) => <div key={index} className="rounded-xl border p-4"><QuestionReviewPreview question={question} />{reviewIssues(question).length > 0 && <ul className="mt-3 list-disc pl-5 text-sm text-amber-900">{reviewIssues(question).map(issue => <li key={issue}>{issue}</li>)}</ul>}</div>)}
                     {heldParseError && <p className="text-xs text-red-600">{heldParseError}</p>}
                     <button
                       onClick={() => handleHeldSave(group)}
@@ -1860,6 +1861,9 @@ export default function MyQuestImportPage() {
                           <button onClick={() => { if (confirm('Remove this question?')) deleteHeldQuestion(group.key, qi) }} className="text-xs text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-2 py-1">✕</button>
                         </div>
                       </div>
+                      <SourceDiagramReview key={`${group.key}-${qi}-${JSON.stringify(q.explanation?.question_diagram ?? {})}`} question={q} subject={group.subject} onSave={async updated => {
+                        setHeldGroups(await heldStore.updateQuestion(group.key, qi, updated))
+                      }} />
                       {isEditing && (
                         <div className="space-y-2 mt-2">
                           <p className="text-[11px] text-gray-500">Edit the JSON. Add an <code className="bg-gray-100 px-1 rounded">image_description</code> field to describe the diagram.</p>

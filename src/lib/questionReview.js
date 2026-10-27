@@ -26,7 +26,7 @@ export function allReviewIssues(question) {
 
 // Missing required content must be repaired rather than acknowledged away.
 export function canAcceptReviewIssue(issue, question) {
-  return !/Question text is missing|At least two non-empty|answer key does not identify|referenced passage or extract is missing|underline target is missing|unsupported structure|Unbalanced inline|valid http|missing context|Multiple enrichment|Multiple source|No unique enrichment/.test(issue)
+  return !/Source diagram needs review|Question text is missing|At least two non-empty|answer key does not identify|referenced passage or extract is missing|underline target is missing|unsupported structure|Unbalanced inline|valid http|missing context|Multiple enrichment|Multiple source|No unique enrichment/.test(issue)
     && !(question._mismatch && !question._matching?.responseFound)
 }
 

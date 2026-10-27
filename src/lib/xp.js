@@ -1,6 +1,8 @@
 // src/lib/xp.js
 // ─────────────────────────────────────────────────────────────────────────────
-// The one XP formula. Session pages use it to show XP instantly; the server
+// The XP formula for saved practice, mock and computer sessions. Live 1v1
+// awards are calculated in SQL and displayed through lib/pvp/results.js.
+// Session pages use this to show XP instantly; the server
 // uses it to award XP after re-checking each answer. Same inputs → same XP, so
 // the number a student sees never jumps after sync.
 //

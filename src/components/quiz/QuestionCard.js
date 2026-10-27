@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MathText, WorkingsBlock, injectMathStyles } from '@/lib/mathRenderer'
 import { safeSvg } from '@/lib/safeSvg'
+import { sourceDiagramSvg } from '@/lib/questionDiagrams'
 
 function safeParseJson(val, fallback) {
   if (val === null || val === undefined) return fallback
@@ -346,6 +347,7 @@ export default function QuestionCard({
   const options     = safeParseJson(question?.options,     {})
   const explanation = safeParseJson(question?.explanation, {})
   const normalisedQuestion = { ...question, options, explanation }
+  const sourceSvg = explanation.question_diagram?.reviewed ? sourceDiagramSvg(normalisedQuestion) : null
 
   const handleSelect = useCallback((key) => {
     if (revealed) return
@@ -402,7 +404,7 @@ export default function QuestionCard({
       )}
 
       {/* Question image */}
-      {question.has_image && question.image_url && (
+      {question.has_image && question.image_url && !sourceSvg && (
         <div className="rounded-[20px] overflow-hidden bg-base border-2 border-default">
           <img src={question.image_url} alt={question.image_description ?? 'Question diagram'}
             className="w-full object-contain max-h-64 bg-card p-3" />
@@ -410,6 +412,7 @@ export default function QuestionCard({
       )}
 
       {/* Question SVG */}
+      {sourceSvg && <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sourceSvg)}`} alt="Source question diagram" className="max-h-96 max-w-full rounded-xl bg-white p-3" />}
       {question.svg_diagram && <SvgBlock svg={question.svg_diagram} label="Diagram" />}
 
       {/* Question text */}

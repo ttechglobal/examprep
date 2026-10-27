@@ -1,12 +1,10 @@
 // src/lib/pvp/results.js
 // Reading a finished 1v1 from one player's side: the outcome, their answers in
 // the shape lib/xp.js expects, and the XP they earned.
-// TODO(1v1): the SQL that awards 1v1 XP (pvp_finish in 20260928_pvp_engine.sql and
-// battle_results_from_pvp in 20261003_battle_leaderboard.sql) still uses the old
-// rates, correct × 10 with +20 for a win and +10 for a draw. Battle XP is now
-// 5 per correct, +10 win, +5 draw (lib/xp.js). Move those functions to the new
-// rates when 1v1 is reviewed, or the XP shown here won't match the XP awarded.
-import { computeSessionXP } from '@/lib/xp'
+// Live 1v1 awards are owned by pvp_finish (20260928_pvp_engine.sql), mirrored
+// by battle_results_from_pvp (20261003_battle_leaderboard.sql). Their rates
+// differ from computer/practice sessions. Keep this display aligned with both
+// SQL functions; changing award policy requires migrating those functions too.
 
 export function opponentRole(me) {
   return me === 'host' ? 'guest' : 'host'
@@ -24,5 +22,8 @@ export function myResults(state) {
 }
 
 export function matchXp(state) {
-  return computeSessionXP('battle', myResults(state), { outcome: outcomeFor(state) })
+  if (state.match.status !== 'finished') return 0
+  const correct = myResults(state).filter(answer => answer.is_correct).length
+  const outcome = outcomeFor(state)
+  return correct * 10 + (outcome === 'win' ? 20 : outcome === 'draw' ? 10 : 0)
 }

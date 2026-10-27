@@ -11,11 +11,12 @@ export const LETTERS = ['A', 'B', 'C', 'D', 'E']
 export function normaliseOptions(raw) {
   if (!raw) return []
   if (Array.isArray(raw)) return raw
-  return LETTERS.map(l => raw[l]).filter(v => v != null)
+  return LETTERS.map(l => raw[l] ?? raw[l.toLowerCase()]).filter(v => v != null)
 }
 
 export function checkCorrect(options, idx, correctAnswer) {
-  return options[idx] === correctAnswer || LETTERS[idx] === correctAnswer || idx === correctAnswer
+  const key = typeof correctAnswer === 'string' && /^[a-e]$/i.test(correctAnswer.trim()) ? correctAnswer.trim().toUpperCase() : correctAnswer
+  return options[idx] === correctAnswer || LETTERS[idx] === key || idx === correctAnswer
 }
 
 /** Index of the correct option (-1 if none matches), with the same rule as checkCorrect. */

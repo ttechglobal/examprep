@@ -67,6 +67,7 @@ function Match({ matchId }) {
   const [popKey,    setPopKey]    = useState(0)
   const [menuOpen,  setMenuOpen]  = useState(false)
   const [view,      setView]      = useState('results')
+  const [reviewFilter, setReviewFilter] = useState('all')
   const [busy,      setBusy]      = useState(false)
   const [notice,    setNotice]    = useState(null)
   const [float,     setFloat]     = useState(null)
@@ -179,12 +180,12 @@ function Match({ matchId }) {
   if (phase === 'finished') {
     const returnTo = `${HUB}/match?m=${matchId}`
     return view === 'review'
-      ? <BattleReview items={reviewItems(rounds)} subject={m.subject_name} opponent={opponentBadge(oppName)} onDone={() => setView('results')}/>
+      ? <BattleReview initialFilter={reviewFilter} items={reviewItems(rounds)} subject={m.subject_name} opponent={opponentBadge(oppName)} onDone={() => setView('results')}/>
       : (
         <>
           <MatchResults
             state={state} isGuest={isGuest} returnTo={returnTo} busy={busy}
-            onReview={() => setView('review')}
+            onReview={filter => {setReviewFilter(filter);setView('review')}}
             onRematch={doRematch}
             onCancelRematch={cancelRematch}
             onNewBattle={() => router.push(`${HUB}/create`)}
@@ -252,6 +253,8 @@ function Match({ matchId }) {
               subject={m.subject_name}
               text={shown?.text}
               passage={shown?.passage_text}
+              passageImage={shown?.passage_image_url}
+              figure={shown}
               timer={live ? <TimerRing secs={m.timer_secs} endsAt={endsAt} onTimeUp={onTimeUp}/> : null}
             />
 
@@ -294,10 +297,10 @@ function reviewItems(rounds) {
   return rounds.map(r => {
     const options = normaliseOptions(r.options).map(optionText)
     return {
-      text: r.text, options, correctIdx: r.correct_index,
+      text: r.text, passage: r.passage_text, options, correctIdx: r.correct_index,
       mineIdx: r.mine?.choice ?? null, theirsIdx: r.theirs?.choice ?? null,
       points: r.mine?.points ?? 0, explanation: r.explanation,
-      question: { options, correct_answer: LETTERS[r.correct_index] },
+      question: { ...r, options, correct_answer: LETTERS[r.correct_index] },
     }
   })
 }

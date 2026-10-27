@@ -40,3 +40,18 @@ export function questionReadingLayout(question) {
   const split = splitEmbeddedPassage(stem)
   return { instruction_text: instruction, passage_text: split?.passage_text ?? null, question_text: split?.question_text ?? stem, derived: !!split }
 }
+
+// Style only an explicitly marked final source credit, never infer an author
+// from an ordinary last line of verse. Keep the source wording intact.
+export function splitPassageCredit(value) {
+  if (typeof value !== 'string') return { text: value, credit: null }
+  const last = value.match(/\r?\n([^\r\n]+)\s*$/)
+  if (!last) return { text: value, credit: null }
+  const line = last[1].trim()
+  const plain = line.replace(/<\/?(?:u|strong|em|sup|sub)>|\*/gi, '').trim()
+  const named = /^(?:[\p{Lu}][\p{L}’'.-]*)(?:\s+(?:(?:van|von|de|da|del|du)\s+)?[\p{Lu}][\p{L}’'.-]*)+(?:\s*[,:(“"].*)?$/u
+  const explicit = /^(?:Author|Poet|Source|Adapted from|Extract from)\s*:\s*\S/i.test(plain)
+  const byline = plain.match(/^(?:[—–]\s*|By\s+)(.+)$/u)?.[1]
+  if (line.length > 300 || !(explicit || byline && named.test(byline))) return { text: value, credit: null }
+  return { text: value.slice(0, last.index).trimEnd(), credit: line }
+}

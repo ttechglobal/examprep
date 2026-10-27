@@ -44,6 +44,7 @@ export default function QuestionReviewPreview({ question, showQuestion = true, a
     </section>
     <section aria-label="Explanation" className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
       <h3 className="text-xs font-bold uppercase tracking-wide text-indigo-700">Explanation</h3>
+      {detail.illustration_reason && <details className="rounded-lg border border-indigo-100 bg-white p-3 text-xs"><summary className="cursor-pointer font-semibold">Explanation illustration: {detail.illustration_prompt ? 'requested' : 'not requested'}</summary><p className="mt-2 leading-6">{detail.illustration_reason}</p></details>}
       {detail.concept && <MathText text={detail.concept} as="p" className="font-semibold text-sm" />}
       {detail.intro && <MathText text={detail.intro} as="p" className="text-sm leading-7" />}
       {Array.isArray(steps) && steps.length > 0 && <ol className="list-decimal space-y-2 pl-5 text-sm">{steps.map((step, index) => <li key={index}><MathText text={typeof step === 'string' ? step : [step.title, ...(step.lines ?? []), step.explanation, step.content, step.math].filter(Boolean).join('\n') || JSON.stringify(step)} as="div" /></li>)}</ol>}

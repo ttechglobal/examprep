@@ -82,6 +82,7 @@ export default function PracticeSessionPage() {
   const planRef = useRef(plan)
   useEffect(() => { planRef.current = plan }, [plan])
 
+  const [reviewFilter, setReviewFilter] = useState('all')
   const [phase,     setPhase]     = useState('loading')   // loading | session | saving | results | review | error
   const [errMsg,    setErrMsg]    = useState('')
   const [config,    setConfig]    = useState(null)
@@ -255,13 +256,13 @@ export default function PracticeSessionPage() {
     const finalAnswers = saved.results.map(r => ({ selectedIdx: r.selectedIdx, isCorrect: r.isCorrect }))
     const subject = config?.subjects?.[0] || 'Practice'
     return phase === 'review' ? (
-      <ReviewSession questions={saved.questions} answers={finalAnswers} title={subject} onDone={() => setPhase('results')} />
+      <ReviewSession questions={saved.questions} answers={finalAnswers} title={subject} initialFilter={reviewFilter} onDone={() => setPhase('results')} />
     ) : (
       <SessionSummary
         questions={saved.questions} answers={finalAnswers} config={config}
         xpAwarded={saved.xp} streakDays={saved.streak} durationSecs={saved.durationSecs}
         onRetry={() => beginAttempt(config)} retryNote="Retry these questions"
-        onReview={() => setPhase('review')}
+        onReview={filter => { setReviewFilter(filter); setPhase('review') }}
         onHome={() => router.push('/student/practice')}
       />
     )
@@ -282,7 +283,7 @@ export default function PracticeSessionPage() {
     : !isStudy && !isSpeed ? <SessionClock key={attempt} /> : null
 
   const aside = isStudy ? (
-    answer && q?.explanation
+    answer && q
       ? <ExplanationBlock question={q} isCorrect={answer.isCorrect} selectedKey={selectedKey} />
       : (
         <div className={s.asideEmpty}>

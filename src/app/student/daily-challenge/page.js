@@ -1,4 +1,10 @@
 'use client'
+
+import StudentQuestionContent from '@/components/student/StudentQuestionContent'
+import ContentText from '@/components/ui/ContentText'
+import { ExplanationBlock } from '@/components/session/ExplanationBlock'
+import { checkCorrect, normaliseOptions } from '@/lib/answers'
+import { dailyReviewIndexes } from '@/lib/dailyReview'
 // src/app/student/daily-challenge/page.js — v3
 // One question at a time. Start screen with timer. No past-question badge.
 // XP: 50 (1st try correct) | 25 (2nd try correct) | 0 (both wrong).
@@ -7,7 +13,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStudentUser } from '@/app/student/layout'
 import { usePoints }      from '@/contexts/PointsContext'
 import { useTheme }       from '@/contexts/ThemeContext'
-import { MathText }       from '@/lib/mathRenderer'
 import Link from 'next/link'
 
 const NAVY   = '#062A78'
@@ -51,59 +56,6 @@ function fmtMs(ms) {
   const s = Math.round(ms / 1000)
   if (s < 60) return `${s}s`
   return `${Math.floor(s/60)}m ${s%60}s`
-}
-
-function normaliseOptions(raw) {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  return LETTERS.map(l => raw[l]).filter(v => v != null)
-}
-
-// ── Explanation box ───────────────────────────────────────────────────────────
-function ExplanationBox({ explanation }) {
-  if (!explanation) return null
-  if (typeof explanation === 'string') {
-    return (
-      <div style={{ padding:'12px 14px', borderRadius:12, background:`${CYAN}08`, border:`1px solid ${CYAN}20`, marginTop:12 }}>
-        <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:CYAN, marginBottom:6 }}>Explanation</div>
-        <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}><MathText text={explanation}/></p>
-      </div>
-    )
-  }
-  const { concept='', intro='', answer_note='', correct='', study_tip='', steps=[] } = explanation
-  const displayIntro = intro || answer_note || correct || ''
-  const displaySteps = Array.isArray(steps) ? steps : []
-  return (
-    <div style={{ borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-subtle)', overflow:'hidden', marginTop:12 }}>
-      <div style={{ padding:'12px 16px', borderBottom:displaySteps.length?'1px solid var(--border)':'none' }}>
-        <div style={{ fontSize:10, fontWeight:900, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--text-tert)', marginBottom:concept?6:0 }}>Explanation</div>
-        {concept && <div style={{ fontSize:13, fontWeight:800, color:BLUE, marginBottom:displayIntro?5:0 }}><MathText text={concept}/></div>}
-        {displayIntro && <p style={{ fontSize:12, color:'var(--text-sec)', lineHeight:1.65, margin:0 }}><MathText text={displayIntro}/></p>}
-      </div>
-      {displaySteps.map((step, i) => {
-        const lines = Array.isArray(step?.lines) ? step.lines : []
-        return (
-          <div key={i} style={{ padding:'10px 16px', borderBottom:i<displaySteps.length-1?'1px solid var(--border)':'none' }}>
-            <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
-              <span style={{ fontSize:10, fontWeight:900, color:BLUE, background:`${BLUE}14`, border:`1px solid ${BLUE}25`, borderRadius:999, padding:'2px 8px', flexShrink:0, marginTop:2 }}>Step {i+1}</span>
-              <div style={{ flex:1 }}>
-                {step?.title && <div style={{ fontSize:12, fontWeight:800, color:'var(--text-prim)', marginBottom:lines.length?6:0 }}><MathText text={step.title}/></div>}
-                {lines.map((line, li) => (
-                  <div key={li} style={{ fontSize:13, color:'var(--text-sec)', lineHeight:2, padding:'2px 0' }}><MathText text={String(line ?? '')}/></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )
-      })}
-      {study_tip && (
-        <div style={{ padding:'10px 16px', background:`${GOLD}08`, borderTop:'1px solid var(--border)' }}>
-          <span style={{ fontSize:11, fontWeight:700, color:GOLD }}>Tip: </span>
-          <span style={{ fontSize:11, color:'var(--text-sec)' }}><MathText text={study_tip}/></span>
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Attempt pips ──────────────────────────────────────────────────────────────
@@ -249,7 +201,7 @@ function QuestionCard({ question, state, onAttempt, submitting, elapsedSecs }) {
 
   function optionState(idx) {
     if (!isCompleted) return 'neutral'
-    const ok = options[idx] === question.correct_answer || LETTERS[idx] === question.correct_answer
+    const ok = checkCorrect(options, idx, question.correct_answer)
     if (ok) return 'correct'
     if (prevPicks.includes(idx)) return 'wrong'
     return 'neutral'
@@ -296,9 +248,7 @@ function QuestionCard({ question, state, onAttempt, submitting, elapsedSecs }) {
 
       {/* Body */}
       <div style={{ padding:'16px 18px' }}>
-        <p style={{ fontSize:14, fontWeight:600, color:'var(--text-prim)', lineHeight:1.7, marginBottom:16 }}>
-          <MathText text={question.text ?? ''}/>
-        </p>
+        <StudentQuestionContent question={question} />
 
         <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
           {options.map((opt, idx) => {
@@ -332,7 +282,7 @@ function QuestionCard({ question, state, onAttempt, submitting, elapsedSecs }) {
                   {isCompleted&&oState==='correct'?'✓' : isCompleted&&oState==='wrong'&&wasPicked?'✗' : LETTERS[idx]}
                 </span>
                 <span style={{ fontSize:13, fontWeight:isPicked||oState==='correct'?700:500, lineHeight:1.5, paddingTop:2 }}>
-                  <MathText text={String(opt??'')}/>
+                  <ContentText text={String(opt??'')} />
                 </span>
               </button>
             )
@@ -377,7 +327,7 @@ function QuestionCard({ question, state, onAttempt, submitting, elapsedSecs }) {
                 </div>
               )}
             </div>
-            <ExplanationBox explanation={question.explanation}/>
+            <ExplanationBlock question={question} isCorrect={isCorrect} selectedKey={prevPicks.length ? LETTERS[prevPicks.at(-1)] : null} />
           </div>
         )}
       </div>
@@ -468,6 +418,9 @@ function StartScreen({ challenges, countdown, onStart, dark }) {
 
 // ── Already-done screen ───────────────────────────────────────────────────────
 function DoneScreen({ challenges, timings, countdown }) {
+  const [reviewFilter, setReviewFilter] = useState(null)
+  const reviewIndexes = dailyReviewIndexes(challenges, reviewFilter || 'all')
+  const needsReview = dailyReviewIndexes(challenges, 'missed').length
   const totalXP     = challenges.reduce((a, c) => a + (c.state?.xp_awarded ?? 0), 0)
   const correctCount = challenges.filter(c => c.state?.correct).length
   const avgMs       = timings.filter(Boolean).length
@@ -478,13 +431,13 @@ function DoneScreen({ challenges, timings, countdown }) {
     <div style={{ background:'var(--bg-card)', borderRadius:20, border:'1px solid var(--border)', overflow:'hidden' }}>
       <div style={{ background:`linear-gradient(135deg,${NAVY},#0c2360)`, padding:'28px 24px', textAlign:'center' }}>
         <div style={{ fontSize:48, marginBottom:12 }}>
-          {correctCount === 2 ? '🏆' : correctCount === 1 ? '👏' : '💪'}
+          {correctCount === challenges.length ? '🏆' : correctCount > 0 ? '👏' : '💪'}
         </div>
         <div style={{ fontSize:22, fontWeight:900, color:'#fff', letterSpacing:'-.03em', marginBottom:6 }}>
-          {correctCount === 2 ? 'Perfect score!' : correctCount === 1 ? 'One down!' : 'Challenge complete!'}
+          {correctCount === challenges.length ? 'All correct!' : 'Challenge complete!'}
         </div>
         <div style={{ fontSize:13, color:'rgba(255,255,255,.6)', marginBottom:20 }}>
-          You got {correctCount} of 2 correct today
+          You got {correctCount} of {challenges.length} correct today
         </div>
         {totalXP > 0 && (
           <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'10px 22px', borderRadius:999, background:`${GOLD}20`, border:`1px solid ${GOLD}50` }}>
@@ -512,6 +465,17 @@ function DoneScreen({ challenges, timings, countdown }) {
             </div>
           </div>
         ))}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:10 }} role="group" aria-label="Daily challenge review">
+          {['all', ...(needsReview ? ['missed'] : [])].map(filter => <button type="button" key={filter} aria-pressed={reviewFilter === filter} onClick={() => setReviewFilter(filter)} style={{ flex:'1 1 160px', padding:'12px 16px', borderRadius:12, border:'1px solid var(--border)', background:reviewFilter === filter ? BLUE : 'var(--bg-subtle)', color:reviewFilter === filter ? '#fff' : 'var(--text-prim)', fontFamily:'inherit', fontWeight:800, cursor:'pointer' }}>{filter === 'all' ? 'Review all answers' : `Needs review (${needsReview})`}</button>)}
+        </div>
+        {reviewFilter && <section aria-label="Completed daily answers" style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <p style={{ fontSize:12, color:'var(--text-sec)', margin:0 }}>Review your answers and explanations. Questions needing a second attempt are included in “Needs review”.</p>
+          {reviewIndexes.map(index => <div key={challenges[index].question.id}>
+            <h2 style={{ fontSize:14, color:'var(--text-prim)', margin:'8px 0' }}>Question {index+1} of {challenges.length}</h2>
+            <QuestionCard question={challenges[index].question} state={challenges[index].state} />
+          </div>)}
+          <button type="button" onClick={() => setReviewFilter(null)} style={{ padding:12, borderRadius:12, border:'1px solid var(--border)', background:'var(--bg-subtle)', color:'var(--text-prim)', fontFamily:'inherit', fontWeight:800, cursor:'pointer' }}>Close review</button>
+        </section>}
         {avgMs && (
           <div style={{ padding:'10px 14px', borderRadius:12, background:`${CYAN}08`, border:`1px solid ${CYAN}25`, display:'flex', alignItems:'center', gap:8 }}>
             <span>⏱</span>
@@ -550,6 +514,7 @@ export default function DailyChallengePage() {
   const [currentStep, setCurrentStep] = useState(0)   // 0 or 1
   const [boardRefreshKey, setBoardRefreshKey] = useState(0)
   const [submitting, setSubmitting]   = useState(false)
+  const [attemptError, setAttemptError] = useState('')
 
   // ── Timing state ─────────────────────────────────────────────────────────
   // timings[i] = ms spent on question i (recorded when it completes)
@@ -595,6 +560,7 @@ export default function DailyChallengePage() {
     if (!ch) return
 
     setSubmitting(true)
+    setAttemptError('')
     try {
       const res = await fetch('/api/student/daily-quiz/attempt', {
         method: 'POST',
@@ -607,7 +573,7 @@ export default function DailyChallengePage() {
         }),
       })
       const data = await res.json()
-      if (!data.ok) return
+      if (!res.ok || !data.ok) { setAttemptError(data.error || 'Your answer could not be saved. Please try again.'); return }
 
       const now = Date.now()
 
@@ -653,7 +619,8 @@ export default function DailyChallengePage() {
         if (resetSelected) resetSelected()
       }
 
-    } finally { setSubmitting(false) }
+    } catch { setAttemptError('Your answer could not be saved. Check your connection and try again.') }
+    finally { setSubmitting(false) }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -714,12 +681,14 @@ export default function DailyChallengePage() {
                   <span style={{ fontSize:11, fontWeight:800, color:'var(--text-tert)', flexShrink:0 }}>Q{currentStep+1} of {validChallenges.length}</span>
                 </div>
                 <QuestionCard
+                  key={ch.question.id}
                   question={ch.question}
                   state={ch.state}
                   onAttempt={handleAttempt}
                   submitting={submitting}
                   elapsedSecs={elapsedSecs}
                 />
+                {attemptError && <p role="alert" style={{ color:RED, fontSize:13 }}>{attemptError}</p>}
                 {/* Manual advance button — only shows when question is completed */}
                 {ch.state?.completed && (
                   <button

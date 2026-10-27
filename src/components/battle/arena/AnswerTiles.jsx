@@ -1,5 +1,5 @@
 'use client'
-import { MathText } from '@/lib/mathRenderer'
+import ContentText from '@/components/ui/ContentText'
 import { LETTERS, NAVY2, optionText } from './theme'
 import s from './AnswerTiles.module.css'
 import Image from 'next/image'
@@ -20,7 +20,7 @@ export default function AnswerTiles({ options, selectedIdx, reveal, opponent, on
       const who = reveal ? pickedBy(index,selectedIdx,reveal.theirsIdx) : null
       return <button key={index} type="button" disabled={!!reveal || disabled} aria-pressed={selected} onClick={() => onSelect?.(index)} className={`${s.answer} ${selected && !reveal ? s.selected : ''} ${correct ? s.correct : ''} ${wrong ? s.wrong : ''} ${reveal && !selected && !correct ? s.muted : ''}`}>
         <span className={s.letter} aria-hidden="true">{correct ? '✓' : wrong ? '✗' : LETTERS[index]}</span>
-        <span className={s.text}><MathText text={optionText(option)} as="span" className=""/></span>
+        <span className={s.text}><ContentText text={optionText(option)} /></span>
         {who && <span className={s.pick}><PickBadge who={who} opponent={opponent}/></span>}
       </button>
     })}

@@ -55,6 +55,12 @@ function run(storeName, mode, fn) {
 
 const byNewest = (a, b) => String(b.savedAt ?? '').localeCompare(String(a.savedAt ?? ''))
 
+export function mergeHeldQuestions(previous = [], incoming = []) {
+  const key = q => JSON.stringify([q.id ?? null, q.question_text ?? q.question, q.option ?? q.options, q.section ?? q.passage_text])
+  const known = new Set(previous.map(key))
+  return [...previous, ...incoming.filter(q => { const id = key(q); if (known.has(id)) return false; known.add(id); return true })]
+}
+
 export function heldQuestionsStore(namespace) {
   const cfg = STORES[namespace]
   if (!cfg) throw new Error(`Unknown held-questions store: ${namespace}`)
@@ -81,7 +87,8 @@ export function heldQuestionsStore(namespace) {
 
   async function putGroup(group) {
     await migrateLegacy()
-    await run(cfg.name, 'readwrite', os => os.put(group))
+    const existing = await run(cfg.name, 'readonly', os => os.get(group.key))
+    await run(cfg.name, 'readwrite', os => os.put({ ...group, questions: mergeHeldQuestions(existing?.questions, group.questions) }))
     return list()
   }
 

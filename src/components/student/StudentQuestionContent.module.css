@@ -1,0 +1,12 @@
+.content { display: grid; gap: 18px; min-width: 0; margin-bottom: 18px; color: inherit; }
+.instruction { padding: 12px 14px; border: 0; border-radius: 14px; font-size: 14px; font-weight: 500; line-height: 1.65; color: var(--student-instruction-ink, var(--s-ink-2, var(--text-sec, inherit))); background: var(--student-content-surface, var(--s-subtle, var(--bg-subtle, #e8eeff))); }
+.reading { min-width: 0; border: 0; border-radius: 14px; padding: 14px; background: var(--student-content-surface, var(--s-subtle, var(--bg-subtle, #e8eeff))); }
+.label { margin: 0 0 10px; font: inherit; font-size: 12px; font-weight: 700; color: var(--student-instruction-ink, var(--s-ink-2, var(--text-sec, inherit))); }
+.readingBody { max-height: var(--student-reading-max-height, min(52vh, 580px)); overflow: auto; scrollbar-gutter: stable; padding-right: 8px; overscroll-behavior: contain; }
+.readingBody:focus-visible { outline: 2px solid var(--s-blue, #1264e5); outline-offset: 4px; }
+.passage { font-family: inherit; font-size: 1rem; font-weight: 400; line-height: 1.85; }
+.credit { margin: 12px 0 0; font-size: 13px; font-style: italic; font-weight: 400; line-height: 1.65; color: var(--student-instruction-ink, var(--s-ink-2, var(--text-sec, inherit))); }
+.stem { min-width: 0; font-size: var(--student-question-font, 1.05rem); line-height: var(--student-question-leading, 1.7); font-weight: var(--student-question-weight, 600); letter-spacing: var(--student-question-tracking, normal); }
+.content u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.content strong { font-weight: 750; }
+@media (max-width: 480px) { .readingBody { max-height: var(--student-reading-max-height, 45vh); } }

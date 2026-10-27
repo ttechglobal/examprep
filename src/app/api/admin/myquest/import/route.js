@@ -1,5 +1,7 @@
 import { reviewIssues } from '@/lib/questionReview'
 import { normalizeQuestionContent } from '@/lib/questionContent'
+import { insertQuestionsWithSourceId } from '@/lib/questionUpdates'
+import { questionDiagramMetadata, questionDiagram } from '@/lib/questionDiagrams'
 // src/app/api/admin/myquest/import/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // MyQuest API — Bulk Import (raw, no enrichment)
@@ -63,7 +65,8 @@ function mapQuestion(raw, { subjectId, examType, year }) {
     }
   }
 
-  const hasImage = !!(mq.image && String(mq.image).startsWith('http'))
+  const hasImage = questionDiagram(mq).required
+  if (hasImage) explanation.question_diagram = questionDiagramMetadata(mq)
 
   return {
     subject_id:     subjectId,
@@ -77,7 +80,8 @@ function mapQuestion(raw, { subjectId, examType, year }) {
     explanation:    Object.keys(explanation).length ? explanation : null,
     difficulty:     inferDifficulty(mq),
     has_image:      hasImage,
-    image_url:      hasImage ? mq.image : null,
+    image_url:      questionDiagram(mq).image_url,
+    image_description: questionDiagram(mq).description,
     passage_text:   mq.section,
     instruction_text: mq.instruction_text,
     passage_image_url: mq.passage_image_url,
@@ -103,7 +107,7 @@ async function deduplicateQuestions(db, questions, subjectId, examType) {
     // IDs in current MyQuest payloads restart at 1 for each paper/year.
     // Only active records from the same subject, exam and year can block reimport.
     const { data, error } = await db.from('questions')
-      .select('id,sdash_id,question_text,passage_text,instruction_text,options')
+      .select('id,question_text,passage_text,instruction_text,options')
       .eq('subject_id', subjectId).eq('exam_type', examType).eq('year', row.year)
       .eq('is_active', row.is_active).in('question_text', [row.question_text])
     if (error) throw new Error(`Duplicate check failed: ${error.message}`)
@@ -162,9 +166,15 @@ export async function POST(request) {
 
   // 2. Map to ExamPrep schema
   const mapped = []
+  const heldQuestions = []
   for (const source of fetchResult.questions) {
     const raw = normalizeQuestionContent(source)
     try {
+      const diagram = questionDiagram(raw)
+      if (diagram.required && !diagram.ready) {
+        heldQuestions.push(raw)
+        continue
+      }
       if (!raw.question || !raw.answer) {
         errors.push({ id: raw.id, reason: 'Missing question text or answer' })
         continue
@@ -198,6 +208,8 @@ export async function POST(request) {
       flagged: flaggedCount,
       duplicate: duplicates,
       saved: 0,
+      held: heldQuestions.length,
+      held_questions: heldQuestions,
       errors,
       truncated: fetchResult.truncated,
       questions: newQuestions.slice(0, 10),
@@ -211,7 +223,7 @@ export async function POST(request) {
   const CHUNK = 25
   for (let i = 0; i < newQuestions.length; i += CHUNK) {
     const chunk = newQuestions.slice(i, i + CHUNK)
-    const { error: insertError } = await db.from('questions').insert(chunk)
+    const { error: insertError } = await insertQuestionsWithSourceId(rows => db.from('questions').insert(rows), chunk)
     if (insertError) {
       errors.push({ reason: `Batch insert failed at offset ${i}: ${insertError.message}` })
     } else {
@@ -243,6 +255,8 @@ export async function POST(request) {
     duplicate: duplicates,
     saved,
     flagged,
+    held: heldQuestions.length,
+    held_questions: heldQuestions,
     errors,
     truncated: fetchResult.truncated,
   })

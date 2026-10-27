@@ -1,0 +1,190 @@
+{
+  "purpose": "Synthetic rendering/adapter fixtures, not a production pack format or approved question-bank upload. Source diagrams here are illustrative; no editorial signature is asserted.",
+  "cases": [
+    {
+      "name": "english_legacy_underline",
+      "question": {
+        "id": "fixture-english-1",
+        "instruction_text": "Choose the option nearest in meaning to the underlined expression.",
+        "question_text": "The speech was **brief and to the point**.",
+        "options": {
+          "a": "concise",
+          "b": "confusing",
+          "c": "lengthy",
+          "d": "hesitant"
+        },
+        "correct_answer": "a",
+        "explanation": {
+          "concept": "Meaning in context",
+          "correct": "**Concise** means brief and clearly expressed.",
+          "wrong_options": {
+            "b": "Confusing concerns clarity, not length.",
+            "c": "Lengthy is the opposite.",
+            "d": "Hesitant means uncertain."
+          }
+        }
+      },
+      "expect": {
+        "target": "brief and to the point",
+        "target_style": "underline",
+        "correct_letter": "A",
+        "explanation_emphasis": "bold",
+        "show_solution_before_completion": false
+      }
+    },
+    {
+      "name": "literature_short_extract_credit",
+      "question": {
+        "id": "fixture-literature-1",
+        "instruction_text": "Read the extract and answer the question.",
+        "passage_text": "The evening folded gently over the fields,\nAnd every path led home.\n— Ada Mensah",
+        "question_text": "What mood does the extract suggest?",
+        "options": [
+          "Alarm",
+          "Rest and belonging",
+          "Anger",
+          "Confusion"
+        ],
+        "correct_answer": "B",
+        "explanation": "Evening and paths leading home suggest a peaceful sense of belonging."
+      },
+      "expect": {
+        "reading_lines": 2,
+        "credit": "— Ada Mensah",
+        "credit_style": "Distinct source attribution using existing mobile typography; no web styling requirement.",
+        "requires_full_poem": false,
+        "correct_letter": "B"
+      }
+    },
+    {
+      "name": "source_svg_separate_from_solution",
+      "question": {
+        "id": "fixture-maths-1",
+        "subject_name": "Mathematics",
+        "instruction_text": "Use the right-angled triangle shown.",
+        "question_text": "Find the length of the hypotenuse, $x$.",
+        "options": [
+          "9 cm",
+          "10 cm",
+          "12 cm",
+          "14 cm"
+        ],
+        "correct_answer": "B",
+        "has_image": false,
+        "image_description": "A right-angled triangle with perpendicular sides 6 cm and 8 cm and hypotenuse x.",
+        "explanation": {
+          "question_diagram": {
+            "required": true,
+            "reviewed": true,
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 240\"><path d=\"M60 40V200H270Z\" fill=\"none\" stroke=\"black\" stroke-width=\"3\"/><path d=\"M60 180H80V200\" fill=\"none\" stroke=\"black\"/><text x=\"15\" y=\"130\">6 cm</text><text x=\"145\" y=\"225\">8 cm</text><text x=\"180\" y=\"105\">x</text></svg>"
+          },
+          "formula_box": "$x^2=a^2+b^2$",
+          "variables_key": [
+            {
+              "symbol": "$x$",
+              "meaning": "hypotenuse length"
+            }
+          ],
+          "steps": [
+            {
+              "title": "Apply Pythagoras",
+              "lines": [
+                "x^2=6^2+8^2=100",
+                "x=10\\,\\mathrm{cm}"
+              ]
+            }
+          ],
+          "svg_diagram": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 240\"><path d=\"M60 40V200H270Z\" fill=\"none\" stroke=\"black\" stroke-width=\"3\"/><text x=\"15\" y=\"130\">6 cm</text><text x=\"145\" y=\"225\">8 cm</text><text x=\"175\" y=\"95\">10 cm</text></svg>",
+          "study_tip": "The hypotenuse is opposite the right angle."
+        }
+      },
+      "expect": {
+        "source_visible_before_answer": true,
+        "render_despite_has_image_false": true,
+        "solution_visible_before_answer": false,
+        "correct_letter": "B",
+        "offline_math_and_svg_required": true
+      }
+    },
+    {
+      "name": "required_passage_image_download_failure",
+      "question": {
+        "id": "fixture-image-1",
+        "instruction_text": "Read the passage in the image.",
+        "question_text": "What is the main idea?",
+        "passage_image_url": "https://example.invalid/required-passage.png",
+        "options": [
+          "One",
+          "Two",
+          "Three",
+          "Four"
+        ],
+        "correct_answer": "A"
+      },
+      "expect": {
+        "new_pack_ready_when_required_download_fails": false,
+        "keep_previous_valid_installation": true,
+        "message": "Required passage image could not be downloaded. Retry the download."
+      }
+    }
+  ],
+  "review_vectors": {
+    "question_count": 3,
+    "answers": [
+      {
+        "selectedIdx": 0,
+        "isCorrect": true
+      },
+      {
+        "selectedIdx": 0,
+        "isCorrect": false
+      },
+      null
+    ],
+    "expected": {
+      "correct": 1,
+      "incorrect": 1,
+      "skipped": 1,
+      "needs_review_original_zero_based_indexes": [
+        1,
+        2
+      ],
+      "accuracy_percent": 33
+    }
+  },
+  "daily_review_vectors": [
+    {
+      "state": {
+        "completed": true,
+        "correct": true,
+        "attempts_used": 1
+      },
+      "needs_review": false
+    },
+    {
+      "state": {
+        "completed": true,
+        "correct": true,
+        "attempts_used": 2
+      },
+      "needs_review": true
+    },
+    {
+      "state": {
+        "completed": true,
+        "correct": false,
+        "attempts_used": 2
+      },
+      "needs_review": true
+    },
+    {
+      "state": {
+        "completed": false,
+        "correct": false,
+        "attempts_used": 1
+      },
+      "needs_review": false
+    }
+  ],
+  "design_note": "Examples illustrate question structure and expected interpretation only. Use the existing mobile design; these are not screen layouts or styling requirements."
+}

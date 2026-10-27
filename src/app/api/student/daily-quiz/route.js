@@ -16,6 +16,7 @@ import { createClient }  from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { NextResponse }  from 'next/server'
 import { QUESTION_COLS, todayStr, todaysSlots, profileSubjects, optionsArray } from '@/lib/server/dailyQuiz'
+import { publicQuestionContent } from '@/lib/studentQuestionContent'
 
 function shapeQuestion(q, subjectName) {
   if (!q) return null
@@ -24,6 +25,7 @@ function shapeQuestion(q, subjectName) {
   return {
     id:             q.id,
     text:           q.question_text,
+    ...publicQuestionContent(q),
     options,
     hint:           q.hint ?? null,
     explanation:    null,

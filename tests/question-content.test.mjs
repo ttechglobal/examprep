@@ -1,3 +1,4 @@
+import * as questionDiagrams from '../src/lib/questionDiagrams.js'
 import * as questionPassage from '../src/lib/questionPassage.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -52,10 +53,12 @@ test('current MyQuest correct_answer is normalized and embedded extracts split w
   assert.equal(q.sdash_answer, 'A')
   assert.deepEqual(contentIssues(q), [])
   const bad = mergeImportEnrichment([source], [{ ...response, source_content: { ...response.source_content, passage_text: 'The river sang.' } }], 'JAMB', 'Literature')[0]
-  assert.equal(bad._contextStatus, 'missing')
+  assert.equal(bad._contextStatus, 'complete')
+  assert.match(bad._sourceSplitIssue, /different source wording/)
+  assert.equal(bad.question_text, source.question)
   assert.ok(contentIssues(bad).length)
   const changedWords = { ...response, source_content: { passage_text: 'Theriver laughed.', question_text: response.source_content.question_text } }
-  assert.equal(mergeImportEnrichment([source], [changedWords], 'JAMB', 'Literature')[0]._contextStatus, 'missing')
+  assert.match(mergeImportEnrichment([source], [changedWords], 'JAMB', 'Literature')[0]._sourceSplitIssue, /different source wording/)
 })
 
 test('similar stems from different passages cannot silently reuse an enrichment', () => {
@@ -73,6 +76,33 @@ test('missing context can be returned without forcing an answer and remains bloc
   const q = mergeImportEnrichment([raw], [missing], 'JAMB', 'English')[0]
   assert.ok(contentIssues(q).some(issue => issue.includes('missing context')))
   assert.ok(contentIssues({ question_text: raw.question }).some(issue => issue.includes('passage')))
+})
+
+test('short embedded literature extracts are complete without separate passage fields', () => {
+  for (const question_text of [
+    'The river laughed. The literary device in this excerpt is',
+    'In the extract “The river laughed”, which device is used?',
+    '“The moon wept.” What is the tone of this extract?',
+  ]) assert.deepEqual(contentIssues({ question_text }), [])
+  assert.deepEqual(contentIssues({ question_text: 'What device is used?', passage_text: 'The river laughed.' }), [])
+  assert.ok(contentIssues({ question_text: 'According to the passage above, why did he leave?' }).some(issue => issue.includes('missing')))
+})
+
+test('an optional split of an already supplied passage does not manufacture missing context', () => {
+  const source = { id: 99, question: 'The literary device in this extract is', section: 'The river laughed.', option: { A: 'Personification', B: 'Simile' }, answer: 'A' }
+  const response = { source_id: '99', question_snippet: source.question, verified_answer: 'A', context_status: 'complete', source_content: { passage_text: source.section, question_text: source.question } }
+  const merged = mergeImportEnrichment([source], [response], 'JAMB', 'Literature')[0]
+  assert.equal(merged._contextStatus, 'complete')
+  assert.equal(merged._sourceSplitIssue, null)
+  assert.equal(merged.question_text, source.question)
+  assert.equal(merged.passage_text, source.section)
+  assert.deepEqual(contentIssues(merged), [])
+  const typographic = { id: 100, question: '“The river laughed.” The literary device in this extract is', option: source.option, answer: 'A' }
+  const sameWords = { ...response, source_id: '100', question_snippet: typographic.question, source_content: { passage_text: '"The river laughed."', question_text: source.question } }
+  const preserved = mergeImportEnrichment([typographic], [sameWords], 'JAMB', 'Literature')[0]
+  assert.equal(preserved.question_text, typographic.question)
+  assert.equal(preserved._sourceSplitIssue, null)
+  assert.deepEqual(contentIssues(preserved), [])
 })
 
 test('underline targets include letter-level marks and unresolved content is blocked', () => {
@@ -119,10 +149,10 @@ test('review preview shows options, both keys and explanation without an answer 
   const compiled = await swc.transform(await readFile(new URL('../src/components/admin/QuestionReviewPreview.jsx', import.meta.url), 'utf8'), {
     filename: 'QuestionReviewPreview.jsx', jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } }, module: { type: 'commonjs' },
   })
-  const module = { exports: {} }
-  const localRequire = name => name === './QuestionContent' ? { __esModule: true, default: ({ question }) => React.createElement('div', null, question.question_text), ContentText: ({ text }) => React.createElement('span', null, text) } : name === '@/lib/questionContent' ? questionContent : name === '@/lib/mathRenderer' ? { MathText: ({ text, as = 'span' }) => React.createElement(as, null, text) } : require(name)
-  new Function('require', 'module', 'exports', compiled.code)(localRequire, module, module.exports)
-  const html = renderToStaticMarkup(React.createElement(module.exports.default, { question: { question_text: 'Which word?', options: { a: 'Concise', b: 'Long' }, correct_answer: 'A', sdash_answer: 'B', explanation: { steps: [{ title: 'Check meaning', lines: ['Compare the words in context.'] }], answer_note: 'Concise is the synonym.', wrong_options: { B: 'Long is the opposite.' } } } }))
+  const renderedModule = { exports: {} }
+  const localRequire = name => name === './QuestionContent' ? { __esModule: true, default: ({ question }) => React.createElement('div', null, question.question_text), ContentText: ({ text }) => React.createElement('span', null, text) } : name === '@/lib/questionDiagrams' ? questionDiagrams : name === '@/lib/questionContent' ? questionContent : name === '@/lib/mathRenderer' ? { MathText: ({ text, as = 'span' }) => React.createElement(as, null, text) } : require(name)
+  new Function('require', 'module', 'exports', compiled.code)(localRequire, renderedModule, renderedModule.exports)
+  const html = renderToStaticMarkup(React.createElement(renderedModule.exports.default, { question: { question_text: 'Which word?', options: { a: 'Concise', b: 'Long' }, correct_answer: 'A', sdash_answer: 'B', explanation: { steps: [{ title: 'Check meaning', lines: ['Compare the words in context.'] }], answer_note: 'Concise is the synonym.', wrong_options: { B: 'Long is the opposite.' } } } }))
   assert.match(html, /Answer options/)
   assert.match(html, /Current answer key/)
   assert.match(html, /Provider answer \(reference\)/)
@@ -130,7 +160,7 @@ test('review preview shows options, both keys and explanation without an answer 
   assert.match(html, /Compare the words in context/)
   assert.match(html, /Long is the opposite/)
   assert.match(html, /Current key/)
-  const missing = renderToStaticMarkup(React.createElement(module.exports.default, { question: { question_text: 'Which word?', options: { A: 'One' }, _contextStatus: 'missing' } }))
+  const missing = renderToStaticMarkup(React.createElement(renderedModule.exports.default, { question: { question_text: 'Which word?', options: { A: 'One' }, _contextStatus: 'missing' } }))
   assert.match(missing, /No answer supplied/)
   assert.match(missing, /did not verify an answer/)
 })
@@ -142,11 +172,11 @@ test('admin renderer emits semantic inline marks, full passage and a safe image 
   const compiled = await swc.transform(await readFile(new URL('../src/components/admin/QuestionContent.jsx', import.meta.url), 'utf8'), {
     filename: 'QuestionContent.jsx', jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic' } } }, module: { type: 'commonjs' },
   })
-  const module = { exports: {} }
+  const renderedModule = { exports: {} }
   // MathText's SSR fallback is plain text; test the surrounding real component.
-  const localRequire = name => name === '@/lib/questionPassage' ? questionPassage : name.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => key }), __esModule: true } : name === '@/lib/questionContent' ? questionContent : name === '@/lib/mathRenderer' ? { MathText: ({ text }) => React.createElement('span', null, text) } : require(name)
-  new Function('require', 'module', 'exports', compiled.code)(localRequire, module, module.exports)
-  const html = renderToStaticMarkup(React.createElement(module.exports.default, { question: {
+  const localRequire = name => name === '@/lib/questionPassage' ? questionPassage : name.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => key }), __esModule: true } : name === '@/lib/questionDiagrams' ? questionDiagrams : name === '@/lib/questionContent' ? questionContent : name === '@/lib/mathRenderer' ? { MathText: ({ text }) => React.createElement('span', null, text) } : require(name)
+  new Function('require', 'module', 'exports', compiled.code)(localRequire, renderedModule, renderedModule.exports)
+  const html = renderToStaticMarkup(React.createElement(renderedModule.exports.default, { question: {
     instruction_text: 'Choose the opposite.', passage_text: 'First line.\n\nLast line.', passage_image_url: 'https://example.com/read.png',
     question_text: '<u>ch</u>urch <em>title</em> <strong>emphasis</strong> <script>bad()</script>',
   } }))
@@ -157,7 +187,7 @@ test('admin renderer emits semantic inline marks, full passage and a safe image 
   assert.match(html, /https:\/\/example.com\/read.png/)
   assert.doesNotMatch(html, /bad\(\)|<script/)
   assert.match(html, /white-space:pre-wrap/)
-  const marked = renderToStaticMarkup(React.createElement(module.exports.default, { question: {
+  const marked = renderToStaticMarkup(React.createElement(renderedModule.exports.default, { question: {
     instruction_text: 'Choose the underlined phrase.', question_text: 'His speech was *brief and to the point*.', passage_text: 'The *quiet* river.\nLast line.',
   } }))
   assert.match(marked, /<u><span>brief and to the point<\/span><\/u>/)

@@ -7,6 +7,8 @@ import { SourceField } from '@/components/admin/ImportContentReview'
 import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
 import QuestionReviewPreview from '@/components/admin/QuestionReviewPreview'
 import { allReviewIssues } from '@/lib/questionReview'
+import SourceDiagramReview from '@/components/admin/SourceDiagramReview'
+import { questionDiagram } from '@/lib/questionDiagrams'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function Badge({ children, color = 'gray' }) {
@@ -303,6 +305,13 @@ function QuestionDrawer({ question: initialQ, onClose, onUpdated, onDeleted }) {
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {q.is_flagged && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>What to check</strong>{allReviewIssues(q).length ? <ul className="mt-2 list-disc pl-5 space-y-2">{allReviewIssues(q).map(issue => <li key={issue}>{issue}</li>)}</ul> : <p className="mt-2">This flag has no recorded reason. Check the question, passage, options, answer key and explanation before resolving it.</p>}</div>}
           {reviewError && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{reviewError}</p>}
+          {questionDiagram(q).required && <SourceDiagramReview key={`${q.id}-${JSON.stringify(q.explanation?.question_diagram ?? {})}`} question={q} subject={q.subjects?.name} onSave={async updated => {
+            const ready = questionDiagram(updated).ready
+            const response = await fetch(`/api/admin/questions/${q.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_url: updated.image_url, image_description: updated.image_description, has_image: true, explanation: updated.explanation, ...(!ready ? { is_active: false, is_flagged: true } : {}) }) })
+            const data = await response.json()
+            if (!response.ok) throw new Error(data.error ?? 'Could not save diagram work')
+            setQ(data); onUpdated?.(data)
+          }} />}
           {q.is_flagged && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
             <p className="font-semibold">Review this question</p>
             <p className="mt-1">Check the question, passage, options and correct answer below. If everything is correct, approve it for students. If unusable, delete it.</p>
@@ -454,6 +463,7 @@ function QuestionList({ source, subjects, reviewOnly = false }) {
   const [filterUntagged, setFilterUntagged] = useState(false)
   const [filterInactive, setFilterInactive] = useState(false)
   const [filterFlagged,  setFilterFlagged]  = useState(reviewOnly)
+  const [filterDiagrams, setFilterDiagrams] = useState(false)
   const PER_PAGE = 25
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
@@ -480,12 +490,13 @@ function QuestionList({ source, subjects, reviewOnly = false }) {
     if (filterUntagged) p.set('untagged',   'true')
     if (filterInactive) p.set('inactive',   'true')
     if (filterFlagged)  p.set('flagged',    'true')
+    if (filterDiagrams) p.set('has_image', 'true')
     fetch(`/api/admin/questions?${p}`)
       .then(r => r.json())
       .then(d => { setQuestions(d.questions ?? []); setTotal(d.total ?? 0) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [source, page, filterExam, filterSubject, filterTopic, filterDiff, filterYear, filterUntagged, filterInactive, filterFlagged])
+  }, [source, page, filterExam, filterSubject, filterTopic, filterDiff, filterYear, filterUntagged, filterInactive, filterFlagged, filterDiagrams])
 
   useEffect(() => { load() }, [load])
 
@@ -672,6 +683,7 @@ function QuestionList({ source, subjects, reviewOnly = false }) {
           }`}>
           {filterInactive ? '✕ Inactive only' : '⊘ Inactive'}
         </button>
+        <button type="button" onClick={() => { setFilterDiagrams(v => !v); setFilterFlagged(true); setPage(1) }} className={`rounded-lg border px-3 py-2 text-xs font-bold ${filterDiagrams ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-200 text-gray-600'}`}>{filterDiagrams ? 'Clear diagram filter' : 'Source diagrams needing review'}</button>
         <button onClick={() => { setFilterFlagged(v => !v); setPage(1) }}
           className={`text-xs px-3 py-2 rounded-xl border font-medium transition-colors ${
             filterFlagged ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'

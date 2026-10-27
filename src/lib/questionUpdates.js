@@ -7,3 +7,15 @@ export async function updateQuestionWithTimestamp(write, changes) {
   }
   return result
 }
+
+// Legacy deployments lack the optional provider ID column. Keep the identity in
+// existing JSON metadata, and retry only this specific schema-cache failure.
+export async function insertQuestionsWithSourceId(write, rows) {
+  const result = await write(rows)
+  if (result.error?.code !== 'PGRST204' || !/['"]sdash_id['"]/.test(result.error.message ?? '')) return result
+  const compatible = row => {
+    const { sdash_id, ...rest } = row
+    return sdash_id ? { ...rest, explanation: { ...(row.explanation ?? {}), import_source_id: sdash_id } } : rest
+  }
+  return write(Array.isArray(rows) ? rows.map(compatible) : compatible(rows))
+}

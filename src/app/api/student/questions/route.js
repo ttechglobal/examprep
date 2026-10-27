@@ -1,3 +1,4 @@
+import { publicQuestionContent } from '@/lib/studentQuestionContent'
 import { STUDENT_EXAMS } from '@/lib/constants'
 // src/app/api/student/questions/route.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,8 +86,8 @@ function shape(q) {
     options:          q.options,
     correct_answer:   q.correct_answer,
     explanation:      q.explanation  ?? null,
-    hint:             null,
-    instruction_text: null,
+    hint:             q.hint ?? null,
+    instruction_text: q.instruction_text ?? null,
     passage_text:     q.passage_text ?? null,
     // Illustrations (20261003_question_illustrations.sql)
     passage_image_url: q.passage_image_url ?? null,
@@ -100,6 +101,7 @@ function shape(q) {
     topic_name:       q.topic_name   ?? null,
     subject_id:       q.subject_id   ?? null,
     subject_name:     q.subject_name ?? null,
+    ...publicQuestionContent(q),
   }
 }
 

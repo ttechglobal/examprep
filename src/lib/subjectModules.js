@@ -44,7 +44,7 @@ ONE OPERATION PER LINE. Every algebraic move on its own line.
 Every equation line wrapped in $...$. No exceptions.`,
 
     illustration: `ILLUSTRATION — MATHEMATICS
-Two fields: illustration_title (4–7 words) and illustration_prompt.
+Visual fields: illustration_title (4–7 words) and illustration_prompt. Also return illustration_reason explaining the decision, including when no visual is needed.
 Set both "" when written steps fully explain the answer.
 
 HOW TO WRITE THE ILLUSTRATION BRIEF
@@ -80,6 +80,7 @@ WHEN TO GENERATE:
   ✓ Trigonometry — right-angled triangle: all three sides labelled, right-angle marker, angle arc
   ✓ Coordinate geometry — axes with plotted points, drawn line, intercepts and gradient
   ✓ Venn diagrams — overlapping circles with region element counts, universal set rectangle
+  ✓ Statistics — plots or histograms when the given data and axes support a clearer explanation of distributions, trends or comparisons
   ✓ Bearing / angle problems — north arrow, labelled bearing, direction lines
   ✗ Algebra, logs, surds, sequences, matrices, fractions, percentages, ratios, statistics, probability
 
@@ -184,7 +185,7 @@ CALCULATION SHAPE (any question with numbers):
   ]`,
 
     illustration: `ILLUSTRATION — PHYSICS
-Two fields: illustration_title (4–7 words) and illustration_prompt.
+Visual fields: illustration_title (4–7 words) and illustration_prompt. Also return illustration_reason explaining the decision, including when no visual is needed.
 Generate when the PHYSICAL ARRANGEMENT — direction, boundary, or spatial setup — is the point.
 Set "" when steps fully carry understanding.
 
@@ -315,7 +316,7 @@ CALCULATION SHAPE (moles, gas laws, concentrations, empirical formula):
   ]`,
 
     illustration: `ILLUSTRATION — CHEMISTRY
-Two fields: illustration_title (4–7 words) and illustration_prompt.
+Visual fields: illustration_title (4–7 words) and illustration_prompt. Also return illustration_reason explaining the decision, including when no visual is needed.
 Generate ONLY when a student cannot visualise the structure or apparatus from text alone.
 Set "" for naming, balancing equations, definitions, and most calculations.
 
@@ -504,11 +505,11 @@ LANGUAGE:
   Use real biological terms but explain them briefly. Write for a smart 15-year-old.`,
 
     illustration: `ILLUSTRATION — BIOLOGY
-Biology is built on visual understanding. Diagrams are not optional extras.
-Generate for ALL the types listed below. The default is: draw it.
-Only set "" for pure one-sentence recall definitions where a diagram genuinely adds nothing.
+Biology often benefits from visual explanations of structures and processes.
+Assess the specific learning benefit and source accuracy; do not draw automatically.
+Use an empty prompt when text is sufficient or a reliable visual cannot be supported.
 
-Two fields: illustration_title (4–7 words) and illustration_prompt.
+Visual fields: illustration_title (4–7 words) and illustration_prompt. Also return illustration_reason explaining the decision, including when no visual is needed.
 
 HOW TO WRITE THE ILLUSTRATION BRIEF
 =====================================
@@ -535,7 +536,7 @@ Write the brief in this order. Content must come before any coordinates.
 ⚠️ LAYOUT RULE: Open with AHA, CONTAINMENT, FLOW, BOUNDARIES, QUANTITIES.
   Coordinates may follow, but content must come first.
 
-WHEN TO GENERATE (biology — mandatory list):
+CANDIDATES TO ASSESS (biology):
   ✓ Osmosis / diffusion — two compartments, membrane, concentration labels, bold directional arrow
   ✓ Cell structure — every relevant organelle drawn, labelled, with leader lines
   ✓ Punnett squares — 2×2 grid, parent genotypes, four offspring cells, phenotype ratio below
@@ -548,7 +549,7 @@ WHEN TO GENERATE (biology — mandatory list):
   ✓ Kidney nephron — tubule stages with filtration / reabsorption arrows
   ✗ Pure recall definitions / classification lists where one sentence fully answers the question
 
-⚠️ BIOLOGY RULE: if in doubt, draw it. Always err on the side of including the diagram.
+BIOLOGY RULE: draw when a supported visual makes the process or structure clearer. Do not invent anatomical parts, flow directions or measurements when uncertain.
 
 ── EXAMPLE 1 — Osmosis (5% left, 15% right, net water movement right from steps) ──
 illustration_title: "Osmosis — Net Water Movement Across Membrane"
@@ -667,7 +668,7 @@ CALCULATION SHAPE (elasticity, multiplier, national income):
   ]`,
 
     illustration: `ILLUSTRATION — ECONOMICS
-Two fields: illustration_title (4–7 words) and illustration_prompt.
+Visual fields: illustration_title (4–7 words) and illustration_prompt. Also return illustration_reason explaining the decision, including when no visual is needed.
 Generate ONLY when the VISUAL RELATIONSHIP between curves or positions IS the answer.
 Set "" for definitions, elasticity calculations, and prose policy explanations.
 
@@ -743,8 +744,9 @@ Government, History, CRK, IRK, Yoruba, Igbo, Hausa, French, Commerce (non-numeri
 Geography (non-numerical questions).`,
 
     illustration: `ILLUSTRATION — HUMANITIES & LANGUAGE
-illustration_prompt: "" always. No SVG diagrams for these subjects.
-These subjects are fully explained through text. Set illustration_prompt to "" for every question.
+Usually use an empty prompt for language, literature, dates and straightforward recall.
+For subjects in this fallback group such as Geography or Agricultural Science, consider supported maps, landform cross-sections, apparatus, structures or process diagrams when they materially clarify the explanation.
+Source question diagrams are handled separately and may be required in ANY subject. Never suppress or replace them with a teaching illustration.
 `,
 
     hintGuide: `

@@ -20,7 +20,7 @@ Source evidence is provided to prevent guessing. These are existing web implemen
 
 ## Known rules
 
-At snapshot time, `src/lib/xp.js` grants 5 XP per correct answer, plus 10 for a battle win or 5 for a draw. The server session-save route rechecks selected options, computes XP, and uses a stable session ID to prevent duplicate awards. Preserve this validation boundary.
+For saved practice/mock/computer sessions, `src/lib/xp.js` grants 5 XP per correct answer, plus 10 for a computer-battle win or 5 for a draw. Live 1v1 uses separate existing SQL rates: 10 per correct, plus 20 for a win or 10 for a draw; the current web display matches those rates. The server session-save route rechecks selected options, computes XP, and uses a stable session ID to prevent duplicate awards. Preserve this validation boundary. See `question-rendering-update-2026-10-26.md` for the current rendering, offline-media and review requirements; older source snapshots may lack them.
 
 The PWA's local queue/history have fixed limits; those are reference implementation details, not acceptable permission to discard unsynced native results. Use durable outbox storage.
 

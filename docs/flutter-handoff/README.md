@@ -4,6 +4,8 @@ This is the portable context for a fresh chat and a new Flutter repository. The 
 
 Read in order:
 
+**26 October update:** When updating an existing mobile implementation, read `question-rendering-update-2026-10-26.md` first (`docs/question-rendering-update-2026-10-26.md` in regenerated full packages). It documents the current question fields, rich-text/media rendering, offline pack migration, results/review and live 1v1 XP differences. The existing mobile design is authoritative for this update; do not copy web screenshots or styling. Older source snapshots may predate these changes.
+
 1. `docs/product-prd.md` — confirmed scope, user stories, acceptance criteria, flows, and open decisions.
 2. `docs/architecture.md` — proposed scalable V1 boundaries and delivery sequence.
 3. `docs/visual-parity.md` — reference map and visual verification requirements.

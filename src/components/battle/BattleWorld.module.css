@@ -1293,3 +1293,7 @@
     transition: none;
   }
 }
+
+.reviewFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.reviewFilters > button { min-width: 0; }
+.reviewFilters > button[aria-pressed="true"] { border-color: #d39525; background: #fff3ce; }

@@ -128,6 +128,7 @@ export default function BattleSetup({ opponent = 'computer' }) {
       {!topics.loading && !topics.error && !filteredTopics.length && <div className={styles.empty}>{topics.rows.length ? 'No matching topics. Clear your search or show all topics.' : 'No topics available. Go back and choose random questions.'}</div>}
     </>}
     {state.step === 'setup' && <>
+      <p className={styles.intro}>{friend ? 'You and your friend answer the same questions against the clock. Lock in each answer before time runs out; review answers and explanations after the match.' : 'Race the computer against the clock. Each answer locks when submitted or when time runs out. See the correct answer after each round, then review explanations at the end.'}</p>
       <div className={`${styles.panel} ${styles.summary}`}>
         <div><IllustratedIcon name={state.exam.toLowerCase()} size={null} className={styles.summaryIcon}/><span className={styles.summaryText}>{state.exam}<small>{EXAM_NAME[state.exam]}</small></span></div><b aria-hidden="true">›</b>
         <div><IllustratedIcon name={subjectArt(subject?.name)} size={null} className={styles.summaryIcon}/><span className={styles.summaryText}>{subject?.name}</span></div><b aria-hidden="true">›</b>

@@ -155,7 +155,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
       rememberSubject(subject)
       return onStart(topicSessionConfig({ subject, topic, exam, count, perQuestionSecs }))
     }
-    if (screen === 'quick5')     return onStart({ ...base(), count: 5, mode: 'quick5', sessionType: 'practice', answerMode: 'instant' })
+    if (screen === 'quick5')     return onStart({ ...base(), count: 5, mode: 'quick5', sessionType: 'practice' })
     if (screen === 'timed')      return onStart({ ...base(), count: speedCount, mode: 'timed', sessionType: 'practice', speedSecs })
     if (screen === 'custom-prefs') {
       return onStart({ ...base(), count, mode: 'practice', sessionType, durationSecs: timerMins ? timerMins * 60 : null })
@@ -200,7 +200,7 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
               <h2 className={s.heading}>{screen === 'topic' ? 'Choose a subject' : screen === 'custom' ? 'Choose your subject' : 'Pick a subject'}</h2>
               <p className={s.hint}>
                 {screen === 'topic' ? 'Next, you’ll pick the topic to drill.'
-                  : screen === 'quick5' ? '5 random questions from this subject, with answers as you go.'
+                  : screen === 'quick5' ? '5 random questions from this subject. Review answers and explanations when you finish.'
                   : screen === 'timed' ? 'Answer each question before the clock runs out.'
                   : 'Pick the exam, then the subject.'}
               </p>
@@ -240,8 +240,8 @@ export default function PracticeSetupSheet({ profile, initialScreen = 'modes', i
               <p className={s.label}>Practice mode</p>
               <div className={s.pair}>
                 {[
-                  { key: 'study',    title: 'Study Practice',   desc: 'See the answer and explanation after each question.' },
-                  { key: 'practice', title: 'Practice Session', desc: 'Answer all the questions, then see your results.' },
+                  { key: 'study',    title: 'Study Practice',   desc: 'Get a second try after a wrong answer, then see the explanation.' },
+                  { key: 'practice', title: 'Practice Session', desc: 'Change your answers as you go. See results and explanations after finishing.' },
                 ].map(o => (
                   <button key={o.key} type="button" className={cx(s.option, sessionType === o.key && s.optionOn)}
                     onClick={() => setSessionType(o.key)} aria-pressed={sessionType === o.key}>

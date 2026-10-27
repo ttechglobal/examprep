@@ -58,6 +58,7 @@ export default function MockPage() {
   const profile  = useStudentUser()
   const plan     = usePlan()
 
+  const [reviewFilter, setReviewFilter] = useState('all')
   const [phase,    setPhase]    = useState('pick-exam')   // pick-exam | setup | session | results | review | error
   const [examType, setExamType] = useState(null)
   const examSubjects = useExamSubjects(profile, examType ?? 'WAEC')
@@ -214,7 +215,7 @@ export default function MockPage() {
     const title = isWAEC ? saved.subjects[0]?.name ?? 'WAEC' : `${examType} Mock`
     return phase === 'review' ? (
       <ReviewSession
-        questions={saved.questions} answers={finalAnswers} title={title}
+        questions={saved.questions} answers={finalAnswers} title={title} initialFilter={reviewFilter}
         subjects={isWAEC ? undefined : saved.subjects}
         onDone={() => setPhase('results')}
       />
@@ -225,7 +226,7 @@ export default function MockPage() {
         xpAwarded={saved.xp} streakDays={saved.streak} durationSecs={saved.durationSecs}
         subjectBreakdown={isWAEC ? undefined : saved.subjects.map(({ name, correct, count }) => ({ name, correct, total: count }))}
         onRetry={() => setPhase('pick-exam')}
-        onReview={() => setPhase('review')}
+        onReview={filter => { setReviewFilter(filter); setPhase('review') }}
         onHome={() => router.push('/student/practice')}
       />
     )

@@ -20,42 +20,52 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { LETTERS } from './SessionUtils'
-import { SessionFrame, SessionTopBar, QuestionPanel, QuestionGridSheet, SessionBottomBar, SubjectTabs } from './SessionFrame'
+import { REVIEW_FILTERS, answerState, sessionResults, reviewIndexes } from '@/lib/sessionReview'
+import { SessionFrame, SessionTopBar, QuestionPanel, QuestionGridSheet, SessionBottomBar, SubjectTabs, sessionStyles } from './SessionFrame'
 import { QuestionCard } from './QuestionCard'
 import { ExplanationBlock, ExplanationSheet, ExplanationTrigger } from './ExplanationBlock'
 
-export function ReviewSession({ questions, answers, onDone, title = 'Review', subjects }) {
+export function ReviewSession({ questions, answers, onDone, title = 'Review', subjects, initialFilter = 'all' }) {
+  const [filter, setFilter] = useState(REVIEW_FILTERS.some(item => item.key === initialFilter) ? initialFilter : 'all')
   const [index,     setIndex]     = useState(0)
   const [gridOpen,  setGridOpen]  = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const mainRef = useRef(null)
 
-  useEffect(() => { mainRef.current?.scrollTo?.(0, 0) }, [index])
+  const visible = reviewIndexes(questions, answers, filter)
+  const current = visible.includes(index) ? index : visible[0]
+  const position = visible.indexOf(current)
+  useEffect(() => { mainRef.current?.scrollTo?.(0, 0) }, [current, filter])
 
-  const q      = questions[index]
-  const a      = answers[index] ?? null
-  const isLast = index >= questions.length - 1
+  const q = current == null ? null : questions[current]
+  const a = current == null ? null : answers[current] ?? null
+  const isLast = position >= visible.length - 1
   const selectedKey = a?.selectedIdx != null ? LETTERS[a.selectedIdx] : null
-
-  const stateOf = i => (!answers[i] || answers[i].selectedIdx == null ? 'skipped' : answers[i].isCorrect ? 'correct' : 'wrong')
-  const correctCount = answers.filter(x => x?.isCorrect).length
+  const stateOf = i => answerState(answers[i])
+  const counts = sessionResults(questions, answers)
+  const correctCount = counts.correct
+  const chooseFilter = value => { setFilter(value); setIndex(reviewIndexes(questions, answers, value)[0] ?? 0) }
+  const go = i => {
+    if (!visible.includes(i)) setFilter('all')
+    setIndex(Math.min(Math.max(i, 0), Math.max(questions.length - 1, 0)))
+  }
 
   // Subject tabs: each subject's first question index.
   const starts = []
   subjects?.reduce((at, sub) => { starts.push(at); return at + sub.count }, 0)
-  const activeSubject = starts.findLastIndex(st => index >= st)
-  const tabs = subjects?.length > 1 ? (
+  const activeSubject = starts.findLastIndex(st => (current ?? 0) >= st)
+  const subjectTabs = subjects?.length > 1 ? (
     <SubjectTabs
       active={Math.max(activeSubject, 0)}
-      onSelect={i => setIndex(starts[i])}
+      onSelect={i => go(starts[i])}
       subjects={subjects.map((sub, i) => ({
         name: sub.name,
-        note: `${answers.slice(starts[i], starts[i] + sub.count).filter(x => x?.isCorrect).length}/${sub.count}`,
+        note: `${answers.slice(starts[i], starts[i] + sub.count).filter(x => answerState(x) === 'correct').length}/${sub.count}`,
       }))}
     />
   ) : null
 
-  const go = i => setIndex(Math.min(Math.max(i, 0), questions.length - 1))
+  const tabs = <>{subjectTabs}<SubjectTabs label="Review filters" active={REVIEW_FILTERS.findIndex(item => item.key === filter)} onSelect={i => chooseFilter(REVIEW_FILTERS[i].key)} subjects={REVIEW_FILTERS.map(item => ({ name: item.name, note: String(item.key === 'all' ? counts.total : item.key === 'missed' ? counts.missed : counts[item.key]) }))} /></>
 
   return (
     <SessionFrame
@@ -63,38 +73,39 @@ export function ReviewSession({ questions, answers, onDone, title = 'Review', su
       top={
         <SessionTopBar
           backLabel="Back" onBack={onDone}
-          title={title} subtitle={`Review · ${correctCount} of ${questions.length} correct`}
-          current={index} total={questions.length} answered={null}
+          title={title} subtitle={`${filter === 'all' ? 'Review' : REVIEW_FILTERS.find(item => item.key === filter).name + ' · ' + visible.length + ' to review'} · ${correctCount} of ${questions.length} correct`}
+          current={current ?? -1} total={questions.length} answered={null}
           onOpenGrid={() => setGridOpen(true)}
         />
       }
       tabs={tabs}
-      panel={<QuestionPanel total={questions.length} current={index} stateOf={stateOf} graded onJump={go} onViewAll={() => setGridOpen(true)} />}
-      aside={q?.explanation ? <ExplanationBlock question={q} isCorrect={!!a?.isCorrect} selectedKey={selectedKey} /> : null}
+      panel={<QuestionPanel total={questions.length} current={current ?? -1} stateOf={stateOf} graded onJump={go} onViewAll={() => setGridOpen(true)} />}
+      aside={q ? <ExplanationBlock question={q} isCorrect={answerState(a) === 'correct'} selectedKey={selectedKey} /> : null}
       bottom={
         <SessionBottomBar
-          onPrev={() => go(index - 1)} prevDisabled={index === 0}
-          onNext={() => (isLast ? onDone() : go(index + 1))}
+          onPrev={() => go(visible[position - 1])} prevDisabled={position <= 0}
+          onNext={() => (!q || isLast ? onDone() : go(visible[position + 1]))}
           nextLabel={isLast ? 'Back to summary' : 'Next'}
         />
       }
       overlay={<>
-        {gridOpen && <QuestionGridSheet total={questions.length} current={index} stateOf={stateOf} graded onJump={go} onClose={() => setGridOpen(false)} />}
+        {gridOpen && <QuestionGridSheet total={questions.length} current={current ?? -1} stateOf={stateOf} graded onJump={go} onClose={() => setGridOpen(false)} />}
         {sheetOpen && q && (
           <ExplanationSheet
-            question={q} isCorrect={!!a?.isCorrect} selectedKey={selectedKey}
-            position={{ current: index, total: questions.length }}
-            onPrev={index > 0 ? () => go(index - 1) : null}
-            onNext={!isLast ? () => go(index + 1) : null}
+            question={q} isCorrect={answerState(a) === 'correct'} selectedKey={selectedKey}
+            position={{ current: current ?? 0, total: questions.length }}
+            onPrev={position > 0 ? () => go(visible[position - 1]) : null}
+            onNext={!isLast ? () => go(visible[position + 1]) : null}
             onClose={() => setSheetOpen(false)}
           />
         )}
       </>}
     >
+      {!q && <div className={sessionStyles.pending} role="status"><strong>No questions match this filter.</strong><p>Choose another filter to continue reviewing.</p><button type="button" className={sessionStyles.prev} onClick={() => chooseFilter('all')}>Show all answers</button></div>}
       {q && (
         <>
-          <QuestionCard key={`${q.id}-${index}`} question={q} qIndex={index} sessionType="study" alreadyAnswered={a} reviewMode hideHint />
-          <ExplanationTrigger question={q} isCorrect={!!a?.isCorrect} onOpen={() => setSheetOpen(true)} />
+          <QuestionCard key={`${q.id}-${current}`} question={q} qIndex={current} sessionType="study" alreadyAnswered={a} reviewMode hideHint />
+          <ExplanationTrigger question={q} isCorrect={answerState(a) === 'correct'} onOpen={() => setSheetOpen(true)} />
         </>
       )}
     </SessionFrame>

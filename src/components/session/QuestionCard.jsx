@@ -28,7 +28,8 @@ import { MathText, injectMathStyles } from '@/lib/mathRenderer'
 import { LETTERS, normaliseOptions, checkCorrect, correctIndex } from './SessionUtils'
 import { QuestionCountdown } from './SessionPrimitives'
 import FlagSheet from './FlagSheet'
-import QuestionFigure from '@/components/ui/QuestionFigure'
+import StudentQuestionContent from '@/components/student/StudentQuestionContent'
+import ContentText from '@/components/ui/ContentText'
 import { Book, Flag, Check, Cross, Bulb } from './icons'
 import s from './session.module.css'
 
@@ -147,9 +148,7 @@ export const QuestionCard = forwardRef(function QuestionCard({
 
       {!hideHint && !reviewMode && !revealed && <Hint text={hint} />}
 
-      <h2 className={s.qText}><MathText text={question.text ?? question.question_text ?? ''} as="span" /></h2>
-
-      <QuestionFigure question={question} className={s.qFigure} />
+      <StudentQuestionContent question={question} />
 
       <div className={s.options} role={reviewMode ? undefined : 'radiogroup'} aria-label="Options">
         {options.map((opt, idx) => {
@@ -162,7 +161,7 @@ export const QuestionCard = forwardRef(function QuestionCard({
               onClick={() => pick(idx)}
             >
               <span className={s.letter}>{LETTERS[idx]}</span>
-              <span className={s.optText}><MathText text={String(opt ?? '')} as="span" /></span>
+              <span className={s.optText}><ContentText text={String(opt ?? '')} /></span>
               {(state === 'correct' || (state === 'wrong' && revealed)) && (
                 <span className={s.mark} aria-label={state === 'correct' ? 'Correct answer' : 'Your answer, wrong'}>
                   {state === 'correct' ? <Check /> : <Cross />}

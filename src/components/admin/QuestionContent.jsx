@@ -4,6 +4,7 @@ import { questionReadingLayout } from '@/lib/questionPassage'
 import s from './QuestionContent.module.css'
 import { MathText } from '@/lib/mathRenderer'
 import { contentText, safeContentImage, normalizeQuestionTargets } from '@/lib/questionContent'
+import { sourceDiagramSvg } from '@/lib/questionDiagrams'
 
 // React elements, never source HTML. Legacy **targets** display as underline;
 // new imports use <u>, leaving <strong> available for genuine bold emphasis.
@@ -28,6 +29,7 @@ export default function QuestionContent({ question }) {
   const layout = questionReadingLayout({ ...question, question_text: normalizeQuestionTargets(question.question_text ?? question.question, question.instruction_text) })
   const image = safeContentImage(question.passage_image_url)
   const hasReading = !!(layout.passage_text || image)
+  const sourceSvg = sourceDiagramSvg(question)
   return <div className={s.content}>
     {layout.instruction_text && <div className={s.instruction}><ContentText text={layout.instruction_text} /></div>}
     {hasReading && <section aria-label="Passage or extract" className={s.reading}>
@@ -38,6 +40,7 @@ export default function QuestionContent({ question }) {
     <div className={`${s.stem} ${hasReading ? s.afterReading : ''}`}>
       {hasReading && <p className={s.questionLabel}>Question</p>}
       <ContentText text={layout.question_text} />
+      {sourceSvg && <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sourceSvg)}`} alt="Source question diagram" className={s.image} />}
     </div>
   </div>
 }

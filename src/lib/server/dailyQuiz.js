@@ -19,9 +19,11 @@ export const SUBJECT_GROUPS = {
   agricultural: ['Agricultural Science'],
 }
 
+// Optional diagram columns differ across deployed schemas. Select the row and
+// explicitly project display-only fields in the API rather than naming columns
+// that may not exist. Only two rows are loaded for the daily challenge.
 export const QUESTION_COLS = `
-  id, question_text, options, correct_answer, explanation, hint,
-  difficulty, year, exam_type, subject_id, topic_id,
+  *,
   subjects ( id, name ),
   topics   ( id, name )
 `
@@ -136,6 +138,6 @@ export async function profileSubjects(db, userId) {
 export function optionsArray(options) {
   const LETTERS = ['A', 'B', 'C', 'D', 'E']
   if (Array.isArray(options)) return options
-  if (options && typeof options === 'object') return LETTERS.map(l => options[l]).filter(v => v != null)
+  if (options && typeof options === 'object') return LETTERS.map(l => options[l] ?? options[l.toLowerCase()]).filter(v => v != null)
   return []
 }

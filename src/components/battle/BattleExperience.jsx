@@ -22,8 +22,9 @@ export const useBattleExperience = () => useContext(Context)
 const LOADING_MIN_MS = 3500
 const LOADING_MAX_MS = 10000
 const TIPS = [
-  'Every correct answer earns you 5 XP.',
-  'Win a battle for 10 bonus XP. A draw earns 5.',
+  'Computer battles earn 5 XP per correct answer.',
+  'Computer battles add 10 XP for a win or 5 for a draw.',
+  'Live 1v1 earns 10 XP per correct answer, plus 20 for a win or 10 for a draw.',
   'Finish your weekly missions for 50 bonus XP each.',
   'Battle XP is your own score in Battle World.',
   'Every battle counts as practice for your exam.',

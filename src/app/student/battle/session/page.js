@@ -34,6 +34,7 @@ export default function BattleSessionPage() {
   const planRef = useRef(plan)
   useEffect(() => { planRef.current = plan }, [plan])
   const [phase,setPhase] = useState('loading')
+  const [reviewFilter,setReviewFilter] = useState('all')
   const [config,setConfig] = useState(null)
   const [questions,setQuestions] = useState([])
   const [choices,setChoices] = useState([])
@@ -172,8 +173,8 @@ export default function BattleSessionPage() {
     {phase === 'loading' ? <p className={styles.intro} role="status">Entering the arena…</p> : <div className={styles.stack}><GameButton onClick={()=>setRetry(v=>v+1)}>Try again</GameButton><GameButton secondary onClick={()=>router.push('/student/battle/setup')}>Change setup</GameButton></div>}
   </BattleWorld>
   if (phase === 'countdown') return <Countdown endsAt={countdownEndsAt} onDone={begin}/>
-  if (phase === 'results') return <BattleOutcome questions={questions} answersLog={log} studentScore={saved.finalS} cpuScore={saved.finalC} xpAwarded={saved.xp} onRematch={rematch} onNewBattle={()=>router.push('/student/battle/setup')} onHome={()=>router.push(BATTLE_HUB)} onReview={()=>setPhase('review')}/>
-  if (phase === 'review') return <BattleReview items={reviewItems(questions,log,choices)} subject={config.subject_name} opponent={CPU} onDone={()=>setPhase('results')}/>
+  if (phase === 'results') return <BattleOutcome questions={questions} answersLog={log} studentScore={saved.finalS} cpuScore={saved.finalC} xpAwarded={saved.xp} onRematch={rematch} onNewBattle={()=>router.push('/student/battle/setup')} onHome={()=>router.push(BATTLE_HUB)} onReview={filter=>{setReviewFilter(filter);setPhase('review')}}/>
+  if (phase === 'review') return <BattleReview initialFilter={reviewFilter} items={reviewItems(questions,log,choices)} subject={config.subject_name} opponent={CPU} onDone={()=>setPhase('results')}/>
   const displayIndex = reviewIndex ?? index
   const q = questions[displayIndex], options = optionList(q)
   const mine = reviewIndex != null ? log[displayIndex]?.selectedIdx : selected

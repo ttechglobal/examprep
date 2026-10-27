@@ -200,9 +200,9 @@ export function SessionBottomBar({ onPrev, prevDisabled, onNext, nextLabel = 'Ne
 }
 
 // ── Subject tabs ─────────────────────────────────────────────────────────────
-export function SubjectTabs({ subjects, active, onSelect }) {
+export function SubjectTabs({ subjects, active, onSelect, label = 'Subjects' }) {
   return (
-    <div className={s.subjects} role="tablist" aria-label="Subjects">
+    <div className={s.subjects} role="tablist" aria-label={label}>
       {subjects.map((sub, i) => (
         <button key={sub.name} type="button" role="tab" className={s.subjectTab} aria-selected={i === active} onClick={() => onSelect(i)}>
           {sub.name}{sub.note && <small>{sub.note}</small>}

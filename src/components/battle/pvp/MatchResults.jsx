@@ -40,6 +40,8 @@ export default function MatchResults({
   // Count only questions actually played: a match can end early (left / away).
   const played    = state.rounds.length
   const correct   = myResults(state).filter(r => r.is_correct).length
+  const unanswered = state.rounds.filter(r => r.mine?.choice == null).length
+  const incorrect = played - correct - unanswered
   const accuracy  = played ? Math.round(correct / played * 100) : 0
   const xp        = matchXp(state)
   const offer     = rematch?.status === 'waiting' ? rematch : null
@@ -83,6 +85,7 @@ export default function MatchResults({
               </div>
               <div style={{ fontSize:12, color:'#6B7280', textAlign:'center', marginTop:10, lineHeight:1.5 }}>
                 {played < match.question_count && `${played} of ${match.question_count} questions played. `}
+                {incorrect} incorrect · {unanswered} unanswered.<br/>
                 10 points per correct answer, up to 5 more for speed.
               </div>
             </div>
@@ -114,7 +117,8 @@ export default function MatchResults({
                 {busy ? 'One moment…' : offer ? '✅ Accept rematch' : '🔁 Rematch'}
               </button>
             )}
-            <button onClick={onReview} style={secondaryBtn}>📋 Review answers</button>
+            {played > correct && <button onClick={() => onReview('missed')} style={secondaryBtn}>Review incorrect and unanswered</button>}
+            <button onClick={() => onReview('all')} style={secondaryBtn}>📋 Review all answers</button>
             <div style={{ display:'grid', gridTemplateColumns: isGuest ? '1fr' : '1fr 1fr', gap:10 }}>
               {!isGuest && <button onClick={onNewBattle} style={goldBtn}>⚔️ New battle</button>}
               <button onClick={onHome} style={plainBtn}>Back to 1v1</button>
