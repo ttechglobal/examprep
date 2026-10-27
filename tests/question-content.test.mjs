@@ -13,6 +13,43 @@ import { buildImportEnrichPrompt, mergeImportEnrichment, parseEnrichment, questi
 const raw = { id: 42, question: 'According to the passage above, what did the speaker decide to do next?', section: '<p>First paragraph.</p><p>Second <u>important</u> paragraph.<br>Another line.</p>', instruction: 'Choose the best answer.', option: ['Leave', 'Stay'], answer: 'a' }
 const enrichment = { source_id: '42', question_snippet: raw.question, verified_answer: 'A', context_status: 'complete', topic_title: 'Comprehension', explanation: { answer_note: 'The speaker leaves.' } }
 
+test('quoted vocabulary targets normalize before enrichment and instructions display separately', () => {
+  const instruction = 'Choose the option opposite in meaning to the word underlined:'
+  const sentence = "Though his parents' poverty placed many 'obstacles' in his path as a young man, Olu succeeded at last"
+  const q = normalizeQuestionContent({ id: 2, question: `${instruction} ${sentence}`, instruction_text: null, option: { a: 'hurdles', b: 'advantages' }, answer: 'B' })
+  assert.equal(q.instruction_text, instruction)
+  assert.equal(q.question, `${instruction} ${sentence.replace("'obstacles'", '<u>obstacles</u>')}`)
+  assert.deepEqual(contentIssues(q), [])
+  assert.equal(questionPassage.questionReadingLayout(q).question_text, sentence.replace("'obstacles'", '<u>obstacles</u>'))
+  assert.equal(questionPassage.questionReadingLayout({ question: `${instruction} ${sentence}` }).instruction_text, instruction)
+  const prompt = buildImportEnrichPrompt([q], 'JAMB', 'English')
+  assert.match(prompt, /<u>obstacles<\/u>/)
+  assert.doesNotMatch(prompt, /underline target is missing/)
+  assert.deepEqual(normalizeQuestionContent(q), q)
+})
+
+test('quote conventions preserve apostrophes, existing marks, literary quotes and ambiguous targets', () => {
+  const instruction = 'Choose the option nearest in meaning to the word or phrase underlined:'
+  for (const [open, close] of [["'", "'"], ['‘', '’'], ['"', '"'], ['“', '”']]) {
+    const stem = `The boss told the man's mother to ${open}let sleeping dogs lie${close}`
+    assert.equal(normalizeQuestionTargets(stem, instruction), "The boss told the man's mother to <u>let sleeping dogs lie</u>")
+  }
+  const ambiguous = "She was 'calm' but he was 'agitated'."
+  assert.equal(normalizeQuestionTargets(ambiguous, instruction), ambiguous)
+  assert.ok(contentIssues({ question: ambiguous, instruction_text: instruction }).some(issue => issue.includes('underline target')))
+  for (const stem of ["His parents' poverty wasn't permanent.", "He was 'agitated", "She said 'come home'.", "The <u>word</u> is 'quoted'."]) {
+    assert.equal(normalizeQuestionTargets(stem, stem.includes('come home') ? 'Discuss the quotation.' : instruction), stem)
+  }
+  assert.equal(normalizeQuestionTargets("'A lonely cloud'\nWhat do the underlined lines suggest?"), "'A lonely cloud'\nWhat do the underlined lines suggest?")
+})
+
+test('WAEC-style inline lines and passage underline targets do not require a full work', () => {
+  assert.deepEqual(contentIssues({ question_text: 'Read the following lines:\nThe moon is bright\nAbove the silent sea.\nWhat is the mood?', instruction_text: 'Read the extract above.' }), [])
+  assert.deepEqual(contentIssues({ question_text: 'What device appears in the underlined lines?', passage_text: 'The <u>wind whispers</u>.' }), [])
+  assert.deepEqual(contentIssues({ question_text: 'What device appears in the underlined lines?', section: 'The *wind whispers*.' }), [])
+  assert.ok(contentIssues({ question_text: 'Read the following lines: What is the mood?' }).some(issue => issue.includes('extract is missing')))
+})
+
 test('normalization preserves source paragraphs, verse and safe inline marks without executable HTML', () => {
   const q = normalizeQuestionContent(raw)
   assert.equal(q.section, 'First paragraph.\n\nSecond <u>important</u> paragraph.\nAnother line.')

@@ -1,4 +1,4 @@
-import { splitEmbeddedPassage } from './questionPassage.js'
+import { splitEmbeddedPassage, embeddedQuestionInstruction } from './questionPassage.js'
 import { questionDiagram, questionDiagramMetadata } from './questionDiagrams.js'
 
 // Portable admin content contract: safe text plus explicit inline marks.
@@ -41,11 +41,23 @@ export function normalizeQuestionTargets(text, instruction = '') {
   const value = contentText(text)
   if (!/\bunderlined?\b/i.test(`${value} ${instruction}`)) return value
   if (/<u>[\s\S]*?<\/u>|\*\*[^*]+\*\*/i.test(value)) return value
-  return value.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (mark, target) =>
+  const marked = value.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (mark, target) =>
     target.trim() === target && target ? `<u>${target}</u>` : mark)
+  if (marked !== value) return marked
+  // Quotation marks are a provider convention for vocabulary targets only.
+  // Word boundaries exclude possessives and contractions from quote pairing.
+  const directive = `${embeddedQuestionInstruction(value) || ''} ${instruction}`
+  if (!/\b(?:word|phrase)(?:\s+or\s+(?:word|phrase))?\s+(?:underlined|that is underlined)\b|\bunderlined\s+(?:word|phrase)\b/i.test(directive)) return value
+  const quotes = [...value.matchAll(/(?<![\p{L}\p{N}])(?:'([^'\n]+)'|‘([^‘’\n]+)’|"([^"\n]+)"|“([^“”\n]+)”)(?![\p{L}\p{N}])/gu)]
+  if (quotes.length !== 1) return value
+  const quote = quotes[0]
+  const target = quote.slice(1).find(part => part !== undefined)
+  if (!target?.trim() || target.trim() !== target || /[<>*]/.test(target)) return value
+  return value.slice(0, quote.index) + `<u>${target}</u>` + value.slice(quote.index + quote[0].length)
 }
 
 export function normalizeQuestionContent(q) {
+  const instruction = contentText(q.instruction_text ?? q.instruction) || embeddedQuestionInstruction(contentText(q.question ?? q.question_text))
   const rawOptions = q.option ?? q.options ?? {}
   const option = Object.fromEntries(Object.entries(rawOptions).map(([k, v], i) => [
     Array.isArray(rawOptions) ? 'abcde'[i] ?? String(i) : k.toLowerCase(), contentText(v) || (/<img\b/i.test(String(v)) ? `See option ${(Array.isArray(rawOptions) ? 'abcde'[i] ?? String(i) : k).toUpperCase()} in the source diagram.` : ''),
@@ -53,10 +65,10 @@ export function normalizeQuestionContent(q) {
   return {
     ...q,
     ...(questionDiagram(q).required ? { explanation: { ...(typeof q.explanation === 'object' && q.explanation ? q.explanation : q.explanation ? { correct: q.explanation } : {}), question_diagram: questionDiagramMetadata(q) } } : {}),
-    question: normalizeQuestionTargets(q.question ?? q.question_text, q.instruction_text ?? q.instruction), option,
+    question: normalizeQuestionTargets(q.question ?? q.question_text, instruction), option,
     answer: q.answer ?? q.correct_answer ?? '',
     section: contentText(q.section ?? q.passage_text) || null,
-    instruction_text: contentText(q.instruction_text ?? q.instruction) || null,
+    instruction_text: instruction,
     passage_image_url: safeContentImage(q.passage_image_url),
   }
 }
@@ -69,13 +81,14 @@ export function safeContentImage(value) {
 export function contentIssues(q) {
   const stem = normalizeQuestionTargets(q.question_text ?? q.question ?? '', q.instruction_text ?? q.instruction)
   const passage = q.passage_text ?? q.section ?? ''
-  const instruction = q.instruction_text ?? ''
+  const instruction = q.instruction_text ?? q.instruction ?? ''
   const all = [stem, passage, instruction, ...Object.values(q.options ?? q.option ?? {})].join('\n')
   const issues = []
   // An extract may be only a line long and may live inside the stem. Its length
   // and storage field do not establish whether context is missing.
-  const embeddedReading = splitEmbeddedPassage(stem)
-    || /[“"][^“”"\n]{3,}[”"]|‘[^‘’\n]{3,}’/.test(stem)
+  const readingStem = stem.replace(/^\s*Read (?:the following|these) lines[^:\n]*[:\n]\s*/i, '')
+  const embeddedReading = splitEmbeddedPassage(readingStem)
+    || /[“"][\s\S]{3,}?[”"]|‘[^‘’]{3,}’/.test(readingStem)
   const hasReading = !!(passage || safeContentImage(q.passage_image_url) || embeddedReading)
   if (q.passage_image_url && !safeContentImage(q.passage_image_url)) issues.push('Passage image must be a valid http or https URL.')
   for (const [label, field] of [['Question', stem], ['Passage / extract', passage], ['Instruction', instruction], ...Object.entries(q.options ?? q.option ?? {}).map(([key, value]) => [`Option ${key.toUpperCase()}`, value])]) {
@@ -90,7 +103,7 @@ export function contentIssues(q) {
   if (all.includes('[Unsupported source content:')) issues.push('Source content has an unsupported structure; inspect the original payload.')
   if (/\b(?:passage|extract|excerpt|poem|text)\s+(?:above|below)|\b(?:above|following)\s+(?:passage|extract|excerpt|poem)|\baccording to the passage\b|\bread the (?:passage|poem|extract)\b/i.test(`${stem} ${instruction}`) && !hasReading) issues.push('The referenced passage or extract is missing. No separate or recognisable embedded extract was supplied. Add the referenced lines or passage; the full literary work is not required.')
   const needsTarget = /\bunderlined?\b/i.test(`${stem} ${instruction}`)
-  const hasTarget = /<u>\s*[^<\s][^]*?<\/u>|\*\*[^*]+\*\*/i.test(stem)
+  const hasTarget = /<u>\s*[^<\s][^]*?<\/u>|\*\*[^*]+\*\*/i.test([stem, normalizeQuestionTargets(passage, `${stem} ${instruction}`)].join('\n'))
   if (needsTarget && !hasTarget) issues.push(String(stem).includes('*')
     ? 'The underline target is missing or its asterisk marker is unclosed in the full question. Check both ends of the marked word or phrase; use <u>…</u> or paired *…*. Do not infer it from a shortened snippet.'
     : 'The underline target is missing from the question. Mark the exact source word or letters with <u>…</u> or paired *…*; a marked answer option alone does not identify the target.')

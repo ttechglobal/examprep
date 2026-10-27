@@ -864,6 +864,11 @@ CONTENT INTEGRITY — applies to every subject:
   instruction asks about an underlined word, phrase or letters. Treat paired markers
   as supplied context, not missing context. Elsewhere single asterisks may mark italics,
   especially in literary passages. Never reinterpret a poem's italics as an underline.
+  Vocabulary providers may use one clearly paired single or double quotation around
+  the target when the instruction explicitly refers to an underlined word or phrase.
+  Treat that unambiguous quotation as the supplied target, including straight or curly
+  quotes. Apostrophes in possessives and contractions are not target delimiters.
+  Multiple quoted candidates remain ambiguous; never choose one using the answer key.
   Evaluate context against the FULL source, not the shortened question_snippet used for matching.
   An image URL is a reference, not evidence that you can see the image. If essential
   content is unavailable or an underline target is unknown, set context_status to "missing",
@@ -879,6 +884,13 @@ CONTENT INTEGRITY — applies to every subject:
   Otherwise omit source_content and report missing context when the extract is absent.
   Literature questions often intentionally supply only a short quotation or a few lines.
   A short extract is valid context; do not require the whole poem, chapter or literary work.
+  Apply this equally to WAEC, JAMB and every other exam. Questions about prescribed
+  literary texts (characters, events, themes, setting) need not reproduce the work.
+  A list of characters can be sufficient for a question about those characters; it is
+  not sufficient for identifying the speaker of an explicitly referenced quotation.
+  Distinguish uncertainty about a prescribed text from missing source material: use
+  confidence "unsure" for knowledge uncertainty, and context_status "missing" only
+  when the question actually requires omitted lines, a passage or a marked target.
   Reading material may remain embedded in the question stem. Separating it into fields
   is optional formatting, not a condition for a complete question. If the split is unclear,
   omit source_content and solve using the full original stem. Report missing context only

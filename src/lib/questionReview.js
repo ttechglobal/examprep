@@ -1,4 +1,5 @@
 import { contentIssues } from './questionContent.js'
+import { embeddedQuestionInstruction } from './questionPassage.js'
 
 export function allReviewIssues(question) {
   const issues = [...contentIssues(question)]
@@ -18,7 +19,9 @@ export function allReviewIssues(question) {
   }
   if (/\ufffd/.test(JSON.stringify([stem, options]))) issues.push('Some source characters are damaged and need checking.')
   if (question._layoutUnverified) issues.push('The proposed line breaks were not present in the source. Verify the original passage or poem layout.')
-  if (question._answerDisagreement) issues.push(`The provider and enrichment disagree on the answer. Provider key: ${question.sdash_answer || '(not supplied)'}; current enrichment key: ${answer || '(not supplied)'}. Compare both option texts with the explanation and original source before choosing a key.`)
+  if (question._answerDisagreement) issues.push(question.sdash_answer?.trim().toUpperCase() === answer
+    ? 'The answer key was changed to the provider key, but the explanation has not been reviewed with it. Apply the reviewed answer and matching explanation to resolve the earlier disagreement.'
+    : `The provider and enrichment disagree on the answer. Provider key: ${question.sdash_answer || '(not supplied)'}; current enrichment key: ${answer || '(not supplied)'}. Compare both option texts with the explanation and original source before choosing a key.`)
   if (question._optionCountMismatch) issues.push('The number of answer options changed during enrichment.')
   if (question.ai_confidence === 'unsure') issues.push(`Enrichment is unsure of the answer.${question._contextStatus === 'missing' ? ' It did not verify an answer because of the missing-context report above; repair or clarify that source content and regenerate enrichment.' : ' Read the explanation, check the source and independently verify the key before publishing.'}`)
   return [...new Set(issues)]
@@ -49,6 +52,23 @@ export function reviewIssues(question) {
   return allReviewIssues(question).filter(issue => !accepted.includes(issue))
 }
 
+// Replace the complete answer-dependent explanation, never relabel AI reasoning.
+export function resolveReviewedAnswer(question, key, explanation, note) {
+  const answer = String(key ?? '').trim().toUpperCase()
+  const option = Object.entries(question.options ?? question.option ?? {}).find(([letter, text]) => letter.toUpperCase() === answer && String(text).trim())
+  if (!option || !explanation?.trim() || !note?.trim()) throw new Error('Choose an available answer and supply its explanation and source review note.')
+  return {
+    ...question, correct_answer: answer, _answerDisagreement: false,
+    ai_confidence: 'reviewed', hint: '', _reviewDecision: null,
+    explanation: {
+      question_diagram: question.explanation?.question_diagram,
+      intro: explanation.trim(), correct: explanation.trim(), answer_note: explanation.trim(),
+      steps: [], workings: [], wrong_options: {},
+      answer_review: { provider_key: question.sdash_answer, previous_key: question.correct_answer, selected_key: answer, note: note.trim() },
+    },
+  }
+}
+
 // Decode only identifiable encoding artifacts, never spelling distractors.
 export function repairTextEncoding(value) {
   if (typeof value !== 'string') return value
@@ -64,7 +84,7 @@ export function existingQuestionFormatting(question) {
     options: Object.fromEntries(Object.entries(question.options ?? {}).map(([key, value]) => [key, repairTextEncoding(value)])),
     instruction_text: repairTextEncoding(question.instruction_text) || null,
   }
-  const instruction = result.question_text.match(/^(?:Choose|Select|Fill(?: in)?|Identify|Find|Determine|Mark)\b[^:\n]{0,220}:/i)?.[0]
+  const instruction = embeddedQuestionInstruction(result.question_text)
   // Keep the full stem for current student clients that do not display instructions.
   if (!result.instruction_text && instruction) result.instruction_text = instruction
   return result

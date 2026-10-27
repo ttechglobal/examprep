@@ -28,6 +28,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import ImportContentReview, { SourceField } from '@/components/admin/ImportContentReview'
 import ImportReviewDecision from '@/components/admin/ImportReviewDecision'
+import AnswerResolution from '@/components/admin/AnswerResolution'
 import { reviewIssues } from '@/lib/questionReview'
 import QuestionContent, { ContentText } from '@/components/admin/QuestionContent'
 import { normalizeQuestionContent, contentIssues } from '@/lib/questionContent'
@@ -1532,39 +1533,7 @@ export default function MyQuestImportPage() {
                           </div>
                           <button type="button" disabled={saving} onClick={() => handleSave([q], true)} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900">Flag and save draft for review</button>
 
-                          {/* Answer disagreement panel */}
-                          {q._answerDisagreement && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                              <p className="text-xs font-black text-amber-800 mb-2">🔍 Answer disagreement — Claude vs MyQuest</p>
-                              <div className="grid grid-cols-2 gap-2 mb-2">
-                                <div className="bg-white border border-amber-200 rounded-lg p-2">
-                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">Claude says</p>
-                                  <p className="text-sm font-black text-amber-900">{q.correct_answer}</p>
-                                </div>
-                                <div className="bg-white border border-amber-200 rounded-lg p-2">
-                                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mb-1">MyQuest says</p>
-                                  <p className="text-sm font-black text-amber-900">{q.sdash_answer}</p>
-                                </div>
-                              </div>
-                              <p className="text-[11px] text-amber-700">Review the answer and explanation together. Selecting a letter alone does not resolve a conflicting explanation; edit the source and regenerate enrichment when needed.</p>
-                              <div className="flex gap-1.5 mt-2 flex-wrap">
-                                {Object.keys(q.options ?? {}).map(k => (
-                                  <button
-                                    key={k}
-                                    onClick={() => setParsedQuestions(prev => prev.map((pq, pi) => pi === index ? { ...pq, correct_answer: k.toUpperCase() } : pq))}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                                      k.toUpperCase() === (q.correct_answer ?? '').toUpperCase()
-                                        ? 'bg-green-600 text-white border-green-600'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'
-                                    }`}
-                                  >
-                                    {k.toUpperCase()}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
+                          {(q._answerDisagreement || q.ai_confidence === 'unsure') && <AnswerResolution question={q} providerExplanation={rawQ?.solution || ''} onChange={updated => setParsedQuestions(prev => prev.map((item, i) => i === index ? updated : item))} />}
                           {/* Explanation preview */}
                           {(q.explanation?.correct || q.explanation?.intro) && (
                             <div className={`rounded-xl p-3 border ${q._mismatch ? 'bg-red-50 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>

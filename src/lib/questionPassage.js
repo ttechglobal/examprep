@@ -28,8 +28,12 @@ export function splitEmbeddedPassage(value) {
   return null
 }
 
+export function embeddedQuestionInstruction(text) {
+  return typeof text === 'string' ? text.match(/^(?:Choose|Select|Fill(?: in)?|Identify|Find|Determine|Mark)\b[^:\n]{0,220}:(?=\s*\S)/i)?.[0] ?? null : null
+}
+
 export function questionReadingLayout(question) {
-  const instruction = question.instruction_text || null
+  const instruction = question.instruction_text || embeddedQuestionInstruction(question.question_text ?? question.question)
   let stem = question.question_text ?? question.question ?? ''
   if (instruction && stem.startsWith(instruction)) stem = stem.slice(instruction.length).trimStart()
   const passage = question.passage_text || question.section || null

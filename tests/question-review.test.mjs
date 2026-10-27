@@ -6,6 +6,25 @@ import { existingQuestionFormatting, repairTextEncoding, reviewIssues } from '..
 import * as review from '../src/lib/questionReview.js'
 import * as updates from '../src/lib/questionUpdates.js'
 
+test('provider resolution replaces conflicting reasoning and preserves missing-context blocks', () => {
+  const q = { question_text: 'Who speaks in the extract above?', options: { A: 'Hermia', B: 'Helena' }, correct_answer: 'A', sdash_answer: 'B', _answerDisagreement: true, ai_confidence: 'unsure', _contextStatus: 'missing', explanation: { intro: 'Hermia speaks', wrong_options: { B: 'Helena does not speak' }, hint: 'Think Hermia' } }
+  const resolved = review.resolveReviewedAnswer(q, 'B', 'Helena speaks to Hermia in this scene.', 'Checked the original scene')
+  assert.equal(resolved.correct_answer, 'B')
+  assert.equal(resolved.explanation.correct, 'Helena speaks to Hermia in this scene.')
+  assert.deepEqual(resolved.explanation.wrong_options, {})
+  assert.equal(resolved.explanation.hint, undefined)
+  assert.equal(resolved._answerDisagreement, false)
+  assert.ok(reviewIssues(resolved).some(issue => issue.includes('missing context')))
+  assert.throws(() => review.resolveReviewedAnswer(q, 'C', 'Reason', 'Source'))
+  assert.throws(() => review.resolveReviewedAnswer(q, 'B', '', 'Source'))
+})
+
+test('matching provider and edited keys describe pending explanation review accurately', () => {
+  const issues = reviewIssues({ question_text: 'Choose.', options: { A: 'One', B: 'Two' }, correct_answer: 'B', sdash_answer: 'B', _answerDisagreement: true })
+  assert.ok(issues.some(issue => issue.includes('explanation has not been reviewed')))
+  assert.ok(!issues.some(issue => issue.includes('disagree on the answer')))
+})
+
 test('formatting keeps student stems and spelling distractors intact while exposing instructions', () => {
   const q = { question_text: 'Choose the correct spelling: The .... is full.', options: { A: 'accommodation', B: 'accomodation' } }
   const formatted = existingQuestionFormatting(q)
