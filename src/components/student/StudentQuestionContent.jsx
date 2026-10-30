@@ -2,6 +2,7 @@
 
 import ContentText from '@/components/ui/ContentText'
 import QuestionFigure from '@/components/ui/QuestionFigure'
+import QuestionSourceText from '@/components/ui/QuestionSourceText'
 import { questionReadingLayout, splitPassageCredit } from '@/lib/questionPassage'
 import { normalizeQuestionTargets, safeContentImage } from '@/lib/questionContent'
 import s from './StudentQuestionContent.module.css'
@@ -18,12 +19,12 @@ export default function StudentQuestionContent({ question }) {
       <h3 className={s.label}>Passage / extract</h3>
       <div className={s.readingBody} tabIndex={0} aria-label="Reading material">
         {passageImage && <QuestionFigure question={{ image_url: passageImage }} label="Passage image" />}
-        {layout.passage_text && <div className={s.passage}><ContentText text={passage.text} />{passage.credit && <p className={s.credit} aria-label="Author or source"><ContentText text={passage.credit} /></p>}</div>}
+        {layout.passage_text && <div className={s.passage}><QuestionSourceText text={passage.text} />{passage.credit && <p className={s.credit} aria-label="Author or source"><ContentText text={passage.credit} /></p>}</div>}
       </div>
     </section>}
     <section aria-label="Question" className={s.stem}>
       {reading && <h3 className={s.label}>Question</h3>}
-      <ContentText text={layout.question_text} />
+      <QuestionSourceText text={layout.question_text} />
     </section>
     <QuestionFigure key={q.id ?? q.q_index ?? layout.question_text} question={q} />
   </div>

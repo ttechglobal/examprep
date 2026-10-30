@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import * as questionContent from '../src/lib/questionContent.js'
 import { contentText, normalizeQuestionContent, normalizeQuestionTargets, contentIssues } from '../src/lib/questionContent.js'
 import { buildImportEnrichPrompt, mergeImportEnrichment, parseEnrichment, questionHasImage } from '../src/lib/questionParser.js'
+import { loadStudentComponent } from './helpers/student-renderer.mjs'
 
 const raw = { id: 42, question: 'According to the passage above, what did the speaker decide to do next?', section: '<p>First paragraph.</p><p>Second <u>important</u> paragraph.<br>Another line.</p>', instruction: 'Choose the best answer.', option: ['Leave', 'Stay'], answer: 'a' }
 const enrichment = { source_id: '42', question_snippet: raw.question, verified_answer: 'A', context_status: 'complete', topic_title: 'Comprehension', explanation: { answer_note: 'The speaker leaves.' } }
@@ -48,6 +49,40 @@ test('WAEC-style inline lines and passage underline targets do not require a ful
   assert.deepEqual(contentIssues({ question_text: 'What device appears in the underlined lines?', passage_text: 'The <u>wind whispers</u>.' }), [])
   assert.deepEqual(contentIssues({ question_text: 'What device appears in the underlined lines?', section: 'The *wind whispers*.' }), [])
   assert.ok(contentIssues({ question_text: 'Read the following lines: What is the mood?' }).some(issue => issue.includes('extract is missing')))
+})
+
+test('JSON quote escaping and retained provider escapes produce the same vocabulary target', () => {
+  const instruction = 'Choose the option opposite in meaning to the word underlined:'
+  const sentence = 'The chairman described his contribution as "invaluable".'
+  const expected = 'The chairman described his contribution as <u>invaluable</u>.'
+  const parsed = JSON.parse(JSON.stringify({ question: sentence, instruction_text: instruction }))
+  assert.equal(normalizeQuestionContent(parsed).question, expected)
+  for (const count of [1, 2, 3]) {
+    const escaped = sentence.replaceAll('"', '\\'.repeat(count) + '"')
+    const raw = { id: 24, question: `${instruction} ${escaped}`, option: { a: 'insincere', b: 'useless' }, answer: 'B' }
+    const q = normalizeQuestionContent(raw)
+    assert.equal(q.question, `${instruction} ${expected}`)
+    assert.deepEqual(contentIssues(raw), [])
+    assert.deepEqual(normalizeQuestionContent(q), q)
+    const prompt = buildImportEnrichPrompt([raw], 'JAMB', 'English')
+    assert.match(prompt, /<u>invaluable<\/u>/)
+    assert.doesNotMatch(prompt, /underline target is missing/)
+    const merged = mergeImportEnrichment([raw], [{ source_id: '24', question_snippet: q.question, verified_answer: 'B', context_status: 'complete', confidence: 'certain', explanation: { correct: 'Invaluable means extremely valuable; useless is the opposite here.' } }], 'JAMB', 'English')[0]
+    assert.equal(merged._mismatch, false)
+    assert.equal(merged.question_text, q.question)
+    assert.deepEqual(contentIssues(merged), [])
+  }
+})
+
+test('escaped quotes do not bypass ambiguity or invent a target for a blank', () => {
+  const instruction = 'Choose the option opposite in meaning to the word underlined:'
+  const ambiguous = String.raw`He was \"calm\" but she was \"agitated\".`
+  assert.equal(normalizeQuestionTargets(ambiguous, instruction), ambiguous)
+  assert.equal(normalizeQuestionTargets(ambiguous, 'Discuss this quotation.'), ambiguous)
+  const missing = { question: 'While Ade is ............, his wife is quite self-effacing.', instruction_text: instruction, options: { A: 'arrogant', B: 'modest' } }
+  assert.ok(contentIssues(missing).some(issue => issue.includes('underline target is missing')))
+  const math = String.raw`Use \frac{1}{2} with \"invaluable\".`
+  assert.equal(normalizeQuestionTargets(math, instruction), String.raw`Use \frac{1}{2} with <u>invaluable</u>.`)
 })
 
 test('normalization preserves source paragraphs, verse and safe inline marks without executable HTML', () => {
@@ -203,7 +238,9 @@ test('review preview shows options, both keys and explanation without an answer 
 })
 
 test('admin renderer emits semantic inline marks, full passage and a safe image link', async () => {
-  const require = createRequire(import.meta.url)
+  const baseRequire = createRequire(import.meta.url)
+  const sourceRenderer = await loadStudentComponent('src/components/ui/QuestionSourceText.jsx')
+  const require = name => name === '@/components/ui/QuestionSourceText' ? sourceRenderer : baseRequire(name)
   const swc = require('next/dist/build/swc')
   await swc.loadBindings()
   const compiled = await swc.transform(await readFile(new URL('../src/components/admin/QuestionContent.jsx', import.meta.url), 'utf8'), {
@@ -228,7 +265,7 @@ test('admin renderer emits semantic inline marks, full passage and a safe image 
     instruction_text: 'Choose the underlined phrase.', question_text: 'His speech was *brief and to the point*.', passage_text: 'The *quiet* river.\nLast line.',
   } }))
   assert.match(marked, /<u><span>brief and to the point<\/span><\/u>/)
-  assert.match(marked, /<em><span>quiet<\/span><\/em>/)
+  assert.match(marked, /<em>[\s\S]*?quiet[\s\S]*?<\/em>/)
 })
 
 

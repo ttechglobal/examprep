@@ -13,6 +13,16 @@ export function contentText(value) {
     .replace(/&ndash;/gi, '–').replace(/&mdash;/gi, '—').replace(/&hellip;/gi, '…')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_, body) => {
+      const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(row => [...row[1].matchAll(/<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(cell => ({ header: cell[1].toLowerCase() === 'th', text: contentText(cell[2]) })))
+      const width = rows[0]?.length ?? 0
+      if (width < 2 || rows.some(row => row.length !== width || row.some(cell => /[|\n]/.test(cell.text))) || /\b(?:colspan|rowspan)\s*=\s*["']?(?:[2-9]|\d{2,})/i.test(body)) {
+        return `\n[Unsupported source content: table layout needs review]\n${body.replace(/<\/t[dh]\s*>/gi, ' | ').replace(/<\/tr\s*>/gi, '\n')}\n`
+      }
+      const headers = rows[0].every(cell => cell.header) ? rows.shift().map(cell => cell.text) : Array.from({ length: width }, (_, index) => `Column ${index + 1}`)
+      const caption = body.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/i)?.[1]
+      return `\n\n${caption ? contentText(caption) + '\n' : ''}| ${headers.join(' | ')} |\n| ${headers.map(() => '---').join(' | ')} |\n${rows.map(row => `| ${row.map(cell => cell.text).join(' | ')} |`).join('\n')}\n\n`
+    })
     .replace(/<\/?span\b[^>]*>/gi, tag => {
       if (/^<\//.test(tag)) return (spans.pop() ?? []).reverse().map(mark => `</${mark}>`).join('')
       const marks = []
@@ -48,12 +58,15 @@ export function normalizeQuestionTargets(text, instruction = '') {
   // Word boundaries exclude possessives and contractions from quote pairing.
   const directive = `${embeddedQuestionInstruction(value) || ''} ${instruction}`
   if (!/\b(?:word|phrase)(?:\s+or\s+(?:word|phrase))?\s+(?:underlined|that is underlined)\b|\bunderlined\s+(?:word|phrase)\b/i.test(directive)) return value
-  const quotes = [...value.matchAll(/(?<![\p{L}\p{N}])(?:'([^'\n]+)'|‘([^‘’\n]+)’|"([^"\n]+)"|“([^“”\n]+)”)(?![\p{L}\p{N}])/gu)]
+  // Some provider payloads retain a second layer of quote escaping after JSON
+  // parsing. Decode quote escapes only here, never general escapes (e.g. LaTeX).
+  const quotedValue = value.replace(/\\+(?=["'‘’“”])/g, '')
+  const quotes = [...quotedValue.matchAll(/(?<![\p{L}\p{N}])(?:'([^'\n]+)'|‘([^‘’\n]+)’|"([^"\n]+)"|“([^“”\n]+)”)(?![\p{L}\p{N}])/gu)]
   if (quotes.length !== 1) return value
   const quote = quotes[0]
   const target = quote.slice(1).find(part => part !== undefined)
   if (!target?.trim() || target.trim() !== target || /[<>*]/.test(target)) return value
-  return value.slice(0, quote.index) + `<u>${target}</u>` + value.slice(quote.index + quote[0].length)
+  return quotedValue.slice(0, quote.index) + `<u>${target}</u>` + quotedValue.slice(quote.index + quote[0].length)
 }
 
 export function normalizeQuestionContent(q) {

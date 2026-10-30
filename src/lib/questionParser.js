@@ -186,6 +186,10 @@ This context can be any of the following:
   TYPE 4 — DATA TABLE OR CHART
     A table of values, statistical data, or chart that questions are based on.
     Common in: Economics, Commerce, Chemistry, Further Mathematics.
+    Copy tables as pipe tables with a header separator in passage_text. Preserve all
+    cells, headings, units and blank debit/credit cells. Accounting schedules, trial
+    balances and partner/year columns must keep their original row/column associations.
+    A fully transcribed text table does not require an image. Charts still do.
 
   TYPE 5 — SCENARIO OR GIVEN-INFORMATION BLOCK
     A paragraph of given data, a word problem setup, or a business scenario
@@ -214,7 +218,8 @@ For every question:
 1. Extract question_text exactly as written — every word, number, and symbol
 2. Extract all options A, B, C, D exactly as written
 3. Identify correct_answer
-4. Set has_image: true if the question references a diagram, table, or graph
+4. Set has_image: true if the question requires a diagram, graph or an untranscribed table.
+   A table fully preserved as rows and columns in passage_text needs no image.
 5. If has_image, write image_description — describe exactly what the diagram shows
 
 ═══════════════════════════════════════════════
@@ -859,6 +864,14 @@ CONTENT INTEGRITY — applies to every subject:
   Include "source_id" copied EXACTLY from SOURCE_ID, and "context_status": "complete" or "missing".
   Include "instruction_text": copy the supplied instruction verbatim, or null.
   Never invent a passage, quotation, source attribution, or underline target.
+  DATA TABLES AND SCHEDULES — all subjects and exam boards:
+  Preserve every source label, amount, sign, currency, date, unit, row order and column
+  association. Do not correct suspected source numbers using the options or workings.
+  Pipe tables (| Label | Value | with a | --- | --- | separator) are portable source
+  content. Keep them intact, including empty cells and separate debit/credit, year,
+  partner or period columns. Never collapse multiple columns into a list of amounts.
+  Do not add calculated totals or answer figures to source data. If a cell is missing
+  or its column is ambiguous, name it in context_reason instead of guessing.
   Preserve <u>underline</u>, <strong>bold</strong>, <em>italic</em>, <sup> and <sub> marks.
   Source *word or phrase* and **word or phrase** markers identify the target when the
   instruction asks about an underlined word, phrase or letters. Treat paired markers
@@ -868,6 +881,9 @@ CONTENT INTEGRITY — applies to every subject:
   the target when the instruction explicitly refers to an underlined word or phrase.
   Treat that unambiguous quotation as the supplied target, including straight or curly
   quotes. Apostrophes in possessives and contractions are not target delimiters.
+  Literal backslashes escaping those quote delimiters are encoding artifacts, not
+  part of the target. A blank alone does not identify an underlined word: if the
+  instruction still requires a target and none is marked, report the missing target.
   Multiple quoted candidates remain ambiguous; never choose one using the answer key.
   Evaluate context against the FULL source, not the shortened question_snippet used for matching.
   An image URL is a reference, not evidence that you can see the image. If essential

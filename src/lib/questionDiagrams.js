@@ -1,4 +1,5 @@
 import { safeSvg } from './safeSvg.js'
+import { questionTableBlocks } from './questionTables.js'
 
 const text = value => typeof value === 'string' ? value.trim() : ''
 const imageUrl = value => { try { const url = new URL(text(value)); return /^https?:$/.test(url.protocol) ? url.href : null } catch { return null } }
@@ -40,7 +41,12 @@ export function questionDiagram(q) {
   const sourceImage = imageUrl(saved.image_url) || imageUrl(q.image_url) || imageUrl(q.image) || imageUrl(q.image?.url)
   const references = sourceDiagramReferences(q)
   const fields = [q.question_text ?? q.question, q.instruction_text ?? q.instruction, q.passage_text ?? q.section, ...Object.values(q.options ?? q.option ?? {})].map(text).join('\n')
-  const reference = /\b(?:diagram|illustration)\b|\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b|\b(?:image|picture|graph|chart|table|map)\s+(?:above|below|shown|given)\b|\bfrom the (?:graph|chart|table|map)\b|\busing the (?:information|data) (?:in|from) the (?:table|graph|chart)\b|\bas shown (?:in|above|below)\b/i.test(fields)
+  const htmlTable = fields.match(/<table\b[^>]*>([\s\S]*?)<\/table>/i)?.[1]
+  const htmlRows = htmlTable ? [...htmlTable.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(row => [...row[1].matchAll(/<(?:td|th)\b[^>]*>/gi)].length) : []
+  const hasHtmlTable = htmlRows.length >= 2 && htmlRows[0] >= 2 && htmlRows.every(width => width === htmlRows[0]) && !/\b(?:colspan|rowspan)\s*=/i.test(htmlTable)
+  const hasTextTable = hasHtmlTable || questionTableBlocks(fields).some(block => block.type === 'table')
+  const visualFields = hasTextTable ? fields.replace(/\btable\b/gi, 'data') : fields
+  const reference = /\b(?:diagram|illustration)\b|\bfigure\s+(?:above|below|shown|given|[1-9]\b)|\b(?:refer(?:ring)?\s+to|shown\s+in)\s+(?:the\s+)?figure\b|\b(?:image|picture|graph|chart|table|map)\s+(?:above|below|shown|given)\b|\bfrom the (?:graph|chart|table|map)\b|\busing the (?:information|data) (?:in|from) the (?:table|graph|chart)\b|\bas shown (?:in|above|below)\b/i.test(visualFields)
   const htmlImage = /<img\b/i.test(fields)
   const required = !!(saved.required || q.has_image === true || sourceImage || description || reference || htmlImage || references.length)
   const svg = sourceDiagramSvg(q)

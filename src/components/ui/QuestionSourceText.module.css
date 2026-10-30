@@ -1,0 +1,9 @@
+.content { min-width: 0; display: grid; gap: 12px; font: inherit; }
+.scroll { max-width: 100%; overflow-x: auto; border: 1px solid currentColor; border-radius: 8px; }
+.scroll:focus-visible { outline: 2px solid #1264e5; outline-offset: 3px; }
+.table { width: 100%; border-collapse: collapse; font-family: inherit; font-size: .95em; font-weight: 400; line-height: 1.65; }
+.table th, .table td { padding: 10px 14px; border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent); vertical-align: top; }
+.table thead th { background: color-mix(in srgb, currentColor 7%, transparent); font-weight: 700; text-align: left; }
+.table tbody th { font-weight: 400; text-align: left; min-width: 140px; }
+.table td { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table tr:last-child > * { border-bottom: 0; }
