@@ -19,7 +19,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { hasSeenIntro, markIntroSeen, continueAsGuest, destinationAfterAuth, isAccountSession } from '@/lib/auth/client'
+import { hasSeenIntro, markIntroSeen, destinationAfterAuth, isAccountSession } from '@/lib/auth/client'
 import { saveReferral } from '@/lib/referral'
 import IntroSlides from '@/components/onboarding/IntroSlides'
 import AuthPanel from '@/components/onboarding/AuthPanel'
@@ -70,12 +70,6 @@ function Onboarding() {
     router.replace(await destinationAfterAuth({ from, join }))
   }
 
-  function handleGuest() {
-    continueAsGuest()
-    markIntroSeen()
-    router.replace('/student/home')
-  }
-
   if (view === 'checking') return <LoadingScreen />
 
   return (
@@ -95,7 +89,6 @@ function Onboarding() {
               initialMode={mode === 'signin' ? 'signin' : 'signup'}
               refParam={ref}
               onAuthed={handleAuthed}
-              onGuest={handleGuest}
             />
           </>
         )}

@@ -7,7 +7,6 @@
 
 import Link from 'next/link'
 import { useTheme } from '@/contexts/ThemeContext'
-import InstallButton from './InstallButton'
 import s from './landing.module.css'
 
 export default function SiteNav({ audience = 'students' }) {
@@ -36,7 +35,7 @@ export default function SiteNav({ audience = 'students' }) {
           </button>
           {isSchools
             ? <Link href="/school-signup" className={`${s.btn} ${s.btnBlue} ${s.btnSm} ${s.desktopOnly}`}>Get started</Link>
-            : <InstallButton label="Install" variant="blue" size="sm" className={s.desktopOnly} />}
+            : <a href="#start-practising" className={`${s.btn} ${s.btnBlue} ${s.btnSm} ${s.desktopOnly}`}>Start free</a>}
         </div>
       </div>
     </header>

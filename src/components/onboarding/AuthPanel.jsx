@@ -19,7 +19,7 @@ const refCache = new Map()   // code → { code, valid, firstName }
 
 // refParam: a code from the page URL (?ref=). Otherwise the one /r/CODE saved
 // on this device. Either way the student can edit or clear it.
-export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, onGuest }) {
+export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed }) {
   const [mode,     setMode]     = useState(initialMode)   // 'signup' | 'signin'
   const [method,   setMethod]   = useState('phone')       // 'phone' | 'email'
   const [fullName, setFullName] = useState('')
@@ -36,7 +36,6 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
   // browser (onboarding shows a loading screen while it checks the session), so
   // reading localStorage here can't cause a hydration mismatch.
   const [refCode, setRefCode] = useState(() => cleanCode(refParam) || getReferral() || '')
-  const [refOpen, setRefOpen] = useState(() => !!(cleanCode(refParam) || getReferral()))
   const [refInfo, setRefInfo] = useState(null)   // { code, valid, firstName } for the code last checked
 
   // Check the code once they stop typing, so a typo shows before they submit.
@@ -187,9 +186,7 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
 
           {isSignup && (
             <div className={s.field}>
-              {refOpen ? (
-                <>
-                  <label className={s.label} htmlFor="ob-ref">Referral code (optional)</label>
+                  <label className={s.label} htmlFor="ob-ref">Teacher referral code (optional)</label>
                   <div className={`${s.inputWrap} ${refBad ? s.inputBad : refGood ? s.inputGood : ''}`}>
                     <input
                       id="ob-ref" className={s.input} type="text" autoComplete="off" autoCapitalize="characters"
@@ -203,10 +200,6 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
                       : refBad ? 'We don\'t recognise this code. You can still sign up.'
                       : 'From your teacher? Enter their code.'}
                   </p>
-                </>
-              ) : (
-                <button type="button" className={s.link} onClick={() => setRefOpen(true)}>Have a referral code?</button>
-              )}
             </div>
           )}
 
@@ -228,9 +221,6 @@ export default function AuthPanel({ initialMode = 'signup', refParam, onAuthed, 
           </button>
         </p>
 
-        {onGuest && (
-          <button type="button" className={s.guest} onClick={onGuest}>Continue as guest</button>
-        )}
       </div>
     </>
   )

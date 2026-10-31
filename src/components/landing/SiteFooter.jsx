@@ -13,7 +13,7 @@ export default function SiteFooter() {
               <img src="/images/examprep_logo.png" alt="" width={30} height={30} />
               <span>ExamPrep <span className={s.brandA1}>A1</span></span>
             </Link>
-            <p className={s.footerAbout}>Fun, focused WAEC and JAMB practice for Nigerian secondary school students.</p>
+            <p className={s.footerAbout}>Fun, focused JAMB and WAEC practice for Nigerian secondary school students.</p>
           </div>
           <div className={s.footerCol}>
             <p className={s.footerHead}>Students</p>

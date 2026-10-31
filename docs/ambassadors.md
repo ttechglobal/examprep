@@ -19,7 +19,7 @@ The public page is `/ambassador` (what the program is, the FAQ and the applicati
 ## How a referral travels
 
 1. The teacher signs up at **`/partner/signup`** (open to anyone who finds it: an ambassador only earns when students they refer pay) and presses **Generate my referral code** once. The code is 8 characters (no `0 O 1 I`) and never changes.
-2. The student opens **`/r/CODE`** (link or QR). It says "Adeola invited you", saves the code on the device for 30 days (`lib/referral.js`) and goes to onboarding. The newest link a student opens wins. The first-time slides still show first.
+2. The student opens **`/r/CODE`** (link or QR). It says "Adeola invited you", saves the code on the device for 30 days (`lib/referral.js`) and shows a copyable teacher code, Android APK download and **Continue in browser**. No account is required before downloading. The newest link a student opens wins. Browser signup keeps the code prefilled; first-time slides still show first. Students signing up in the native app must enter the code there; browser storage does not transfer into the APK.
 3. On sign-up the optional **Referral code** box is prefilled and shows "Invited by Adeola ✓". `/api/auth/signup` saves `profiles.referred_by` through `apply_referral`. A wrong code never blocks sign-up.
 4. When an admin activates the student's first plan, `activate_subscription` calls `refresh_referral_commission` in the same transaction and the commission appears on the teacher's dashboard. Cancelling a plan calls it too.
 
@@ -71,6 +71,10 @@ Analytics, leaderboards and notification audiences already exclude ambassadors: 
 The teacher dashboard has Overview, Referral link and Students views, with a sidebar on desktop and bottom navigation on mobile. Switching views reuses the loaded dashboard data. The dashboard's Help button opens a support page with an editable draft; only “Continue to WhatsApp” opens the external chat, where the teacher still taps Send. Support uses the shared number in `lib/contact.js` (+234 816 652 8437). Teacher signup and login share the student app's Zara greeting and rounded, raised form styling in a light layout.
 
 Set `NEXT_PUBLIC_APP_URL` to the canonical production origin and rebuild when changing it (Next.js includes public environment variables at build time). Referral links fall back to the current browser origin when the setting is missing, invalid, or points to localhost while the teacher is on a live site. Link copying, WhatsApp sharing and QR generation use the same URL.
+
+The student landing page and referral page share a compact JAMB-first design (`components/landing/StudentLanding.jsx`), with WAEC support, practice benefits, a 14-day Pro trial (from `TRIAL_DAYS`), and offline access explicitly marked coming soon. **Start practising for free** links to the app/browser choice section on the current page. The referral version adds the inviting teacher and copyable code; browser signup carries the code forward.
+
+Set `NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL` to the published HTTPS APK download URL and rebuild to enable **Download Android APK** on both pages. Until configured, the pages say **Android app · Coming soon** and offer browser signup. The APK is developed separately and must provide a teacher referral code field during signup and apply it to the same backend. Web signup always shows the optional teacher referral code field and no longer offers **Continue as guest**.
 
 Run the migrations in the Supabase SQL editor, in order, **before** deploying the code:
 `20261014_ambassadors.sql` → `20261015_admin_ambassadors.sql` → `20261016_ambassadors_lean.sql`. Each is safe to re-run. Until they have run, the referral box reads "We don't recognise this code" (sign-up still works) and the admin Ambassadors page shows an error.
