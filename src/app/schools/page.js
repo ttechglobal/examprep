@@ -1,197 +1,39 @@
-// src/app/schools/page.js — Landing page (schools)
-// ─────────────────────────────────────────────────────────────────────────────
-// Two selling points: 1) practice becomes fun, so students actually do it,
-// 2) teachers see insight into how students are learning.
-// Positioned as a partner in WAEC/JAMB preparation. No pricing, no
-// ambassador content. Schools can see the demo.
-// Note: /schools is NOT covered by the /school/:path* middleware matcher,
-// so it stays public.
-// ─────────────────────────────────────────────────────────────────────────────
-
+import Image from 'next/image'
 import Link from 'next/link'
-import SiteNav from '@/components/landing/SiteNav'
-import SiteFooter from '@/components/landing/SiteFooter'
-import FaqList from '@/components/landing/FaqList'
-import { Phone, BattleScreen, LeaderboardCard, SchoolDashboard } from '@/components/landing/Mockups'
-import s from '@/components/landing/landing.module.css'
+import PublicNav from '@/components/landing/PublicNav'
+import PublicFooter from '@/components/landing/PublicFooter'
+import { SCHOOL_PARTNERSHIP_URL } from '@/lib/contact'
+import { publicMetadata } from '@/lib/publicWebsite'
+import s from '@/components/landing/publicWebsite.module.css'
 
-export const metadata = {
-  title: 'ExamPrep A1 for Schools | WAEC & JAMB preparation',
-  description: 'ExamPrep A1 makes practice fun for your students and shows your teachers how they are learning, topic by topic.',
-  openGraph: {
-    title: 'ExamPrep A1 for Schools',
-    description: 'Practice your students enjoy, and insight your teachers can act on.',
-    images: ['/images/examprep_logo.png'],
-    type: 'website',
-  },
-}
-
-const SIGNUP = '/school-signup'
-const DEMO   = '/demo'
-
-const STEPS = [
-  { title: 'Sign up your school',         text: 'Create your school account in a few minutes.' },
-  { title: 'Create your classes',         text: 'Set up each class and share its code with your students.' },
-  { title: 'Students join and practise',  text: 'They enter the code in the app and start practising on real past questions.' },
-  { title: 'Teachers see the insight',    text: 'Your dashboard fills up as students practise, topic by topic.' },
-]
-
-const FAQS = [
-  { q: 'How do students join?',
-    a: 'Each class gets its own code. Students enter it in the app and are linked to that class straight away.' },
-  { q: 'What can teachers see?',
-    a: 'How each class is doing by subject and by topic, which topics are weakest, how often students practise, and which students need extra support.' },
-  { q: 'Does it replace our teachers?',
-    a: 'No. ExamPrep A1 gives students more practice and gives teachers better information. The teaching stays with your teachers.' },
-  { q: 'Which exams does it cover?',
-    a: 'WAEC and JAMB. Questions are real past questions, tagged by exam, year and topic.' },
-  { q: 'Can parents follow their child’s progress?',
-    a: 'Yes. Parents can receive a weekly progress report by email.' },
-  { q: 'Can we see it before signing up?',
-    a: 'Yes. Open the demo to try the student experience, including battle mode, without creating an account.' },
-]
+export const metadata = publicMetadata({ title: 'ExamPrep A1 for Schools | Better prepared for JAMB & WAEC', description: 'Help your students build understanding and exam confidence through engaging JAMB and WAEC practice. Talk to us about a selected-school partnership.', path: '/schools' })
 
 export default function SchoolsPage() {
-  return (
-    <div className={s.page}>
-      <SiteNav audience="schools" />
-
-      <main>
-        {/* ── Hero ── */}
-        <section className={s.hero}>
-          <div className={`${s.wrap} ${s.heroGrid}`}>
-            <div>
-              <h1 className={`${s.heroTitle} ${s.heroTitleWide}`}>Help your students <span className={s.accentCool}>prepare better</span> for WAEC and JAMB.</h1>
-              <p className={s.heroSub}>
-                ExamPrep A1 makes practice fun for your students, and shows your teachers exactly how they are learning.
-              </p>
-              <div className={s.heroActions}>
-                <Link href={SIGNUP} className={`${s.btn} ${s.btnBlue} ${s.btnLg}`}>Get started</Link>
-                <Link href={DEMO} className={`${s.btn} ${s.btnGhost} ${s.btnLg}`}>See a demo</Link>
-              </div>
-              <p className={s.heroNote}>Already using ExamPrep A1? <Link href="/school-login">School sign in</Link></p>
-              <ul className={s.chips}>
-                <li><span className={s.dot} />Real WAEC &amp; JAMB past questions</li>
-                <li><span className={s.dot} />Topic-by-topic insight</li>
-                <li><span className={s.dot} />Weekly parent reports</li>
-              </ul>
-            </div>
-            <div className={s.stage}>
-              <Phone label="A student playing a battle on a Biology question"><BattleScreen /></Phone>
-              <div className={`${s.float} ${s.floatA}`} aria-hidden="true">
-                <span className={s.floatEmoji}>⚔️</span><span>Students play<small>Real past questions</small></span>
-              </div>
-              <div className={`${s.float} ${s.floatB}`} aria-hidden="true">
-                <span className={s.floatEmoji}>📊</span><span>Teachers see<small>Every answer, by topic</small></span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Selling point 1: fun ── */}
-        <section className={s.sectionAlt}>
-          <div className={`${s.wrap} ${s.split}`}>
-            <div>
-              <h2 className={s.h2}>Practice your students actually want to do.</h2>
-              <p className={s.lead}>
-                Revision works when students keep coming back. Battles against the computer, daily challenges,
-                streaks and a class leaderboard turn exam practice into something students choose to do.
-              </p>
-              <ul className={s.points}>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">⚔️</span>
-                  <div><p className={s.pointTitle}>Battles on real past questions</p><p className={s.pointText}>Students race the computer and the clock, and the computer gets tougher as they win.</p></div>
-                </li>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">🏆</span>
-                  <div><p className={s.pointTitle}>Class and school leaderboards</p><p className={s.pointText}>Friendly competition keeps whole classes practising.</p></div>
-                </li>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">📖</span>
-                  <div><p className={s.pointTitle}>Explanations that teach</p><p className={s.pointText}>Every question explains the idea behind it, not just the right option.</p></div>
-                </li>
-              </ul>
-            </div>
-            <LeaderboardCard />
-          </div>
-        </section>
-
-        {/* ── Selling point 2: insight ── */}
-        <section className={s.section}>
-          <div className={`${s.wrap} ${s.split} ${s.splitFlip}`}>
-            <div>
-              <h2 className={s.h2}>See how your students are learning.</h2>
-              <p className={s.lead}>
-                Every question a student answers feeds your dashboard. Teachers see which topics the class understands,
-                where it is struggling and who needs support, while there is still time to act.
-              </p>
-              <ul className={s.points}>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">📊</span>
-                  <div><p className={s.pointTitle}>Subject and topic breakdown</p><p className={s.pointText}>Not just “Chemistry is weak”. Which Chemistry topics, and by how much.</p></div>
-                </li>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">🚨</span>
-                  <div><p className={s.pointTitle}>Students who need support</p><p className={s.pointText}>Spot who is falling behind early, not after the mock exam.</p></div>
-                </li>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">📈</span>
-                  <div><p className={s.pointTitle}>Weekly engagement</p><p className={s.pointText}>See how often each class practises, week by week.</p></div>
-                </li>
-                <li className={s.point}>
-                  <span className={s.pointIcon} aria-hidden="true">📧</span>
-                  <div><p className={s.pointTitle}>Weekly parent reports</p><p className={s.pointText}>Parents get a summary of their child’s practice by email.</p></div>
-                </li>
-              </ul>
-            </div>
-            <SchoolDashboard />
-          </div>
-        </section>
-
-        {/* ── Partner / how it works ── */}
-        <section className={s.sectionAlt}>
-          <div className={s.wrap}>
-            <h2 className={s.h2}>A partner in exam preparation.</h2>
-            <p className={s.lead}>
-              We work alongside your teachers. ExamPrep A1 gives students practice they enjoy, and gives teachers
-              the information they need to focus revision where it matters.
-            </p>
-            <ol className={s.steps}>
-              {STEPS.map(st => (
-                <li key={st.title} className={s.step}>
-                  <p className={s.stepTitle}>{st.title}</p>
-                  <p className={s.stepText}>{st.text}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        {/* ── FAQ ── */}
-        <section className={s.section}>
-          <div className={`${s.wrap} ${s.center}`}>
-            <h2 className={s.h2}>Questions schools ask</h2>
-            <FaqList items={FAQS} />
-          </div>
-        </section>
-
-        {/* ── Final CTA ── */}
-        <section className={s.final}>
-          <div className={s.wrap}>
-            <h2 className={s.finalTitle}>Prepare your students better, starting this term.</h2>
-            <p className={s.finalText}>See what your students will experience, or set up your school today.</p>
-            <div className={s.finalActions}>
-              <Link href={SIGNUP} className={`${s.btn} ${s.btnBlue} ${s.btnLg}`}>Get started</Link>
-              <Link href={DEMO} className={`${s.btn} ${s.btnGhost} ${s.btnLg}`}>See a demo</Link>
-            </div>
-            <p className={s.finalText} style={{ marginTop: 22, fontSize: 14 }}>
-              Prefer to talk first? Email <a href="mailto:schools@examprep.ng" style={{ color: '#fff', fontWeight: 800 }}>schools@examprep.ng</a>
-            </p>
-          </div>
-        </section>
-      </main>
-
-      <SiteFooter />
-    </div>
-  )
+  return <div className={s.site}>
+    <PublicNav />
+    <main id="main-content">
+      <section className={`${s.wrap} ${s.schoolHero}`}>
+        <p className={s.eyebrow}>EXAMPREP A1 FOR SCHOOLS</p>
+        <h1>Big goals for your students. Better preparation, together.</h1>
+        <p className={s.intro}>Help your students approach JAMB and WAEC with stronger understanding and more confidence. Bring regular, engaging practice into their school day.</p>
+        <p className={s.note}>The desktop school experience is being prepared for public release. The images below show the current app design with example data.</p>
+        <div className={s.actions}><a href={SCHOOL_PARTNERSHIP_URL} className={s.button}>Discuss a school partnership</a><Link href="/download" className={s.secondary}>Explore student practice →</Link></div>
+        <div className={s.schoolGallery}>
+          <figure className={s.schoolFigure}><Image src="/images/website/school-home.webp" width={1280} height={960} alt="School app preview with shared practice and computer battle entry points" sizes="(max-width: 767px) 92vw, 560px" priority /><figcaption>Shared school home · example school</figcaption></figure>
+          <figure className={s.schoolFigure}><Image src="/images/website/school-analytics.webp" width={1280} height={1100} alt="School topic analytics preview showing activity on one shared computer" sizes="(max-width: 767px) 92vw, 560px" /><figcaption>Topic analytics · illustrative local activity</figcaption></figure>
+        </div>
+      </section>
+      <section className={`${s.section} ${s.practiceSection}`}><div className={`${s.wrap} ${s.split}`}>
+        <div><p className={s.eyebrow}>MAKE PREPARATION PART OF THE ROUTINE</p><h2>More chances to practise. More chances to understand.</h2><p className={s.intro}>Give learners a space to work through exam questions, learn from mistakes and try again.</p></div>
+        <div className={s.schoolFacts}>
+          <div><h3>Build familiarity with exam questions</h3><p>Learners take turns practising past questions and playing computer battles on shared computers.</p></div>
+          <div><h3>See what needs more practice</h3><p>Review topic-level activity on each computer to guide further practice. Session counts are not distinct learners, and reports do not combine devices.</p></div>
+          <div><h3>Plan the right next step</h3><p>Talk with our team about availability and what fits your school. Public desktop downloads and activation are still being prepared.</p></div>
+        </div>
+      </div></section>
+      <section className={`${s.wrap} ${s.partnership}`}><div><p className={s.eyebrow}>SELECTED-SCHOOL PARTNERSHIPS</p><h2>Let’s work towards your students’ goals.</h2><p>We’re partnering with selected schools to support stronger preparation for JAMB and WAEC. Tell us about your students and the goals you’re working towards.</p><a href={SCHOOL_PARTNERSHIP_URL} className={s.button}>Contact the team <span aria-hidden="true">↗</span></a><span className={s.contactHint}>Start the conversation on WhatsApp.</span></div><div className={s.partnershipArt}><Image src="/images/website/friend.webp" width={480} height={480} alt="A student focused on learning" sizes="(max-width:767px) 160px, 320px" /><span>Stronger preparation.<br />Shared ambition.</span></div></section>
+      <p className={`${s.wrap} ${s.downloadSignin}`}>Already using the existing web school portal? <Link href="/school-login">School sign in</Link></p>
+    </main>
+    <PublicFooter />
+  </div>
 }

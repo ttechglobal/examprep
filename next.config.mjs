@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Isolate preview/build output when another local app session is running.
+  distDir: process.env.EXAMPREP_BUILD_DIR || '.next',
   /* config options here */
 
   images: {

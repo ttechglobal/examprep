@@ -8,6 +8,8 @@ export function whatsappLink(text) {
   return `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(text)}`
 }
 
+export const SCHOOL_PARTNERSHIP_URL = whatsappLink('Hi, I would like to explore an ExamPrep A1 partnership to help our students prepare for JAMB and WAEC. How can we get started?')
+
 /** A WhatsApp chat with someone else (international digits, e.g. 23480…). */
 export function whatsappTo(number, text) {
   return `https://wa.me/${number}${text ? `?text=${encodeURIComponent(text)}` : ''}`
